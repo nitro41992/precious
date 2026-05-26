@@ -1,0 +1,2 @@
+[functions.capture-intake]
+verify_jwt = true

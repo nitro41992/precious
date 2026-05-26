@@ -1,0 +1,69 @@
+apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
+apply plugin: "com.facebook.react"
+
+def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
+def preciousApiUrl = (findProperty("PRECIOUS_API_URL") ?: System.getenv("PRECIOUS_API_URL") ?: "").toString()
+def supabaseUrl = (findProperty("EXPO_PUBLIC_SUPABASE_URL") ?: System.getenv("EXPO_PUBLIC_SUPABASE_URL") ?: "").toString()
+def supabaseAnonKey = (findProperty("EXPO_PUBLIC_SUPABASE_ANON_KEY") ?: System.getenv("EXPO_PUBLIC_SUPABASE_ANON_KEY") ?: "").toString()
+
+react {
+  entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", projectRoot, "android", "absolute"].execute(null, rootDir).text.trim())
+  reactNativeDir = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
+  hermesCommand = new File(["node", "--print", "require.resolve('hermes-compiler/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().getAbsolutePath() + "/hermesc/%OS-BIN%/hermesc"
+  codegenDir = new File(["node", "--print", "require.resolve('@react-native/codegen/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
+  cliFile = new File(["node", "--print", "require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })"].execute(null, rootDir).text.trim())
+  bundleCommand = "export:embed"
+  autolinkLibrariesWithApp()
+}
+
+android {
+  ndkVersion rootProject.ext.ndkVersion
+  buildToolsVersion rootProject.ext.buildToolsVersion
+  compileSdk rootProject.ext.compileSdkVersion
+
+  namespace "com.preciouscaptures"
+  defaultConfig {
+    applicationId "com.preciouscaptures"
+    minSdkVersion rootProject.ext.minSdkVersion
+    targetSdkVersion rootProject.ext.targetSdkVersion
+    versionCode 1
+    versionName "0.1.0"
+    buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
+    buildConfigField "String", "PRECIOUS_API_URL", "\"${preciousApiUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+    buildConfigField "String", "SUPABASE_URL", "\"${supabaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+    buildConfigField "String", "SUPABASE_ANON_KEY", "\"${supabaseAnonKey.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+  }
+
+  signingConfigs {
+    debug {
+      storeFile file("debug.keystore")
+      storePassword "android"
+      keyAlias "androiddebugkey"
+      keyPassword "android"
+    }
+  }
+
+  buildTypes {
+    debug {
+      signingConfig signingConfigs.debug
+    }
+    release {
+      signingConfig signingConfigs.debug
+      minifyEnabled false
+      shrinkResources false
+      proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+    }
+  }
+}
+
+dependencies {
+  implementation("com.facebook.react:react-android")
+  implementation("androidx.appcompat:appcompat:1.7.0")
+  implementation("androidx.core:core-ktx:1.13.1")
+  implementation("androidx.work:work-runtime-ktx:2.9.1")
+
+  if (hermesEnabled.toBoolean()) {
+    implementation("com.facebook.react:hermes-android")
+  }
+}

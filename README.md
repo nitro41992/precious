@@ -1,0 +1,83 @@
+# Precious Captures
+
+Fresh mobile prototype for the smallest useful Sharebook loop:
+
+1. Share text or a link from Android.
+2. Show a short processing notification.
+3. Run hosted LLM extraction while the app can be closed.
+4. Tap the notification to quick edit.
+5. Persist captures and extracted structure in Supabase.
+
+The product path is Supabase-backed: native share intake enqueues Android WorkManager,
+the worker posts to a hosted Sharebook capture API with the persisted user session,
+the server runs OpenAI structured extraction in a background task, and the worker polls
+for completion before updating the local notification. The hosted API can be either the
+deployed Next API (`EXPO_PUBLIC_SHAREBOOK_API_URL`) or the standalone Supabase Edge
+Function (`PRECIOUS_CAPTURE_FUNCTION_URL`). The Mac server is only a dev harness and is
+not required for the hosted flow.
+
+## Requirements
+
+Copied product/design requirements live in `docs/requirements/`. They are reference material only; no old app code was copied into this prototype.
+
+`docs/requirements/RESET_REQUIREMENTS.md` is the controlling scope for this fresh app.
+
+## Commands
+
+```sh
+npm run typecheck
+npm run android:build:hosted
+npm run android:install
+```
+
+Set these environment variables before building Android:
+
+```sh
+EXPO_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+EXPO_PUBLIC_SHAREBOOK_API_URL=https://YOUR_SHAREBOOK_APP.example
+```
+
+If `EXPO_PUBLIC_SHAREBOOK_API_URL` is omitted, the build falls back to
+`${EXPO_PUBLIC_SUPABASE_URL}/functions/v1/capture-intake`.
+
+Deploy the hosted worker:
+
+```sh
+supabase db push
+supabase secrets set OPENAI_API_KEY=...
+export SUPABASE_ACCESS_TOKEN=...
+npm run hosted:deploy
+npm run hosted:verify
+```
+
+The app uses email/password auth to avoid magic-link redirect issues. After sign-in,
+the native session is stored for Android share-sheet background workers.
+
+For private dogfood accounts, create or reset a confirmed password user without magic
+links:
+
+```sh
+npm run hosted:create-user -- --email you@example.com --password 'a-long-password'
+```
+
+`npm run android:build:hosted` loads Supabase and Sharebook API env vars from this repo
+and the parent Sharebook `.env` files before building the APK. Use it for phone builds
+that should call the hosted API instead of the old Mac runner.
+
+`npm run hosted:verify` creates or signs in a password-based e2e user, posts a real
+link to the hosted capture API, polls until the LLM result is terminal, then requires
+LLM evidence, a succeeded `analysis_runs` row, structured intent, and a persisted
+`reminders` row for the reminder-specific fixture. It uses:
+
+```sh
+EXPO_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL
+EXPO_PUBLIC_SUPABASE_ANON_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY
+EXPO_PUBLIC_SHAREBOOK_API_URL or PRECIOUS_CAPTURE_FUNCTION_URL
+```
+
+The old `server:dev` and `android:reverse` scripts remain for debugging the earlier
+Mac-hosted prototype, but they are not the product path.
+
+The Android app id is `com.preciouscaptures`.
