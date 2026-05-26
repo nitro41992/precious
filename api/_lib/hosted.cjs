@@ -206,6 +206,21 @@ function oembedEndpoint(value) {
   return null;
 }
 
+function webSearchDomains(sourceUrl) {
+  if (!sourceUrl) return [];
+  try {
+    const host = new URL(sourceUrl).hostname.replace(/^www\./, "").toLowerCase();
+    if (!host) return [];
+    const domains = new Set([host]);
+    if (host === "youtu.be" || host.endsWith(".youtube.com")) domains.add("youtube.com");
+    if (host === "x.com") domains.add("twitter.com");
+    if (host === "twitter.com") domains.add("x.com");
+    return Array.from(domains).slice(0, 4);
+  } catch {
+    return [];
+  }
+}
+
 async function fetchUrlMetadata(sourceUrl) {
   if (!sourceUrl) return null;
   const endpoint = oembedEndpoint(sourceUrl);
@@ -277,8 +292,11 @@ function responseText(payload) {
 async function runOpenAi(capture, urlMetadata) {
   const started = Date.now();
   const useWebSearch = Boolean(capture.source_url && !urlMetadata);
+  const allowedDomains = webSearchDomains(capture.source_url);
   const requestBody = {
     model: MODEL,
+    reasoning: { effort: "low" },
+    max_output_tokens: 1600,
     input: [
       {
         role: "system",
@@ -296,7 +314,12 @@ async function runOpenAi(capture, urlMetadata) {
     }
   };
   if (useWebSearch) {
-    requestBody.tools = [{ type: "web_search" }];
+    requestBody.tools = [
+      {
+        type: "web_search",
+        ...(allowedDomains.length ? { filters: { allowed_domains: allowedDomains } } : {})
+      }
+    ];
     requestBody.tool_choice = "auto";
     requestBody.include = ["web_search_call.action.sources"];
   }
