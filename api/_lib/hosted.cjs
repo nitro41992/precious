@@ -206,21 +206,6 @@ function oembedEndpoint(value) {
   return null;
 }
 
-function webSearchDomains(sourceUrl) {
-  if (!sourceUrl) return [];
-  try {
-    const host = new URL(sourceUrl).hostname.replace(/^www\./, "").toLowerCase();
-    if (!host) return [];
-    const domains = new Set([host]);
-    if (host === "youtu.be" || host.endsWith(".youtube.com")) domains.add("youtube.com");
-    if (host === "x.com") domains.add("twitter.com");
-    if (host === "twitter.com") domains.add("x.com");
-    return Array.from(domains).slice(0, 4);
-  } catch {
-    return [];
-  }
-}
-
 async function fetchUrlMetadata(sourceUrl) {
   if (!sourceUrl) return null;
   const endpoint = oembedEndpoint(sourceUrl);
@@ -262,6 +247,7 @@ function buildPrompt(capture, urlMetadata) {
     "Return concise structured data for a mobile quick-edit surface.",
     "Use URL metadata when provided.",
     "If URL metadata is missing and web search is available, search for evidence about the exact shared URL or its stable public identifier.",
+    "Use a single targeted search whenever possible; do not browse broadly when the exact URL or ID is enough.",
     "Only use web evidence that clearly matches the shared URL. If evidence is missing or ambiguous, mark the result low confidence instead of inventing details.",
     "Suggest a reminder only when the evidence has a useful future trigger. Do not invent events, places, or deadlines.",
     "If metadata is unavailable, infer only from the URL path and shared text and mark low confidence when needed.",
@@ -292,7 +278,6 @@ function responseText(payload) {
 async function runOpenAi(capture, urlMetadata) {
   const started = Date.now();
   const useWebSearch = Boolean(capture.source_url && !urlMetadata);
-  const allowedDomains = webSearchDomains(capture.source_url);
   const requestBody = {
     model: MODEL,
     reasoning: { effort: "low" },
@@ -314,12 +299,7 @@ async function runOpenAi(capture, urlMetadata) {
     }
   };
   if (useWebSearch) {
-    requestBody.tools = [
-      {
-        type: "web_search",
-        ...(allowedDomains.length ? { filters: { allowed_domains: allowedDomains } } : {})
-      }
-    ];
+    requestBody.tools = [{ type: "web_search" }];
     requestBody.tool_choice = "auto";
     requestBody.include = ["web_search_call.action.sources"];
   }
