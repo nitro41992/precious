@@ -39,5 +39,9 @@
         <data android:mimeType="text/plain" />
       </intent-filter>
     </activity>
+
+    <receiver
+      android:name=".CaptureCancelReceiver"
+      android:exported="false" />
   </application>
 </manifest>

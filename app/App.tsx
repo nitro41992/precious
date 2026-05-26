@@ -19,7 +19,7 @@ import {
   View
 } from "react-native";
 
-type CaptureStatus = "processing" | "ready" | "needs_review" | "failed";
+type CaptureStatus = "processing" | "ready" | "needs_review" | "failed" | "cancelled";
 
 type Capture = {
   id: string;
@@ -118,12 +118,29 @@ function statusLabel(status: CaptureStatus) {
   if (status === "processing") return "Processing";
   if (status === "needs_review") return "Needs review";
   if (status === "failed") return "Failed";
+  if (status === "cancelled") return "Cancelled";
   return "Ready";
+}
+
+function friendlyError(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  if (
+    /UnknownHostException|Unable to resolve host|No address associated|fetch failed/i.test(
+      message
+    )
+  ) {
+    return "Waiting for internet to reach Sharebook.";
+  }
+  if (/unauthorized|session expired/i.test(message)) {
+    return "Your session expired. Sign in again.";
+  }
+  return message || fallback;
 }
 
 function captureFromRemote(row: Record<string, any>): Capture {
   const analysis = row.analysis ?? {};
   const defaultIntent = analysis.default_intent ?? {};
+  const cancelRequested = Boolean(row.analysis_cancel_requested_at);
   const remoteEntities = row.captured_entities
     ? row.captured_entities.map((entity: Record<string, any>) => ({
         type: String(entity.type || entity.entity_type || ""),
@@ -140,10 +157,14 @@ function captureFromRemote(row: Record<string, any>): Capture {
     sourceUrl: typeof row.source_url === "string" ? row.source_url : null,
     siteName: hostFromUrl(typeof row.source_url === "string" ? row.source_url : null),
     summary: analysis.summary || undefined,
-    analysisMode: row.analysis_mode || (row.analysis_provider ? "llm" : undefined),
+    analysisMode: cancelRequested
+      ? "cancelled"
+      : row.analysis_mode || (row.analysis_provider ? "llm" : undefined),
     analysisProvider: row.analysis_provider || undefined,
     analysisModel: row.analysis_model || undefined,
-    analysisError: row.analysis_error || undefined,
+    analysisError: cancelRequested
+      ? row.analysis_error || "AI processing was cancelled."
+      : row.analysis_error || undefined,
     defaultIntent: row.default_intent || defaultIntent.category || undefined,
     intentRationale: row.intent_rationale || defaultIntent.rationale || undefined,
     confidenceLabel: analysis.confidence_label || undefined,
@@ -154,7 +175,9 @@ function captureFromRemote(row: Record<string, any>): Capture {
     searchPhrases: analysis.search_phrases || [],
     note: String(row.context_note || ""),
     status:
-      row.analysis_state === "ready"
+      cancelRequested
+        ? "cancelled"
+        : row.analysis_state === "ready"
         ? "ready"
         : row.analysis_state === "needs_review"
           ? "needs_review"
@@ -205,7 +228,7 @@ export default function App() {
           authorization: `Bearer ${session.accessToken}`
         }
       });
-      const json = await response.json();
+      const json = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(json.error || "Could not load captures");
       const next = ((json.captures ?? []) as Array<Record<string, any>>).map(captureFromRemote);
       next.sort((a, b) => b.createdAt - a.createdAt);
@@ -272,7 +295,7 @@ export default function App() {
 
   useEffect(() => {
     void loadCaptures().catch((error) => {
-      setMessage(error instanceof Error ? error.message : "Could not load captures");
+      setMessage(friendlyError(error, "Could not load captures"));
     });
   }, [loadCaptures]);
 
@@ -309,28 +332,32 @@ export default function App() {
   async function saveQuickEdit() {
     if (!selected) return;
     if (config?.apiUrl && session?.accessToken) {
-      const response = await fetch(captureMutationUrl(config.apiUrl), {
-        method: "PATCH",
-        headers: {
-          apikey: config.supabaseAnonKey,
-          authorization: `Bearer ${session.accessToken}`,
-          "content-type": "application/json"
-        },
-        body: JSON.stringify({
-          captureId: selected.remoteId || selected.id,
-          title: draftTitle.trim(),
-          note: draftNote.trim()
-        })
-      });
-      const json = await response.json();
-      if (!response.ok) {
-        setMessage(json.error || "Could not save.");
-        return;
+      try {
+        const response = await fetch(captureMutationUrl(config.apiUrl), {
+          method: "PATCH",
+          headers: {
+            apikey: config.supabaseAnonKey,
+            authorization: `Bearer ${session.accessToken}`,
+            "content-type": "application/json"
+          },
+          body: JSON.stringify({
+            captureId: selected.remoteId || selected.id,
+            title: draftTitle.trim(),
+            note: draftNote.trim()
+          })
+        });
+        const json = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          setMessage(friendlyError(new Error(json.error || "Could not save."), "Could not save."));
+          return;
+        }
+        setCaptures((current) =>
+          current.map((item) => (item.id === selected.id ? captureFromRemote(json.capture) : item))
+        );
+        setMessage("Saved.");
+      } catch (error) {
+        setMessage(friendlyError(error, "Could not save."));
       }
-      setCaptures((current) =>
-        current.map((item) => (item.id === selected.id ? captureFromRemote(json.capture) : item))
-      );
-      setMessage("Saved.");
       return;
     }
     if (!nativeStore) return;
@@ -357,7 +384,7 @@ export default function App() {
       setSourceDraft("");
       setMessage("Saved. AI extraction is running.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not save capture.");
+      setMessage(friendlyError(error, "Could not save capture."));
     } finally {
       setSavingCapture(false);
     }
@@ -383,7 +410,7 @@ export default function App() {
         },
         body: JSON.stringify({ email: authEmail.trim(), password: authPassword })
       });
-      const json = await response.json();
+      const json = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(json.error_description || json.msg || json.error || "Sign in failed");
       const accessToken = json.access_token;
       const refreshToken = json.refresh_token;
@@ -397,7 +424,7 @@ export default function App() {
       setSession(next);
       setMessage("");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Sign in failed");
+      setMessage(friendlyError(error, "Sign in failed"));
     } finally {
       setAuthLoading(null);
     }
@@ -425,7 +452,8 @@ export default function App() {
               styles.status,
               item.status === "processing" && styles.statusProcessing,
               item.status === "needs_review" && styles.statusReview,
-              item.status === "failed" && styles.statusFailed
+              item.status === "failed" && styles.statusFailed,
+              item.status === "cancelled" && styles.statusCancelled
             ]}
           >
             {statusLabel(item.status)}
@@ -756,6 +784,9 @@ const styles = StyleSheet.create({
   },
   statusFailed: {
     color: "#9f3d2e"
+  },
+  statusCancelled: {
+    color: colors.muted
   },
   meta: {
     color: colors.muted,

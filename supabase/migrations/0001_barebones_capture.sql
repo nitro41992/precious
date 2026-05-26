@@ -17,6 +17,8 @@ create table if not exists captures (
   analysis_provider text,
   analysis_model text,
   analysis_mode text,
+  analysis_cancel_requested_at timestamptz,
+  analysis_cancel_reason text,
   default_intent text,
   default_intent_confidence numeric,
   current_save_intent text,
@@ -40,6 +42,8 @@ alter table captures add column if not exists analysis jsonb;
 alter table captures add column if not exists analysis_provider text;
 alter table captures add column if not exists analysis_model text;
 alter table captures add column if not exists analysis_mode text;
+alter table captures add column if not exists analysis_cancel_requested_at timestamptz;
+alter table captures add column if not exists analysis_cancel_reason text;
 alter table captures add column if not exists processed_at timestamptz;
 
 create table if not exists analysis_runs (

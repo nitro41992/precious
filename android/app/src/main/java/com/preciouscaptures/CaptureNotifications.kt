@@ -17,12 +17,61 @@ private const val CHANNEL_ID = "precious-capture-processing"
 
 object CaptureNotifications {
   fun showProcessing(context: Context, captureId: String) {
+    showAnalyzing(context, captureId)
+  }
+
+  fun showQueued(context: Context, captureId: String) {
     notify(
       context = context,
       captureId = captureId,
       title = "Processing capture",
-      body = "Running AI extraction.",
-      ongoing = true
+      body = "Queued for AI extraction.",
+      ongoing = true,
+      cancellable = true
+    )
+  }
+
+  fun showWaitingForNetwork(context: Context, captureId: String) {
+    notify(
+      context = context,
+      captureId = captureId,
+      title = "Waiting for internet",
+      body = "Sharebook will keep trying when the API is reachable.",
+      ongoing = true,
+      cancellable = true
+    )
+  }
+
+  fun showUploading(context: Context, captureId: String) {
+    notify(
+      context = context,
+      captureId = captureId,
+      title = "Saving capture",
+      body = "Uploading to Sharebook.",
+      ongoing = true,
+      cancellable = true
+    )
+  }
+
+  fun showAnalyzing(context: Context, captureId: String) {
+    notify(
+      context = context,
+      captureId = captureId,
+      title = "AI extraction running",
+      body = "Extracting intent, reminders, and collections.",
+      ongoing = true,
+      cancellable = true
+    )
+  }
+
+  fun showSaving(context: Context, captureId: String) {
+    notify(
+      context = context,
+      captureId = captureId,
+      title = "Saving AI results",
+      body = "Persisting reminders and collection ideas.",
+      ongoing = true,
+      cancellable = true
     )
   }
 
@@ -32,7 +81,8 @@ object CaptureNotifications {
       captureId = captureId,
       title = "AI extraction complete",
       body = captureTitle,
-      ongoing = false
+      ongoing = false,
+      cancellable = false
     )
   }
 
@@ -42,7 +92,8 @@ object CaptureNotifications {
       captureId = captureId,
       title = "AI extraction needs review",
       body = captureTitle,
-      ongoing = false
+      ongoing = false,
+      cancellable = false
     )
   }
 
@@ -52,7 +103,19 @@ object CaptureNotifications {
       captureId = captureId,
       title = "AI extraction failed",
       body = captureTitle,
-      ongoing = false
+      ongoing = false,
+      cancellable = false
+    )
+  }
+
+  fun showCancelled(context: Context, captureId: String) {
+    notify(
+      context = context,
+      captureId = captureId,
+      title = "AI extraction cancelled",
+      body = "Capture processing was stopped.",
+      ongoing = false,
+      cancellable = false
     )
   }
 
@@ -61,7 +124,8 @@ object CaptureNotifications {
     captureId: String,
     title: String,
     body: String,
-    ongoing: Boolean
+    ongoing: Boolean,
+    cancellable: Boolean
   ) {
     ensureChannel(context)
     if (Build.VERSION.SDK_INT >= 33 &&
@@ -78,8 +142,17 @@ object CaptureNotifications {
       intent,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
+    val cancelIntent = Intent(context, CaptureCancelReceiver::class.java)
+      .setAction(ACTION_CANCEL_CAPTURE)
+      .putExtra(EXTRA_CAPTURE_ID, captureId)
+    val cancelPendingIntent = PendingIntent.getBroadcast(
+      context,
+      captureId.hashCode(),
+      cancelIntent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 
-    val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+    val builder = NotificationCompat.Builder(context, CHANNEL_ID)
       .setSmallIcon(android.R.drawable.ic_menu_save)
       .setContentTitle(title)
       .setContentText(body)
@@ -87,10 +160,14 @@ object CaptureNotifications {
       .setOngoing(ongoing)
       .setAutoCancel(!ongoing)
       .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-      .build()
+      .setOnlyAlertOnce(true)
+    if (ongoing) builder.setProgress(0, 0, true)
+    if (cancellable) {
+      builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", cancelPendingIntent)
+    }
 
     runCatching {
-      NotificationManagerCompat.from(context).notify(captureId.hashCode(), notification)
+      NotificationManagerCompat.from(context).notify(captureId.hashCode(), builder.build())
     }
   }
 

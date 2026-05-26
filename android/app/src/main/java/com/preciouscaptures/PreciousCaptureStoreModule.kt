@@ -4,13 +4,7 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
-import androidx.work.BackoffPolicy
-import androidx.work.Constraints
-import androidx.work.Data
 import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import java.util.concurrent.TimeUnit
 
 class PreciousCaptureStoreModule(
   private val reactContext: ReactApplicationContext
@@ -36,17 +30,8 @@ class PreciousCaptureStoreModule(
 
       val capture = PreciousCaptureStore.addProcessingCapture(reactContext, sourceText)
       val captureId = capture.getString("id")
-      CaptureNotifications.showProcessing(reactContext, captureId)
-      val request = OneTimeWorkRequestBuilder<ShareProcessWorker>()
-        .setInputData(Data.Builder().putString("captureId", captureId).build())
-        .setConstraints(
-          Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
-        )
-        .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
-        .build()
-      WorkManager.getInstance(reactContext).enqueue(request)
+      CaptureNotifications.showQueued(reactContext, captureId)
+      enqueueCaptureWork(reactContext, captureId, NetworkType.CONNECTED)
       promise.resolve(capture.toString())
     } catch (error: Exception) {
       promise.reject("capture_enqueue_failed", error)

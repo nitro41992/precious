@@ -4,13 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
-import androidx.work.Constraints
-import androidx.work.Data
-import androidx.work.BackoffPolicy
 import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import java.util.concurrent.TimeUnit
 
 class ShareIntakeActivity : Activity() {
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,19 +31,14 @@ class ShareIntakeActivity : Activity() {
 
     val capture = PreciousCaptureStore.addProcessingCapture(applicationContext, sourceText)
     val captureId = capture.getString("id")
-    CaptureNotifications.showProcessing(applicationContext, captureId)
-    val networkType = if (capture.optString("sourceUrl").isNotBlank()) {
+    CaptureNotifications.showQueued(applicationContext, captureId)
+    val networkType = if (configuredApiUrl().isNotBlank() || capture.optString("sourceUrl").isNotBlank()) {
       NetworkType.CONNECTED
     } else {
       NetworkType.NOT_REQUIRED
     }
 
-    val request = OneTimeWorkRequestBuilder<ShareProcessWorker>()
-      .setInputData(Data.Builder().putString("captureId", captureId).build())
-      .setConstraints(Constraints.Builder().setRequiredNetworkType(networkType).build())
-      .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
-      .build()
-    WorkManager.getInstance(applicationContext).enqueue(request)
+    enqueueCaptureWork(applicationContext, captureId, networkType)
     Toast.makeText(this, "Saved to Precious Captures", Toast.LENGTH_SHORT).show()
   }
 }

@@ -14,7 +14,11 @@ class ShareProcessWorker(
 ) : CoroutineWorker(appContext, params) {
   override suspend fun doWork(): Result {
     val captureId = inputData.getString("captureId") ?: return Result.failure()
-    CaptureNotifications.showProcessing(applicationContext, captureId)
+    if (PreciousCaptureStore.isCancelled(applicationContext, captureId)) {
+      CaptureNotifications.showCancelled(applicationContext, captureId)
+      return Result.success()
+    }
+    CaptureNotifications.showUploading(applicationContext, captureId)
     delay(1600)
     val pendingCapture = PreciousCaptureStore.find(applicationContext, captureId)
     val enrichment = withContext(Dispatchers.IO) {
@@ -23,18 +27,35 @@ class ShareProcessWorker(
         captureId,
         pendingCapture?.optString("sourceText").orEmpty(),
         pendingCapture?.optString("sourceUrl")
-      ) ?: aiUnavailableEnrichment(
+      ) { phase ->
+        when (phase) {
+          CaptureProcessingPhase.UPLOADING -> CaptureNotifications.showUploading(applicationContext, captureId)
+          CaptureProcessingPhase.ANALYZING -> CaptureNotifications.showAnalyzing(applicationContext, captureId)
+          CaptureProcessingPhase.SAVING -> CaptureNotifications.showSaving(applicationContext, captureId)
+          CaptureProcessingPhase.WAITING_FOR_NETWORK -> CaptureNotifications.showWaitingForNetwork(applicationContext, captureId)
+        }
+      } ?: aiUnavailableEnrichment(
         pendingCapture?.optString("sourceText").orEmpty(),
         pendingCapture?.optString("sourceUrl")
       )
+    }
+    if (PreciousCaptureStore.isCancelled(applicationContext, captureId) || isStopped) {
+      PreciousCaptureStore.cancel(applicationContext, captureId)
+      CaptureNotifications.showCancelled(applicationContext, captureId)
+      return Result.success()
     }
     val capture = PreciousCaptureStore.complete(applicationContext, captureId, enrichment)
     val title = capture?.optString("title", "Capture saved") ?: "Capture saved"
     when (capture?.optString("status")) {
       "ready" -> CaptureNotifications.showComplete(applicationContext, captureId, title)
       "needs_review" -> CaptureNotifications.showNeedsReview(applicationContext, captureId, title)
+      "cancelled" -> CaptureNotifications.showCancelled(applicationContext, captureId)
       "processing" -> {
-        CaptureNotifications.showProcessing(applicationContext, captureId)
+        if (capture.optString("analysisMode") == "llm_waiting_network") {
+          CaptureNotifications.showWaitingForNetwork(applicationContext, captureId)
+        } else {
+          CaptureNotifications.showAnalyzing(applicationContext, captureId)
+        }
         return Result.retry()
       }
       else -> CaptureNotifications.showFailed(applicationContext, captureId, title)
