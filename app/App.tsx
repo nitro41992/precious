@@ -76,6 +76,8 @@ type AppConfig = {
 type NativeAuth = {
   getConfig: () => Promise<string>;
   getSession: () => Promise<string | null>;
+  refreshSession: () => Promise<string | null>;
+  forceRefreshSession?: () => Promise<string | null>;
   persistSession: (
     accessToken: string | null,
     refreshToken: string | null,
@@ -97,6 +99,19 @@ type NativeNetwork = {
 const nativeStore = NativeModules.PreciousCaptureStore as CaptureStore | undefined;
 const nativeAuth = NativeModules.PreciousAuth as NativeAuth | undefined;
 const nativeNetwork = NativeModules.PreciousNetwork as NativeNetwork | undefined;
+
+class ApiRequestError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+function isAuthError(error: unknown) {
+  return error instanceof ApiRequestError && (error.status === 401 || error.status === 403);
+}
 
 function hostFromUrl(value: string | null) {
   if (!value) return "";
@@ -136,8 +151,7 @@ function hasExtractedData(capture: Pick<Capture, "defaultIntent" | "summary" | "
   return Boolean(
     capture.defaultIntent ||
       capture.summary ||
-      capture.analysisProvider ||
-      (capture.analysisMode && !["ai_unavailable", "cancelled"].includes(capture.analysisMode))
+      (capture.analysisProvider && capture.analysisProvider !== "none")
   );
 }
 
@@ -252,7 +266,10 @@ async function requestJson<T>(
   const response = JSON.parse(raw || "{}") as { ok: boolean; status: number; body: string };
   const json = response.body ? JSON.parse(response.body) : {};
   if (!response.ok) {
-    throw new Error(json.error_description || json.msg || json.error || `Request failed (${response.status})`);
+    throw new ApiRequestError(
+      json.error_description || json.msg || json.error || `Request failed (${response.status})`,
+      response.status
+    );
   }
   return json as T;
 }
@@ -272,15 +289,49 @@ export default function App() {
   const [authPassword, setAuthPassword] = useState("");
   const [authLoading, setAuthLoading] = useState<"signin" | "signup" | null>(null);
 
+  const getFreshSession = useCallback(async (force = false) => {
+    if (!session) return null;
+    const raw = force && nativeAuth?.forceRefreshSession
+      ? await nativeAuth.forceRefreshSession()
+      : await nativeAuth?.refreshSession();
+    if (!raw) {
+      await nativeAuth?.clearSession();
+      setSession(null);
+      setCaptures([]);
+      return null;
+    }
+    const next = JSON.parse(raw) as AuthSession;
+    if (
+      next.accessToken !== session.accessToken ||
+      next.refreshToken !== session.refreshToken ||
+      next.expiresAt !== session.expiresAt
+    ) {
+      setSession(next);
+    }
+    return next;
+  }, [session]);
+
   const loadCaptures = useCallback(async () => {
     if (config?.apiUrl && session?.accessToken) {
-      const json = await requestJson<{ captures?: Array<Record<string, any>> }>(captureListUrl(config.apiUrl), {
-        headers: {
-          accept: "application/json",
-          apikey: config.supabaseAnonKey,
-          authorization: `Bearer ${session.accessToken}`
-        }
-      });
+      const activeSession = await getFreshSession();
+      if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
+      const loadWithToken = (accessToken: string) =>
+        requestJson<{ captures?: Array<Record<string, any>> }>(captureListUrl(config.apiUrl), {
+          headers: {
+            accept: "application/json",
+            apikey: config.supabaseAnonKey,
+            authorization: `Bearer ${accessToken}`
+          }
+        });
+      let json: { captures?: Array<Record<string, any>> };
+      try {
+        json = await loadWithToken(activeSession.accessToken);
+      } catch (error) {
+        if (!isAuthError(error)) throw error;
+        const refreshed = await getFreshSession(true);
+        if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
+        json = await loadWithToken(refreshed.accessToken);
+      }
       const next = ((json.captures ?? []) as Array<Record<string, any>>).map(captureFromRemote);
       next.sort((a, b) => b.createdAt - a.createdAt);
       setCaptures(next);
@@ -295,7 +346,7 @@ export default function App() {
     const next = JSON.parse(raw || "[]") as Capture[];
     next.sort((a, b) => b.createdAt - a.createdAt);
     setCaptures(next);
-  }, [config, session]);
+  }, [config, getFreshSession, session]);
 
   const openCapture = useCallback(
     (captureId: string | null) => {
@@ -346,7 +397,7 @@ export default function App() {
 
   useEffect(() => {
     void loadCaptures().catch((error) => {
-      setMessage(friendlyError(error, "Could not load captures"));
+      setMessage((current) => current || friendlyError(error, "Could not load captures"));
     });
   }, [loadCaptures]);
 
@@ -384,19 +435,31 @@ export default function App() {
     if (!selected) return;
     if (config?.apiUrl && session?.accessToken) {
       try {
-        const json = await requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
-          method: "PATCH",
-          headers: {
-            apikey: config.supabaseAnonKey,
-            authorization: `Bearer ${session.accessToken}`,
-            "content-type": "application/json"
-          },
-          body: {
-            captureId: selected.remoteId || selected.id,
-            title: draftTitle.trim(),
-            note: draftNote.trim()
-          }
-        });
+        const activeSession = await getFreshSession();
+        if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
+        const saveWithToken = (accessToken: string) =>
+          requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
+            method: "PATCH",
+            headers: {
+              apikey: config.supabaseAnonKey,
+              authorization: `Bearer ${accessToken}`,
+              "content-type": "application/json"
+            },
+            body: {
+              captureId: selected.remoteId || selected.id,
+              title: draftTitle.trim(),
+              note: draftNote.trim()
+            }
+          });
+        let json: { capture: Record<string, any> };
+        try {
+          json = await saveWithToken(activeSession.accessToken);
+        } catch (error) {
+          if (!isAuthError(error)) throw error;
+          const refreshed = await getFreshSession(true);
+          if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
+          json = await saveWithToken(refreshed.accessToken);
+        }
         setCaptures((current) =>
           current.map((item) => (item.id === selected.id ? captureFromRemote(json.capture) : item))
         );
@@ -576,7 +639,7 @@ export default function App() {
                 <Text style={styles.supportingText}>
                   {selected.analysisMode === "llm"
                     ? `LLM extraction · ${selected.analysisModel || selected.analysisProvider || "model"}`
-                    : `Fallback extraction · ${selected.analysisMode}`}
+                    : `LLM extraction unavailable · ${selected.analysisMode}`}
                 </Text>
               ) : null}
               {selected.analysisError && selected.analysisError !== "null" ? (

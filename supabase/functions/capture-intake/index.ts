@@ -149,33 +149,7 @@ function titleFallback(sourceText: string | null, sourceUrl: string | null) {
 }
 
 async function fetchUrlMetadata(sourceUrl: string | null) {
-  if (!sourceUrl) return null;
-  try {
-    const response = await fetch(sourceUrl, {
-      headers: {
-        "user-agent": "Mozilla/5.0 PreciousCaptures/0.1",
-        accept: "text/html,application/xhtml+xml"
-      },
-      signal: AbortSignal.timeout(7000)
-    });
-    if (!response.ok) return null;
-    const html = (await response.text()).slice(0, 250_000);
-    const meta = (key: string) => {
-      const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      return (
-        html.match(new RegExp(`<meta\\s+[^>]*(?:property|name)=["']${escaped}["'][^>]*content=["']([^"']+)["']`, "i"))?.[1] ??
-        html.match(new RegExp(`<meta\\s+[^>]*content=["']([^"']+)["'][^>]*(?:property|name)=["']${escaped}["']`, "i"))?.[1] ??
-        null
-      );
-    };
-    return {
-      title: meta("og:title") ?? meta("twitter:title") ?? html.match(/<title[^>]*>(.*?)<\/title>/is)?.[1] ?? null,
-      description: meta("og:description") ?? meta("twitter:description") ?? null,
-      site_name: meta("og:site_name") ?? null
-    };
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 function buildPrompt(capture: CaptureRow, urlMetadata: unknown) {

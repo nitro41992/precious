@@ -167,56 +167,8 @@ function fallbackTitle(sourceText, sourceUrl) {
   return sourceText?.trim().split(/\n/)[0]?.slice(0, 72) || "Shared capture";
 }
 
-function localFallbackAnalysis(capture) {
-  const title = fallbackTitle(capture.source_text, capture.source_url);
-  const note = capture.source_url
-    ? capture.source_text.replace(capture.source_url, "").trim()
-    : capture.source_text;
-  return {
-    display_title: title,
-    summary: note || title,
-    default_intent: {
-      category: "remember",
-      confidence: 0.35,
-      rationale: "Local fallback preserved the shared content because LLM extraction was unavailable."
-    },
-    entities: [],
-    suggested_reminders: [],
-    suggested_collections: [],
-    search_phrases: [title, note].filter(Boolean).slice(0, 4),
-    confidence_label: "Couldn't tell",
-    needs_review: true
-  };
-}
-
 async function fetchUrlMetadata(sourceUrl) {
-  if (!sourceUrl) return null;
-  try {
-    const response = await fetch(sourceUrl, {
-      headers: {
-        "user-agent": "Mozilla/5.0 PreciousCaptures/0.1",
-        accept: "text/html,application/xhtml+xml"
-      },
-      signal: AbortSignal.timeout(7000)
-    });
-    if (!response.ok) return null;
-    const html = (await response.text()).slice(0, 250_000);
-    const meta = (key) => {
-      const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      return (
-        html.match(new RegExp(`<meta\\s+[^>]*(?:property|name)=["']${escaped}["'][^>]*content=["']([^"']+)["']`, "i"))?.[1] ??
-        html.match(new RegExp(`<meta\\s+[^>]*content=["']([^"']+)["'][^>]*(?:property|name)=["']${escaped}["']`, "i"))?.[1] ??
-        null
-      );
-    };
-    return {
-      title: meta("og:title") ?? meta("twitter:title") ?? html.match(/<title[^>]*>(.*?)<\/title>/is)?.[1] ?? null,
-      description: meta("og:description") ?? meta("twitter:description") ?? null,
-      siteName: meta("og:site_name") ?? null
-    };
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 function buildPrompt(capture, urlMetadata) {
@@ -334,18 +286,17 @@ async function runAnalysisJob(captureId) {
       processed_at: new Date().toISOString()
     });
   } catch (error) {
-    const fallback = localFallbackAnalysis(capture);
     await upsertCapture({
       ...capture,
-      analysis_state: "needs_review",
+      analysis_state: "failed",
       analysis_error: error instanceof Error ? error.message : "Analysis failed",
-      analysis: fallback,
-      analysis_provider: process.env.OPENAI_API_KEY ? "openai" : "local",
-      analysis_model: process.env.OPENAI_API_KEY ? model : "local_fallback",
-      analysis_mode: process.env.OPENAI_API_KEY ? "llm_failed_fallback" : "local_fallback",
+      analysis: null,
+      analysis_provider: process.env.OPENAI_API_KEY ? "openai" : null,
+      analysis_model: process.env.OPENAI_API_KEY ? model : null,
+      analysis_mode: "llm_failed",
       analysis_run: {
-        provider: process.env.OPENAI_API_KEY ? "openai" : "local",
-        model: process.env.OPENAI_API_KEY ? model : "local_fallback",
+        provider: "openai",
+        model,
         prompt_version: "fresh-capture-analysis-v1",
         schema_version: "fresh-capture-analysis-v1",
         latency_ms: Date.now() - startedAt,

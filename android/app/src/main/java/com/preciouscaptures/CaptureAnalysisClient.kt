@@ -223,38 +223,7 @@ object CaptureAnalysisClient {
   }
 
   private fun validSession(context: Context): JSONObject? {
-    val session = readNativeAuthSession(context) ?: return null
-    val expiresAt = session.optLong("expiresAt", 0L)
-    val now = System.currentTimeMillis() / 1000L
-    if (expiresAt == 0L || expiresAt > now + 60) return session
-    return refreshSession(context, session)
-  }
-
-  private fun refreshSession(context: Context, session: JSONObject): JSONObject? {
-    val supabaseUrl = BuildConfig.SUPABASE_URL.trimEnd('/')
-    val anonKey = BuildConfig.SUPABASE_ANON_KEY
-    val refreshToken = session.optString("refreshToken")
-    if (supabaseUrl.isBlank() || anonKey.isBlank() || refreshToken.isBlank()) return null
-
-    return runCatching {
-      val connection = (URL("$supabaseUrl/auth/v1/token?grant_type=refresh_token").openConnection() as HttpURLConnection)
-      connection.requestMethod = "POST"
-      connection.setRequestProperty("apikey", anonKey)
-      connection.setRequestProperty("content-type", "application/json")
-      connection.doOutput = true
-      connection.outputStream.use { output ->
-        output.write(JSONObject().put("refresh_token", refreshToken).toString().toByteArray())
-      }
-      if (connection.responseCode !in 200..299) return null
-      val json = JSONObject(connection.inputStream.bufferedReader().readText())
-      val next = JSONObject()
-        .put("accessToken", json.getString("access_token"))
-        .put("refreshToken", json.optString("refresh_token", refreshToken))
-        .put("expiresAt", json.optLong("expires_at", 0L))
-        .put("userId", session.optString("userId"))
-      writeNativeAuthSession(context, next)
-      next
-    }.getOrNull()
+    return refreshNativeAuthSession(context)
   }
 
   private fun toEnrichment(remoteCapture: JSONObject): JSONObject {

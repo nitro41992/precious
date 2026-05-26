@@ -95,7 +95,7 @@ object PreciousCaptureStore {
       val capture = captures.getJSONObject(index)
       if (capture.optString("id") == id) {
         val title = enrichment.optString("title").ifBlank { capture.optString("title", "Untitled capture") }
-        val analysisMode = enrichment.optString("analysisMode", "local_metadata")
+        val analysisMode = enrichment.optString("analysisMode", "pending_llm")
         val needsReview = enrichment.optBoolean("needsReview", false)
         val nextStatus = when {
           capture.optString("status") == "cancelled" -> "cancelled"

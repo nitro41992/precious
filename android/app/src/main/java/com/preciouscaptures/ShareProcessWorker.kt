@@ -70,7 +70,7 @@ class ShareProcessWorker(
       .put("analysisModel", "")
       .put(
         "analysisError",
-        "AI processing did not run. Sign in and configure the hosted Sharebook API."
+        "LLM extraction did not run. Sign in and configure the hosted Sharebook API."
       )
       .put("defaultIntent", "")
       .put("intentRationale", "")
