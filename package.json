@@ -4,6 +4,7 @@
   "private": true,
   "main": "index.js",
   "scripts": {
+    "build": "next build",
     "android:build": "cd android && ./gradlew :app:assembleDebug",
     "android:build:hosted": "node scripts/build-hosted-apk.mjs",
     "android:build:release": "cd android && ./gradlew :app:assembleRelease",
@@ -18,8 +19,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.106.2",
     "expo": "^56.0.4",
+    "next": "^16.2.6",
     "react": "^19.2.6",
+    "react-dom": "^19.2.6",
     "react-native": "^0.85.3",
     "react-native-url-polyfill": "^3.0.0"
   },

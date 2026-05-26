@@ -1,0 +1,15 @@
+android/
+app/
+docs/
+server/
+supabase/
+screenshots/
+node_modules/
+.next/
+.vercel/
+.expo/
+.git/
+*.apk
+*.hprof
+*.log
+tsconfig.tsbuildinfo
