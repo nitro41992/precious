@@ -85,8 +85,18 @@ type NativeAuth = {
   clearSession: () => Promise<boolean>;
 };
 
+type NativeNetwork = {
+  requestJson: (
+    url: string,
+    method: string,
+    headersJson: string | null,
+    body: string | null
+  ) => Promise<string>;
+};
+
 const nativeStore = NativeModules.PreciousCaptureStore as CaptureStore | undefined;
 const nativeAuth = NativeModules.PreciousAuth as NativeAuth | undefined;
+const nativeNetwork = NativeModules.PreciousNetwork as NativeNetwork | undefined;
 
 function hostFromUrl(value: string | null) {
   if (!value) return "";
@@ -122,6 +132,20 @@ function statusLabel(status: CaptureStatus) {
   return "Ready";
 }
 
+function hasExtractedData(capture: Pick<Capture, "defaultIntent" | "summary" | "analysisProvider" | "analysisMode">) {
+  return Boolean(
+    capture.defaultIntent ||
+      capture.summary ||
+      capture.analysisProvider ||
+      (capture.analysisMode && !["ai_unavailable", "cancelled"].includes(capture.analysisMode))
+  );
+}
+
+function displayStatus(capture: Capture): CaptureStatus {
+  if (capture.status === "failed" && hasExtractedData(capture)) return "ready";
+  return capture.status;
+}
+
 function friendlyError(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : String(error || "");
   if (
@@ -141,6 +165,12 @@ function captureFromRemote(row: Record<string, any>): Capture {
   const analysis = row.analysis ?? {};
   const defaultIntent = analysis.default_intent ?? {};
   const cancelRequested = Boolean(row.analysis_cancel_requested_at);
+  const remoteHasExtractedData = Boolean(
+    row.default_intent ||
+      row.analysis_provider ||
+      analysis.summary ||
+      defaultIntent.category
+  );
   const remoteEntities = row.captured_entities
     ? row.captured_entities.map((entity: Record<string, any>) => ({
         type: String(entity.type || entity.entity_type || ""),
@@ -181,9 +211,11 @@ function captureFromRemote(row: Record<string, any>): Capture {
         ? "ready"
         : row.analysis_state === "needs_review"
           ? "needs_review"
-          : row.analysis_state === "failed"
+          : row.analysis_state === "failed" && !remoteHasExtractedData
             ? "failed"
-            : "processing",
+            : remoteHasExtractedData
+              ? "ready"
+              : "processing",
     createdAt: row.created_at ? Date.parse(row.created_at) : Date.now(),
     updatedAt: row.updated_at ? Date.parse(row.updated_at) : Date.now(),
     processedAt: row.processed_at ? Date.parse(row.processed_at) : null
@@ -204,6 +236,27 @@ function captureMutationUrl(apiUrl: string) {
   return isEdgeCaptureApi(apiUrl) ? apiUrl : `${apiUrl}/api/captures`;
 }
 
+async function requestJson<T>(
+  url: string,
+  input: { method?: string; headers?: Record<string, string>; body?: unknown } = {}
+): Promise<T> {
+  if (!nativeNetwork) {
+    throw new Error("Native network bridge is unavailable.");
+  }
+  const raw = await nativeNetwork.requestJson(
+    url,
+    input.method ?? "GET",
+    JSON.stringify(input.headers ?? {}),
+    input.body === undefined ? null : JSON.stringify(input.body)
+  );
+  const response = JSON.parse(raw || "{}") as { ok: boolean; status: number; body: string };
+  const json = response.body ? JSON.parse(response.body) : {};
+  if (!response.ok) {
+    throw new Error(json.error_description || json.msg || json.error || `Request failed (${response.status})`);
+  }
+  return json as T;
+}
+
 export default function App() {
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
@@ -221,15 +274,13 @@ export default function App() {
 
   const loadCaptures = useCallback(async () => {
     if (config?.apiUrl && session?.accessToken) {
-      const response = await fetch(captureListUrl(config.apiUrl), {
+      const json = await requestJson<{ captures?: Array<Record<string, any>> }>(captureListUrl(config.apiUrl), {
         headers: {
           accept: "application/json",
           apikey: config.supabaseAnonKey,
           authorization: `Bearer ${session.accessToken}`
         }
       });
-      const json = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(json.error || "Could not load captures");
       const next = ((json.captures ?? []) as Array<Record<string, any>>).map(captureFromRemote);
       next.sort((a, b) => b.createdAt - a.createdAt);
       setCaptures(next);
@@ -333,24 +384,19 @@ export default function App() {
     if (!selected) return;
     if (config?.apiUrl && session?.accessToken) {
       try {
-        const response = await fetch(captureMutationUrl(config.apiUrl), {
+        const json = await requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
           method: "PATCH",
           headers: {
             apikey: config.supabaseAnonKey,
             authorization: `Bearer ${session.accessToken}`,
             "content-type": "application/json"
           },
-          body: JSON.stringify({
+          body: {
             captureId: selected.remoteId || selected.id,
             title: draftTitle.trim(),
             note: draftNote.trim()
-          })
+          }
         });
-        const json = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          setMessage(friendlyError(new Error(json.error || "Could not save."), "Could not save."));
-          return;
-        }
         setCaptures((current) =>
           current.map((item) => (item.id === selected.id ? captureFromRemote(json.capture) : item))
         );
@@ -402,16 +448,14 @@ export default function App() {
         mode === "signin"
           ? `${config.supabaseUrl}/auth/v1/token?grant_type=password`
           : `${config.supabaseUrl}/auth/v1/signup`;
-      const response = await fetch(endpoint, {
+      const json = await requestJson<Record<string, any>>(endpoint, {
         method: "POST",
         headers: {
           apikey: config.supabaseAnonKey,
           "content-type": "application/json"
         },
-        body: JSON.stringify({ email: authEmail.trim(), password: authPassword })
+        body: { email: authEmail.trim(), password: authPassword }
       });
-      const json = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(json.error_description || json.msg || json.error || "Sign in failed");
       const accessToken = json.access_token;
       const refreshToken = json.refresh_token;
       const userId = json.user?.id;
@@ -438,6 +482,7 @@ export default function App() {
 
   function renderCapture({ item }: { item: Capture }) {
     const source = item.siteName || hostFromUrl(item.sourceUrl) || item.sourceText.slice(0, 56);
+    const itemStatus = displayStatus(item);
     return (
       <Pressable
         onPress={() => openCapture(item.id)}
@@ -450,13 +495,13 @@ export default function App() {
           <Text
             style={[
               styles.status,
-              item.status === "processing" && styles.statusProcessing,
-              item.status === "needs_review" && styles.statusReview,
-              item.status === "failed" && styles.statusFailed,
-              item.status === "cancelled" && styles.statusCancelled
+              itemStatus === "processing" && styles.statusProcessing,
+              itemStatus === "needs_review" && styles.statusReview,
+              itemStatus === "failed" && styles.statusFailed,
+              itemStatus === "cancelled" && styles.statusCancelled
             ]}
           >
-            {statusLabel(item.status)}
+            {statusLabel(itemStatus)}
           </Text>
         </View>
         <Text numberOfLines={1} style={styles.meta}>
@@ -489,7 +534,7 @@ export default function App() {
           <Pressable onPress={() => setSelectedId(null)} style={styles.textButton}>
             <Text style={styles.textButtonText}>Back</Text>
           </Pressable>
-          <Text style={styles.kicker}>{selected.status === "processing" ? "Processing" : "Quick edit"}</Text>
+          <Text style={styles.kicker}>{displayStatus(selected) === "processing" ? "Processing" : "Quick edit"}</Text>
           <TextInput
             onChangeText={setDraftTitle}
             placeholder="Title"

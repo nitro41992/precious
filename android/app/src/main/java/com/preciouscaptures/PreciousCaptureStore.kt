@@ -104,6 +104,8 @@ object PreciousCaptureStore {
           analysisMode == "llm_waiting_network" -> "processing"
           analysisMode == "llm" && !needsReview -> "ready"
           analysisMode == "llm" -> "needs_review"
+          enrichment.optString("defaultIntent").isNotBlank() && !needsReview -> "ready"
+          enrichment.optString("defaultIntent").isNotBlank() -> "needs_review"
           else -> "failed"
         }
         capture

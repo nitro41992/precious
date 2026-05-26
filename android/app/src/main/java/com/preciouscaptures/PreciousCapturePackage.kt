@@ -9,7 +9,8 @@ class PreciousCapturePackage : ReactPackage {
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
     listOf(
       PreciousCaptureStoreModule(reactContext),
-      PreciousAuthModule(reactContext)
+      PreciousAuthModule(reactContext),
+      PreciousNetworkModule(reactContext)
     )
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
