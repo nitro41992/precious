@@ -163,11 +163,11 @@ function displayStatus(capture: Capture): CaptureStatus {
 function friendlyError(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : String(error || "");
   if (
-    /UnknownHostException|Unable to resolve host|No address associated|fetch failed/i.test(
+    /UnknownHostException|Unable to resolve host|No address associated|fetch failed|SocketException|Software caused connection abort|Connection reset|unexpected end of stream|native_request_failed/i.test(
       message
     )
   ) {
-    return "Waiting for internet to reach Sharebook.";
+    return "Network connection dropped. Try again in a moment.";
   }
   if (/unauthorized|session expired/i.test(message)) {
     return "Your session expired. Sign in again.";

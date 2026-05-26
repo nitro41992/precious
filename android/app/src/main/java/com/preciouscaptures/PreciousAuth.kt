@@ -133,9 +133,11 @@ fun refreshNativeAuthSession(context: Context, force: Boolean = false): JSONObje
   val refreshToken = session.optString("refreshToken")
   if (supabaseUrl.isBlank() || anonKey.isBlank() || refreshToken.isBlank()) return null
 
-  return runCatching {
+  return try {
     val connection = (URL("$supabaseUrl/auth/v1/token?grant_type=refresh_token").openConnection() as HttpURLConnection)
     connection.requestMethod = "POST"
+    connection.connectTimeout = 10000
+    connection.readTimeout = 30000
     connection.setRequestProperty("apikey", anonKey)
     connection.setRequestProperty("content-type", "application/json")
     connection.doOutput = true
@@ -151,7 +153,10 @@ fun refreshNativeAuthSession(context: Context, force: Boolean = false): JSONObje
       .put("userId", session.optString("userId"))
     writeNativeAuthSession(context, next)
     next
-  }.getOrNull()
+  } catch (error: Exception) {
+    if (error.isTransientNativeNetworkError()) throw error
+    null
+  }
 }
 
 fun clearNativeAuthSession(context: Context) {

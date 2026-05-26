@@ -7,6 +7,7 @@ import com.facebook.react.bridge.ReactMethod
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlin.math.min
 
 class PreciousNetworkModule(
   private val reactContext: ReactApplicationContext
@@ -22,40 +23,50 @@ class PreciousNetworkModule(
     promise: Promise
   ) {
     Thread {
+      var lastError: Exception? = null
       try {
-        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-          requestMethod = method.uppercase()
-          connectTimeout = 10000
-          readTimeout = 30000
-          val headers = runCatching { JSONObject(headersJson ?: "{}") }.getOrDefault(JSONObject())
-          headers.keys().forEach { key ->
-            setRequestProperty(key, headers.optString(key))
-          }
-          if (!body.isNullOrBlank()) {
-            doOutput = true
-            if (getRequestProperty("content-type").isNullOrBlank()) {
-              setRequestProperty("content-type", "application/json")
+        repeat(3) { attempt ->
+          try {
+            val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+              requestMethod = method.uppercase()
+              connectTimeout = 10000
+              readTimeout = 30000
+              val headers = runCatching { JSONObject(headersJson ?: "{}") }.getOrDefault(JSONObject())
+              headers.keys().forEach { key ->
+                setRequestProperty(key, headers.optString(key))
+              }
+              if (!body.isNullOrBlank()) {
+                doOutput = true
+                if (getRequestProperty("content-type").isNullOrBlank()) {
+                  setRequestProperty("content-type", "application/json")
+                }
+              }
             }
+
+            if (!body.isNullOrBlank()) {
+              connection.outputStream.use { output -> output.write(body.toByteArray()) }
+            }
+
+            val status = connection.responseCode
+            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+            val responseBody = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            promise.resolve(
+              JSONObject()
+                .put("status", status)
+                .put("ok", status in 200..299)
+                .put("body", responseBody)
+                .toString()
+            )
+            connection.disconnect()
+            return@Thread
+          } catch (error: Exception) {
+            lastError = error
+            if (!error.isTransientNativeNetworkError() || attempt >= 2) throw error
+            Thread.sleep(min(250L * (attempt + 1), 750L))
           }
         }
-
-        if (!body.isNullOrBlank()) {
-          connection.outputStream.use { output -> output.write(body.toByteArray()) }
-        }
-
-        val status = connection.responseCode
-        val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-        val responseBody = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-        promise.resolve(
-          JSONObject()
-            .put("status", status)
-            .put("ok", status in 200..299)
-            .put("body", responseBody)
-            .toString()
-        )
-        connection.disconnect()
       } catch (error: Exception) {
-        promise.reject("native_request_failed", error)
+        promise.reject("native_request_failed", lastError ?: error)
       }
     }.start()
   }

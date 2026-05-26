@@ -223,7 +223,14 @@ object CaptureAnalysisClient {
   }
 
   private fun validSession(context: Context): JSONObject? {
-    return refreshNativeAuthSession(context)
+    return try {
+      refreshNativeAuthSession(context)
+    } catch (error: Exception) {
+      if (error.isTransientNativeNetworkError()) {
+        throw NetworkUnavailableException(error.message ?: "Network is unavailable", error)
+      }
+      null
+    }
   }
 
   private fun toEnrichment(remoteCapture: JSONObject): JSONObject {
@@ -413,7 +420,8 @@ object CaptureAnalysisClient {
 }
 
 private fun Throwable.isTransientNetworkError(): Boolean {
-  return this is UnknownHostException ||
+  return isTransientNativeNetworkError() ||
+    this is UnknownHostException ||
     this is SocketTimeoutException ||
     this is ConnectException ||
     this is NoRouteToHostException ||
