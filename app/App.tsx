@@ -179,6 +179,7 @@ function captureFromRemote(row: Record<string, any>): Capture {
   const analysis = row.analysis ?? {};
   const defaultIntent = analysis.default_intent ?? {};
   const cancelRequested = Boolean(row.analysis_cancel_requested_at);
+  const analysisMode = nullableValue(row.analysis_mode) || (nullableValue(row.analysis_provider) ? "llm" : undefined);
   const remoteHasExtractedData = Boolean(
     row.default_intent ||
       row.analysis_provider ||
@@ -201,11 +202,9 @@ function captureFromRemote(row: Record<string, any>): Capture {
     sourceUrl: typeof row.source_url === "string" ? row.source_url : null,
     siteName: hostFromUrl(typeof row.source_url === "string" ? row.source_url : null),
     summary: analysis.summary || undefined,
-    analysisMode: cancelRequested
-      ? "cancelled"
-      : row.analysis_mode || (row.analysis_provider ? "llm" : undefined),
-    analysisProvider: row.analysis_provider || undefined,
-    analysisModel: row.analysis_model || undefined,
+    analysisMode: cancelRequested ? "cancelled" : analysisMode,
+    analysisProvider: nullableValue(row.analysis_provider),
+    analysisModel: nullableValue(row.analysis_model),
     analysisError: cancelRequested
       ? row.analysis_error || "AI processing was cancelled."
       : row.analysis_error || undefined,
@@ -234,6 +233,12 @@ function captureFromRemote(row: Record<string, any>): Capture {
     updatedAt: row.updated_at ? Date.parse(row.updated_at) : Date.now(),
     processedAt: row.processed_at ? Date.parse(row.processed_at) : null
   };
+}
+
+function nullableValue(value: unknown) {
+  if (value === null || value === undefined) return undefined;
+  const text = String(value);
+  return text && text !== "null" ? text : undefined;
 }
 
 function isEdgeCaptureApi(apiUrl: string) {
@@ -380,19 +385,22 @@ export default function App() {
       const captureId = parseCaptureUrl(url);
       if (captureId) setSelectedId(captureId);
     });
+  }, []);
 
+  useEffect(() => {
     const linkSubscription = Linking.addEventListener("url", ({ url }) => {
       const captureId = parseCaptureUrl(url);
       if (captureId) setSelectedId(captureId);
       void loadCaptures();
     });
+    return () => linkSubscription.remove();
+  }, [loadCaptures]);
+
+  useEffect(() => {
     const appSubscription = AppState.addEventListener("change", (state) => {
       if (state === "active") void loadCaptures();
     });
-    return () => {
-      linkSubscription.remove();
-      appSubscription.remove();
-    };
+    return () => appSubscription.remove();
   }, [loadCaptures]);
 
   useEffect(() => {
@@ -430,6 +438,11 @@ export default function App() {
   }, [captures, query]);
 
   const selected = selectedId ? captures.find((capture) => capture.id === selectedId) ?? null : null;
+  const selectedAnalysisMode = nullableValue(selected?.analysisMode);
+  const selectedSummary =
+    selected?.summary && selected.summary !== selected.sourceUrl && selected.summary !== selected.sourceText
+      ? selected.summary
+      : undefined;
 
   async function saveQuickEdit() {
     if (!selected) return;
@@ -577,7 +590,7 @@ export default function App() {
         ) : null}
         {item.defaultIntent ? (
           <Text numberOfLines={1} style={styles.intentPreview}>
-            {humanize(item.defaultIntent)} · {item.confidenceLabel || item.analysisMode || "Analyzed"}
+            {humanize(item.defaultIntent)} · {item.confidenceLabel || nullableValue(item.analysisMode) || "Analyzed"}
           </Text>
         ) : null}
         {item.note ? (
@@ -617,13 +630,13 @@ export default function App() {
             <Text style={styles.meta}>Source</Text>
             <Text style={styles.sourceText}>{selected.sourceUrl || selected.sourceText}</Text>
           </View>
-          {selected.summary ? (
+          {selectedSummary ? (
             <View style={styles.sourceBlock}>
               <Text style={styles.meta}>Extracted</Text>
-              <Text style={styles.sourceText}>{selected.summary}</Text>
+              <Text style={styles.sourceText}>{selectedSummary}</Text>
             </View>
           ) : null}
-          {(selected.defaultIntent || selected.intentRationale || selected.analysisMode) ? (
+          {(selected.defaultIntent || selected.intentRationale || selectedAnalysisMode) ? (
             <View style={styles.sourceBlock}>
               <Text style={styles.meta}>Intent</Text>
               {selected.defaultIntent ? (
@@ -635,11 +648,11 @@ export default function App() {
               {selected.intentRationale ? (
                 <Text style={styles.supportingText}>{selected.intentRationale}</Text>
               ) : null}
-              {selected.analysisMode ? (
+              {selectedAnalysisMode ? (
                 <Text style={styles.supportingText}>
-                  {selected.analysisMode === "llm"
+                  {selectedAnalysisMode === "llm"
                     ? `LLM extraction · ${selected.analysisModel || selected.analysisProvider || "model"}`
-                    : `LLM extraction unavailable · ${selected.analysisMode}`}
+                    : `LLM extraction unavailable · ${selectedAnalysisMode}`}
                 </Text>
               ) : null}
               {selected.analysisError && selected.analysisError !== "null" ? (

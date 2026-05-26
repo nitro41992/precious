@@ -237,13 +237,13 @@ object CaptureAnalysisClient {
     val analysis = remoteCapture.optJSONObject("analysis") ?: analysisFromCapture(remoteCapture)
     val defaultIntent = analysis.optJSONObject("default_intent") ?: JSONObject()
     val analysisRun = firstAnalysisRun(remoteCapture)
-    val analysisMode = remoteCapture.optString("analysis_mode").ifBlank {
+    val analysisMode = nullableString(remoteCapture, "analysis_mode").ifBlank {
       if (analysisRun != null && analysisRun.optString("status", "succeeded") == "succeeded") "llm" else ""
     }
-    val analysisProvider = remoteCapture.optString("analysis_provider").ifBlank {
+    val analysisProvider = nullableString(remoteCapture, "analysis_provider").ifBlank {
       analysisRun?.optString("provider").orEmpty()
     }
-    val analysisModel = remoteCapture.optString("analysis_model").ifBlank {
+    val analysisModel = nullableString(remoteCapture, "analysis_model").ifBlank {
       analysisRun?.optString("model").orEmpty()
     }
     return JSONObject()

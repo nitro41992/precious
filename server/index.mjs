@@ -168,6 +168,48 @@ function fallbackTitle(sourceText, sourceUrl) {
 }
 
 async function fetchUrlMetadata(sourceUrl) {
+  if (!sourceUrl) return null;
+  const endpoint = oembedEndpoint(sourceUrl);
+  if (!endpoint) return null;
+  try {
+    const response = await fetch(endpoint, {
+      headers: {
+        accept: "application/json",
+        "user-agent": "PreciousCaptures/0.1"
+      },
+      signal: AbortSignal.timeout(7000)
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return {
+      provider: "oembed",
+      type: typeof data.type === "string" ? data.type : null,
+      title: typeof data.title === "string" ? data.title : null,
+      description: null,
+      image: typeof data.thumbnail_url === "string" ? data.thumbnail_url : null,
+      canonical: sourceUrl,
+      siteName: typeof data.provider_name === "string" ? data.provider_name : null,
+      authorName: typeof data.author_name === "string" ? data.author_name : null,
+      authorUrl: typeof data.author_url === "string" ? data.author_url : null
+    };
+  } catch {
+    return null;
+  }
+}
+
+function oembedEndpoint(value) {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.replace(/^www\./, "");
+    if (host === "youtube.com" || host === "m.youtube.com" || host === "youtu.be" || host === "music.youtube.com") {
+      return `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(value)}`;
+    }
+    if (host === "reddit.com" || host.endsWith(".reddit.com")) {
+      return `https://www.reddit.com/oembed?format=json&url=${encodeURIComponent(value)}`;
+    }
+  } catch {
+    return null;
+  }
   return null;
 }
 
