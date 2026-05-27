@@ -2213,6 +2213,90 @@ async function markCollectionDecisionAccepted(
     .eq("id", data.id);
 }
 
+function confirmedReminderSuggestions(analysis: Record<string, unknown>) {
+  const reminders = Array.isArray(analysis.suggested_reminders) ? analysis.suggested_reminders : [];
+  return reminders.map((reminder) => {
+    if (!reminder || typeof reminder !== "object" || Array.isArray(reminder)) return reminder;
+    return { ...(reminder as Record<string, unknown>), status: "confirmed" };
+  });
+}
+
+function dismissReminderSuggestion(analysis: Record<string, unknown>, reminderIndex: unknown) {
+  const index = Number(reminderIndex);
+  const reminders = Array.isArray(analysis.suggested_reminders) ? analysis.suggested_reminders : [];
+  if (!Number.isInteger(index) || index < 0 || index >= reminders.length) return reminders;
+  return reminders.filter((_, itemIndex) => itemIndex !== index);
+}
+
+async function acceptPendingCollectionDecisions(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  captureId: string,
+  analysis: Record<string, unknown>
+) {
+  const rawDecisions = Array.isArray(analysis.collection_decisions)
+    ? analysis.collection_decisions
+    : Array.isArray(analysis.suggested_collections)
+      ? analysis.suggested_collections
+      : [];
+  const decisions = rawDecisions
+    .map((item) => normalizeCollectionDecision(item as Record<string, unknown>))
+    .filter((decision) =>
+      (decision.type === "existing" && decision.collection_id) ||
+      (decision.type === "new" && decision.title && decision.description)
+    );
+
+  for (const decision of decisions) {
+    if (decision.type === "existing" && decision.collection_id) {
+      const collection = await supabase
+        .from("collections")
+        .select("id,status")
+        .eq("user_id", userId)
+        .eq("id", decision.collection_id)
+        .maybeSingle();
+      if (collection.error) throw collection.error;
+      if (!collection.data || collection.data.status === "archived") continue;
+      await linkCaptureToCollection(supabase, userId, decision.collection_id, captureId, {
+        createdBy: "analysis",
+        rationale: decision.rationale,
+        confidence: decision.confidence
+      });
+      continue;
+    }
+
+    const existing = await supabase
+      .from("collections")
+      .select("id,status")
+      .eq("user_id", userId)
+      .eq("title", decision.title)
+      .maybeSingle();
+    if (existing.error) throw existing.error;
+    let collectionId = existing.data?.id ? String(existing.data.id) : "";
+    if (!collectionId) {
+      const created = await supabase
+        .from("collections")
+        .insert({
+          user_id: userId,
+          title: decision.title,
+          description: decision.description,
+          created_by: "analysis"
+        })
+        .select("id")
+        .single();
+      if (created.error) throw created.error;
+      collectionId = String(created.data.id);
+      await upsertCollectionEmbedding(supabase, userId, collectionId, decision.title, decision.description || "");
+    } else if (existing.data?.status === "archived") {
+      continue;
+    }
+    await linkCaptureToCollection(supabase, userId, collectionId, captureId, {
+      createdBy: "analysis",
+      rationale: decision.rationale,
+      confidence: decision.confidence
+    });
+  }
+}
+
 async function handleClientEventsResource(
   request: Request,
   supabase: ReturnType<typeof adminClient>,
@@ -2578,12 +2662,16 @@ Deno.serve(async (request) => {
         const currentAnalysis = existingResult.data.analysis && typeof existingResult.data.analysis === "object"
           ? existingResult.data.analysis as Record<string, unknown>
           : {};
-        if (hasCollectionDecisions(currentAnalysis)) {
-          return json({ error: "Resolve collection suggestions before confirming review." }, 409);
-        }
+        await acceptPendingCollectionDecisions(supabase, user.id, String(existingResult.data.id), currentAnalysis);
         const confirmedAt = new Date().toISOString();
         const update: Record<string, unknown> = {
-          analysis: { ...currentAnalysis, needs_review: false },
+          analysis: {
+            ...currentAnalysis,
+            needs_review: false,
+            collection_decisions: [],
+            suggested_collections: [],
+            suggested_reminders: confirmedReminderSuggestions(currentAnalysis)
+          },
           analysis_state: "ready",
           review_confirmed_at: confirmedAt
         };
@@ -2622,7 +2710,28 @@ Deno.serve(async (request) => {
             .single();
         }
         if (result.error) throw result.error;
-        return json({ capture: withCaptureState(result.data) });
+        const rows = await attachLinkedCollections(supabase, user.id, [result.data as Record<string, unknown>]);
+        return json({ capture: withCaptureState(rows[0] ?? result.data) });
+      }
+
+      if (body.action === "dismiss_reminder") {
+        const currentAnalysis = existingResult.data.analysis && typeof existingResult.data.analysis === "object"
+          ? existingResult.data.analysis as Record<string, unknown>
+          : {};
+        const nextAnalysis = {
+          ...currentAnalysis,
+          suggested_reminders: dismissReminderSuggestion(currentAnalysis, body.reminderIndex)
+        };
+        const result = await supabase
+          .from("captures")
+          .update({ analysis: nextAnalysis })
+          .eq("user_id", user.id)
+          .eq("id", existingResult.data.id)
+          .select("*")
+          .single();
+        if (result.error) throw result.error;
+        const rows = await attachLinkedCollections(supabase, user.id, [result.data as Record<string, unknown>]);
+        return json({ capture: withCaptureState(rows[0] ?? result.data) });
       }
 
       const update: Record<string, unknown> = {};

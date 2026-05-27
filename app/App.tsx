@@ -23,6 +23,7 @@ import {
 import saveIntents from "../supabase/functions/_shared/save-intents.json";
 
 type CaptureStatus = "processing" | "ready" | "needs_review" | "failed";
+type ReviewReason = "intent" | "collection" | "analysis";
 
 type Capture = {
   id: string;
@@ -235,16 +236,31 @@ function hasUnresolvedCollectionDecisions(capture: Pick<Capture, "collectionDeci
   return Boolean(capture.collectionDecisions?.length);
 }
 
+function reviewReasons(
+  capture: Pick<Capture, "status" | "needsReview" | "confidenceLabel" | "collectionDecisions" | "reviewConfirmedAt">
+): ReviewReason[] {
+  if (capture.reviewConfirmedAt || capture.status === "processing" || capture.status === "failed") return [];
+  const reasons: ReviewReason[] = [];
+  if (confidenceRequiresReview(capture.confidenceLabel)) reasons.push("intent");
+  if (hasUnresolvedCollectionDecisions(capture)) reasons.push("collection");
+  if ((capture.needsReview || capture.status === "needs_review") && !reasons.length) reasons.push("analysis");
+  return reasons;
+}
+
+function reviewReasonLabel(reason: ReviewReason) {
+  if (reason === "intent") return "Intent uncertain";
+  if (reason === "collection") return "Collection suggestions";
+  return "Analysis needs review";
+}
+
+function reviewReasonSummary(reasons: ReviewReason[]) {
+  return reasons.map(reviewReasonLabel).join(", ");
+}
+
 function captureNeedsReview(
   capture: Pick<Capture, "status" | "needsReview" | "confidenceLabel" | "collectionDecisions" | "reviewConfirmedAt">
 ) {
-  if (capture.reviewConfirmedAt || capture.status === "processing" || capture.status === "failed") return false;
-  return Boolean(
-    capture.needsReview ||
-      capture.status === "needs_review" ||
-      confidenceRequiresReview(capture.confidenceLabel) ||
-      hasUnresolvedCollectionDecisions(capture)
-  );
+  return reviewReasons(capture).length > 0;
 }
 
 function displayStatus(capture: Capture): CaptureStatus {
@@ -871,10 +887,6 @@ export default function App() {
 
   async function confirmReview() {
     if (!selected) return;
-    if (hasUnresolvedCollectionDecisions(selected)) {
-      setMessage("Resolve collection suggestions before confirming review.");
-      return;
-    }
     if (config?.apiUrl && session?.accessToken) {
       try {
         const activeSession = await getFreshSession();
@@ -904,8 +916,12 @@ export default function App() {
           if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
           json = await confirmWithToken(refreshed.accessToken);
         }
+        const updatedCapture = captureFromRemote(json.capture);
         setCaptures((current) =>
-          current.map((item) => (item.id === selected.id ? captureFromRemote(json.capture) : item))
+          current.map((item) => (item.id === selected.id ? updatedCapture : item))
+        );
+        setCollectionCaptures((current) =>
+          current.map((item) => (item.id === selected.id ? updatedCapture : item))
         );
         setDraftTitleDirty(false);
         setDraftNoteDirty(false);
@@ -925,6 +941,9 @@ export default function App() {
     );
     const next = JSON.parse(raw || "[]") as Capture[];
     setCaptures(sortCaptures(next));
+    setCollectionCaptures((current) =>
+      current.map((item) => next.find((capture) => capture.id === item.id) ?? item)
+    );
     setDraftTitleDirty(false);
     setDraftNoteDirty(false);
     setDraftIntentDirty(false);
@@ -1102,6 +1121,71 @@ export default function App() {
     }
   }
 
+  async function dismissReminder(reminderIndex: number) {
+    if (!selected) return;
+    if (config?.apiUrl && session?.accessToken) {
+      try {
+        const activeSession = await getFreshSession();
+        if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
+        const dismissWithToken = (accessToken: string) =>
+          requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
+            method: "PATCH",
+            headers: {
+              apikey: config.supabaseAnonKey,
+              authorization: `Bearer ${accessToken}`,
+              "content-type": "application/json"
+            },
+            body: {
+              captureId: selected.remoteId || selected.id,
+              action: "dismiss_reminder",
+              reminderIndex
+            }
+          });
+        let json: { capture: Record<string, any> };
+        try {
+          json = await dismissWithToken(activeSession.accessToken);
+        } catch (error) {
+          if (!isAuthError(error)) throw error;
+          const refreshed = await getFreshSession(true);
+          if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
+          json = await dismissWithToken(refreshed.accessToken);
+        }
+        const updatedCapture = captureFromRemote(json.capture);
+        setCaptures((current) =>
+          current.map((capture) => (capture.id === selected.id ? updatedCapture : capture))
+        );
+        setCollectionCaptures((current) =>
+          current.map((capture) => (capture.id === selected.id ? updatedCapture : capture))
+        );
+        setMessage("Reminder removed.");
+      } catch (error) {
+        setMessage(friendlyError(error, "Could not remove reminder."));
+      }
+      return;
+    }
+    setCaptures((current) =>
+      current.map((capture) =>
+        capture.id === selected.id
+          ? {
+              ...capture,
+              suggestedReminders: (capture.suggestedReminders || []).filter((_, index) => index !== reminderIndex)
+            }
+          : capture
+      )
+    );
+    setCollectionCaptures((current) =>
+      current.map((capture) =>
+        capture.id === selected.id
+          ? {
+              ...capture,
+              suggestedReminders: (capture.suggestedReminders || []).filter((_, index) => index !== reminderIndex)
+            }
+          : capture
+      )
+    );
+    setMessage("Reminder removed.");
+  }
+
   async function copySource() {
     if (!selected) return;
     const source = selected.sourceUrl || selected.sourceText;
@@ -1255,6 +1339,7 @@ export default function App() {
   function renderCapture({ item }: { item: Capture }) {
     const source = item.siteName || hostFromUrl(item.sourceUrl) || item.sourceText.slice(0, 56);
     const itemStatus = displayStatus(item);
+    const itemReviewReasons = reviewReasons(item);
     return (
       <Pressable
         onPress={() => openCapture(item.id)}
@@ -1288,6 +1373,11 @@ export default function App() {
             {humanize(item.defaultIntent)} · {item.confidenceLabel || nullableValue(item.analysisMode) || "Analyzed"}
           </Text>
         ) : null}
+        {itemReviewReasons.length ? (
+          <Text numberOfLines={1} style={styles.reviewReasonPreview}>
+            {reviewReasonSummary(itemReviewReasons)}
+          </Text>
+        ) : null}
         {item.note ? (
           <Text numberOfLines={2} style={styles.notePreview}>
             {item.note}
@@ -1300,6 +1390,7 @@ export default function App() {
   function renderCollectionCapture({ item }: { item: Capture }) {
     const source = item.siteName || hostFromUrl(item.sourceUrl) || item.sourceText.slice(0, 56);
     const itemStatus = displayStatus(item);
+    const itemReviewReasons = reviewReasons(item);
     return (
       <View style={styles.collectionCaptureRow}>
         <Pressable
@@ -1334,6 +1425,11 @@ export default function App() {
           {item.defaultIntent ? (
             <Text numberOfLines={1} style={styles.intentPreview}>
               {humanize(item.defaultIntent)} · {item.confidenceLabel || nullableValue(item.analysisMode) || "Analyzed"}
+            </Text>
+          ) : null}
+          {itemReviewReasons.length ? (
+            <Text numberOfLines={1} style={styles.reviewReasonPreview}>
+              {reviewReasonSummary(itemReviewReasons)}
             </Text>
           ) : null}
         </Pressable>
@@ -1481,7 +1577,8 @@ export default function App() {
     const selectedArchived = isArchived(selected);
     const sourceValue = selected.sourceUrl || selected.sourceText;
     const hasDirtyDraft = draftTitleDirty || draftNoteDirty || draftIntentDirty;
-    const canConfirmReview = displayStatus(selected) === "needs_review" && !hasUnresolvedCollectionDecisions(selected);
+    const selectedReviewReasons = reviewReasons(selected);
+    const canConfirmReview = selectedReviewReasons.length > 0;
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="dark-content" />
@@ -1513,6 +1610,16 @@ export default function App() {
             </Text>
           </View>
           <Text style={styles.kicker}>Capture review</Text>
+          {selectedReviewReasons.length ? (
+            <View style={styles.reviewReasonBlock}>
+              <Text style={styles.meta}>Needs review</Text>
+              {selectedReviewReasons.map((reason) => (
+                <Text key={reason} style={styles.reviewReasonText}>
+                  {reviewReasonLabel(reason)}
+                </Text>
+              ))}
+            </View>
+          ) : null}
           <TextInput
             multiline
             onChangeText={(value) => {
@@ -1614,11 +1721,16 @@ export default function App() {
           {selected.suggestedReminders?.length ? (
             <View style={styles.sourceBlock}>
               <Text style={styles.meta}>Reminders</Text>
-              {selected.suggestedReminders.slice(0, 3).map((reminder) => (
-                <Text key={`${reminder.trigger_type}-${reminder.trigger_value}`} style={styles.sourceText}>
-                  {reminder.trigger_value || humanize(reminder.trigger_type)}
-                  {reminder.status ? ` · ${humanize(reminder.status)}` : ""} · {reminder.rationale}
-                </Text>
+              {selected.suggestedReminders.slice(0, 3).map((reminder, index) => (
+                <View key={`${reminder.trigger_type}-${reminder.trigger_value}-${index}`} style={styles.collectionActionRow}>
+                  <Text style={[styles.sourceText, styles.collectionActionText]}>
+                    {reminder.trigger_value || humanize(reminder.trigger_type)}
+                    {reminder.status ? ` · ${humanize(reminder.status)}` : ""} · {reminder.rationale}
+                  </Text>
+                  <Pressable onPress={() => void dismissReminder(index)} hitSlop={8}>
+                    <Text style={styles.inlineAction}>Remove</Text>
+                  </Pressable>
+                </View>
               ))}
             </View>
           ) : null}
@@ -2069,6 +2181,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textTransform: "capitalize"
   },
+  reviewReasonPreview: {
+    color: "#9a6b1f",
+    fontSize: 13,
+    fontWeight: "600"
+  },
   separator: {
     backgroundColor: colors.line,
     height: StyleSheet.hairlineWidth
@@ -2156,6 +2273,17 @@ const styles = StyleSheet.create({
   },
   editBlock: {
     gap: 8
+  },
+  reviewReasonBlock: {
+    backgroundColor: colors.soft,
+    borderRadius: 8,
+    gap: 6,
+    padding: 12
+  },
+  reviewReasonText: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "700"
   },
   fieldLabel: {
     color: colors.ink,

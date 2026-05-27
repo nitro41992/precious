@@ -175,6 +175,9 @@ object PreciousCaptureStore {
           .put("title", title.ifBlank { capture.optString("title", "Untitled capture") })
           .put("note", note)
           .put("needsReview", false)
+          .put("collectionDecisions", JSONArray())
+          .put("suggestedCollections", JSONArray())
+          .put("suggestedReminders", confirmedReminders(capture.optJSONArray("suggestedReminders") ?: JSONArray()))
           .put("status", "ready")
           .put("reviewConfirmedAt", now)
           .put("updatedAt", now)
@@ -231,6 +234,19 @@ object PreciousCaptureStore {
         decisions != null && decisions.length() > 0
       }
     }
+  }
+
+  private fun confirmedReminders(reminders: JSONArray): JSONArray {
+    val next = JSONArray()
+    for (index in 0 until reminders.length()) {
+      val reminder = reminders.optJSONObject(index)
+      if (reminder != null) {
+        next.put(reminder.put("status", "confirmed"))
+      } else {
+        next.put(reminders.opt(index))
+      }
+    }
+    return next
   }
 
   private fun extractUrl(value: String): String? {

@@ -3,7 +3,6 @@ const {
   createOrGetCaptureWithAsset,
   loadCapture,
   mergeAnalysisPatch,
-  hasCollectionDecisions,
   readBody,
   readCapturePayload,
   send,
@@ -20,6 +19,22 @@ const activeSaveIntentKeys = new Set(
 function archivedFilter(row, archived) {
   const state = row.capture_state || (row.archived_at || row.analysis?.capture_state === "archived" ? "archived" : "active");
   return archived ? state === "archived" : state !== "archived";
+}
+
+function confirmedReminderSuggestions(analysis) {
+  const reminders = Array.isArray(analysis.suggested_reminders) ? analysis.suggested_reminders : [];
+  return reminders.map((reminder) =>
+    reminder && typeof reminder === "object" && !Array.isArray(reminder)
+      ? { ...reminder, status: "confirmed" }
+      : reminder
+  );
+}
+
+function dismissReminderSuggestion(analysis, reminderIndex) {
+  const index = Number(reminderIndex);
+  const reminders = Array.isArray(analysis.suggested_reminders) ? analysis.suggested_reminders : [];
+  if (!Number.isInteger(index) || index < 0 || index >= reminders.length) return reminders;
+  return reminders.filter((_, itemIndex) => itemIndex !== index);
 }
 
 module.exports = async function captures(req, res) {
@@ -111,12 +126,15 @@ module.exports = async function captures(req, res) {
         const existing = await loadCapture(supabase, user.id, body.captureId);
         if (!existing) return send(res, 404, { error: "Capture not found" });
         const analysis = existing.analysis && typeof existing.analysis === "object" ? existing.analysis : {};
-        if (hasCollectionDecisions(analysis)) {
-          return send(res, 409, { error: "Resolve collection suggestions before confirming review." });
-        }
         const confirmedAt = new Date().toISOString();
         const update = {
-          analysis: { ...analysis, needs_review: false },
+          analysis: {
+            ...analysis,
+            needs_review: false,
+            collection_decisions: [],
+            suggested_collections: [],
+            suggested_reminders: confirmedReminderSuggestions(analysis)
+          },
           analysis_state: "ready",
           review_confirmed_at: confirmedAt
         };
@@ -154,6 +172,25 @@ module.exports = async function captures(req, res) {
             .select("*")
             .single();
         }
+        if (result.error) throw result.error;
+        return send(res, 200, { capture: withCaptureState(result.data) });
+      }
+
+      if (body.action === "dismiss_reminder") {
+        const existing = await loadCapture(supabase, user.id, body.captureId);
+        if (!existing) return send(res, 404, { error: "Capture not found" });
+        const analysis = existing.analysis && typeof existing.analysis === "object" ? existing.analysis : {};
+        const nextAnalysis = {
+          ...analysis,
+          suggested_reminders: dismissReminderSuggestion(analysis, body.reminderIndex)
+        };
+        const result = await supabase
+          .from("captures")
+          .update({ analysis: nextAnalysis })
+          .eq("user_id", user.id)
+          .or(`id.eq.${body.captureId},client_capture_key.eq.${body.captureId}`)
+          .select("*")
+          .single();
         if (result.error) throw result.error;
         return send(res, 200, { capture: withCaptureState(result.data) });
       }
