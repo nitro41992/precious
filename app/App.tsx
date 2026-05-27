@@ -1,6 +1,6 @@
 import "react-native-url-polyfill/auto";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   AppState,
@@ -91,11 +91,53 @@ type Collection = {
   updatedAt?: string | null;
 };
 
+type ReminderSuggestion = NonNullable<Capture["suggestedReminders"]>[number];
+type ReminderDraftAction = "keep" | "remove";
+type CollectionDraftAction = "keep" | "remove" | "ignore" | "link" | "create" | "added";
+type NoteSaveState = "idle" | "saving" | "saved" | "error";
+
+type ReminderReviewDecision = {
+  index: number;
+  action: ReminderDraftAction;
+};
+
+type CollectionReviewDecision =
+  | {
+      kind: "linked";
+      collectionId: string;
+      action: "keep" | "remove";
+    }
+  | {
+      kind: "suggested";
+      index: number;
+      type: CollectionDecision["type"];
+      collectionId?: string | null;
+      title: string;
+      description?: string | null;
+      rationale: string;
+      confidence: number;
+      action: "ignore" | "link" | "create";
+    };
+
+type CaptureReviewDraft = {
+  title?: string;
+  titleDirty?: boolean;
+  note?: string;
+  noteDirty?: boolean;
+  intent?: string;
+  intentDirty?: boolean;
+  reminders?: Record<string, ReminderDraftAction>;
+  collections?: Record<string, CollectionDraftAction>;
+  updatedAt?: number;
+};
+
 type CaptureStore = {
   captureSource: (sourceText: string) => Promise<string>;
   getCaptures: () => Promise<string>;
   updateCapture: (id: string, title: string, note: string, currentSaveIntent: string | null) => Promise<string>;
   confirmCaptureReview?: (id: string, title: string, note: string, currentSaveIntent: string | null) => Promise<string>;
+  getReviewDrafts?: () => Promise<string | null>;
+  setReviewDrafts?: (draftsJson: string) => Promise<boolean>;
   archiveCapture: (id: string) => Promise<string>;
   restoreCapture: (id: string) => Promise<string>;
 };
@@ -207,6 +249,76 @@ function humanize(value: string | undefined) {
 function normalizeIntent(value: string | undefined) {
   if (!value) return "";
   return INTENT_OPTIONS.includes(value) ? value : "";
+}
+
+function reminderLabel(reminder: ReminderSuggestion | undefined) {
+  if (!reminder) return "";
+  return reminder.trigger_value || humanize(reminder.trigger_type);
+}
+
+function reminderDraftKey(reminder: ReminderSuggestion, index: number) {
+  return `${index}:${reminder.trigger_type || ""}:${reminder.trigger_value || ""}`;
+}
+
+function linkedCollectionDraftKey(collectionId: string) {
+  return `linked:${collectionId}`;
+}
+
+function suggestedCollectionDraftKey(collection: CollectionDecision, index: number) {
+  return `suggested:${index}:${collection.type}:${collection.collectionId || collection.title}`;
+}
+
+function captureDraftKey(capture: Pick<Capture, "id" | "remoteId">) {
+  return capture.remoteId || capture.id;
+}
+
+function cleanedReviewDraft(draft: CaptureReviewDraft): CaptureReviewDraft | null {
+  const next: CaptureReviewDraft = { updatedAt: draft.updatedAt };
+  if (draft.titleDirty && typeof draft.title === "string") {
+    next.title = draft.title;
+    next.titleDirty = true;
+  }
+  if (draft.noteDirty && typeof draft.note === "string") {
+    next.note = draft.note;
+    next.noteDirty = true;
+  }
+  if (draft.intentDirty && draft.intent) {
+    next.intent = draft.intent;
+    next.intentDirty = true;
+  }
+  if (draft.reminders && Object.keys(draft.reminders).length) {
+    next.reminders = draft.reminders;
+  }
+  if (draft.collections && Object.keys(draft.collections).length) {
+    next.collections = draft.collections;
+  }
+  const hasChanges = Boolean(
+    next.titleDirty ||
+      next.noteDirty ||
+      next.intentDirty ||
+      next.reminders ||
+      next.collections
+  );
+  return hasChanges ? next : null;
+}
+
+function cleanSentence(value: string | null | undefined) {
+  return String(value || "").trim().replace(/\s+/g, " ").replace(/[.!?]+$/, "");
+}
+
+function conciseText(value: string | null | undefined, maxLength = 110) {
+  const text = cleanSentence(value);
+  if (text.length <= maxLength) return text;
+  const clipped = text.slice(0, maxLength);
+  const breakIndex = Math.max(clipped.lastIndexOf(","), clipped.lastIndexOf(";"), clipped.lastIndexOf(" "));
+  return `${clipped.slice(0, breakIndex > 60 ? breakIndex : maxLength).trim()}...`;
+}
+
+function becauseSentence(value: string | null | undefined) {
+  const text = conciseText(value);
+  if (!text) return "";
+  const body = text.replace(/^because[:\s]*/i, "");
+  return `Because ${body.charAt(0).toLowerCase()}${body.slice(1)}.`;
 }
 
 function isArchived(capture: Pick<Capture, "archivedAt">) {
@@ -491,6 +603,12 @@ export default function App() {
   const [draftTitle, setDraftTitle] = useState("");
   const [draftNote, setDraftNote] = useState("");
   const [draftIntent, setDraftIntent] = useState("");
+  const [quickIntentOpen, setQuickIntentOpen] = useState(false);
+  const [reminderDrafts, setReminderDrafts] = useState<Record<string, ReminderDraftAction>>({});
+  const [collectionDrafts, setCollectionDrafts] = useState<Record<string, CollectionDraftAction>>({});
+  const [reviewDraftsByCapture, setReviewDraftsByCapture] = useState<Record<string, CaptureReviewDraft>>({});
+  const [reviewDraftsLoaded, setReviewDraftsLoaded] = useState(false);
+  const [noteSaveState, setNoteSaveState] = useState<NoteSaveState>("idle");
   const [collectionTitle, setCollectionTitle] = useState("");
   const [collectionDescription, setCollectionDescription] = useState("");
   const [collectionDraftDirty, setCollectionDraftDirty] = useState(false);
@@ -504,6 +622,7 @@ export default function App() {
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authLoading, setAuthLoading] = useState<"signin" | "signup" | null>(null);
+  const latestNoteRef = useRef("");
 
   const getFreshSession = useCallback(async (force = false) => {
     if (!session) return null;
@@ -638,6 +757,9 @@ export default function App() {
     setDraftTitleDirty(false);
     setDraftNoteDirty(false);
     setDraftIntentDirty(false);
+    setQuickIntentOpen(false);
+    setReminderDrafts({});
+    setCollectionDrafts({});
     setSelectedId(captureId);
   }, []);
 
@@ -701,13 +823,6 @@ export default function App() {
     });
     return () => linkSubscription.remove();
   }, [loadCaptures, selectCapture]);
-
-  useEffect(() => {
-    const appSubscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") void loadCaptures();
-    });
-    return () => appSubscription.remove();
-  }, [loadCaptures]);
 
   useEffect(() => {
     void loadCaptures().catch((error) => {
@@ -798,11 +913,128 @@ export default function App() {
   const selectedCollection = selectedCollectionId
     ? collections.find((collection) => collection.id === selectedCollectionId) ?? null
     : null;
-  const selectedAnalysisMode = nullableValue(selected?.analysisMode);
-  const selectedSummary =
-    selected?.summary && selected.summary !== selected.sourceUrl && selected.summary !== selected.sourceText
-      ? selected.summary
-      : undefined;
+  const selectedDraftKey = selected ? captureDraftKey(selected) : "";
+
+  useEffect(() => {
+    latestNoteRef.current = draftNote;
+  }, [draftNote]);
+
+  useEffect(() => {
+    const appSubscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        void loadCaptures();
+      } else if (nativeStore?.setReviewDrafts) {
+        void nativeStore.setReviewDrafts(JSON.stringify(reviewDraftsByCapture));
+        if (selected && draftNoteDirty) {
+          void saveContextNote(selected, draftNote);
+        }
+      }
+    });
+    return () => appSubscription.remove();
+  }, [draftNote, draftNoteDirty, loadCaptures, reviewDraftsByCapture, selected]);
+
+  useEffect(() => {
+    if (!selected || !draftNoteDirty) return;
+    setNoteSaveState("idle");
+    const timer = setTimeout(() => {
+      void saveContextNote(selected, draftNote);
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [draftNote, draftNoteDirty, selected]);
+
+  function updateSelectedReviewDraft(patch: Partial<CaptureReviewDraft>) {
+    if (!selected) return;
+    const key = captureDraftKey(selected);
+    setReviewDraftsByCapture((current) => {
+      const nextDraft = cleanedReviewDraft({
+        ...(current[key] || {}),
+        ...patch,
+        updatedAt: Date.now()
+      });
+      const next = { ...current };
+      if (nextDraft) next[key] = nextDraft;
+      else delete next[key];
+      return next;
+    });
+  }
+
+  function clearSelectedReviewDraft(capture: Capture) {
+    const key = captureDraftKey(capture);
+    setReviewDraftsByCapture((current) => {
+      if (!current[key]) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  }
+
+  function clearAutosavedNoteDraft(captureKey: string, noteValue: string) {
+    setReviewDraftsByCapture((current) => {
+      const existing = current[captureKey];
+      if (!existing || existing.note !== noteValue) return current;
+      const nextDraft = cleanedReviewDraft({
+        ...existing,
+        note: undefined,
+        noteDirty: false,
+        updatedAt: Date.now()
+      });
+      const next = { ...current };
+      if (nextDraft) next[captureKey] = nextDraft;
+      else delete next[captureKey];
+      return next;
+    });
+  }
+
+  useEffect(() => {
+    if (!nativeStore?.getReviewDrafts) {
+      setReviewDraftsLoaded(true);
+      return;
+    }
+    nativeStore.getReviewDrafts().then((raw) => {
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Record<string, CaptureReviewDraft>;
+      setReviewDraftsByCapture(parsed && typeof parsed === "object" ? parsed : {});
+    }).catch(() => {
+      setReviewDraftsByCapture({});
+    }).finally(() => {
+      setReviewDraftsLoaded(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!reviewDraftsLoaded || !nativeStore?.setReviewDrafts) return;
+    void nativeStore.setReviewDrafts(JSON.stringify(reviewDraftsByCapture));
+  }, [reviewDraftsByCapture, reviewDraftsLoaded]);
+
+  useEffect(() => {
+    if (!selected) {
+      setDraftTitle("");
+      setDraftNote("");
+      setDraftIntent("");
+      setDraftTitleDirty(false);
+      setDraftNoteDirty(false);
+      setDraftIntentDirty(false);
+      setReminderDrafts({});
+      setCollectionDrafts({});
+      setQuickIntentOpen(false);
+      return;
+    }
+    const savedDraft = reviewDraftsByCapture[captureDraftKey(selected)] || {};
+    setDraftTitle(savedDraft.titleDirty && typeof savedDraft.title === "string" ? savedDraft.title : selected.title);
+    setDraftNote(savedDraft.noteDirty && typeof savedDraft.note === "string" ? savedDraft.note : selected.note);
+    setDraftIntent(
+      savedDraft.intentDirty && savedDraft.intent
+        ? savedDraft.intent
+        : normalizeIntent(selected.defaultIntent)
+    );
+    setDraftTitleDirty(Boolean(savedDraft.titleDirty));
+    setDraftNoteDirty(Boolean(savedDraft.noteDirty));
+    setDraftIntentDirty(Boolean(savedDraft.intentDirty));
+    setReminderDrafts(savedDraft.reminders || {});
+    setCollectionDrafts(savedDraft.collections || {});
+    setNoteSaveState("idle");
+    setQuickIntentOpen(false);
+  }, [reviewDraftsByCapture, selectedDraftKey]);
 
   useEffect(() => {
     if (!selectedCollectionId) {
@@ -824,8 +1056,77 @@ export default function App() {
     });
   }, [captureReturnCollectionId, loadCollectionCaptures, selectedCollection?.status, selectedCollectionId]);
 
-  async function saveQuickEdit() {
+  function showRationale(title: string, rationale: string | null | undefined) {
+    const text = cleanSentence(rationale);
+    if (!text) return;
+    Alert.alert(title, text, [{ text: "Done" }]);
+  }
+
+  async function saveContextNote(capture: Capture, noteValue: string) {
+    const captureKey = captureDraftKey(capture);
+    setNoteSaveState("saving");
+    if (config?.apiUrl && session?.accessToken) {
+      try {
+        const activeSession = await getFreshSession();
+        if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
+        const saveWithToken = (accessToken: string) =>
+          requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
+            method: "PATCH",
+            headers: {
+              apikey: config.supabaseAnonKey,
+              authorization: `Bearer ${accessToken}`,
+              "content-type": "application/json"
+            },
+            body: {
+              captureId: capture.remoteId || capture.id,
+              note: noteValue.trim()
+            }
+          });
+        let json: { capture: Record<string, any> };
+        try {
+          json = await saveWithToken(activeSession.accessToken);
+        } catch (error) {
+          if (!isAuthError(error)) throw error;
+          const refreshed = await getFreshSession(true);
+          if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
+          json = await saveWithToken(refreshed.accessToken);
+        }
+        const updatedCapture = captureFromRemote(json.capture);
+        setCaptures((current) =>
+          current.map((item) => (item.id === capture.id ? updatedCapture : item))
+        );
+        setCollectionCaptures((current) =>
+          current.map((item) => (item.id === capture.id ? updatedCapture : item))
+        );
+        if (latestNoteRef.current === noteValue) {
+          setDraftNoteDirty(false);
+          clearAutosavedNoteDraft(captureKey, noteValue);
+          setNoteSaveState("saved");
+        }
+      } catch (error) {
+        setNoteSaveState("error");
+      }
+      return;
+    }
+
+    if (!nativeStore) return;
+    try {
+      const raw = await nativeStore.updateCapture(capture.id, capture.title, noteValue.trim(), null);
+      const next = JSON.parse(raw || "[]") as Capture[];
+      setCaptures(sortCaptures(next));
+      if (latestNoteRef.current === noteValue) {
+        setDraftNoteDirty(false);
+        clearAutosavedNoteDraft(captureKey, noteValue);
+        setNoteSaveState("saved");
+      }
+    } catch (error) {
+      setNoteSaveState("error");
+    }
+  }
+
+  async function saveQuickEdit(nextIntent?: string) {
     if (!selected) return;
+    const intentOverride = nextIntent && normalizeIntent(nextIntent) ? nextIntent : undefined;
     if (config?.apiUrl && session?.accessToken) {
       try {
         const activeSession = await getFreshSession();
@@ -842,7 +1143,7 @@ export default function App() {
               captureId: selected.remoteId || selected.id,
               title: draftTitle.trim(),
               note: draftNote.trim(),
-              currentSaveIntent: draftIntentDirty && draftIntent ? draftIntent : undefined
+              currentSaveIntent: intentOverride || (draftIntentDirty && draftIntent ? draftIntent : undefined)
             }
           });
         let json: { capture: Record<string, any> };
@@ -864,7 +1165,7 @@ export default function App() {
         setDraftTitleDirty(false);
         setDraftNoteDirty(false);
         setDraftIntentDirty(false);
-        setMessage("Saved.");
+        setMessage("Applied.");
       } catch (error) {
         setMessage(friendlyError(error, "Could not save."));
       }
@@ -875,13 +1176,134 @@ export default function App() {
       selected.id,
       draftTitle.trim(),
       draftNote.trim(),
-      draftIntentDirty && draftIntent ? draftIntent : null
+      intentOverride || (draftIntentDirty && draftIntent ? draftIntent : null)
     );
     const next = JSON.parse(raw || "[]") as Capture[];
     setCaptures(sortCaptures(next));
     setDraftTitleDirty(false);
     setDraftNoteDirty(false);
     setDraftIntentDirty(false);
+    setMessage("Applied.");
+  }
+
+  async function saveReviewDecisions() {
+    if (!selected) return;
+    const reminderDecisions: ReminderReviewDecision[] = (selected.suggestedReminders || [])
+      .map((reminder, index) => ({
+        index,
+        action: reminderDrafts[reminderDraftKey(reminder, index)] || "keep"
+      }))
+      .filter((decision) => decision.action === "remove");
+    const collectionDecisions: CollectionReviewDecision[] = [
+      ...(selected.linkedCollections || [])
+        .map((collection) => ({
+          kind: "linked" as const,
+          collectionId: collection.id,
+          action: collectionDrafts[linkedCollectionDraftKey(collection.id)] === "remove" ? "remove" as const : "keep" as const
+        }))
+        .filter((decision) => decision.action === "remove"),
+      ...(selected.collectionDecisions || [])
+        .map((collection, index) => {
+          const action = collectionDrafts[suggestedCollectionDraftKey(collection, index)] || "ignore";
+          const reviewAction: "ignore" | "link" | "create" =
+            action === "link" || action === "create" ? action : "ignore";
+          return {
+            kind: "suggested" as const,
+            index,
+            type: collection.type,
+            collectionId: collection.collectionId,
+            title: collection.title,
+            description: collection.description,
+            rationale: collection.rationale,
+            confidence: collection.confidence,
+            action: reviewAction
+          };
+        })
+        .filter((decision) => decision.action === "link" || decision.action === "create")
+    ];
+
+    if (config?.apiUrl && session?.accessToken) {
+      try {
+        const activeSession = await getFreshSession();
+        if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
+        const saveWithToken = (accessToken: string) =>
+          requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
+            method: "PATCH",
+            headers: {
+              apikey: config.supabaseAnonKey,
+              authorization: `Bearer ${accessToken}`,
+              "content-type": "application/json"
+            },
+            body: {
+              captureId: selected.remoteId || selected.id,
+              action: "save_review_decisions",
+              title: draftTitle.trim(),
+              note: draftNote.trim(),
+              currentSaveIntent: draftIntentDirty && draftIntent ? draftIntent : undefined,
+              reminderDecisions,
+              collectionDecisions
+            }
+          });
+        let json: { capture: Record<string, any> };
+        try {
+          json = await saveWithToken(activeSession.accessToken);
+        } catch (error) {
+          if (!isAuthError(error)) throw error;
+          const refreshed = await getFreshSession(true);
+          if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
+          json = await saveWithToken(refreshed.accessToken);
+        }
+        const updatedCapture = captureFromRemote(json.capture);
+        setCaptures((current) =>
+          current.map((item) => (item.id === selected.id ? updatedCapture : item))
+        );
+        setCollectionCaptures((current) =>
+          current.map((item) => (item.id === selected.id ? updatedCapture : item))
+        );
+        setDraftTitleDirty(false);
+        setDraftNoteDirty(false);
+        setDraftIntentDirty(false);
+        setReminderDrafts({});
+        setCollectionDrafts({});
+        clearSelectedReviewDraft(selected);
+        if (homeMode === "collections") await loadCollections();
+        setMessage("Saved.");
+      } catch (error) {
+        setMessage(friendlyError(error, "Could not save."));
+      }
+      return;
+    }
+
+    if (!nativeStore) return;
+    const raw = await nativeStore.updateCapture(
+      selected.id,
+      draftTitle.trim(),
+      draftNote.trim(),
+      draftIntentDirty && draftIntent ? draftIntent : null
+    );
+    const next = (JSON.parse(raw || "[]") as Capture[]).map((capture) => {
+      if (capture.id !== selected.id) return capture;
+      return {
+        ...capture,
+        suggestedReminders: (capture.suggestedReminders || []).filter((reminder, index) => {
+          return reminderDrafts[reminderDraftKey(reminder, index)] !== "remove";
+        }),
+        linkedCollections: (capture.linkedCollections || []).filter((collection) => {
+          return collectionDrafts[linkedCollectionDraftKey(collection.id)] !== "remove";
+        }),
+        collectionDecisions: (capture.collectionDecisions || []).filter((collection, index) => {
+          const action = collectionDrafts[suggestedCollectionDraftKey(collection, index)] || "ignore";
+          return action !== "link" && action !== "create";
+        })
+      };
+    });
+    setCaptures(sortCaptures(next));
+    setDraftTitleDirty(false);
+    setDraftNoteDirty(false);
+    setDraftIntentDirty(false);
+    setReminderDrafts({});
+    setCollectionDrafts({});
+    clearSelectedReviewDraft(selected);
     setMessage("Saved.");
   }
 
@@ -1072,6 +1494,106 @@ export default function App() {
   async function unlinkCollectionFromCapture(collectionId: string) {
     if (!selected) return;
     await unlinkCaptureFromCollection(collectionId, selected);
+  }
+
+  async function autosaveCollectionDecision(decision: CollectionDecision, decisionKey: string) {
+    if (!selected) return;
+    const captureId = selected.remoteId || selected.id;
+    try {
+      let linkedCollection: LinkedCollection | null = null;
+      if (decision.type === "existing" && decision.collectionId) {
+        await collectionRequest<{ ok: boolean }>("collection-links", {
+          method: "POST",
+          body: {
+            collectionId: decision.collectionId,
+            captureId,
+            title: decision.title,
+            rationale: decision.rationale,
+            confidence: decision.confidence,
+            createdBy: "analysis"
+          }
+        });
+        linkedCollection = {
+          id: decision.collectionId,
+          title: decision.title,
+          description: decision.description || undefined,
+          createdBy: "analysis",
+          rationale: decision.rationale,
+          confidence: decision.confidence
+        };
+      } else if (decision.type === "new" && decision.title.trim() && decision.description?.trim()) {
+        const json = await collectionRequest<{ collection: Record<string, any> }>("collections", {
+          method: "POST",
+          body: {
+            title: decision.title.trim(),
+            description: decision.description.trim(),
+            captureId,
+            rationale: decision.rationale,
+            confidence: decision.confidence,
+            createdBy: "analysis"
+          }
+        });
+        const collection = collectionFromRemote(json.collection);
+        linkedCollection = {
+          id: collection.id,
+          title: collection.title,
+          description: collection.description,
+          createdBy: "analysis",
+          rationale: decision.rationale,
+          confidence: decision.confidence
+        };
+      }
+      if (!linkedCollection) return;
+      const linkedKey = linkedCollectionDraftKey(linkedCollection.id);
+      const nextDrafts = { ...collectionDrafts, [decisionKey]: decision.type === "new" ? "create" as const : "link" as const, [linkedKey]: "added" as const };
+      setCollectionDrafts(nextDrafts);
+      updateSelectedReviewDraft({ collections: nextDrafts });
+      setCaptures((current) =>
+        current.map((capture) => {
+          if (capture.id !== selected.id) return capture;
+          const linked = capture.linkedCollections || [];
+          return {
+            ...capture,
+            linkedCollections: linked.some((collection) => collection.id === linkedCollection.id)
+              ? linked
+              : [...linked, linkedCollection],
+            collectionDecisions: (capture.collectionDecisions || []).filter((item) => item !== decision),
+            suggestedCollections: (capture.suggestedCollections || []).filter((item) => item !== decision)
+          };
+        })
+      );
+      setCollectionCaptures((current) =>
+        current.map((capture) =>
+          capture.id === selected.id
+            ? {
+                ...capture,
+                linkedCollections: [
+                  ...(capture.linkedCollections || []).filter((collection) => collection.id !== linkedCollection.id),
+                  linkedCollection
+                ]
+              }
+            : capture
+        )
+      );
+      if (homeMode === "collections") await loadCollections();
+      setMessage("Collection updated.");
+    } catch (error) {
+      setMessage(friendlyError(error, "Could not update collection."));
+    }
+  }
+
+  async function undoAddedCollection(collection: LinkedCollection) {
+    if (!selected) return;
+    const key = linkedCollectionDraftKey(collection.id);
+    try {
+      await unlinkCaptureFromCollection(collection.id, selected);
+      const nextDrafts = { ...collectionDrafts };
+      delete nextDrafts[key];
+      setCollectionDrafts(nextDrafts);
+      updateSelectedReviewDraft({ collections: nextDrafts });
+    } catch {
+      // unlinkCaptureFromCollection already reports the error.
+    }
   }
 
   async function acceptCollectionDecision(decision: CollectionDecision) {
@@ -1576,9 +2098,31 @@ export default function App() {
   if (selected) {
     const selectedArchived = isArchived(selected);
     const sourceValue = selected.sourceUrl || selected.sourceText;
-    const hasDirtyDraft = draftTitleDirty || draftNoteDirty || draftIntentDirty;
     const selectedReviewReasons = reviewReasons(selected);
-    const canConfirmReview = selectedReviewReasons.length > 0;
+    const aiIntentValue = normalizeIntent(selected.defaultIntent) || selected.defaultIntent || "";
+    const quickIntentValue = draftIntent || aiIntentValue;
+    const quickIntentLabel = humanize(quickIntentValue) || "something useful";
+    const reminderRows = selected.suggestedReminders || [];
+    const collectionRows = selected.linkedCollections || [];
+    const collectionSuggestionRows = selected.collectionDecisions || [];
+    const primaryReminder = reminderRows[0];
+    const primaryLinkedCollection = collectionRows[0];
+    const primaryCollectionDecision = collectionSuggestionRows[0];
+    const primaryCollectionTitle = primaryLinkedCollection?.title || primaryCollectionDecision?.title || "";
+    const primaryCollectionRationale = primaryLinkedCollection?.rationale || primaryCollectionDecision?.rationale;
+    const primaryRationale = primaryReminder?.rationale || primaryCollectionRationale || selected.intentRationale;
+    const quickBecause = becauseSentence(primaryRationale);
+    const noteStatusLabel =
+      noteSaveState === "saving"
+        ? "Saving..."
+        : noteSaveState === "error"
+          ? "Could not autosave"
+          : noteSaveState === "saved"
+            ? "Saved"
+            : draftNoteDirty
+              ? "Autosaves"
+              : "";
+    const showStatus = selectedArchived || displayStatus(selected) !== "ready";
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="dark-content" />
@@ -1598,18 +2142,241 @@ export default function App() {
             >
               <Text style={styles.textButtonText}>Back</Text>
             </Pressable>
-            <Text
-              style={[
-                styles.status,
-                displayStatus(selected) === "processing" && styles.statusProcessing,
-                displayStatus(selected) === "needs_review" && styles.statusReview,
-                displayStatus(selected) === "failed" && styles.statusFailed
-              ]}
-            >
-              {selectedArchived ? "Archived" : statusLabel(displayStatus(selected))}
-            </Text>
+            {showStatus ? (
+              <Text
+                style={[
+                  styles.status,
+                  displayStatus(selected) === "processing" && styles.statusProcessing,
+                  displayStatus(selected) === "needs_review" && styles.statusReview,
+                  displayStatus(selected) === "failed" && styles.statusFailed
+                ]}
+              >
+                {selectedArchived ? "Archived" : statusLabel(displayStatus(selected))}
+              </Text>
+            ) : null}
           </View>
           <Text style={styles.kicker}>Capture review</Text>
+          <View style={styles.quickEditBlock}>
+            <TextInput
+              multiline
+              onChangeText={(value) => {
+                setDraftTitleDirty(true);
+                setDraftTitle(value);
+                updateSelectedReviewDraft({ title: value, titleDirty: true });
+              }}
+              placeholder="Title"
+              placeholderTextColor={colors.muted}
+              style={styles.reviewTitleInput}
+              value={draftTitle}
+            />
+            <View style={styles.quickTopRow}>
+              <View style={styles.quickTopCopy}>
+                <Text style={styles.quickLabel}>Intent</Text>
+                <View style={styles.quickSentenceRow}>
+                  <Pressable
+                    onLongPress={() => showRationale("Why this intent?", selected.intentRationale)}
+                    style={styles.quickChip}
+                  >
+                    <Text style={styles.quickChipText}>{quickIntentLabel}</Text>
+                  </Pressable>
+                  <Pressable onPress={() => setQuickIntentOpen((current) => !current)} hitSlop={8}>
+                    <Text style={styles.suggestionAction}>
+                      {quickIntentOpen ? "Close" : "Change"}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+            {quickIntentOpen ? (
+              <View style={styles.quickOptions}>
+                {INTENT_OPTIONS.map((intent) => {
+                  const selectedIntent = quickIntentValue === intent;
+                  return (
+                    <Pressable
+                      key={intent}
+                      onPress={() => {
+                        const intentDirty = intent !== aiIntentValue;
+                        setDraftIntentDirty(intentDirty);
+                        setDraftIntent(intent);
+                        updateSelectedReviewDraft({ intent, intentDirty });
+                        setQuickIntentOpen(false);
+                      }}
+                      style={[styles.intentChip, selectedIntent && styles.intentChipSelected]}
+                    >
+                      <Text style={[styles.intentChipText, selectedIntent && styles.intentChipTextSelected]}>
+                        {humanize(intent)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
+            {draftIntentDirty ? (
+              <View style={styles.changeLine}>
+                <Text style={styles.changeText}>
+                  AI suggested {humanize(aiIntentValue) || "something useful"}
+                </Text>
+                <Pressable
+                  onPress={() => {
+                    setDraftIntent(aiIntentValue);
+                    setDraftIntentDirty(false);
+                    updateSelectedReviewDraft({ intent: aiIntentValue, intentDirty: false });
+                  }}
+                  hitSlop={8}
+                >
+                  <Text style={styles.suggestionAction}>Undo</Text>
+                </Pressable>
+              </View>
+            ) : null}
+            {quickBecause ? (
+              <View style={styles.becauseRow}>
+                <Text style={styles.becauseText}>{quickBecause}</Text>
+                <Pressable
+                  onLongPress={() => showRationale("Why?", primaryRationale)}
+                  onPress={() => showRationale("Why?", primaryRationale)}
+                  hitSlop={8}
+                >
+                  <Text style={styles.hintText}>Why</Text>
+                </Pressable>
+              </View>
+            ) : null}
+            <View style={styles.suggestionRail}>
+              <Text style={styles.quickLabel}>AI suggestions</Text>
+              {reminderRows.length ? (
+                reminderRows.slice(0, 3).map((reminder, index) => {
+                  const key = reminderDraftKey(reminder, index);
+                  const action = reminderDrafts[key] || "keep";
+                  const removed = action === "remove";
+                  return (
+                    <View key={key} style={[styles.suggestionPill, removed && styles.suggestionPillChanged]}>
+                      <View style={styles.suggestionLabelColumn}>
+                        <Text style={styles.suggestionLabel}>Reminder</Text>
+                        <Text style={[styles.suggestionState, removed && styles.suggestionStateChanged]}>
+                          {removed ? "Removed" : "AI suggested"}
+                        </Text>
+                      </View>
+                      <Pressable
+                        onLongPress={() => showRationale("Why this reminder?", reminder.rationale)}
+                        onPress={() => showRationale("Why this reminder?", reminder.rationale)}
+                        style={styles.suggestionValue}
+                      >
+                        <Text style={[styles.suggestionText, removed && styles.suggestionTextMuted]}>
+                          {conciseText(reminderLabel(reminder), 64)}
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => {
+                          const next = { ...reminderDrafts };
+                          if (removed) delete next[key];
+                          else next[key] = "remove";
+                          setReminderDrafts(next);
+                          updateSelectedReviewDraft({ reminders: next });
+                        }}
+                        hitSlop={8}
+                      >
+                        <Text style={styles.suggestionAction}>{removed ? "Undo" : "Remove"}</Text>
+                      </Pressable>
+                    </View>
+                  );
+                })
+              ) : (
+                <View style={styles.suggestionPill}>
+                  <Text style={styles.suggestionLabel}>Reminder</Text>
+                  <Text style={[styles.suggestionText, styles.suggestionValue]}>None</Text>
+                </View>
+              )}
+              {collectionRows.map((collection) => {
+                const key = linkedCollectionDraftKey(collection.id);
+                const removed = collectionDrafts[key] === "remove";
+                const added = collectionDrafts[key] === "added";
+                return (
+                  <View key={collection.id} style={[styles.suggestionPill, (removed || added) && styles.suggestionPillChanged]}>
+                    <View style={styles.suggestionLabelColumn}>
+                      <Text style={styles.suggestionLabel}>Collection</Text>
+                      <Text style={[styles.suggestionState, (removed || added) && styles.suggestionStateChanged]}>
+                        {removed ? "Removed" : added ? "Added" : "Linked"}
+                      </Text>
+                    </View>
+                    <Pressable
+                      onLongPress={() => showRationale("Why this collection?", collection.rationale)}
+                      onPress={() => showRationale("Why this collection?", collection.rationale)}
+                      style={styles.suggestionValue}
+                    >
+                      <Text style={[styles.suggestionText, removed && styles.suggestionTextMuted]}>
+                        {collection.title}
+                      </Text>
+                    </Pressable>
+                      <Pressable
+                        onPress={() => {
+                          if (added) {
+                            void undoAddedCollection(collection);
+                            return;
+                          }
+                          if (removed) {
+                            const next = { ...collectionDrafts };
+                            delete next[key];
+                            setCollectionDrafts(next);
+                            updateSelectedReviewDraft({ collections: next });
+                            return;
+                          }
+                          void unlinkCollectionFromCapture(collection.id);
+                        }}
+                      hitSlop={8}
+                    >
+                      <Text style={styles.suggestionAction}>{removed || added ? "Undo" : "Remove"}</Text>
+                    </Pressable>
+                  </View>
+                );
+              })}
+              {collectionSuggestionRows.slice(0, 3).map((collection, index) => {
+                const key = suggestedCollectionDraftKey(collection, index);
+                const action = collectionDrafts[key] || "ignore";
+                const staged = action === "link" || action === "create";
+                const defaultAction = collection.type === "new" ? "Create" : "Link";
+                return (
+                  <View
+                    key={key}
+                    style={[styles.suggestionPill, staged && styles.suggestionPillChanged]}
+                  >
+                    <View style={styles.suggestionLabelColumn}>
+                      <Text style={styles.suggestionLabel}>Collection</Text>
+                      <Text style={[styles.suggestionState, staged && styles.suggestionStateChanged]}>
+                        {staged ? (action === "create" ? "Will create" : "Will link") : "AI suggested"}
+                      </Text>
+                    </View>
+                    <Pressable
+                      onLongPress={() => showRationale("Why this collection?", collection.rationale)}
+                      onPress={() => showRationale("Why this collection?", collection.rationale)}
+                      style={styles.suggestionValue}
+                    >
+                      <Text style={styles.suggestionText}>{collection.title}</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => {
+                        if (staged) {
+                          const next = { ...collectionDrafts };
+                          delete next[key];
+                          setCollectionDrafts(next);
+                          updateSelectedReviewDraft({ collections: next });
+                          return;
+                        }
+                        void autosaveCollectionDecision(collection, key);
+                      }}
+                      hitSlop={8}
+                    >
+                      <Text style={styles.suggestionAction}>{staged ? "Undo" : defaultAction}</Text>
+                    </Pressable>
+                  </View>
+                );
+              })}
+              {!collectionRows.length && !collectionSuggestionRows.length ? (
+                <View style={styles.suggestionPill}>
+                  <Text style={styles.suggestionLabel}>Collection</Text>
+                  <Text style={[styles.suggestionText, styles.suggestionValue]}>None</Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
           {selectedReviewReasons.length ? (
             <View style={styles.reviewReasonBlock}>
               <Text style={styles.meta}>Needs review</Text>
@@ -1620,46 +2387,21 @@ export default function App() {
               ))}
             </View>
           ) : null}
-          <TextInput
-            multiline
-            onChangeText={(value) => {
-              setDraftTitleDirty(true);
-              setDraftTitle(value);
-            }}
-            placeholder="Title"
-            placeholderTextColor={colors.muted}
-            style={styles.titleInput}
-            value={draftTitle}
-          />
-          <View style={styles.editBlock}>
-            <Text style={styles.fieldLabel}>Save intent</Text>
-            <View style={styles.intentGrid}>
-              {INTENT_OPTIONS.map((intent) => {
-                const selectedIntent = draftIntent === intent;
-                return (
-                  <Pressable
-                    key={intent}
-                    onPress={() => {
-                      setDraftIntentDirty(true);
-                      setDraftIntent(intent);
-                    }}
-                    style={[styles.intentChip, selectedIntent && styles.intentChipSelected]}
-                  >
-                    <Text style={[styles.intentChipText, selectedIntent && styles.intentChipTextSelected]}>
-                      {humanize(intent)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+          <View style={styles.sourceBlock}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.meta}>Context note</Text>
+              {noteStatusLabel ? (
+                <Text style={[styles.noteSaveState, noteSaveState === "error" && styles.noteSaveStateError]}>
+                  {noteStatusLabel}
+                </Text>
+              ) : null}
             </View>
-          </View>
-          <View style={styles.editBlock}>
-            <Text style={styles.fieldLabel}>Context note</Text>
             <TextInput
               multiline
               onChangeText={(value) => {
                 setDraftNoteDirty(true);
                 setDraftNote(value);
+                updateSelectedReviewDraft({ note: value, noteDirty: true });
               }}
               placeholder="Add why you saved this, if the extraction missed it"
               placeholderTextColor={colors.muted}
@@ -1678,111 +2420,15 @@ export default function App() {
             </View>
             <Text selectable style={styles.sourceText}>{sourceValue}</Text>
           </View>
-          {selectedSummary ? (
-            <View style={styles.sourceBlock}>
-              <Text style={styles.meta}>Extracted</Text>
-              <Text style={styles.sourceText}>{selectedSummary}</Text>
-            </View>
-          ) : null}
-          {(selected.defaultIntent || selected.intentRationale || selectedAnalysisMode) ? (
-            <View style={styles.sourceBlock}>
-              <Text style={styles.meta}>Intent</Text>
-              {selected.defaultIntent ? (
-                <Text style={styles.sourceText}>
-                  {humanize(selected.defaultIntent)}
-                  {selected.confidenceLabel ? ` · ${selected.confidenceLabel}` : ""}
-                </Text>
-              ) : null}
-              {selected.intentRationale ? (
-                <Text style={styles.supportingText}>{selected.intentRationale}</Text>
-              ) : null}
-              {selectedAnalysisMode ? (
-                <Text style={styles.supportingText}>
-                  {selectedAnalysisMode === "llm"
-                    ? `LLM extraction · ${selected.analysisModel || selected.analysisProvider || "model"}`
-                    : `LLM extraction unavailable · ${selectedAnalysisMode}`}
-                </Text>
-              ) : null}
-              {selected.analysisError && selected.analysisError !== "null" ? (
-                <Text style={styles.errorText}>{selected.analysisError}</Text>
-              ) : null}
-            </View>
-          ) : null}
           {selected.entities?.length ? (
             <View style={styles.sourceBlock}>
-              <Text style={styles.meta}>Entities</Text>
+              <Text style={styles.meta}>Detected details</Text>
               {selected.entities.slice(0, 5).map((entity) => (
                 <Text key={`${entity.type}-${entity.name}`} style={styles.sourceText}>
                   {entity.name} · {entity.type}
                 </Text>
               ))}
             </View>
-          ) : null}
-          {selected.suggestedReminders?.length ? (
-            <View style={styles.sourceBlock}>
-              <Text style={styles.meta}>Reminders</Text>
-              {selected.suggestedReminders.slice(0, 3).map((reminder, index) => (
-                <View key={`${reminder.trigger_type}-${reminder.trigger_value}-${index}`} style={styles.collectionActionRow}>
-                  <Text style={[styles.sourceText, styles.collectionActionText]}>
-                    {reminder.trigger_value || humanize(reminder.trigger_type)}
-                    {reminder.status ? ` · ${humanize(reminder.status)}` : ""} · {reminder.rationale}
-                  </Text>
-                  <Pressable onPress={() => void dismissReminder(index)} hitSlop={8}>
-                    <Text style={styles.inlineAction}>Remove</Text>
-                  </Pressable>
-                </View>
-              ))}
-            </View>
-          ) : null}
-          {selected.linkedCollections?.length ? (
-            <View style={styles.sourceBlock}>
-              <Text style={styles.meta}>Linked collections</Text>
-              {selected.linkedCollections.map((collection) => (
-                <View key={collection.id} style={styles.collectionActionRow}>
-                  <View style={styles.collectionActionText}>
-                    <Text style={styles.sourceText}>{collection.title}</Text>
-                    {collection.rationale ? (
-                      <Text style={styles.supportingText}>{collection.rationale}</Text>
-                    ) : null}
-                  </View>
-                  <Pressable onPress={() => void unlinkCollectionFromCapture(collection.id)} hitSlop={8}>
-                    <Text style={styles.inlineAction}>Remove</Text>
-                  </Pressable>
-                </View>
-              ))}
-            </View>
-          ) : null}
-          {selected.collectionDecisions?.length ? (
-            <View style={styles.sourceBlock}>
-              <Text style={styles.meta}>Collection suggestions</Text>
-              {selected.collectionDecisions.slice(0, 4).map((collection, index) => (
-                <View key={`${collection.type}-${collection.collectionId || collection.title}-${index}`} style={styles.suggestionBlock}>
-                  <Text style={styles.sourceText}>
-                    {collection.type === "new" ? "New: " : ""}
-                    {collection.title}
-                  </Text>
-                  {collection.description ? (
-                    <Text style={styles.supportingText}>{collection.description}</Text>
-                  ) : null}
-                  <Text style={styles.supportingText}>{collection.rationale}</Text>
-                  <Pressable onPress={() => void acceptCollectionDecision(collection)} style={styles.smallButton}>
-                    <Text style={styles.smallButtonText}>
-                      {collection.type === "new" ? "Create and link" : "Link"}
-                    </Text>
-                  </Pressable>
-                </View>
-              ))}
-            </View>
-          ) : null}
-          <Pressable onPress={() => void saveQuickEdit()} style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>Save</Text>
-          </Pressable>
-          {canConfirmReview ? (
-            <Pressable onPress={() => void confirmReview()} style={styles.secondaryButton}>
-              <Text style={styles.secondaryButtonText}>
-                {hasDirtyDraft ? "Save and confirm" : "Confirm review"}
-              </Text>
-            </Pressable>
           ) : null}
           <Pressable onPress={confirmArchive} style={styles.secondaryButton}>
             <Text style={selectedArchived ? styles.secondaryButtonText : styles.dangerButtonText}>
@@ -2048,7 +2694,8 @@ const colors = {
   muted: "#7c7a72",
   line: "#e4e1da",
   soft: "#f2f1ec",
-  processing: "#8a806d"
+  processing: "#8a806d",
+  danger: "#9f3a2f"
 };
 
 const styles = StyleSheet.create({
@@ -2271,6 +2918,144 @@ const styles = StyleSheet.create({
     lineHeight: 34,
     paddingVertical: 6
   },
+  quickEditBlock: {
+    backgroundColor: colors.soft,
+    borderRadius: 8,
+    gap: 14,
+    padding: 16
+  },
+  reviewTitleInput: {
+    color: colors.ink,
+    fontSize: 25,
+    fontWeight: "700",
+    lineHeight: 31,
+    padding: 0
+  },
+  quickTopRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between"
+  },
+  quickTopCopy: {
+    flex: 1,
+    gap: 7
+  },
+  quickLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase"
+  },
+  quickSentenceRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6
+  },
+  quickSentenceText: {
+    color: colors.ink,
+    fontSize: 19,
+    lineHeight: 27
+  },
+  quickChip: {
+    backgroundColor: colors.paper,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4
+  },
+  quickChipText: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: "700",
+    lineHeight: 24
+  },
+  quickOptions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingTop: 2
+  },
+  changeLine: {
+    alignItems: "center",
+    backgroundColor: colors.paper,
+    borderRadius: 8,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between",
+    paddingHorizontal: 10,
+    paddingVertical: 8
+  },
+  changeText: {
+    color: colors.muted,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "700"
+  },
+  becauseRow: {
+    alignItems: "flex-start",
+    borderTopColor: colors.line,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 6,
+    paddingTop: 12
+  },
+  becauseText: {
+    color: colors.muted,
+    fontSize: 15,
+    lineHeight: 22
+  },
+  suggestionRail: {
+    gap: 8
+  },
+  suggestionPill: {
+    alignItems: "center",
+    backgroundColor: colors.paper,
+    borderRadius: 8,
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 9
+  },
+  suggestionPillChanged: {
+    backgroundColor: "#f3efe6"
+  },
+  suggestionLabelColumn: {
+    gap: 2,
+    minWidth: 72
+  },
+  suggestionLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: "700",
+    minWidth: 72,
+    textTransform: "uppercase"
+  },
+  suggestionState: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: "700"
+  },
+  suggestionStateChanged: {
+    color: colors.ink
+  },
+  suggestionValue: {
+    flex: 1
+  },
+  suggestionText: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "700",
+    lineHeight: 20
+  },
+  suggestionTextMuted: {
+    color: colors.muted,
+    textDecorationLine: "line-through"
+  },
+  suggestionAction: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "700"
+  },
   editBlock: {
     gap: 8
   },
@@ -2323,6 +3108,16 @@ const styles = StyleSheet.create({
     padding: 14,
     textAlignVertical: "top"
   },
+  detailInput: {
+    backgroundColor: colors.soft,
+    borderRadius: 8,
+    color: colors.ink,
+    fontSize: 16,
+    lineHeight: 22,
+    minHeight: 56,
+    padding: 14,
+    textAlignVertical: "top"
+  },
   sourceBlock: {
     borderTopColor: colors.line,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -2338,6 +3133,20 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 13,
     fontWeight: "700"
+  },
+  hintText: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase"
+  },
+  noteSaveState: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: "700"
+  },
+  noteSaveStateError: {
+    color: colors.danger
   },
   sourceText: {
     color: colors.ink,

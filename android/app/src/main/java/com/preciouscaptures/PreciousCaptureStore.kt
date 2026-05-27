@@ -7,6 +7,7 @@ import java.util.UUID
 
 private const val STORE_PREFS = "precious_capture_store"
 private const val STORE_KEY = "captures"
+private const val REVIEW_DRAFTS_KEY = "capture_review_drafts"
 
 object PreciousCaptureStore {
   @Synchronized
@@ -191,6 +192,22 @@ object PreciousCaptureStore {
     }
     save(context, next)
     return next
+  }
+
+  @Synchronized
+  fun reviewDrafts(context: Context): String? {
+    return context
+      .getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE)
+      .getString(REVIEW_DRAFTS_KEY, "{}")
+  }
+
+  @Synchronized
+  fun saveReviewDrafts(context: Context, draftsJson: String) {
+    context
+      .getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE)
+      .edit()
+      .putString(REVIEW_DRAFTS_KEY, draftsJson)
+      .commit()
   }
 
   @Synchronized

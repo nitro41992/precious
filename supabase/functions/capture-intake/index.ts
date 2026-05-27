@@ -2228,6 +2228,105 @@ function dismissReminderSuggestion(analysis: Record<string, unknown>, reminderIn
   return reminders.filter((_, itemIndex) => itemIndex !== index);
 }
 
+function reviewReminderSuggestions(analysis: Record<string, unknown>, decisions: unknown) {
+  const removeIndices = new Set(
+    (Array.isArray(decisions) ? decisions : [])
+      .filter((decision) => {
+        return decision && typeof decision === "object" && (decision as Record<string, unknown>).action === "remove";
+      })
+      .map((decision) => Number((decision as Record<string, unknown>).index))
+      .filter(Number.isInteger)
+  );
+  const reminders = Array.isArray(analysis.suggested_reminders) ? analysis.suggested_reminders : [];
+  return reminders.filter((_, index) => !removeIndices.has(index));
+}
+
+function collectionDecisionKey(decision: Record<string, unknown>, index: number) {
+  return `${index}:${decision.type || ""}:${decision.collectionId || decision.collection_id || decision.title || ""}`;
+}
+
+function reviewCollectionDecisions(analysis: Record<string, unknown>, decisions: unknown) {
+  const acceptedKeys = new Set(
+    (Array.isArray(decisions) ? decisions : [])
+      .filter((decision) => {
+        if (!decision || typeof decision !== "object") return false;
+        const record = decision as Record<string, unknown>;
+        return record.kind === "suggested" && (record.action === "link" || record.action === "create");
+      })
+      .map((decision) => collectionDecisionKey(decision as Record<string, unknown>, Number((decision as Record<string, unknown>).index)))
+  );
+  const current = Array.isArray(analysis.collection_decisions)
+    ? analysis.collection_decisions
+    : Array.isArray(analysis.suggested_collections)
+      ? analysis.suggested_collections
+      : [];
+  return current.filter((decision, index) => {
+    return !acceptedKeys.has(collectionDecisionKey(decision as Record<string, unknown>, index));
+  });
+}
+
+async function applyCollectionReviewDecisions(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  captureId: string,
+  decisions: unknown
+) {
+  for (const item of Array.isArray(decisions) ? decisions : []) {
+    if (!item || typeof item !== "object") continue;
+    const decision = item as Record<string, unknown>;
+    if (decision.kind === "linked" && decision.action === "remove" && typeof decision.collectionId === "string") {
+      const { error } = await supabase
+        .from("collection_capture_links")
+        .update({ unlinked_at: new Date().toISOString(), unlink_reason: "user_removed" })
+        .eq("user_id", userId)
+        .eq("collection_id", decision.collectionId)
+        .eq("capture_id", captureId)
+        .is("unlinked_at", null);
+      if (error) throw error;
+      continue;
+    }
+
+    if (decision.kind !== "suggested" || (decision.action !== "link" && decision.action !== "create")) continue;
+    let collectionId = typeof decision.collectionId === "string" ? decision.collectionId : "";
+    const title = typeof decision.title === "string" ? decision.title.trim() : "";
+    const description = typeof decision.description === "string" ? decision.description.trim() : "";
+    const rationale = typeof decision.rationale === "string" ? decision.rationale : null;
+    const confidence = Number(decision.confidence);
+    if (!collectionId && decision.action === "create" && title && description) {
+      const existing = await supabase
+        .from("collections")
+        .select("id,status")
+        .eq("user_id", userId)
+        .eq("title", title)
+        .maybeSingle();
+      if (existing.error) throw existing.error;
+      if (existing.data?.status === "archived") continue;
+      collectionId = existing.data?.id ? String(existing.data.id) : "";
+      if (!collectionId) {
+        const created = await supabase
+          .from("collections")
+          .insert({
+            user_id: userId,
+            title,
+            description,
+            created_by: "analysis"
+          })
+          .select("id")
+          .single();
+        if (created.error) throw created.error;
+        collectionId = String(created.data.id);
+        await upsertCollectionEmbedding(supabase, userId, collectionId, title, description);
+      }
+    }
+    if (!collectionId) continue;
+    await linkCaptureToCollection(supabase, userId, collectionId, captureId, {
+      createdBy: "analysis",
+      rationale,
+      confidence: Number.isFinite(confidence) ? confidence : null
+    });
+  }
+}
+
 async function acceptPendingCollectionDecisions(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
@@ -2706,6 +2805,60 @@ Deno.serve(async (request) => {
             .update(fallbackUpdate)
             .eq("user_id", user.id)
             .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
+            .select("*")
+            .single();
+        }
+        if (result.error) throw result.error;
+        const rows = await attachLinkedCollections(supabase, user.id, [result.data as Record<string, unknown>]);
+        return json({ capture: withCaptureState(rows[0] ?? result.data) });
+      }
+
+      if (body.action === "save_review_decisions") {
+        const currentAnalysis = existingResult.data.analysis && typeof existingResult.data.analysis === "object"
+          ? existingResult.data.analysis as Record<string, unknown>
+          : {};
+        await applyCollectionReviewDecisions(supabase, user.id, String(existingResult.data.id), body.collectionDecisions);
+        const nextAnalysis = normalizedReviewAnalysis(
+          {
+            ...currentAnalysis,
+            needs_review: false,
+            collection_decisions: reviewCollectionDecisions(currentAnalysis, body.collectionDecisions),
+            suggested_collections: [],
+            suggested_reminders: reviewReminderSuggestions(currentAnalysis, body.reminderDecisions)
+          },
+          existingResult.data.review_confirmed_at
+        );
+        const update: Record<string, unknown> = {
+          analysis: nextAnalysis,
+          analysis_state: analysisRequiresReview(nextAnalysis, existingResult.data.review_confirmed_at) ? "needs_review" : "ready"
+        };
+        if (typeof body.title === "string") {
+          const title = body.title.trim() || null;
+          update.title = title;
+          update.display_title = title;
+        }
+        if (typeof body.note === "string") update.context_note = body.note.trim() || null;
+        if (typeof body.currentSaveIntent === "string") {
+          if (!activeSaveIntentKeySet.has(body.currentSaveIntent)) {
+            return json({ error: "currentSaveIntent is not an active save intent" }, 400);
+          }
+          update.current_save_intent = body.currentSaveIntent;
+          update.intent_corrected_at = new Date().toISOString();
+        }
+        let result = await supabase
+          .from("captures")
+          .update(update)
+          .eq("user_id", user.id)
+          .eq("id", existingResult.data.id)
+          .select("*")
+          .single();
+        if (result.error && update.intent_corrected_at && /intent_corrected_at|schema cache|column/i.test(String(result.error.message || result.error.details || ""))) {
+          delete update.intent_corrected_at;
+          result = await supabase
+            .from("captures")
+            .update(update)
+            .eq("user_id", user.id)
+            .eq("id", existingResult.data.id)
             .select("*")
             .single();
         }

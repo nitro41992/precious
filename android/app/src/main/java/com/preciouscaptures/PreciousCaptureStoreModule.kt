@@ -57,6 +57,25 @@ class PreciousCaptureStoreModule(
   }
 
   @ReactMethod
+  fun getReviewDrafts(promise: Promise) {
+    try {
+      promise.resolve(PreciousCaptureStore.reviewDrafts(reactContext))
+    } catch (error: Exception) {
+      promise.reject("capture_review_drafts_read_failed", error)
+    }
+  }
+
+  @ReactMethod
+  fun setReviewDrafts(draftsJson: String, promise: Promise) {
+    try {
+      PreciousCaptureStore.saveReviewDrafts(reactContext, draftsJson)
+      promise.resolve(true)
+    } catch (error: Exception) {
+      promise.reject("capture_review_drafts_write_failed", error)
+    }
+  }
+
+  @ReactMethod
   fun archiveCapture(id: String, promise: Promise) {
     try {
       promise.resolve(PreciousCaptureStore.archive(reactContext, id).toString())
