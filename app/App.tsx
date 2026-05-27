@@ -1594,6 +1594,50 @@ export default function App() {
     }
   }
 
+  async function clearAiCollectionSuggestion(index: number) {
+    if (!selected) return;
+    if (!config?.apiUrl || !session?.accessToken) {
+      setMessage("Sign in to manage collections.");
+      return;
+    }
+    const previousId = selected.id;
+    const savingKey = `clear-suggestion:${index}`;
+    setCollectionChoiceSaving(savingKey);
+    try {
+      const activeSession = await getFreshSession();
+      if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
+      const send = (accessToken: string) =>
+        requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
+          method: "PATCH",
+          headers: {
+            apikey: config.supabaseAnonKey,
+            authorization: `Bearer ${accessToken}`,
+            "content-type": "application/json"
+          },
+          body: {
+            captureId: selected.remoteId || selected.id,
+            action: "clear_collection_suggestion",
+            suggestionIndex: index
+          }
+        });
+      let json: { capture: Record<string, any> };
+      try {
+        json = await send(activeSession.accessToken);
+      } catch (error) {
+        if (!isAuthError(error)) throw error;
+        const refreshed = await getFreshSession(true);
+        if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
+        json = await send(refreshed.accessToken);
+      }
+      applyUpdatedCapture(captureFromRemote(json.capture), previousId);
+      setMessage("AI suggestion cleared.");
+    } catch (error) {
+      setMessage(friendlyError(error, "Could not clear AI suggestion."));
+    } finally {
+      setCollectionChoiceSaving(null);
+    }
+  }
+
   async function openCollectionPicker() {
     setCollectionPickerOpen((current) => !current);
     if (!collectionPickerOpen) {
@@ -2262,6 +2306,12 @@ export default function App() {
     const reminderRows = selected.suggestedReminders || [];
     const collectionRows = selected.linkedCollections || [];
     const collectionSuggestionRows = selected.collectionDecisions || [];
+    const activeSuggestionKeys = new Set(
+      collectionSuggestionRows.map((decision) => decision.collectionId || decision.title.toLowerCase())
+    );
+    const linkedCollectionKeys = new Set(
+      collectionRows.flatMap((collection) => [collection.id, collection.title.toLowerCase()])
+    );
     const replacedCollectionSuggestions = (selected.manualCollectionOverrides || [])
       .filter((override) => override.restoredDecisions.length)
       .flatMap((override) =>
@@ -2270,7 +2320,9 @@ export default function App() {
           decision,
           key: `${override.collectionId}:${index}:${decision.collectionId || decision.title}`
         }))
-      );
+      )
+      .filter(({ decision }) => !activeSuggestionKeys.has(decision.collectionId || decision.title.toLowerCase()))
+      .filter(({ decision }) => !linkedCollectionKeys.has(decision.collectionId || decision.title.toLowerCase()));
     const linkedCollectionIds = new Set(collectionRows.map((collection) => collection.id));
     const activeCollections = collections.filter((collection) => collection.status === "active");
     const collectionPickerTerm = collectionPickerQuery.trim().toLowerCase();
@@ -2325,7 +2377,13 @@ export default function App() {
               <Text numberOfLines={2} style={styles.meta}>{collection.description}</Text>
             </View>
             <Text style={styles.suggestionAction}>
-              {collectionChoiceSaving === `existing:${collection.id}` ? "Adding..." : "Add"}
+              {collectionChoiceSaving === `existing:${collection.id}`
+                ? collectionSuggestionRows.length
+                  ? "Replacing..."
+                  : "Adding..."
+                : collectionSuggestionRows.length
+                  ? "Replace"
+                  : "Add"}
             </Text>
           </Pressable>
         ))}
@@ -2364,7 +2422,13 @@ export default function App() {
             style={[styles.smallButton, (collectionCreateDisabled || Boolean(collectionChoiceSaving)) && styles.disabledButton]}
           >
             <Text style={styles.smallButtonText}>
-              {collectionChoiceSaving === "new" ? "Creating..." : "Create and add"}
+              {collectionChoiceSaving === "new"
+                ? collectionSuggestionRows.length
+                  ? "Replacing..."
+                  : "Creating..."
+                : collectionSuggestionRows.length
+                  ? "Create and replace"
+                  : "Create and add"}
             </Text>
           </Pressable>
         </View>
@@ -2539,13 +2603,15 @@ export default function App() {
                 const key = linkedCollectionDraftKey(collection.id);
                 const removed = collectionDrafts[key] === "remove";
                 const added = collectionDrafts[key] === "added";
-                const hasAiFallback = Boolean(manualOverrideForCollection(selected, collection.id)?.restoredDecisions.length);
+                const hasAiFallback = collection.createdBy !== "analysis" &&
+                  Boolean(manualOverrideForCollection(selected, collection.id)?.restoredDecisions.length);
+                const collectionSourceLabel = collection.createdBy === "analysis" ? "AI confirmed" : "Linked";
                 return (
                   <View key={collection.id} style={[styles.suggestionPill, (removed || added || hasAiFallback) && styles.suggestionPillChanged]}>
                     <View style={styles.suggestionLabelColumn}>
                       <Text style={styles.suggestionLabel}>Collection</Text>
                       <Text style={[styles.suggestionState, (removed || added || hasAiFallback) && styles.suggestionStateChanged]}>
-                        {removed ? "Removed" : added || hasAiFallback ? "Added" : "Linked"}
+                        {removed ? "Cleared" : added || hasAiFallback ? "Added" : collectionSourceLabel}
                       </Text>
                     </View>
                     <Pressable
@@ -2575,7 +2641,7 @@ export default function App() {
                       hitSlop={8}
                     >
                       <Text style={styles.suggestionAction}>
-                        {removed || added ? "Undo" : "Remove"}
+                        {removed || added ? "Undo" : "Clear collection"}
                       </Text>
                     </Pressable>
                   </View>
@@ -2583,11 +2649,12 @@ export default function App() {
               })}
               {replacedCollectionSuggestions.map(({ override, decision, key }) => {
                 const undoing = collectionChoiceSaving === `undo:${override.collectionId}`;
+                const stateLabel = collectionRows.length ? "AI suggestion replaced" : "AI suggestion cleared";
                 return (
                   <View key={key} style={[styles.suggestionPill, styles.suggestionPillChanged]}>
                     <View style={styles.suggestionLabelColumn}>
                       <Text style={styles.suggestionLabel}>Collection</Text>
-                      <Text style={[styles.suggestionState, styles.suggestionStateChanged]}>AI suggested</Text>
+                      <Text style={[styles.suggestionState, styles.suggestionStateChanged]}>{stateLabel}</Text>
                     </View>
                     <Pressable
                       onLongPress={() => showRationale("Why this collection?", decision.rationale)}
@@ -2608,7 +2675,7 @@ export default function App() {
                       })}
                       hitSlop={8}
                     >
-                      <Text style={styles.suggestionAction}>{undoing ? "Restoring..." : "Undo"}</Text>
+                      <Text style={styles.suggestionAction}>{undoing ? "Restoring..." : "Restore AI"}</Text>
                     </Pressable>
                   </View>
                 );
@@ -2618,7 +2685,7 @@ export default function App() {
                 const action = collectionDrafts[key] || "ignore";
                 const staged = action === "link" || action === "create";
                 const saving = collectionChoiceSaving === `suggestion:${index}`;
-                const defaultAction = collection.type === "new" ? "Create" : "Link";
+                const clearing = collectionChoiceSaving === `clear-suggestion:${index}`;
                 return (
                   <View
                     key={key}
@@ -2627,7 +2694,7 @@ export default function App() {
                     <View style={styles.suggestionLabelColumn}>
                       <Text style={styles.suggestionLabel}>Collection</Text>
                       <Text style={[styles.suggestionState, staged && styles.suggestionStateChanged]}>
-                        {staged ? (action === "create" ? "Will create" : "Will link") : "AI suggested"}
+                        {staged ? (action === "create" ? "Will create" : "Will link") : "AI suggestion"}
                       </Text>
                     </View>
                     <Pressable
@@ -2651,19 +2718,29 @@ export default function App() {
                         }}
                         hitSlop={8}
                       >
-                        <Text style={styles.suggestionAction}>{saving ? "Saving..." : staged ? "Undo" : defaultAction}</Text>
+                        <Text style={styles.suggestionAction}>
+                          {saving ? "Confirming..." : staged ? "Undo" : "Confirm"}
+                        </Text>
                       </Pressable>
                       <Pressable
                         onPress={() => void openCollectionPicker()}
                         hitSlop={8}
                       >
-                        <Text style={styles.suggestionAction}>{collectionPickerOpen ? "Close" : "Different"}</Text>
+                        <Text style={styles.suggestionAction}>
+                          {collectionPickerOpen ? "Close" : "Replace"}
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => void clearAiCollectionSuggestion(index)}
+                        hitSlop={8}
+                      >
+                        <Text style={styles.suggestionAction}>{clearing ? "Clearing..." : "Clear AI"}</Text>
                       </Pressable>
                     </View>
                   </View>
                 );
               })}
-              {!collectionRows.length && !collectionSuggestionRows.length && !replacedCollectionSuggestions.length ? (
+              {!collectionRows.length && !collectionSuggestionRows.length ? (
                 <View style={styles.suggestionPill}>
                   <Text style={styles.suggestionLabel}>Collection</Text>
                   <Text style={[styles.suggestionText, styles.suggestionValue]}>None</Text>
@@ -2672,7 +2749,7 @@ export default function App() {
                   </Pressable>
                 </View>
               ) : null}
-              {(!collectionRows.length || collectionSuggestionRows.length) ? collectionPickerContent : null}
+              {collectionPickerContent}
             </View>
           </View>
           {selectedReviewReasons.length ? (

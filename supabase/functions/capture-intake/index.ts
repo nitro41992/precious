@@ -2982,13 +2982,15 @@ async function attachLinkedCollections(
     .is("unlinked_at", null);
   if (error) return rows;
   const byCapture = new Map<string, Array<Record<string, unknown>>>();
+  const activeCollectionIdsByCapture = new Map<string, Set<string>>();
   for (const link of data ?? []) {
     const record = link as Record<string, unknown>;
     const collection = record.collections as Record<string, unknown> | null;
     if (!collection || collection.status === "archived") continue;
     const captureId = String(record.capture_id);
+    const collectionId = String(collection.id);
     const item = {
-      id: String(collection.id),
+      id: collectionId,
       title: String(collection.title || ""),
       description: String(collection.description || ""),
       created_by: String(record.created_by || "user"),
@@ -2997,8 +2999,61 @@ async function attachLinkedCollections(
       linked_at: record.linked_at || null
     };
     byCapture.set(captureId, [...(byCapture.get(captureId) || []), item]);
+    activeCollectionIdsByCapture.set(captureId, new Set([...(activeCollectionIdsByCapture.get(captureId) || []), collectionId]));
   }
-  return rows.map((row) => ({ ...row, linked_collections: byCapture.get(String(row.id)) || [] }));
+  const removed = await supabase
+    .from("collection_capture_links")
+    .select("capture_id, collection_id, rationale, confidence, unlinked_at, collections(id,title,description,status)")
+    .eq("user_id", userId)
+    .eq("created_by", "analysis")
+    .in("capture_id", captureIds)
+    .not("unlinked_at", "is", null)
+    .order("unlinked_at", { ascending: false });
+  const overridesByCapture = new Map<string, Array<Record<string, unknown>>>();
+  if (!removed.error) {
+    for (const link of removed.data ?? []) {
+      const record = link as Record<string, unknown>;
+      const captureId = String(record.capture_id || "");
+      const collectionId = String(record.collection_id || "");
+      if (!captureId || !collectionId || activeCollectionIdsByCapture.get(captureId)?.has(collectionId)) continue;
+      if (overridesByCapture.get(captureId)?.some((override) => override.collection_id === collectionId)) continue;
+      const collection = record.collections as Record<string, unknown> | null;
+      if (!collection || collection.status === "archived") continue;
+      overridesByCapture.set(captureId, [
+        ...(overridesByCapture.get(captureId) || []),
+        {
+          collection_id: collectionId,
+          source: "analysis",
+          restored_decisions: [
+            {
+              type: "existing",
+              collection_id: collectionId,
+              title: String(collection.title || ""),
+              description: typeof collection.description === "string" ? collection.description : null,
+              rationale: typeof record.rationale === "string" ? record.rationale : "",
+              confidence: Number.isFinite(Number(record.confidence)) ? Number(record.confidence) : 0
+            }
+          ],
+          applied_at: record.unlinked_at || null
+        }
+      ]);
+    }
+  }
+  return rows.map((row) => {
+    const captureId = String(row.id);
+    const analysis = row.analysis && typeof row.analysis === "object" ? row.analysis as Record<string, unknown> : {};
+    const existingOverrides = collectionChoiceOverrides(analysis);
+    const existingOverrideIds = new Set(existingOverrides.map((override) => String(override.collection_id || "")));
+    const recoveredOverrides = (overridesByCapture.get(captureId) || [])
+      .filter((override) => !existingOverrideIds.has(String(override.collection_id || "")));
+    return {
+      ...row,
+      analysis: recoveredOverrides.length
+        ? { ...analysis, collection_choice_overrides: [...existingOverrides, ...recoveredOverrides] }
+        : row.analysis,
+      linked_collections: byCapture.get(captureId) || []
+    };
+  });
 }
 
 function sameCollectionDecision(decision: Record<string, unknown>, accepted: Record<string, unknown>) {
@@ -3247,6 +3302,15 @@ function choiceRestoredDecisions(override: Record<string, unknown>) {
     : [];
 }
 
+function collectionChoiceOverrideId(decision: Record<string, unknown>, index: number) {
+  const collectionId = typeof decision.collection_id === "string" && decision.collection_id.trim()
+    ? decision.collection_id.trim()
+    : typeof decision.collectionId === "string" && decision.collectionId.trim()
+      ? decision.collectionId.trim()
+      : "";
+  return collectionId || `suggestion:${collectionDecisionKey(decision, index)}`;
+}
+
 async function captureResponse(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
@@ -3341,7 +3405,7 @@ async function applyCollectionChoice(
   });
   const overrides = collectionChoiceOverrides(currentAnalysis)
     .filter((override) => String(override.collection_id || "") !== collectionId);
-  if (dismissedDecisions.length) {
+  if (source !== "analysis" && dismissedDecisions.length) {
     overrides.push({
       collection_id: collectionId,
       source,
@@ -3372,6 +3436,64 @@ async function applyCollectionChoice(
   return await captureResponse(supabase, userId, captureId);
 }
 
+async function clearCollectionSuggestion(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  capture: Record<string, unknown>,
+  body: Record<string, unknown>
+) {
+  const currentAnalysis = capture.analysis && typeof capture.analysis === "object"
+    ? capture.analysis as Record<string, unknown>
+    : {};
+  const currentDecisions = activeCollectionDecisionRows(currentAnalysis);
+  const suggestionIndex = Number(body.suggestionIndex);
+  const dismissedEntries = Number.isInteger(suggestionIndex) && suggestionIndex >= 0 && suggestionIndex < currentDecisions.length
+    ? [{ decision: currentDecisions[suggestionIndex], index: suggestionIndex }]
+    : currentDecisions.map((decision, index) => ({ decision, index }));
+  if (!dismissedEntries.length) return await captureResponse(supabase, userId, String(capture.id));
+
+  const dismissedKeys = new Set(
+    dismissedEntries.map(({ decision, index }) => collectionDecisionKey(decision, index))
+  );
+  const dismissedOverrideIds = new Set(
+    dismissedEntries.map(({ decision, index }) => collectionChoiceOverrideId(decision, index))
+  );
+  const overrides = collectionChoiceOverrides(currentAnalysis)
+    .filter((override) => !dismissedOverrideIds.has(String(override.collection_id || "")));
+  for (const { decision, index } of dismissedEntries) {
+    overrides.push({
+      collection_id: collectionChoiceOverrideId(decision, index),
+      source: "clear",
+      restored_decisions: [decision],
+      applied_at: new Date().toISOString()
+    });
+  }
+
+  const nextDecisions = currentDecisions.filter((decision, index) => {
+    return !dismissedKeys.has(collectionDecisionKey(decision, index));
+  });
+  const nextAnalysis = normalizedReviewAnalysis(
+    {
+      ...currentAnalysis,
+      needs_review: false,
+      collection_decisions: nextDecisions,
+      suggested_collections: [],
+      collection_choice_overrides: overrides
+    },
+    capture.review_confirmed_at
+  );
+  const update = await supabase
+    .from("captures")
+    .update({
+      analysis: nextAnalysis,
+      analysis_state: analysisRequiresReview(nextAnalysis, capture.review_confirmed_at) ? "needs_review" : "ready"
+    })
+    .eq("user_id", userId)
+    .eq("id", String(capture.id));
+  if (update.error) throw update.error;
+  return await captureResponse(supabase, userId, String(capture.id));
+}
+
 async function undoCollectionChoice(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
@@ -3386,15 +3508,50 @@ async function undoCollectionChoice(
     : {};
   const overrides = collectionChoiceOverrides(currentAnalysis);
   const override = overrides.find((item) => String(item.collection_id || "") === collectionId);
-  const restoredDecisions = override ? choiceRestoredDecisions(override) : [];
+  let restoredDecisions = override ? choiceRestoredDecisions(override) : [];
+  if (!restoredDecisions.length) {
+    const removed = await supabase
+      .from("collection_capture_links")
+      .select("rationale, confidence, collections(id,title,description,status)")
+      .eq("user_id", userId)
+      .eq("collection_id", collectionId)
+      .eq("capture_id", captureId)
+      .eq("created_by", "analysis")
+      .not("unlinked_at", "is", null)
+      .order("unlinked_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (removed.error) throw removed.error;
+    const collection = Array.isArray(removed.data?.collections)
+      ? removed.data?.collections[0] as Record<string, unknown> | undefined
+      : removed.data?.collections as Record<string, unknown> | undefined;
+    if (collection && collection.status !== "archived") {
+      restoredDecisions = [
+        {
+          type: "existing",
+          collection_id: collectionId,
+          title: String(collection.title || ""),
+          description: typeof collection.description === "string" ? collection.description : null,
+          rationale: typeof removed.data?.rationale === "string" ? removed.data.rationale : "",
+          confidence: Number.isFinite(Number(removed.data?.confidence)) ? Number(removed.data?.confidence) : 0
+        }
+      ];
+    }
+  }
 
-  const unlink = await supabase
+  const unlinkAt = new Date().toISOString();
+  const unlinkQuery = supabase
     .from("collection_capture_links")
-    .update({ unlinked_at: new Date().toISOString(), unlink_reason: "user_undo" })
+    .update({
+      unlinked_at: unlinkAt,
+      unlink_reason: restoredDecisions.length ? "user_restore_ai" : "user_undo"
+    })
     .eq("user_id", userId)
-    .eq("collection_id", collectionId)
     .eq("capture_id", captureId)
     .is("unlinked_at", null);
+  const unlink = restoredDecisions.length
+    ? await unlinkQuery
+    : await unlinkQuery.eq("collection_id", collectionId);
   if (unlink.error) throw unlink.error;
 
   const nextDecisions = [...activeCollectionDecisionRows(currentAnalysis)];
@@ -3423,6 +3580,75 @@ async function undoCollectionChoice(
     .eq("id", captureId);
   if (update.error) throw update.error;
   return await captureResponse(supabase, userId, captureId);
+}
+
+async function preserveAiCollectionSuggestionForUnlink(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  captureId: string,
+  collectionId: string
+) {
+  const link = await supabase
+    .from("collection_capture_links")
+    .select("created_by, rationale, confidence, collections(id,title,description)")
+    .eq("user_id", userId)
+    .eq("collection_id", collectionId)
+    .eq("capture_id", captureId)
+    .is("unlinked_at", null)
+    .maybeSingle();
+  if (link.error) throw link.error;
+  if (!link.data || link.data.created_by !== "analysis") return;
+
+  const capture = await supabase
+    .from("captures")
+    .select("id, analysis, review_confirmed_at")
+    .eq("user_id", userId)
+    .eq("id", captureId)
+    .maybeSingle();
+  if (capture.error) throw capture.error;
+  if (!capture.data) return;
+
+  const collection = Array.isArray(link.data.collections)
+    ? link.data.collections[0] as Record<string, unknown> | undefined
+    : link.data.collections as Record<string, unknown> | undefined;
+  if (!collection) return;
+
+  const currentAnalysis = capture.data.analysis && typeof capture.data.analysis === "object"
+    ? capture.data.analysis as Record<string, unknown>
+    : {};
+  const restoredDecision = {
+    type: "existing",
+    collection_id: collectionId,
+    title: String(collection.title || ""),
+    description: typeof collection.description === "string" ? collection.description : null,
+    rationale: typeof link.data.rationale === "string" ? link.data.rationale : "",
+    confidence: Number.isFinite(Number(link.data.confidence)) ? Number(link.data.confidence) : 0
+  };
+  const overrides = collectionChoiceOverrides(currentAnalysis)
+    .filter((override) => String(override.collection_id || "") !== collectionId);
+  overrides.push({
+    collection_id: collectionId,
+    source: "analysis",
+    restored_decisions: [restoredDecision],
+    applied_at: new Date().toISOString()
+  });
+  const nextAnalysis = normalizedReviewAnalysis(
+    {
+      ...currentAnalysis,
+      needs_review: false,
+      collection_choice_overrides: overrides
+    },
+    capture.data.review_confirmed_at
+  );
+  const update = await supabase
+    .from("captures")
+    .update({
+      analysis: nextAnalysis,
+      analysis_state: analysisRequiresReview(nextAnalysis, capture.data.review_confirmed_at) ? "needs_review" : "ready"
+    })
+    .eq("user_id", userId)
+    .eq("id", captureId);
+  if (update.error) throw update.error;
 }
 
 async function handleClientEventsResource(
@@ -3644,6 +3870,7 @@ async function handleCollectionLinksResource(
   }
 
   if (request.method === "PATCH" && body.action === "unlink") {
+    await preserveAiCollectionSuggestionForUnlink(supabase, userId, captureId, collectionId);
     const { error } = await supabase
       .from("collection_capture_links")
       .update({ unlinked_at: new Date().toISOString(), unlink_reason: "user" })
@@ -3762,6 +3989,10 @@ Deno.serve(async (request) => {
 
       if (body.action === "apply_collection_choice") {
         return await applyCollectionChoice(supabase, user.id, existingResult.data as Record<string, unknown>, body);
+      }
+
+      if (body.action === "clear_collection_suggestion") {
+        return await clearCollectionSuggestion(supabase, user.id, existingResult.data as Record<string, unknown>, body);
       }
 
       if (body.action === "undo_collection_choice") {
