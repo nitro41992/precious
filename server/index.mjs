@@ -230,7 +230,7 @@ function buildPrompt(capture, urlMetadata) {
     "Prefer the most specific future use over content type. Do not choose visit just because a place or business appears; choose reference for business contact or pricing information unless there is clear visit intent.",
     "Do not use a catch-all. If no specific future use is inferable, choose remember with lower confidence and needs_review.",
     "Do not invent facts that are not present in the shared text, URL, or URL metadata.",
-    "If Reddit, Instagram, or another site blocks metadata, infer only from the URL path and user share text.",
+    "If metadata is blocked or unavailable, infer only from item-specific URL path/query signals and user share text.",
     "",
     JSON.stringify(
       {

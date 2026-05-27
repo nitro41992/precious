@@ -23,3 +23,7 @@ The hosted build script embeds the JavaScript bundle and hosted Supabase configu
 ## Supabase Pushes
 
 Only push/deploy Supabase when backend files changed, such as `supabase/functions`, `supabase/migrations`, or API/server code that is actually deployed. Pure React Native UI changes in `app/App.tsx` do not require a Supabase push.
+
+## Extraction Rules
+
+Keep LLM prompts, preflight gates, and policy decisions domain-agnostic. If a specific site needs richer handling, put that logic in a bounded extractor/parser adapter for that site's public URL format or API, and keep the prompt/policy language generic.
