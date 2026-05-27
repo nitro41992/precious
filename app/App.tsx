@@ -48,7 +48,9 @@ type Capture = {
     confidence: number;
     status?: string;
   }>;
-  suggestedCollections?: Array<{ name: string; rationale: string; confidence: number }>;
+  linkedCollections?: LinkedCollection[];
+  collectionDecisions?: CollectionDecision[];
+  suggestedCollections?: CollectionDecision[];
   searchPhrases?: string[];
   note: string;
   archivedAt?: number | null;
@@ -56,6 +58,35 @@ type Capture = {
   createdAt: number;
   updatedAt: number;
   processedAt: number | null;
+};
+
+type LinkedCollection = {
+  id: string;
+  title: string;
+  description?: string;
+  createdBy?: string;
+  rationale?: string | null;
+  confidence?: number | null;
+};
+
+type CollectionDecision = {
+  type: "existing" | "new";
+  collectionId?: string | null;
+  title: string;
+  description?: string | null;
+  rationale: string;
+  confidence: number;
+};
+
+type Collection = {
+  id: string;
+  title: string;
+  description: string;
+  status: "active" | "archived";
+  captureCount: number;
+  archivedAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 };
 
 type CaptureStore = {
@@ -123,6 +154,11 @@ const INTENT_OPTIONS = INTENT_CONFIG.map((intent) => intent.key);
 const INTENT_LABELS = new Map(INTENT_CONFIG.map((intent) => [intent.key, intent.label]));
 
 type CaptureListMode = "active" | "archived";
+type HomeMode = "captures" | "collections";
+type CollectionListMode = "active" | "archived";
+
+const PROCESSING_REFRESH_MS = 3000;
+const LOCAL_PROCESSING_GRACE_MS = 30 * 60 * 1000;
 
 class ApiRequestError extends Error {
   status: number;
@@ -194,6 +230,25 @@ function displayStatus(capture: Capture): CaptureStatus {
   return capture.status;
 }
 
+function sortCaptures(captures: Capture[]) {
+  return [...captures].sort((a, b) => b.createdAt - a.createdAt);
+}
+
+function mergeRemoteCaptures(remoteCaptures: Capture[], currentCaptures: Capture[], listMode: CaptureListMode) {
+  if (listMode === "archived") return sortCaptures(remoteCaptures);
+  const remoteIds = new Set(remoteCaptures.map((capture) => capture.id));
+  const now = Date.now();
+  const freshLocalProcessing = currentCaptures.filter((capture) => {
+    return (
+      !remoteIds.has(capture.id) &&
+      !isArchived(capture) &&
+      displayStatus(capture) === "processing" &&
+      now - capture.createdAt < LOCAL_PROCESSING_GRACE_MS
+    );
+  });
+  return sortCaptures([...remoteCaptures, ...freshLocalProcessing]);
+}
+
 function friendlyError(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : String(error || "");
   if (
@@ -214,6 +269,11 @@ function captureFromRemote(row: Record<string, any>): Capture {
   const defaultIntent = analysis.default_intent ?? {};
   const archivedAtValue = row.archived_at || analysis.archived_at || null;
   const analysisMode = nullableValue(row.analysis_mode) || (nullableValue(row.analysis_provider) ? "llm" : undefined);
+  const collectionDecisions = Array.isArray(analysis.collection_decisions)
+    ? analysis.collection_decisions.map(collectionDecisionFromRemote).filter(Boolean) as CollectionDecision[]
+    : Array.isArray(analysis.suggested_collections)
+      ? analysis.suggested_collections.map(collectionDecisionFromRemote).filter(Boolean) as CollectionDecision[]
+      : [];
   const remoteHasExtractedData = Boolean(
     row.default_intent ||
       row.analysis_provider ||
@@ -238,7 +298,13 @@ function captureFromRemote(row: Record<string, any>): Capture {
     needsReview: Boolean(analysis.needs_review || row.analysis_state === "needs_review"),
     entities: analysis.entities || [],
     suggestedReminders: analysis.suggested_reminders || [],
-    suggestedCollections: analysis.suggested_collections || [],
+    linkedCollections: Array.isArray(row.linked_collections)
+      ? row.linked_collections.map(linkedCollectionFromRemote)
+      : Array.isArray(analysis.linked_collections)
+        ? analysis.linked_collections.map(linkedCollectionFromRemote)
+        : [],
+    collectionDecisions,
+    suggestedCollections: collectionDecisions,
     searchPhrases: analysis.search_phrases || [],
     note: String(row.context_note || ""),
     archivedAt:
@@ -287,6 +353,50 @@ function captureMutationUrl(apiUrl: string) {
   return isEdgeCaptureApi(apiUrl) ? apiUrl : `${apiUrl}/api/captures`;
 }
 
+function edgeResourceUrl(apiUrl: string, resource: string, params: Record<string, string> = {}) {
+  const url = new URL(isEdgeCaptureApi(apiUrl) ? apiUrl : `${apiUrl}/api/captures`);
+  url.searchParams.set("resource", resource);
+  for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+  return url.toString();
+}
+
+function collectionFromRemote(row: Record<string, any>): Collection {
+  return {
+    id: String(row.id),
+    title: String(row.title || ""),
+    description: String(row.description || ""),
+    status: row.status === "archived" ? "archived" : "active",
+    captureCount: Number(row.capture_count || row.captureCount || 0),
+    archivedAt: nullableValue(row.archived_at),
+    createdAt: nullableValue(row.created_at),
+    updatedAt: nullableValue(row.updated_at)
+  };
+}
+
+function linkedCollectionFromRemote(row: Record<string, any>): LinkedCollection {
+  return {
+    id: String(row.id || row.collection_id || ""),
+    title: String(row.title || ""),
+    description: nullableValue(row.description),
+    createdBy: nullableValue(row.created_by || row.createdBy),
+    rationale: nullableValue(row.rationale) || null,
+    confidence: Number.isFinite(Number(row.confidence)) ? Number(row.confidence) : null
+  };
+}
+
+function collectionDecisionFromRemote(row: Record<string, any>): CollectionDecision | null {
+  const type = row.type === "existing" ? "existing" : row.type === "new" ? "new" : null;
+  if (!type) return null;
+  return {
+    type,
+    collectionId: nullableValue(row.collection_id || row.collectionId) || null,
+    title: String(row.title || row.name || ""),
+    description: nullableValue(row.description) || null,
+    rationale: String(row.rationale || ""),
+    confidence: Number.isFinite(Number(row.confidence)) ? Number(row.confidence) : 0
+  };
+}
+
 async function requestJson<T>(
   url: string,
   input: { method?: string; headers?: Record<string, string>; body?: unknown } = {}
@@ -313,14 +423,25 @@ async function requestJson<T>(
 
 export default function App() {
   const [captures, setCaptures] = useState<Capture[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [session, setSession] = useState<AuthSession | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
+  const [homeMode, setHomeMode] = useState<HomeMode>("captures");
   const [query, setQuery] = useState("");
   const [listMode, setListMode] = useState<CaptureListMode>("active");
+  const [collectionListMode, setCollectionListMode] = useState<CollectionListMode>("active");
   const [draftTitle, setDraftTitle] = useState("");
   const [draftNote, setDraftNote] = useState("");
   const [draftIntent, setDraftIntent] = useState("");
+  const [collectionTitle, setCollectionTitle] = useState("");
+  const [collectionDescription, setCollectionDescription] = useState("");
+  const [collectionDraftDirty, setCollectionDraftDirty] = useState(false);
+  const [showCollectionForm, setShowCollectionForm] = useState(false);
+  const [draftTitleDirty, setDraftTitleDirty] = useState(false);
+  const [draftNoteDirty, setDraftNoteDirty] = useState(false);
+  const [draftIntentDirty, setDraftIntentDirty] = useState(false);
   const [message, setMessage] = useState("");
   const [sourceDraft, setSourceDraft] = useState("");
   const [savingCapture, setSavingCapture] = useState(false);
@@ -372,8 +493,7 @@ export default function App() {
         json = await loadWithToken(refreshed.accessToken);
       }
       const next = ((json.captures ?? []) as Array<Record<string, any>>).map(captureFromRemote);
-      next.sort((a, b) => b.createdAt - a.createdAt);
-      setCaptures(next);
+      setCaptures((current) => mergeRemoteCaptures(next, current, listMode));
       return;
     }
 
@@ -383,24 +503,68 @@ export default function App() {
     }
     const raw = await nativeStore.getCaptures();
     const next = JSON.parse(raw || "[]") as Capture[];
-    next.sort((a, b) => b.createdAt - a.createdAt);
-    setCaptures(next);
+    setCaptures(sortCaptures(next));
   }, [config, getFreshSession, listMode, session]);
+
+  const loadCollections = useCallback(async () => {
+    if (!config?.apiUrl || !session?.accessToken) {
+      setCollections([]);
+      return;
+    }
+    const activeSession = await getFreshSession();
+    if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
+    const loadWithToken = (accessToken: string) =>
+      requestJson<{ collections?: Array<Record<string, any>> }>(
+        edgeResourceUrl(config.apiUrl, "collections", {
+          archived: collectionListMode === "archived" ? "true" : "false"
+        }),
+        {
+          headers: {
+            accept: "application/json",
+            apikey: config.supabaseAnonKey,
+            authorization: `Bearer ${accessToken}`
+          }
+        }
+      );
+    let json: { collections?: Array<Record<string, any>> };
+    try {
+      json = await loadWithToken(activeSession.accessToken);
+    } catch (error) {
+      if (!isAuthError(error)) throw error;
+      const refreshed = await getFreshSession(true);
+      if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
+      json = await loadWithToken(refreshed.accessToken);
+    }
+    setCollections((json.collections ?? []).map(collectionFromRemote));
+  }, [collectionListMode, config, getFreshSession, session]);
+
+  const selectCapture = useCallback((captureId: string | null) => {
+    setDraftTitleDirty(false);
+    setDraftNoteDirty(false);
+    setDraftIntentDirty(false);
+    setSelectedId(captureId);
+  }, []);
+
+  const selectCollection = useCallback((collectionId: string | null) => {
+    setSelectedCollectionId(collectionId);
+    setCollectionDraftDirty(false);
+    setShowCollectionForm(false);
+  }, []);
 
   const openCapture = useCallback(
     (captureId: string | null) => {
       if (!captureId) return;
       const capture = captures.find((item) => item.id === captureId);
       if (!capture) {
-        setSelectedId(captureId);
+        selectCapture(captureId);
         return;
       }
-      setSelectedId(capture.id);
+      selectCapture(capture.id);
       setDraftTitle(capture.title);
       setDraftNote(capture.note);
       setDraftIntent(normalizeIntent(capture.defaultIntent));
     },
-    [captures]
+    [captures, selectCapture]
   );
 
   useEffect(() => {
@@ -418,18 +582,18 @@ export default function App() {
 
     Linking.getInitialURL().then((url) => {
       const captureId = parseCaptureUrl(url);
-      if (captureId) setSelectedId(captureId);
+      if (captureId) selectCapture(captureId);
     });
-  }, []);
+  }, [selectCapture]);
 
   useEffect(() => {
     const linkSubscription = Linking.addEventListener("url", ({ url }) => {
       const captureId = parseCaptureUrl(url);
-      if (captureId) setSelectedId(captureId);
+      if (captureId) selectCapture(captureId);
       void loadCaptures();
     });
     return () => linkSubscription.remove();
-  }, [loadCaptures]);
+  }, [loadCaptures, selectCapture]);
 
   useEffect(() => {
     const appSubscription = AppState.addEventListener("change", (state) => {
@@ -445,22 +609,53 @@ export default function App() {
   }, [loadCaptures]);
 
   useEffect(() => {
-    if (!selectedId) return;
-    const capture = captures.find((item) => item.id === selectedId);
-    if (!capture) return;
-    setDraftTitle(capture.title);
-    setDraftNote(capture.note);
-    setDraftIntent(normalizeIntent(capture.defaultIntent));
-  }, [captures, selectedId]);
+    if (homeMode !== "collections") return;
+    void loadCollections().catch((error) => {
+      setMessage((current) => current || friendlyError(error, "Could not load collections"));
+    });
+  }, [homeMode, loadCollections]);
+
+  const hasProcessingCapture = useMemo(
+    () => captures.some((capture) => displayStatus(capture) === "processing"),
+    [captures]
+  );
+
+  useEffect(() => {
+    if (!hasProcessingCapture) return;
+    const timer = setInterval(() => {
+      void loadCaptures().catch(() => {
+        // Keep foreground polling quiet; explicit loads still surface errors.
+      });
+    }, PROCESSING_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [hasProcessingCapture, loadCaptures]);
 
   useEffect(() => {
     if (!selectedId) return;
+    const capture = captures.find((item) => item.id === selectedId);
+    if (!capture) return;
+    if (!draftTitleDirty) setDraftTitle(capture.title);
+    if (!draftNoteDirty) setDraftNote(capture.note);
+    if (!draftIntentDirty) setDraftIntent(normalizeIntent(capture.defaultIntent));
+  }, [captures, draftIntentDirty, draftNoteDirty, draftTitleDirty, selectedId]);
+
+  useEffect(() => {
+    if (!selectedCollectionId) return;
+    const collection = collections.find((item) => item.id === selectedCollectionId);
+    if (!collection || collectionDraftDirty) return;
+    setCollectionTitle(collection.title);
+    setCollectionDescription(collection.description);
+  }, [collectionDraftDirty, collections, selectedCollectionId]);
+
+  useEffect(() => {
+    if (!selectedId && !selectedCollectionId) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      setSelectedId(null);
+      selectCapture(null);
+      selectCollection(null);
       return true;
     });
     return () => subscription.remove();
-  }, [selectedId]);
+  }, [selectCapture, selectCollection, selectedCollectionId, selectedId]);
 
   const filteredCaptures = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -474,7 +669,19 @@ export default function App() {
     );
   }, [captures, listMode, query]);
 
+  const filteredCollections = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    const visible = collections.filter((collection) => collection.status === collectionListMode);
+    if (!term) return visible;
+    return visible.filter((collection) =>
+      [collection.title, collection.description].join(" ").toLowerCase().includes(term)
+    );
+  }, [collectionListMode, collections, query]);
+
   const selected = selectedId ? captures.find((capture) => capture.id === selectedId) ?? null : null;
+  const selectedCollection = selectedCollectionId
+    ? collections.find((collection) => collection.id === selectedCollectionId) ?? null
+    : null;
   const selectedAnalysisMode = nullableValue(selected?.analysisMode);
   const selectedSummary =
     selected?.summary && selected.summary !== selected.sourceUrl && selected.summary !== selected.sourceText
@@ -514,6 +721,9 @@ export default function App() {
         setCaptures((current) =>
           current.map((item) => (item.id === selected.id ? captureFromRemote(json.capture) : item))
         );
+        setDraftTitleDirty(false);
+        setDraftNoteDirty(false);
+        setDraftIntentDirty(false);
         setMessage("Saved.");
       } catch (error) {
         setMessage(friendlyError(error, "Could not save."));
@@ -523,9 +733,169 @@ export default function App() {
     if (!nativeStore) return;
     const raw = await nativeStore.updateCapture(selected.id, draftTitle.trim(), draftNote.trim(), draftIntent || null);
     const next = JSON.parse(raw || "[]") as Capture[];
-    next.sort((a, b) => b.createdAt - a.createdAt);
-    setCaptures(next);
+    setCaptures(sortCaptures(next));
+    setDraftTitleDirty(false);
+    setDraftNoteDirty(false);
+    setDraftIntentDirty(false);
     setMessage("Saved.");
+  }
+
+  async function collectionRequest<T>(
+    resource: "collections" | "collection-links",
+    input: { method: string; body?: unknown }
+  ) {
+    if (!config?.apiUrl || !session?.accessToken) throw new Error("Sign in to manage collections.");
+    const activeSession = await getFreshSession();
+    if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
+    const send = (accessToken: string) =>
+      requestJson<T>(edgeResourceUrl(config.apiUrl, resource), {
+        method: input.method,
+        headers: {
+          apikey: config.supabaseAnonKey,
+          authorization: `Bearer ${accessToken}`,
+          "content-type": "application/json"
+        },
+        body: input.body
+      });
+    try {
+      return await send(activeSession.accessToken);
+    } catch (error) {
+      if (!isAuthError(error)) throw error;
+      const refreshed = await getFreshSession(true);
+      if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
+      return await send(refreshed.accessToken);
+    }
+  }
+
+  async function saveCollection() {
+    const title = collectionTitle.trim();
+    const description = collectionDescription.trim();
+    if (!title || !description) return;
+    try {
+      if (selectedCollection) {
+        const json = await collectionRequest<{ collection: Record<string, any> }>("collections", {
+          method: "PATCH",
+          body: { collectionId: selectedCollection.id, title, description }
+        });
+        setCollections((current) =>
+          current.map((item) => (item.id === selectedCollection.id ? collectionFromRemote(json.collection) : item))
+        );
+      } else {
+        const json = await collectionRequest<{ collection: Record<string, any> }>("collections", {
+          method: "POST",
+          body: { title, description }
+        });
+        setCollections((current) => [collectionFromRemote(json.collection), ...current]);
+        setCollectionTitle("");
+        setCollectionDescription("");
+        setShowCollectionForm(false);
+      }
+      setCollectionDraftDirty(false);
+      setMessage("Collection saved.");
+    } catch (error) {
+      setMessage(friendlyError(error, "Could not save collection."));
+    }
+  }
+
+  async function setCollectionArchiveState(collection: Collection, archived: boolean) {
+    try {
+      await collectionRequest<{ collection: Record<string, any> }>("collections", {
+        method: "PATCH",
+        body: { collectionId: collection.id, action: archived ? "archive" : "restore" }
+      });
+      selectCollection(null);
+      setMessage(archived ? "Collection archived." : "Collection restored.");
+      await loadCollections();
+      await loadCaptures();
+    } catch (error) {
+      setMessage(friendlyError(error, archived ? "Could not archive collection." : "Could not restore collection."));
+    }
+  }
+
+  function confirmArchiveCollection(collection: Collection) {
+    if (collection.status === "archived") {
+      void setCollectionArchiveState(collection, false);
+      return;
+    }
+    Alert.alert(
+      "Archive this collection?",
+      "Current captures will be removed from it. Restoring brings back only this snapshot.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Archive", style: "destructive", onPress: () => void setCollectionArchiveState(collection, true) }
+      ]
+    );
+  }
+
+  async function unlinkCollectionFromCapture(collectionId: string) {
+    if (!selected) return;
+    const captureId = selected.remoteId || selected.id;
+    try {
+      await collectionRequest<{ ok: boolean }>("collection-links", {
+        method: "PATCH",
+        body: { action: "unlink", collectionId, captureId }
+      });
+      setCaptures((current) =>
+        current.map((capture) =>
+          capture.id === selected.id
+            ? {
+                ...capture,
+                linkedCollections: (capture.linkedCollections || []).filter((collection) => collection.id !== collectionId)
+              }
+            : capture
+        )
+      );
+      setMessage("Removed from collection.");
+    } catch (error) {
+      setMessage(friendlyError(error, "Could not remove collection."));
+    }
+  }
+
+  async function acceptCollectionDecision(decision: CollectionDecision) {
+    if (!selected) return;
+    const captureId = selected.remoteId || selected.id;
+    try {
+      if (decision.type === "existing" && decision.collectionId) {
+        await collectionRequest<{ ok: boolean }>("collection-links", {
+          method: "POST",
+          body: {
+            collectionId: decision.collectionId,
+            captureId,
+            rationale: decision.rationale,
+            confidence: decision.confidence,
+            createdBy: "analysis"
+          }
+        });
+      } else if (decision.type === "new" && decision.title.trim() && decision.description?.trim()) {
+        await collectionRequest<{ collection: Record<string, any> }>("collections", {
+          method: "POST",
+          body: {
+            title: decision.title.trim(),
+            description: decision.description.trim(),
+            captureId,
+            rationale: decision.rationale,
+            confidence: decision.confidence,
+            createdBy: "analysis"
+          }
+        });
+      }
+      setCaptures((current) =>
+        current.map((capture) =>
+          capture.id === selected.id
+            ? {
+                ...capture,
+                collectionDecisions: (capture.collectionDecisions || []).filter((item) => item !== decision),
+                suggestedCollections: (capture.suggestedCollections || []).filter((item) => item !== decision)
+              }
+            : capture
+        )
+      );
+      await loadCaptures();
+      if (homeMode === "collections") await loadCollections();
+      setMessage("Collection updated.");
+    } catch (error) {
+      setMessage(friendlyError(error, "Could not update collection."));
+    }
   }
 
   async function copySource() {
@@ -568,7 +938,7 @@ export default function App() {
           if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
           await updateWithToken(refreshed.accessToken);
         }
-        setSelectedId(null);
+        selectCapture(null);
         setMessage(archived ? "Archived." : "Restored.");
         await loadCaptures();
       } catch (error) {
@@ -581,9 +951,8 @@ export default function App() {
       ? await nativeStore.archiveCapture(selected.id)
       : await nativeStore.restoreCapture(selected.id);
     const next = JSON.parse(raw || "[]") as Capture[];
-    next.sort((a, b) => b.createdAt - a.createdAt);
-    setCaptures(next);
-    setSelectedId(null);
+    setCaptures(sortCaptures(next));
+    selectCapture(null);
     setMessage(archived ? "Archived." : "Restored.");
   }
 
@@ -667,6 +1036,9 @@ export default function App() {
     await nativeAuth?.clearSession();
     setSession(null);
     setCaptures([]);
+    setCollections([]);
+    selectCapture(null);
+    selectCollection(null);
   }
 
   function renderCapture({ item }: { item: Capture }) {
@@ -714,6 +1086,88 @@ export default function App() {
     );
   }
 
+  function renderCollection({ item }: { item: Collection }) {
+    return (
+      <Pressable
+        onPress={() => {
+          selectCollection(item.id);
+          setCollectionTitle(item.title);
+          setCollectionDescription(item.description);
+        }}
+        style={({ pressed }) => [styles.captureRow, pressed && styles.pressed]}
+      >
+        <View style={styles.rowTop}>
+          <Text numberOfLines={1} style={styles.captureTitle}>
+            {item.title}
+          </Text>
+          <Text style={styles.status}>
+            {item.status === "archived" ? "Archived" : `${item.captureCount} captures`}
+          </Text>
+        </View>
+        <Text numberOfLines={2} style={styles.summaryPreview}>
+          {item.description}
+        </Text>
+      </Pressable>
+    );
+  }
+
+  if (selectedCollection) {
+    const saveDisabled = !collectionTitle.trim() || !collectionDescription.trim();
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="dark-content" />
+        <ScrollView contentContainerStyle={styles.detail}>
+          <View style={styles.detailHeader}>
+            <Pressable onPress={() => selectCollection(null)} style={styles.textButton}>
+              <Text style={styles.textButtonText}>Back</Text>
+            </Pressable>
+            <Text style={styles.status}>
+              {selectedCollection.status === "archived" ? "Archived" : `${selectedCollection.captureCount} captures`}
+            </Text>
+          </View>
+          <Text style={styles.kicker}>Collection</Text>
+          <TextInput
+            onChangeText={(value) => {
+              setCollectionDraftDirty(true);
+              setCollectionTitle(value);
+            }}
+            placeholder="Title"
+            placeholderTextColor={colors.muted}
+            style={styles.titleInput}
+            value={collectionTitle}
+          />
+          <View style={styles.editBlock}>
+            <Text style={styles.fieldLabel}>Description</Text>
+            <TextInput
+              multiline
+              onChangeText={(value) => {
+                setCollectionDraftDirty(true);
+                setCollectionDescription(value);
+              }}
+              placeholder="What belongs in this collection"
+              placeholderTextColor={colors.muted}
+              style={styles.noteInput}
+              value={collectionDescription}
+            />
+          </View>
+          <Pressable
+            disabled={saveDisabled}
+            onPress={() => void saveCollection()}
+            style={[styles.primaryButton, saveDisabled && styles.disabledButton]}
+          >
+            <Text style={styles.primaryButtonText}>Save collection</Text>
+          </Pressable>
+          <Pressable onPress={() => confirmArchiveCollection(selectedCollection)} style={styles.secondaryButton}>
+            <Text style={selectedCollection.status === "archived" ? styles.secondaryButtonText : styles.dangerButtonText}>
+              {selectedCollection.status === "archived" ? "Restore collection" : "Archive collection"}
+            </Text>
+          </Pressable>
+          {message ? <Text style={styles.message}>{message}</Text> : null}
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   if (selected) {
     const selectedArchived = isArchived(selected);
     const sourceValue = selected.sourceUrl || selected.sourceText;
@@ -722,7 +1176,7 @@ export default function App() {
         <StatusBar barStyle="dark-content" />
         <ScrollView contentContainerStyle={styles.detail}>
           <View style={styles.detailHeader}>
-            <Pressable onPress={() => setSelectedId(null)} style={styles.textButton}>
+            <Pressable onPress={() => selectCapture(null)} style={styles.textButton}>
               <Text style={styles.textButtonText}>Back</Text>
             </Pressable>
             <Text
@@ -739,7 +1193,10 @@ export default function App() {
           <Text style={styles.kicker}>Capture review</Text>
           <TextInput
             multiline
-            onChangeText={setDraftTitle}
+            onChangeText={(value) => {
+              setDraftTitleDirty(true);
+              setDraftTitle(value);
+            }}
             placeholder="Title"
             placeholderTextColor={colors.muted}
             style={styles.titleInput}
@@ -753,7 +1210,10 @@ export default function App() {
                 return (
                   <Pressable
                     key={intent}
-                    onPress={() => setDraftIntent(intent)}
+                    onPress={() => {
+                      setDraftIntentDirty(true);
+                      setDraftIntent(intent);
+                    }}
                     style={[styles.intentChip, selectedIntent && styles.intentChipSelected]}
                   >
                     <Text style={[styles.intentChipText, selectedIntent && styles.intentChipTextSelected]}>
@@ -768,7 +1228,10 @@ export default function App() {
             <Text style={styles.fieldLabel}>Context note</Text>
             <TextInput
               multiline
-              onChangeText={setDraftNote}
+              onChangeText={(value) => {
+                setDraftNoteDirty(true);
+                setDraftNote(value);
+              }}
               placeholder="Add why you saved this, if the extraction missed it"
               placeholderTextColor={colors.muted}
               style={styles.noteInput}
@@ -837,13 +1300,43 @@ export default function App() {
               ))}
             </View>
           ) : null}
-          {selected.suggestedCollections?.length ? (
+          {selected.linkedCollections?.length ? (
             <View style={styles.sourceBlock}>
-              <Text style={styles.meta}>Collection ideas</Text>
-              {selected.suggestedCollections.slice(0, 4).map((collection) => (
-                <Text key={collection.name} style={styles.sourceText}>
-                  {collection.name} · {collection.rationale}
-                </Text>
+              <Text style={styles.meta}>Linked collections</Text>
+              {selected.linkedCollections.map((collection) => (
+                <View key={collection.id} style={styles.collectionActionRow}>
+                  <View style={styles.collectionActionText}>
+                    <Text style={styles.sourceText}>{collection.title}</Text>
+                    {collection.rationale ? (
+                      <Text style={styles.supportingText}>{collection.rationale}</Text>
+                    ) : null}
+                  </View>
+                  <Pressable onPress={() => void unlinkCollectionFromCapture(collection.id)} hitSlop={8}>
+                    <Text style={styles.inlineAction}>Remove</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          ) : null}
+          {selected.collectionDecisions?.length ? (
+            <View style={styles.sourceBlock}>
+              <Text style={styles.meta}>Collection suggestions</Text>
+              {selected.collectionDecisions.slice(0, 4).map((collection, index) => (
+                <View key={`${collection.type}-${collection.collectionId || collection.title}-${index}`} style={styles.suggestionBlock}>
+                  <Text style={styles.sourceText}>
+                    {collection.type === "new" ? "New: " : ""}
+                    {collection.title}
+                  </Text>
+                  {collection.description ? (
+                    <Text style={styles.supportingText}>{collection.description}</Text>
+                  ) : null}
+                  <Text style={styles.supportingText}>{collection.rationale}</Text>
+                  <Pressable onPress={() => void acceptCollectionDecision(collection)} style={styles.smallButton}>
+                    <Text style={styles.smallButtonText}>
+                      {collection.type === "new" ? "Create and link" : "Link"}
+                    </Text>
+                  </Pressable>
+                </View>
               ))}
             </View>
           ) : null}
@@ -914,7 +1407,11 @@ export default function App() {
       <StatusBar barStyle="dark-content" />
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.kicker}>{filteredCaptures.length} {listMode === "archived" ? "archived" : "active"} captures</Text>
+          <Text style={styles.kicker}>
+            {homeMode === "captures"
+              ? `${filteredCaptures.length} ${listMode === "archived" ? "archived" : "active"} captures`
+              : `${filteredCollections.length} ${collectionListMode} collections`}
+          </Text>
           <Text style={styles.title}>Precious Captures</Text>
           {session ? (
             <Pressable onPress={() => void signOut()} style={styles.textButton}>
@@ -930,12 +1427,31 @@ export default function App() {
           value={query}
         />
         <View style={styles.segmented}>
+          {(["captures", "collections"] as const).map((mode) => (
+            <Pressable
+              key={mode}
+              onPress={() => {
+                setHomeMode(mode);
+                selectCapture(null);
+                selectCollection(null);
+              }}
+              style={[styles.segment, homeMode === mode && styles.segmentSelected]}
+            >
+              <Text style={[styles.segmentText, homeMode === mode && styles.segmentTextSelected]}>
+                {mode === "captures" ? "Captures" : "Collections"}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        {homeMode === "captures" ? (
+          <>
+            <View style={styles.segmented}>
           {(["active", "archived"] as const).map((mode) => (
             <Pressable
               key={mode}
               onPress={() => {
                 setListMode(mode);
-                setSelectedId(null);
+                selectCapture(null);
               }}
               style={[styles.segment, listMode === mode && styles.segmentSelected]}
             >
@@ -944,49 +1460,142 @@ export default function App() {
               </Text>
             </Pressable>
           ))}
-        </View>
-        <View style={styles.captureBox}>
-          <TextInput
-            multiline
-            onChangeText={setSourceDraft}
-            placeholder="Paste a link or note"
-            placeholderTextColor={colors.muted}
-            style={styles.captureInput}
-            value={sourceDraft}
-          />
-          <Pressable
-            disabled={savingCapture || !sourceDraft.trim()}
-            onPress={() => void saveCaptureSource()}
-            style={[
-              styles.primaryButton,
-              (savingCapture || !sourceDraft.trim()) && styles.disabledButton
-            ]}
-          >
-            <Text style={styles.primaryButtonText}>
-              {savingCapture ? "Saving..." : "Save and analyze"}
-            </Text>
-          </Pressable>
-          {message ? <Text style={styles.message}>{message}</Text> : null}
-        </View>
-        <FlatList
-          data={filteredCaptures}
-          keyExtractor={(item) => item.id}
-          renderItem={renderCapture}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>
-                {listMode === "archived" ? "No archived captures." : "Share something in."}
-              </Text>
-              <Text style={styles.emptyText}>
-                {listMode === "archived"
-                  ? "Archived captures will appear here so you can restore them later."
-                  : "Use the Android share sheet from a browser, message, or notes app."}
-              </Text>
             </View>
-          }
-          contentContainerStyle={filteredCaptures.length ? styles.listContent : styles.emptyContent}
-        />
+            <View style={styles.captureBox}>
+              <TextInput
+                multiline
+                onChangeText={setSourceDraft}
+                placeholder="Paste a link or note"
+                placeholderTextColor={colors.muted}
+                style={styles.captureInput}
+                value={sourceDraft}
+              />
+              <Pressable
+                disabled={savingCapture || !sourceDraft.trim()}
+                onPress={() => void saveCaptureSource()}
+                style={[
+                  styles.primaryButton,
+                  (savingCapture || !sourceDraft.trim()) && styles.disabledButton
+                ]}
+              >
+                <Text style={styles.primaryButtonText}>
+                  {savingCapture ? "Saving..." : "Save and analyze"}
+                </Text>
+              </Pressable>
+              {message ? <Text style={styles.message}>{message}</Text> : null}
+            </View>
+            <FlatList
+              data={filteredCaptures}
+              keyExtractor={(item) => item.id}
+              renderItem={renderCapture}
+              ItemSeparatorComponent={() => <View style={styles.separator} />}
+              ListEmptyComponent={
+                <View style={styles.empty}>
+                  <Text style={styles.emptyTitle}>
+                    {listMode === "archived" ? "No archived captures." : "Share something in."}
+                  </Text>
+                  <Text style={styles.emptyText}>
+                    {listMode === "archived"
+                      ? "Archived captures will appear here so you can restore them later."
+                      : "Use the Android share sheet from a browser, message, or notes app."}
+                  </Text>
+                </View>
+              }
+              contentContainerStyle={filteredCaptures.length ? styles.listContent : styles.emptyContent}
+            />
+          </>
+        ) : (
+          <>
+            <View style={styles.segmented}>
+              {(["active", "archived"] as const).map((mode) => (
+                <Pressable
+                  key={mode}
+                  onPress={() => {
+                    setCollectionListMode(mode);
+                    selectCollection(null);
+                  }}
+                  style={[styles.segment, collectionListMode === mode && styles.segmentSelected]}
+                >
+                  <Text style={[styles.segmentText, collectionListMode === mode && styles.segmentTextSelected]}>
+                    {mode === "active" ? "Active" : "Archived"}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            {collectionListMode === "active" ? (
+              <View style={styles.captureBox}>
+                {showCollectionForm ? (
+                  <>
+                    <TextInput
+                      onChangeText={(value) => {
+                        setCollectionDraftDirty(true);
+                        setCollectionTitle(value);
+                      }}
+                      placeholder="Collection title"
+                      placeholderTextColor={colors.muted}
+                      style={styles.search}
+                      value={collectionTitle}
+                    />
+                    <TextInput
+                      multiline
+                      onChangeText={(value) => {
+                        setCollectionDraftDirty(true);
+                        setCollectionDescription(value);
+                      }}
+                      placeholder="Description"
+                      placeholderTextColor={colors.muted}
+                      style={styles.captureInput}
+                      value={collectionDescription}
+                    />
+                    <Pressable
+                      disabled={!collectionTitle.trim() || !collectionDescription.trim()}
+                      onPress={() => void saveCollection()}
+                      style={[
+                        styles.primaryButton,
+                        (!collectionTitle.trim() || !collectionDescription.trim()) && styles.disabledButton
+                      ]}
+                    >
+                      <Text style={styles.primaryButtonText}>Save collection</Text>
+                    </Pressable>
+                  </>
+                ) : (
+                  <Pressable
+                    onPress={() => {
+                      setCollectionTitle("");
+                      setCollectionDescription("");
+                      setShowCollectionForm(true);
+                    }}
+                    style={styles.primaryButton}
+                  >
+                    <Text style={styles.primaryButtonText}>Add collection</Text>
+                  </Pressable>
+                )}
+                {message ? <Text style={styles.message}>{message}</Text> : null}
+              </View>
+            ) : message ? (
+              <Text style={styles.message}>{message}</Text>
+            ) : null}
+            <FlatList
+              data={filteredCollections}
+              keyExtractor={(item) => item.id}
+              renderItem={renderCollection}
+              ItemSeparatorComponent={() => <View style={styles.separator} />}
+              ListEmptyComponent={
+                <View style={styles.empty}>
+                  <Text style={styles.emptyTitle}>
+                    {collectionListMode === "archived" ? "No archived collections." : "No collections yet."}
+                  </Text>
+                  <Text style={styles.emptyText}>
+                    {collectionListMode === "archived"
+                      ? "Archived collections can be restored with their archive-time snapshot."
+                      : "Create a bucket with a title and description."}
+                  </Text>
+                </View>
+              }
+              contentContainerStyle={filteredCollections.length ? styles.listContent : styles.emptyContent}
+            />
+          </>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -1249,6 +1858,32 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 14,
     lineHeight: 21
+  },
+  collectionActionRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between"
+  },
+  collectionActionText: {
+    flex: 1,
+    gap: 2
+  },
+  suggestionBlock: {
+    gap: 6,
+    paddingBottom: 10
+  },
+  smallButton: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.ink,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8
+  },
+  smallButtonText: {
+    color: colors.paper,
+    fontSize: 13,
+    fontWeight: "700"
   },
   errorText: {
     color: "#9f3d2e",
