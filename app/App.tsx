@@ -464,10 +464,14 @@ export default function App() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
+  const [captureReturnCollectionId, setCaptureReturnCollectionId] = useState<string | null>(null);
   const [homeMode, setHomeMode] = useState<HomeMode>("captures");
   const [query, setQuery] = useState("");
   const [listMode, setListMode] = useState<CaptureListMode>("active");
   const [collectionListMode, setCollectionListMode] = useState<CollectionListMode>("active");
+  const [collectionCaptures, setCollectionCaptures] = useState<Capture[]>([]);
+  const [collectionCapturesForId, setCollectionCapturesForId] = useState<string | null>(null);
+  const [collectionCapturesLoading, setCollectionCapturesLoading] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftNote, setDraftNote] = useState("");
   const [draftIntent, setDraftIntent] = useState("");
@@ -574,6 +578,46 @@ export default function App() {
     setCollections((json.collections ?? []).map(collectionFromRemote));
   }, [collectionListMode, config, getFreshSession, session]);
 
+  const loadCollectionCaptures = useCallback(async (collectionId: string) => {
+    if (!config?.apiUrl || !session?.accessToken) {
+      setCollectionCaptures([]);
+      setCollectionCapturesForId(collectionId);
+      return;
+    }
+    setCollectionCapturesLoading(true);
+    try {
+      const activeSession = await getFreshSession();
+      if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
+      const loadWithToken = (accessToken: string) =>
+        requestJson<{ captures?: Array<Record<string, any>> }>(
+          edgeResourceUrl(config.apiUrl, "collection-captures", {
+            collectionId,
+            limit: "100"
+          }),
+          {
+            headers: {
+              accept: "application/json",
+              apikey: config.supabaseAnonKey,
+              authorization: `Bearer ${accessToken}`
+            }
+          }
+        );
+      let json: { captures?: Array<Record<string, any>> };
+      try {
+        json = await loadWithToken(activeSession.accessToken);
+      } catch (error) {
+        if (!isAuthError(error)) throw error;
+        const refreshed = await getFreshSession(true);
+        if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
+        json = await loadWithToken(refreshed.accessToken);
+      }
+      setCollectionCaptures((json.captures ?? []).map(captureFromRemote));
+      setCollectionCapturesForId(collectionId);
+    } finally {
+      setCollectionCapturesLoading(false);
+    }
+  }, [config, getFreshSession, session]);
+
   const selectCapture = useCallback((captureId: string | null) => {
     setDraftTitleDirty(false);
     setDraftNoteDirty(false);
@@ -583,6 +627,7 @@ export default function App() {
 
   const selectCollection = useCallback((collectionId: string | null) => {
     setSelectedCollectionId(collectionId);
+    setCaptureReturnCollectionId(null);
     setCollectionDraftDirty(false);
     setShowCollectionForm(false);
   }, []);
@@ -590,6 +635,7 @@ export default function App() {
   const openCapture = useCallback(
     (captureId: string | null) => {
       if (!captureId) return;
+      setCaptureReturnCollectionId(null);
       const capture = captures.find((item) => item.id === captureId);
       if (!capture) {
         selectCapture(captureId);
@@ -602,6 +648,15 @@ export default function App() {
     },
     [captures, selectCapture]
   );
+
+  const openCaptureFromCollection = useCallback((capture: Capture, collectionId: string) => {
+    setSelectedCollectionId(null);
+    setCaptureReturnCollectionId(collectionId);
+    selectCapture(capture.id);
+    setDraftTitle(capture.title);
+    setDraftNote(capture.note);
+    setDraftIntent(normalizeIntent(capture.defaultIntent));
+  }, [selectCapture]);
 
   useEffect(() => {
     nativeAuth?.getConfig().then((raw) => {
@@ -686,12 +741,17 @@ export default function App() {
   useEffect(() => {
     if (!selectedId && !selectedCollectionId) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (selectedId && captureReturnCollectionId) {
+        selectCapture(null);
+        selectCollection(captureReturnCollectionId);
+        return true;
+      }
       selectCapture(null);
       selectCollection(null);
       return true;
     });
     return () => subscription.remove();
-  }, [selectCapture, selectCollection, selectedCollectionId, selectedId]);
+  }, [captureReturnCollectionId, selectCapture, selectCollection, selectedCollectionId, selectedId]);
 
   const filteredCaptures = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -714,7 +774,11 @@ export default function App() {
     );
   }, [collectionListMode, collections, query]);
 
-  const selected = selectedId ? captures.find((capture) => capture.id === selectedId) ?? null : null;
+  const selected = selectedId
+    ? captures.find((capture) => capture.id === selectedId) ??
+      collectionCaptures.find((capture) => capture.id === selectedId) ??
+      null
+    : null;
   const selectedCollection = selectedCollectionId
     ? collections.find((collection) => collection.id === selectedCollectionId) ?? null
     : null;
@@ -723,6 +787,26 @@ export default function App() {
     selected?.summary && selected.summary !== selected.sourceUrl && selected.summary !== selected.sourceText
       ? selected.summary
       : undefined;
+
+  useEffect(() => {
+    if (!selectedCollectionId) {
+      if (!captureReturnCollectionId) {
+        setCollectionCaptures([]);
+        setCollectionCapturesForId(null);
+      }
+      return;
+    }
+    if (selectedCollection?.status === "archived") {
+      setCollectionCaptures([]);
+      setCollectionCapturesForId(selectedCollectionId);
+      return;
+    }
+    void loadCollectionCaptures(selectedCollectionId).catch((error) => {
+      setCollectionCaptures([]);
+      setCollectionCapturesForId(selectedCollectionId);
+      setMessage((current) => current || friendlyError(error, "Could not load collection captures"));
+    });
+  }, [captureReturnCollectionId, loadCollectionCaptures, selectedCollection?.status, selectedCollectionId]);
 
   async function saveQuickEdit() {
     if (!selected) return;
@@ -754,8 +838,12 @@ export default function App() {
           if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
           json = await saveWithToken(refreshed.accessToken);
         }
+        const updatedCapture = captureFromRemote(json.capture);
         setCaptures((current) =>
-          current.map((item) => (item.id === selected.id ? captureFromRemote(json.capture) : item))
+          current.map((item) => (item.id === selected.id ? updatedCapture : item))
+        );
+        setCollectionCaptures((current) =>
+          current.map((item) => (item.id === selected.id ? updatedCapture : item))
         );
         setDraftTitleDirty(false);
         setDraftNoteDirty(false);
@@ -930,17 +1018,24 @@ export default function App() {
     );
   }
 
-  async function unlinkCollectionFromCapture(collectionId: string) {
-    if (!selected) return;
-    const captureId = selected.remoteId || selected.id;
+  async function unlinkCaptureFromCollection(collectionId: string, capture: Capture) {
+    const captureId = capture.remoteId || capture.id;
     try {
       await collectionRequest<{ ok: boolean }>("collection-links", {
         method: "PATCH",
         body: { action: "unlink", collectionId, captureId }
       });
+      setCollectionCaptures((current) => current.filter((item) => item.id !== capture.id));
+      setCollections((current) =>
+        current.map((collection) =>
+          collection.id === collectionId
+            ? { ...collection, captureCount: Math.max(0, collection.captureCount - 1) }
+            : collection
+        )
+      );
       setCaptures((current) =>
         current.map((capture) =>
-          capture.id === selected.id
+          capture.id === captureId || capture.remoteId === captureId
             ? {
                 ...capture,
                 linkedCollections: (capture.linkedCollections || []).filter((collection) => collection.id !== collectionId)
@@ -949,9 +1044,15 @@ export default function App() {
         )
       );
       setMessage("Removed from collection.");
+      await loadCaptures();
     } catch (error) {
       setMessage(friendlyError(error, "Could not remove collection."));
     }
+  }
+
+  async function unlinkCollectionFromCapture(collectionId: string) {
+    if (!selected) return;
+    await unlinkCaptureFromCollection(collectionId, selected);
   }
 
   async function acceptCollectionDecision(decision: CollectionDecision) {
@@ -1041,7 +1142,9 @@ export default function App() {
           if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
           await updateWithToken(refreshed.accessToken);
         }
+        const returnCollectionId = captureReturnCollectionId;
         selectCapture(null);
+        if (returnCollectionId) selectCollection(returnCollectionId);
         setMessage(archived ? "Archived." : "Restored.");
         await loadCaptures();
       } catch (error) {
@@ -1055,7 +1158,9 @@ export default function App() {
       : await nativeStore.restoreCapture(selected.id);
     const next = JSON.parse(raw || "[]") as Capture[];
     setCaptures(sortCaptures(next));
+    const returnCollectionId = captureReturnCollectionId;
     selectCapture(null);
+    if (returnCollectionId) selectCollection(returnCollectionId);
     setMessage(archived ? "Archived." : "Restored.");
   }
 
@@ -1140,6 +1245,9 @@ export default function App() {
     setSession(null);
     setCaptures([]);
     setCollections([]);
+    setCollectionCaptures([]);
+    setCollectionCapturesForId(null);
+    setCaptureReturnCollectionId(null);
     selectCapture(null);
     selectCollection(null);
   }
@@ -1189,6 +1297,58 @@ export default function App() {
     );
   }
 
+  function renderCollectionCapture({ item }: { item: Capture }) {
+    const source = item.siteName || hostFromUrl(item.sourceUrl) || item.sourceText.slice(0, 56);
+    const itemStatus = displayStatus(item);
+    return (
+      <View style={styles.collectionCaptureRow}>
+        <Pressable
+          onPress={() => {
+            if (selectedCollection) openCaptureFromCollection(item, selectedCollection.id);
+          }}
+          style={({ pressed }) => [styles.collectionCaptureMain, pressed && styles.pressed]}
+        >
+          <View style={styles.rowTop}>
+            <Text numberOfLines={1} style={styles.captureTitle}>
+              {item.title}
+            </Text>
+            <Text
+              style={[
+                styles.status,
+                itemStatus === "processing" && styles.statusProcessing,
+                itemStatus === "needs_review" && styles.statusReview,
+                itemStatus === "failed" && styles.statusFailed
+              ]}
+            >
+              {statusLabel(itemStatus)}
+            </Text>
+          </View>
+          <Text numberOfLines={1} style={styles.meta}>
+            {source || "Shared text"} · {formatTime(item.createdAt)}
+          </Text>
+          {item.summary ? (
+            <Text numberOfLines={2} style={styles.summaryPreview}>
+              {item.summary}
+            </Text>
+          ) : null}
+          {item.defaultIntent ? (
+            <Text numberOfLines={1} style={styles.intentPreview}>
+              {humanize(item.defaultIntent)} · {item.confidenceLabel || nullableValue(item.analysisMode) || "Analyzed"}
+            </Text>
+          ) : null}
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            if (selectedCollection) void unlinkCaptureFromCollection(selectedCollection.id, item);
+          }}
+          style={styles.removeButton}
+        >
+          <Text style={styles.inlineAction}>Remove</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   function renderCollection({ item }: { item: Collection }) {
     return (
       <Pressable
@@ -1216,57 +1376,103 @@ export default function App() {
 
   if (selectedCollection) {
     const saveDisabled = !collectionTitle.trim() || !collectionDescription.trim();
+    const activeCollection = selectedCollection.status === "active";
+    const capturesReadyForCollection = collectionCapturesForId === selectedCollection.id;
+    const visibleCollectionCaptures = activeCollection && capturesReadyForCollection ? collectionCaptures : [];
+    const collectionCapturesPending = activeCollection && (!capturesReadyForCollection || collectionCapturesLoading);
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="dark-content" />
-        <ScrollView contentContainerStyle={styles.detail}>
-          <View style={styles.detailHeader}>
-            <Pressable onPress={() => selectCollection(null)} style={styles.textButton}>
-              <Text style={styles.textButtonText}>Back</Text>
-            </Pressable>
-            <Text style={styles.status}>
-              {selectedCollection.status === "archived" ? "Archived" : `${selectedCollection.captureCount} captures`}
-            </Text>
-          </View>
-          <Text style={styles.kicker}>Collection</Text>
-          <TextInput
-            onChangeText={(value) => {
-              setCollectionDraftDirty(true);
-              setCollectionTitle(value);
-            }}
-            placeholder="Title"
-            placeholderTextColor={colors.muted}
-            style={styles.titleInput}
-            value={collectionTitle}
-          />
-          <View style={styles.editBlock}>
-            <Text style={styles.fieldLabel}>Description</Text>
-            <TextInput
-              multiline
-              onChangeText={(value) => {
-                setCollectionDraftDirty(true);
-                setCollectionDescription(value);
-              }}
-              placeholder="What belongs in this collection"
-              placeholderTextColor={colors.muted}
-              style={styles.noteInput}
-              value={collectionDescription}
-            />
-          </View>
-          <Pressable
-            disabled={saveDisabled}
-            onPress={() => void saveCollection()}
-            style={[styles.primaryButton, saveDisabled && styles.disabledButton]}
-          >
-            <Text style={styles.primaryButtonText}>Save collection</Text>
-          </Pressable>
-          <Pressable onPress={() => confirmArchiveCollection(selectedCollection)} style={styles.secondaryButton}>
-            <Text style={selectedCollection.status === "archived" ? styles.secondaryButtonText : styles.dangerButtonText}>
-              {selectedCollection.status === "archived" ? "Restore collection" : "Archive collection"}
-            </Text>
-          </Pressable>
-          {message ? <Text style={styles.message}>{message}</Text> : null}
-        </ScrollView>
+        <FlatList
+          data={visibleCollectionCaptures}
+          keyExtractor={(item) => item.id}
+          renderItem={renderCollectionCapture}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListHeaderComponent={
+            <View style={styles.collectionDetailTop}>
+              <View style={styles.detailHeader}>
+                <Pressable onPress={() => selectCollection(null)} style={styles.textButton}>
+                  <Text style={styles.textButtonText}>Back</Text>
+                </Pressable>
+                <Text style={styles.status}>
+                  {selectedCollection.status === "archived" ? "Archived" : `${selectedCollection.captureCount} captures`}
+                </Text>
+              </View>
+              <Text style={styles.kicker}>Collection</Text>
+              <Text style={styles.title}>{selectedCollection.title}</Text>
+              <Text style={styles.sourceText}>{selectedCollection.description}</Text>
+              {activeCollection ? (
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.meta}>Captures</Text>
+                  {collectionCapturesPending ? <Text style={styles.meta}>Loading...</Text> : null}
+                </View>
+              ) : (
+                <View style={styles.sourceBlock}>
+                  <Text style={styles.meta}>Archived collection</Text>
+                  <Text style={styles.supportingText}>
+                    Restore this collection to bring back its archive-time capture links.
+                  </Text>
+                </View>
+              )}
+            </View>
+          }
+          ListEmptyComponent={
+            activeCollection ? (
+              <View style={styles.collectionEmpty}>
+                <Text style={styles.emptyTitle}>
+                  {collectionCapturesPending ? "Loading captures..." : "No captures in this collection."}
+                </Text>
+                {!collectionCapturesPending ? (
+                  <Text style={styles.emptyText}>Linked captures will appear here.</Text>
+                ) : null}
+              </View>
+            ) : null
+          }
+          ListFooterComponent={
+            <View style={styles.collectionSettings}>
+              {activeCollection ? (
+                <>
+                  <Text style={styles.meta}>Collection settings</Text>
+                  <TextInput
+                    onChangeText={(value) => {
+                      setCollectionDraftDirty(true);
+                      setCollectionTitle(value);
+                    }}
+                    placeholder="Title"
+                    placeholderTextColor={colors.muted}
+                    style={styles.search}
+                    value={collectionTitle}
+                  />
+                  <TextInput
+                    multiline
+                    onChangeText={(value) => {
+                      setCollectionDraftDirty(true);
+                      setCollectionDescription(value);
+                    }}
+                    placeholder="What belongs in this collection"
+                    placeholderTextColor={colors.muted}
+                    style={styles.noteInput}
+                    value={collectionDescription}
+                  />
+                  <Pressable
+                    disabled={saveDisabled}
+                    onPress={() => void saveCollection()}
+                    style={[styles.primaryButton, saveDisabled && styles.disabledButton]}
+                  >
+                    <Text style={styles.primaryButtonText}>Save collection</Text>
+                  </Pressable>
+                </>
+              ) : null}
+              <Pressable onPress={() => confirmArchiveCollection(selectedCollection)} style={styles.secondaryButton}>
+                <Text style={selectedCollection.status === "archived" ? styles.secondaryButtonText : styles.dangerButtonText}>
+                  {selectedCollection.status === "archived" ? "Restore collection" : "Archive collection"}
+                </Text>
+              </Pressable>
+              {message ? <Text style={styles.message}>{message}</Text> : null}
+            </View>
+          }
+          contentContainerStyle={styles.collectionDetailContent}
+        />
       </SafeAreaView>
     );
   }
@@ -1281,7 +1487,18 @@ export default function App() {
         <StatusBar barStyle="dark-content" />
         <ScrollView contentContainerStyle={styles.detail}>
           <View style={styles.detailHeader}>
-            <Pressable onPress={() => selectCapture(null)} style={styles.textButton}>
+            <Pressable
+              onPress={() => {
+                if (captureReturnCollectionId) {
+                  const collectionId = captureReturnCollectionId;
+                  selectCapture(null);
+                  selectCollection(collectionId);
+                } else {
+                  selectCapture(null);
+                }
+              }}
+              style={styles.textButton}
+            >
               <Text style={styles.textButtonText}>Back</Text>
             </Pressable>
             <Text
@@ -1878,6 +2095,39 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 23,
     maxWidth: 280
+  },
+  collectionDetailContent: {
+    paddingBottom: 40,
+    paddingHorizontal: 22,
+    paddingTop: 18
+  },
+  collectionDetailTop: {
+    gap: 12,
+    paddingBottom: 8
+  },
+  collectionCaptureRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 12,
+    paddingVertical: 16
+  },
+  collectionCaptureMain: {
+    flex: 1,
+    gap: 7
+  },
+  removeButton: {
+    paddingVertical: 4
+  },
+  collectionEmpty: {
+    paddingBottom: 24,
+    paddingTop: 18
+  },
+  collectionSettings: {
+    borderTopColor: colors.line,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 10,
+    marginTop: 8,
+    paddingTop: 16
   },
   detail: {
     gap: 16,

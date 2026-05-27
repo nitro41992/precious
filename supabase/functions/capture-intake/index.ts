@@ -1900,6 +1900,47 @@ async function handleCollectionLinksResource(
   return json({ error: "Not found" }, 404);
 }
 
+async function handleCollectionCapturesResource(
+  request: Request,
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  url: URL
+) {
+  if (request.method !== "GET") return json({ error: "Not found" }, 404);
+  const collectionId = url.searchParams.get("collectionId") || "";
+  if (!collectionId) return json({ error: "collectionId is required" }, 400);
+
+  const collection = await supabase
+    .from("collections")
+    .select("id,status")
+    .eq("user_id", userId)
+    .eq("id", collectionId)
+    .maybeSingle();
+  if (collection.error) throw collection.error;
+  if (!collection.data) return json({ error: "Collection not found" }, 404);
+  if (collection.data.status === "archived") return json({ captures: [] });
+
+  const limit = Math.max(1, Math.min(Number(url.searchParams.get("limit") || 100), 200));
+  const { data, error } = await supabase
+    .from("collection_capture_links")
+    .select("linked_at, captures(*, capture_assets(*))")
+    .eq("user_id", userId)
+    .eq("collection_id", collectionId)
+    .is("unlinked_at", null)
+    .order("linked_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+
+  const captureRows = (data ?? [])
+    .map((row) => {
+      const captures = (row as Record<string, unknown>).captures;
+      return Array.isArray(captures) ? captures[0] : captures;
+    })
+    .filter(Boolean) as Array<Record<string, unknown>>;
+  const rows = await attachLinkedCollections(supabase, userId, captureRows);
+  return json({ captures: withCaptureStates(rows).filter((row) => archivedFilter(row, false)) });
+}
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const user = await currentUser(request);
@@ -1916,6 +1957,10 @@ Deno.serve(async (request) => {
 
     if (resource === "collection-links") {
       return await handleCollectionLinksResource(request, supabase, user.id);
+    }
+
+    if (resource === "collection-captures") {
+      return await handleCollectionCapturesResource(request, supabase, user.id, url);
     }
 
     if (request.method === "GET") {
