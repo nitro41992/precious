@@ -90,8 +90,7 @@ call the Supabase Edge Function instead of the old Mac runner.
 
 `npm run hosted:verify` creates or signs in a password-based e2e user, posts a real
 link to the Supabase capture function, polls until the LLM result is terminal, then requires
-LLM evidence, a succeeded `analysis_runs` row, structured intent, and a persisted
-`reminders` row for the reminder-specific fixture. It uses:
+LLM evidence, a succeeded `analysis_runs` row, and structured intent. It uses:
 
 ```sh
 EXPO_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL

@@ -2,14 +2,19 @@ const crypto = require("node:crypto");
 const dns = require("node:dns").promises;
 const net = require("node:net");
 const { createClient } = require("@supabase/supabase-js");
+const saveIntents = require("../../supabase/functions/_shared/save-intents.json");
 
-const PROMPT_VERSION = "precious-capture-analysis-v1";
-const SCHEMA_VERSION = "precious-capture-analysis-v1";
+const PROMPT_VERSION = "precious-capture-analysis-v2";
+const SCHEMA_VERSION = "precious-capture-analysis-v2";
 const MODEL = process.env.OPENAI_MODEL || "gpt-5-mini";
 const USER_AGENT = "PreciousCaptures/0.1 (+https://github.com/nitro41992/precious)";
 const METADATA_MAX_BYTES = 220_000;
 const METADATA_TIMEOUT_MS = 7000;
-const METADATA_CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 7;
+const ACTIVE_SAVE_INTENTS = saveIntents.filter((intent) => intent.active);
+const ACTIVE_SAVE_INTENT_KEYS = ACTIVE_SAVE_INTENTS.map((intent) => intent.key);
+const SAVE_INTENT_PROMPT = ACTIVE_SAVE_INTENTS
+  .map((intent) => `- ${intent.key} (${intent.label}): ${intent.llm_description}`)
+  .join("\n");
 
 const analysisSchema = {
   type: "object",
@@ -35,16 +40,7 @@ const analysisSchema = {
       properties: {
         category: {
           type: "string",
-          enum: [
-            "read_later",
-            "watch_later",
-            "try_place",
-            "buy_later",
-            "cook_or_make",
-            "remember",
-            "follow_up",
-            "other"
-          ]
+          enum: ACTIVE_SAVE_INTENT_KEYS
         },
         confidence: { type: "number" },
         rationale: { type: "string" }
@@ -598,64 +594,11 @@ async function fetchOembedMetadata(sourceUrl, endpoint) {
 }
 
 async function loadCachedUrlMetadata(supabase, userId, normalizedUrl) {
-  if (!supabase || !normalizedUrl) return null;
-  const { data, error } = await supabase
-    .from("url_metadata")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("normalized_url", normalizedUrl)
-    .maybeSingle();
-  if (error || !data || data.status !== "success") return null;
-  if (data.expires_at && new Date(data.expires_at).getTime() < Date.now()) return null;
-  return {
-    provider: data.provider,
-    type: data.content_type,
-    title: data.title,
-    description: data.description,
-    image: data.image_url,
-    canonical: data.canonical_url || normalizedUrl,
-    siteName: data.site_name,
-    favicon: data.favicon_url,
-    authorName: data.author_name,
-    authorUrl: data.author_url,
-    source: data.source_type,
-    confidence: Number(data.confidence ?? 0),
-    status: data.status,
-    raw: data.raw_metadata || null
-  };
+  return null;
 }
 
 async function persistUrlMetadata(supabase, userId, normalizedUrl, metadata, errorMessageValue) {
-  if (!supabase || !userId || !normalizedUrl) return;
-  const expiresAt = new Date(Date.now() + METADATA_CACHE_TTL_MS).toISOString();
-  const row = {
-    user_id: userId,
-    normalized_url: normalizedUrl,
-    canonical_url: metadata?.canonical || normalizedUrl,
-    source_url: normalizedUrl,
-    title: metadata?.title || null,
-    description: metadata?.description || null,
-    image_url: metadata?.image || null,
-    favicon_url: metadata?.favicon || null,
-    provider: metadata?.provider || metadata?.siteName || hostFromUrl(normalizedUrl),
-    site_name: metadata?.siteName || null,
-    author_name: metadata?.authorName || null,
-    author_url: metadata?.authorUrl || null,
-    content_type: metadata?.type || null,
-    source_type: metadata?.source || "none",
-    confidence: metadata?.confidence || 0,
-    status: metadata?.status || (errorMessageValue ? "failed" : "empty"),
-    error: errorMessageValue ? String(errorMessageValue).slice(0, 600) : null,
-    raw_metadata: metadata?.raw || {},
-    fetched_at: new Date().toISOString(),
-    expires_at: expiresAt
-  };
-  try {
-    const { error } = await supabase.from("url_metadata").upsert(row, { onConflict: "user_id,normalized_url" });
-    if (error) throw error;
-  } catch {
-    // URL metadata cache is an optimization; captures still persist the metadata in analysis JSON.
-  }
+  return;
 }
 
 function hasUsefulMetadata(metadata) {
@@ -704,6 +647,10 @@ function buildPrompt(capture, urlMetadata) {
   return [
     "Infer why the user saved this item. Focus on intent, medium-term usefulness, reminders, and collection fit.",
     "Return concise structured data for a mobile quick-edit surface.",
+    "Choose default_intent.category from this configured save-intent catalog:",
+    SAVE_INTENT_PROMPT,
+    "Prefer the most specific future use over content type. Do not choose visit just because a place or business appears; choose reference for business contact or pricing information unless there is clear visit intent.",
+    "Do not use a catch-all. If no specific future use is inferable, choose remember with lower confidence and needs_review.",
     "Use URL metadata when provided.",
     "If URL metadata is missing and web search is available, search for evidence about the exact shared URL or its stable public identifier.",
     "Use a single targeted search whenever possible; do not browse broadly when the exact URL or ID is enough.",
@@ -791,23 +738,6 @@ async function runOpenAi(capture, urlMetadata) {
     latencyMs: Date.now() - started,
     usage: raw.usage ?? {}
   };
-}
-
-function searchDocument(capture, analysis, urlMetadata) {
-  return [
-    analysis.display_title,
-    analysis.summary,
-    analysis.default_intent?.category,
-    analysis.default_intent?.rationale,
-    urlMetadata?.title,
-    urlMetadata?.authorName,
-    capture.source_url,
-    capture.source_text,
-    ...(analysis.search_phrases ?? []),
-    ...(analysis.entities ?? []).map((entity) => `${entity.name} ${entity.type}`)
-  ]
-    .filter(Boolean)
-    .join("\n");
 }
 
 async function createOrGetCapture(supabase, userId, body) {
@@ -924,7 +854,7 @@ async function createOrGetCaptureWithAsset(supabase, userId, fields, asset) {
 async function loadCapture(supabase, userId, captureId) {
   const { data, error } = await supabase
     .from("captures")
-    .select("*, captured_entities(*), reminder_suggestions(*), collection_suggestions(*), analysis_runs(*), capture_assets(*)")
+    .select("*, analysis_runs(*), capture_assets(*)")
     .eq("user_id", userId)
     .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
     .order("created_at", { referencedTable: "analysis_runs", ascending: false })
@@ -985,80 +915,6 @@ async function analyzeCapture(supabase, userId, captureId) {
     .select("id")
     .single();
   if (runError) throw runError;
-
-  await Promise.all([
-    supabase.from("captured_entities").delete().eq("capture_id", capture.id),
-    supabase.from("reminder_suggestions").delete().eq("capture_id", capture.id),
-    supabase.from("reminders").delete().eq("capture_id", capture.id),
-    supabase.from("collection_suggestions").delete().eq("capture_id", capture.id),
-    supabase.from("search_documents").delete().eq("capture_id", capture.id)
-  ]);
-
-  if (analysis.entities?.length) {
-    await supabase.from("captured_entities").insert(
-      analysis.entities.map((entity) => ({
-        user_id: userId,
-        capture_id: capture.id,
-        analysis_run_id: run.id,
-        entity_type: entity.type,
-        display_name: entity.name,
-        normalized_name: String(entity.name || "").toLowerCase(),
-        evidence: entity.evidence,
-        source: "llm",
-        confidence: entity.confidence
-      }))
-    );
-  }
-
-  const realReminders = (analysis.suggested_reminders ?? []).filter(
-    (reminder) => reminder.trigger_type !== "none"
-  );
-  if (realReminders.length) {
-    await supabase.from("reminder_suggestions").insert(
-      realReminders.map((reminder) => ({
-        user_id: userId,
-        capture_id: capture.id,
-        analysis_run_id: run.id,
-        trigger_type: reminder.trigger_type,
-        trigger_value: reminder.trigger_value,
-        rationale: reminder.rationale,
-        confidence: reminder.confidence
-      }))
-    );
-    const remindersToSet = realReminders
-      .filter((reminder) => Number(reminder.confidence ?? 0) >= 0.55)
-      .map((reminder) => ({
-        user_id: userId,
-        capture_id: capture.id,
-        analysis_run_id: run.id,
-        trigger_type: reminder.trigger_type,
-        trigger_value: reminder.trigger_value,
-        rationale: reminder.rationale,
-        confidence: reminder.confidence,
-        status: "pending"
-      }));
-    if (remindersToSet.length) await supabase.from("reminders").insert(remindersToSet);
-  }
-
-  if (analysis.suggested_collections?.length) {
-    await supabase.from("collection_suggestions").insert(
-      analysis.suggested_collections.map((collection) => ({
-        user_id: userId,
-        capture_id: capture.id,
-        analysis_run_id: run.id,
-        name: collection.name,
-        rationale: collection.rationale,
-        confidence: collection.confidence
-      }))
-    );
-  }
-
-  await supabase.from("search_documents").insert({
-    user_id: userId,
-    capture_id: capture.id,
-    analysis_run_id: run.id,
-    document: searchDocument(capture, analysis, urlMetadata)
-  });
 
   const { error: updateError } = await supabase
     .from("captures")

@@ -1,0 +1,68 @@
+[
+  {
+    "key": "watch",
+    "label": "Watch",
+    "llm_description": "Use when the saved item is primarily video, a stream, a show, a film, a talk, or another media item the user likely wants to watch later.",
+    "active": true
+  },
+  {
+    "key": "read",
+    "label": "Read",
+    "llm_description": "Use when the saved item is primarily an article, post, document, newsletter, thread, book, or other text the user likely wants to read later.",
+    "active": true
+  },
+  {
+    "key": "visit",
+    "label": "Visit",
+    "llm_description": "Use when the saved item is a place, venue, restaurant, shop, destination, or location the user likely wants to physically visit.",
+    "active": true
+  },
+  {
+    "key": "buy",
+    "label": "Buy",
+    "llm_description": "Use when the saved item is a product, listing, deal, store page, or purchasing option the user likely wants to buy or consider buying.",
+    "active": true
+  },
+  {
+    "key": "make",
+    "label": "Make",
+    "llm_description": "Use when the saved item is a recipe, DIY project, craft, build guide, code pattern, workout, or other thing the user may cook, create, or perform.",
+    "active": true
+  },
+  {
+    "key": "share",
+    "label": "Share",
+    "llm_description": "Use when evidence suggests the user saved the item to send, show, recommend, or discuss with another person or group.",
+    "active": true
+  },
+  {
+    "key": "plan",
+    "label": "Plan",
+    "llm_description": "Use when the saved item supports planning a trip, event, appointment, itinerary, project, deadline, or future logistics.",
+    "active": true
+  },
+  {
+    "key": "research",
+    "label": "Research",
+    "llm_description": "Use when the saved item is evidence for later investigation, evaluation, or decision-making, including comparing multiple options.",
+    "active": true
+  },
+  {
+    "key": "reference",
+    "label": "Reference",
+    "llm_description": "Use when the saved item is mainly for later lookup, including contact info, pricing, measurements, instructions, receipts, screenshots, policies, or factual material.",
+    "active": true
+  },
+  {
+    "key": "remember",
+    "label": "Remember",
+    "llm_description": "Use when the saved item preserves a fact, idea, quote, memory, preference, or context without a clearer action. Use this with lower confidence and needs_review when no specific future use is inferable.",
+    "active": true
+  },
+  {
+    "key": "follow_up",
+    "label": "Follow up",
+    "llm_description": "Use only when evidence suggests a concrete next action such as call, email, message, book, reply, submit, renew, pay, or complete a task.",
+    "active": true
+  }
+]

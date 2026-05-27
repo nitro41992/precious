@@ -99,8 +99,6 @@ object PreciousCaptureStore {
         val analysisMode = enrichment.optString("analysisMode", "pending_llm")
         val needsReview = enrichment.optBoolean("needsReview", false)
         val nextStatus = when {
-          capture.optString("status") == "cancelled" -> "cancelled"
-          analysisMode == "cancelled" -> "cancelled"
           analysisMode == "llm_processing" -> "processing"
           analysisMode == "llm_waiting_network" -> "processing"
           analysisMode == "llm" && !needsReview -> "ready"
@@ -136,33 +134,6 @@ object PreciousCaptureStore {
     }
     save(context, next)
     return updated
-  }
-
-  @Synchronized
-  fun cancel(context: Context, id: String): JSONObject? {
-    val captures = list(context)
-    val now = System.currentTimeMillis()
-    var updated: JSONObject? = null
-    val next = JSONArray()
-    for (index in 0 until captures.length()) {
-      val capture = captures.getJSONObject(index)
-      if (capture.optString("id") == id) {
-        capture
-          .put("status", "cancelled")
-          .put("analysisMode", "cancelled")
-          .put("analysisError", "AI processing was cancelled.")
-          .put("updatedAt", now)
-          .put("processedAt", now)
-        updated = capture
-      }
-      next.put(capture)
-    }
-    save(context, next)
-    return updated
-  }
-
-  fun isCancelled(context: Context, id: String): Boolean {
-    return find(context, id)?.optString("status") == "cancelled"
   }
 
   @Synchronized

@@ -65,19 +65,10 @@ object CaptureAnalysisClient {
         onPhase(CaptureProcessingPhase.ANALYZING)
         val remote = getCapture(apiUrl, token, captureId, remoteCaptureId)
         val state = remote?.optString("analysis_state").orEmpty()
-        if (
-          state == "cancelled" ||
-          state == "cancel_requested" ||
-          remote?.optString("analysis_cancel_requested_at").orEmpty().isNotBlank()
-        ) {
-          return cancelledEnrichment(sourceText, sourceUrl)
-        }
         if (remote != null && (state == "ready" || state == "needs_review")) {
           onPhase(CaptureProcessingPhase.SAVING)
           if (!isEdgeFunction(apiUrl)) {
-            createSuggestedReminders(apiUrl, token, remoteCaptureId, remote)
-            val refreshed = getCapture(apiUrl, token, captureId, remoteCaptureId)
-            return toEnrichment(refreshed ?: remote)
+            return toEnrichment(remote)
           }
           return toEnrichment(remote)
         }
@@ -95,25 +86,6 @@ object CaptureAnalysisClient {
       onPhase(CaptureProcessingPhase.WAITING_FOR_NETWORK)
       waitingForNetworkEnrichment(sourceText, sourceUrl)
     }
-  }
-
-  fun cancelRemote(context: Context, captureId: String) {
-    val apiUrl = configuredApiUrl()
-    if (apiUrl.isBlank() || isEdgeFunction(apiUrl)) return
-    val remoteCaptureId = readRemoteCapture(context, captureId) ?: return
-    val session = readNativeAuthSession(context) ?: return
-    val token = session.optString("accessToken")
-    if (token.isBlank()) return
-    Thread {
-      runCatching {
-        request("$apiUrl/api/captures", "PATCH", token, readTimeoutMs = 5000) { connection ->
-          val body = JSONObject()
-            .put("captureId", remoteCaptureId)
-            .put("action", "cancel_analysis")
-          connection.outputStream.use { output -> output.write(body.toString().toByteArray()) }
-        }
-      }
-    }.start()
   }
 
   private fun postCapture(
@@ -224,39 +196,6 @@ object CaptureAnalysisClient {
         .put("captureId", remoteCaptureId)
         .put("route", "openai_mini")
       connection.outputStream.use { output -> output.write(body.toString().toByteArray()) }
-    }
-  }
-
-  private fun createSuggestedReminders(
-    apiUrl: String,
-    accessToken: String,
-    remoteCaptureId: String,
-    remoteCapture: JSONObject
-  ) {
-    val suggestions = remoteCapture.optJSONArray("reminder_suggestions")
-      ?: remoteCapture.optJSONObject("analysis")?.optJSONArray("suggested_reminders")
-      ?: return
-
-    for (index in 0 until suggestions.length()) {
-      val reminder = suggestions.optJSONObject(index) ?: continue
-      val triggerType = reminder.optString("trigger_type")
-      val triggerValue = reminder.optString("trigger_value")
-      val confidence = reminder.optDouble("confidence", 0.0)
-      if (triggerType == "none" || triggerValue.isBlank() || confidence < 0.55) continue
-
-      request("$apiUrl/api/reminders", "POST", accessToken, readTimeoutMs = 30000) { connection ->
-        val body = JSONObject().put("captureId", remoteCaptureId)
-        val suggestionId = reminder.optString("id")
-        if (suggestionId.isNotBlank()) {
-          body.put("suggestionId", suggestionId)
-        } else {
-          body
-            .put("triggerType", triggerType)
-            .put("triggerValue", triggerValue)
-            .put("rationale", reminder.optString("rationale"))
-        }
-        connection.outputStream.use { output -> output.write(body.toString().toByteArray()) }
-      }
     }
   }
 
@@ -385,55 +324,15 @@ object CaptureAnalysisClient {
   }
 
   private fun normalizeEntities(remoteCapture: JSONObject, analysis: JSONObject): org.json.JSONArray {
-    val related = remoteCapture.optJSONArray("captured_entities")
-    if (related == null) return analysis.optJSONArray("entities") ?: org.json.JSONArray()
-    val next = org.json.JSONArray()
-    for (index in 0 until related.length()) {
-      val entity = related.optJSONObject(index) ?: continue
-      next.put(
-        JSONObject()
-          .put("type", entity.optString("type", entity.optString("entity_type")))
-          .put("name", entity.optString("name", entity.optString("display_name")))
-          .put("evidence", entity.optString("evidence"))
-          .put("confidence", entity.optDouble("confidence", 0.0))
-      )
-    }
-    return next
+    return analysis.optJSONArray("entities") ?: org.json.JSONArray()
   }
 
   private fun normalizeReminders(remoteCapture: JSONObject, analysis: JSONObject): org.json.JSONArray {
-    val related = remoteCapture.optJSONArray("reminders")
-      ?: remoteCapture.optJSONArray("reminder_suggestions")
-      ?: return analysis.optJSONArray("suggested_reminders") ?: org.json.JSONArray()
-    val next = org.json.JSONArray()
-    for (index in 0 until related.length()) {
-      val reminder = related.optJSONObject(index) ?: continue
-      next.put(
-        JSONObject()
-          .put("trigger_type", reminder.optString("trigger_type"))
-          .put("trigger_value", reminder.optString("trigger_value"))
-          .put("rationale", reminder.optString("rationale"))
-          .put("confidence", reminder.optDouble("confidence", 0.0))
-          .put("status", reminder.optString("status"))
-      )
-    }
-    return next
+    return analysis.optJSONArray("suggested_reminders") ?: org.json.JSONArray()
   }
 
   private fun normalizeCollections(remoteCapture: JSONObject, analysis: JSONObject): org.json.JSONArray {
-    val related = remoteCapture.optJSONArray("collection_suggestions")
-      ?: return analysis.optJSONArray("suggested_collections") ?: org.json.JSONArray()
-    val next = org.json.JSONArray()
-    for (index in 0 until related.length()) {
-      val collection = related.optJSONObject(index) ?: continue
-      next.put(
-        JSONObject()
-          .put("name", collection.optString("name"))
-          .put("rationale", collection.optString("rationale"))
-          .put("confidence", collection.optDouble("confidence", 0.0))
-      )
-    }
-    return next
+    return analysis.optJSONArray("suggested_collections") ?: org.json.JSONArray()
   }
 
   private fun llmStillProcessingEnrichment(sourceText: String, sourceUrl: String?): JSONObject {
@@ -454,18 +353,6 @@ object CaptureAnalysisClient {
       .put("analysisProvider", "openai")
       .put("analysisModel", "")
       .put("analysisError", "Waiting for internet to reach Sharebook.")
-      .put("defaultIntent", "")
-      .put("intentRationale", "")
-      .put("confidenceLabel", "")
-      .put("needsReview", false)
-  }
-
-  private fun cancelledEnrichment(sourceText: String, sourceUrl: String?): JSONObject {
-    return CaptureEnricher.enrich(sourceText, sourceUrl)
-      .put("analysisMode", "cancelled")
-      .put("analysisProvider", "none")
-      .put("analysisModel", "")
-      .put("analysisError", "AI processing was cancelled.")
       .put("defaultIntent", "")
       .put("intentRationale", "")
       .put("confidenceLabel", "")

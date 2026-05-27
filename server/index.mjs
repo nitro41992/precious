@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,6 +11,14 @@ const storePath = join(dataDir, "captures.json");
 const port = Number(process.env.PORT || 3030);
 const model = process.env.OPENAI_MODEL || "gpt-5-mini";
 const runningJobs = new Set();
+const saveIntents = JSON.parse(
+  readFileSync(join(__dirname, "..", "supabase", "functions", "_shared", "save-intents.json"), "utf8")
+);
+const activeSaveIntents = saveIntents.filter((intent) => intent.active);
+const activeSaveIntentKeys = activeSaveIntents.map((intent) => intent.key);
+const saveIntentPrompt = activeSaveIntents
+  .map((intent) => `- ${intent.key} (${intent.label}): ${intent.llm_description}`)
+  .join("\n");
 
 const CAPTURE_ANALYSIS_SCHEMA = {
   type: "object",
@@ -35,16 +44,7 @@ const CAPTURE_ANALYSIS_SCHEMA = {
       properties: {
         category: {
           type: "string",
-          enum: [
-            "read_later",
-            "watch_later",
-            "try_place",
-            "buy_later",
-            "cook_or_make",
-            "remember",
-            "follow_up",
-            "other"
-          ]
+          enum: activeSaveIntentKeys
         },
         confidence: { type: "number" },
         rationale: { type: "string" }
@@ -217,6 +217,10 @@ function buildPrompt(capture, urlMetadata) {
   return [
     "Infer why the user saved this shared item, not just what the page is about.",
     "Return concise structured data for a mobile quick-edit surface.",
+    "Choose default_intent.category from this configured save-intent catalog:",
+    saveIntentPrompt,
+    "Prefer the most specific future use over content type. Do not choose visit just because a place or business appears; choose reference for business contact or pricing information unless there is clear visit intent.",
+    "Do not use a catch-all. If no specific future use is inferable, choose remember with lower confidence and needs_review.",
     "Do not invent facts that are not present in the shared text, URL, or URL metadata.",
     "If Reddit, Instagram, or another site blocks metadata, infer only from the URL path and user share text.",
     "",

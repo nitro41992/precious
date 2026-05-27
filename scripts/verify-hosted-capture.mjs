@@ -199,37 +199,6 @@ async function triggerAnalyze({ apiUrl, accessToken, captureId }) {
   });
 }
 
-async function createSuggestedReminders({ apiUrl, accessToken, capture }) {
-  if (isEdgeCaptureApi(apiUrl)) return;
-  const suggestions = capture.reminder_suggestions ?? capture.analysis?.suggested_reminders ?? [];
-  for (const reminder of suggestions) {
-    if (
-      reminder.trigger_type === "none" ||
-      !reminder.trigger_value ||
-      Number(reminder.confidence ?? 0) < 0.55
-    ) {
-      continue;
-    }
-    await requestJson(`${apiUrl}/api/reminders`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${accessToken}`,
-        "content-type": "application/json"
-      },
-      body: JSON.stringify(
-        reminder.id
-          ? { captureId: capture.id, suggestionId: reminder.id }
-          : {
-              captureId: capture.id,
-              triggerType: reminder.trigger_type,
-              triggerValue: reminder.trigger_value,
-              rationale: reminder.rationale
-            }
-      )
-    });
-  }
-}
-
 async function pollAnyCapture({ apiUrl, anonKey, accessToken, clientCaptureKey, captureId, timeoutMs }) {
   if (isEdgeCaptureApi(apiUrl)) {
     return pollCapture({
@@ -342,36 +311,12 @@ async function main() {
     throw new Error("Capture is missing structured default_intent output.");
   }
 
-  await createSuggestedReminders({
-    apiUrl,
-    accessToken,
-    capture
-  });
-
-  const [runs, reminders, reminderLinks, suggestions, assets] = await Promise.all([
+  const [runs, assets] = await Promise.all([
     restRows({
       supabaseUrl,
       serviceRoleKey,
       table: "analysis_runs",
       params: { capture_id: `eq.${capture.id}`, status: "eq.succeeded", select: "id,model,provider,status" }
-    }),
-    restRows({
-      supabaseUrl,
-      serviceRoleKey,
-      table: "reminders",
-      params: { capture_id: `eq.${capture.id}`, select: "id,trigger_type,trigger_value,status,rationale" }
-    }),
-    restRows({
-      supabaseUrl,
-      serviceRoleKey,
-      table: "reminder_captures",
-      params: { capture_id: `eq.${capture.id}`, select: "reminder_id,capture_id" }
-    }),
-    restRows({
-      supabaseUrl,
-      serviceRoleKey,
-      table: "reminder_suggestions",
-      params: { capture_id: `eq.${capture.id}`, select: "id,trigger_type,trigger_value,rationale,confidence" }
     }),
     restRows({
       supabaseUrl,
@@ -391,13 +336,6 @@ async function main() {
       throw new Error(`Expected image asset MIME type, got ${assets[0].mime_type || "missing"}.`);
     }
   }
-  const persistedReminders = reminders.length + reminderLinks.length;
-  if (!options.allowNoReminder && !persistedReminders) {
-    throw new Error(
-      `No reminders row was persisted. Suggestions found: ${JSON.stringify(suggestions).slice(0, 500)}`
-    );
-  }
-
   console.log(
     JSON.stringify(
       {
@@ -410,8 +348,6 @@ async function main() {
         model: capture.analysis_model || succeededRuns[0]?.model,
         intent,
         assets: assets.length,
-        reminders: persistedReminders,
-        reminderSuggestions: suggestions.length,
         title: capture.display_title
       },
       null,

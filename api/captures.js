@@ -10,6 +10,11 @@ const {
   withCaptureStates,
   withUser
 } = require("./_lib/hosted.cjs");
+const saveIntents = require("../supabase/functions/_shared/save-intents.json");
+
+const activeSaveIntentKeys = new Set(
+  saveIntents.filter((intent) => intent.active).map((intent) => intent.key)
+);
 
 function archivedFilter(row, archived) {
   const state = row.capture_state || (row.archived_at || row.analysis?.capture_state === "archived" ? "archived" : "active");
@@ -34,7 +39,7 @@ module.exports = async function captures(req, res) {
 
       const { data, error } = await supabase
         .from("captures")
-        .select("*, captured_entities(*), reminder_suggestions(*), collection_suggestions(*), analysis_runs(*), capture_assets(*)")
+        .select("*, analysis_runs(*), capture_assets(*)")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(Number.isFinite(limit) ? limit : 50);
@@ -109,6 +114,9 @@ module.exports = async function captures(req, res) {
       }
       if (typeof body.note === "string") update.context_note = body.note.trim() || null;
       if (typeof body.currentSaveIntent === "string") {
+        if (!activeSaveIntentKeys.has(body.currentSaveIntent)) {
+          return send(res, 400, { error: "currentSaveIntent is not an active save intent" });
+        }
         update.current_save_intent = body.currentSaveIntent;
         update.intent_corrected_at = new Date().toISOString();
       }

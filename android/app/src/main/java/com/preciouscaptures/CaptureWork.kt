@@ -36,7 +36,3 @@ fun enqueueCaptureWork(
 
   WorkManager.getInstance(context).enqueue(request)
 }
-
-fun cancelCaptureWork(context: Context, captureId: String) {
-  WorkManager.getInstance(context).cancelAllWorkByTag(captureWorkTag(captureId))
-}

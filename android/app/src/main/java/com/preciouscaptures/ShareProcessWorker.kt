@@ -15,10 +15,6 @@ class ShareProcessWorker(
 ) : CoroutineWorker(appContext, params) {
   override suspend fun doWork(): Result {
     val captureId = inputData.getString("captureId") ?: return Result.failure()
-    if (PreciousCaptureStore.isCancelled(applicationContext, captureId)) {
-      CaptureNotifications.showCancelled(applicationContext, captureId)
-      return Result.success()
-    }
     CaptureNotifications.showUploading(applicationContext, captureId)
     delay(1600)
     val pendingCapture = PreciousCaptureStore.find(applicationContext, captureId)
@@ -47,17 +43,11 @@ class ShareProcessWorker(
     if (!assetPath.isNullOrBlank()) {
       runCatching { File(assetPath).delete() }
     }
-    if (PreciousCaptureStore.isCancelled(applicationContext, captureId)) {
-      PreciousCaptureStore.cancel(applicationContext, captureId)
-      CaptureNotifications.showCancelled(applicationContext, captureId)
-      return Result.success()
-    }
     val capture = PreciousCaptureStore.complete(applicationContext, captureId, enrichment)
     val title = capture?.optString("title", "Capture saved") ?: "Capture saved"
     when (capture?.optString("status")) {
       "ready" -> CaptureNotifications.showComplete(applicationContext, captureId, title)
       "needs_review" -> CaptureNotifications.showNeedsReview(applicationContext, captureId, title)
-      "cancelled" -> CaptureNotifications.showCancelled(applicationContext, captureId)
       "processing" -> {
         if (capture.optString("analysisMode") == "llm_waiting_network") {
           CaptureNotifications.showWaitingForNetwork(applicationContext, captureId)

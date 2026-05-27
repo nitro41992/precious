@@ -20,7 +20,9 @@ import {
   View
 } from "react-native";
 
-type CaptureStatus = "processing" | "ready" | "needs_review" | "failed" | "cancelled";
+import saveIntents from "../supabase/functions/_shared/save-intents.json";
+
+type CaptureStatus = "processing" | "ready" | "needs_review" | "failed";
 
 type Capture = {
   id: string;
@@ -109,16 +111,16 @@ const nativeAuth = NativeModules.PreciousAuth as NativeAuth | undefined;
 const nativeNetwork = NativeModules.PreciousNetwork as NativeNetwork | undefined;
 const nativeClipboard = NativeModules.PreciousClipboard as NativeClipboard | undefined;
 
-const INTENT_OPTIONS = [
-  "watch_later",
-  "read_later",
-  "try_place",
-  "buy_later",
-  "cook_or_make",
-  "remember",
-  "follow_up",
-  "other"
-] as const;
+type SaveIntentConfig = {
+  key: string;
+  label: string;
+  llm_description: string;
+  active: boolean;
+};
+
+const INTENT_CONFIG = (saveIntents as SaveIntentConfig[]).filter((intent) => intent.active);
+const INTENT_OPTIONS = INTENT_CONFIG.map((intent) => intent.key);
+const INTENT_LABELS = new Map(INTENT_CONFIG.map((intent) => [intent.key, intent.label]));
 
 type CaptureListMode = "active" | "archived";
 
@@ -156,6 +158,8 @@ function formatTime(value: number) {
 
 function humanize(value: string | undefined) {
   if (!value) return "";
+  const intentLabel = INTENT_LABELS.get(value);
+  if (intentLabel) return intentLabel;
   return value
     .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -163,7 +167,7 @@ function humanize(value: string | undefined) {
 
 function normalizeIntent(value: string | undefined) {
   if (!value) return "";
-  return INTENT_OPTIONS.includes(value as (typeof INTENT_OPTIONS)[number]) ? value : "";
+  return INTENT_OPTIONS.includes(value) ? value : "";
 }
 
 function isArchived(capture: Pick<Capture, "archivedAt">) {
@@ -174,7 +178,6 @@ function statusLabel(status: CaptureStatus) {
   if (status === "processing") return "Processing";
   if (status === "needs_review") return "Needs review";
   if (status === "failed") return "Failed";
-  if (status === "cancelled") return "Cancelled";
   return "Ready";
 }
 
@@ -210,7 +213,6 @@ function captureFromRemote(row: Record<string, any>): Capture {
   const analysis = row.analysis ?? {};
   const defaultIntent = analysis.default_intent ?? {};
   const archivedAtValue = row.archived_at || analysis.archived_at || null;
-  const cancelRequested = Boolean(row.analysis_cancel_requested_at);
   const analysisMode = nullableValue(row.analysis_mode) || (nullableValue(row.analysis_provider) ? "llm" : undefined);
   const remoteHasExtractedData = Boolean(
     row.default_intent ||
@@ -218,14 +220,6 @@ function captureFromRemote(row: Record<string, any>): Capture {
       analysis.summary ||
       defaultIntent.category
   );
-  const remoteEntities = row.captured_entities
-    ? row.captured_entities.map((entity: Record<string, any>) => ({
-        type: String(entity.type || entity.entity_type || ""),
-        name: String(entity.name || entity.display_name || ""),
-        evidence: String(entity.evidence || ""),
-        confidence: Number(entity.confidence || 0)
-      }))
-    : undefined;
   return {
     id: String(row.client_capture_key || row.id),
     remoteId: String(row.id || row.client_capture_key || ""),
@@ -234,19 +228,17 @@ function captureFromRemote(row: Record<string, any>): Capture {
     sourceUrl: typeof row.source_url === "string" ? row.source_url : null,
     siteName: hostFromUrl(typeof row.source_url === "string" ? row.source_url : null),
     summary: analysis.summary || undefined,
-    analysisMode: cancelRequested ? "cancelled" : analysisMode,
+    analysisMode,
     analysisProvider: nullableValue(row.analysis_provider),
     analysisModel: nullableValue(row.analysis_model),
-    analysisError: cancelRequested
-      ? row.analysis_error || "AI processing was cancelled."
-      : row.analysis_error || undefined,
+    analysisError: row.analysis_error || undefined,
     defaultIntent: row.current_save_intent || row.default_intent || defaultIntent.category || undefined,
     intentRationale: row.intent_rationale || defaultIntent.rationale || undefined,
     confidenceLabel: analysis.confidence_label || undefined,
     needsReview: Boolean(analysis.needs_review || row.analysis_state === "needs_review"),
-    entities: remoteEntities || analysis.entities || [],
-    suggestedReminders: row.reminders || row.reminder_suggestions || analysis.suggested_reminders || [],
-    suggestedCollections: row.collection_suggestions || analysis.suggested_collections || [],
+    entities: analysis.entities || [],
+    suggestedReminders: analysis.suggested_reminders || [],
+    suggestedCollections: analysis.suggested_collections || [],
     searchPhrases: analysis.search_phrases || [],
     note: String(row.context_note || ""),
     archivedAt:
@@ -260,9 +252,7 @@ function captureFromRemote(row: Record<string, any>): Capture {
             : Date.now()
           : null,
     status:
-      cancelRequested
-        ? "cancelled"
-        : row.analysis_state === "ready"
+      row.analysis_state === "ready"
         ? "ready"
         : row.analysis_state === "needs_review"
           ? "needs_review"
@@ -696,8 +686,7 @@ export default function App() {
               styles.status,
               itemStatus === "processing" && styles.statusProcessing,
               itemStatus === "needs_review" && styles.statusReview,
-              itemStatus === "failed" && styles.statusFailed,
-              itemStatus === "cancelled" && styles.statusCancelled
+              itemStatus === "failed" && styles.statusFailed
             ]}
           >
             {statusLabel(itemStatus)}
@@ -741,8 +730,7 @@ export default function App() {
                 styles.status,
                 displayStatus(selected) === "processing" && styles.statusProcessing,
                 displayStatus(selected) === "needs_review" && styles.statusReview,
-                displayStatus(selected) === "failed" && styles.statusFailed,
-                displayStatus(selected) === "cancelled" && styles.statusCancelled
+                displayStatus(selected) === "failed" && styles.statusFailed
               ]}
             >
               {selectedArchived ? "Archived" : statusLabel(displayStatus(selected))}
@@ -1122,9 +1110,6 @@ const styles = StyleSheet.create({
   },
   statusFailed: {
     color: "#9f3d2e"
-  },
-  statusCancelled: {
-    color: colors.muted
   },
   meta: {
     color: colors.muted,

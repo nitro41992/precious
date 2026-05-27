@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import saveIntents from "../_shared/save-intents.json" assert { type: "json" };
 
 type CaptureRow = {
   id: string;
@@ -25,8 +26,19 @@ type CapturePayload = {
   } | null;
 };
 
-const PROMPT_VERSION = "precious-capture-analysis-v1";
-const SCHEMA_VERSION = "precious-capture-analysis-v1";
+const PROMPT_VERSION = "precious-capture-analysis-v2";
+const SCHEMA_VERSION = "precious-capture-analysis-v2";
+const activeSaveIntents = (saveIntents as Array<{
+  key: string;
+  label: string;
+  llm_description: string;
+  active: boolean;
+}>).filter((intent) => intent.active);
+const activeSaveIntentKeys = activeSaveIntents.map((intent) => intent.key);
+const activeSaveIntentKeySet = new Set(activeSaveIntentKeys);
+const saveIntentPrompt = activeSaveIntents
+  .map((intent) => `- ${intent.key} (${intent.label}): ${intent.llm_description}`)
+  .join("\n");
 
 const corsHeaders = {
   "access-control-allow-origin": "*",
@@ -58,16 +70,7 @@ const analysisSchema = {
       properties: {
         category: {
           type: "string",
-          enum: [
-            "read_later",
-            "watch_later",
-            "try_place",
-            "buy_later",
-            "cook_or_make",
-            "remember",
-            "follow_up",
-            "other"
-          ]
+          enum: activeSaveIntentKeys
         },
         confidence: { type: "number" },
         rationale: { type: "string" }
@@ -291,6 +294,10 @@ function buildPrompt(capture: CaptureRow, urlMetadata: unknown) {
   return [
     "Infer why the user saved this item. Focus on intent, medium-term usefulness, reminders, and collection fit.",
     "Return concise structured data for a mobile quick-edit surface.",
+    "Choose default_intent.category from this configured save-intent catalog:",
+    saveIntentPrompt,
+    "Prefer the most specific future use over content type. Do not choose visit just because a place or business appears; choose reference for business contact or pricing information unless there is clear visit intent.",
+    "Do not use a catch-all. If no specific future use is inferable, choose remember with lower confidence and needs_review.",
     "Suggest a reminder only when the evidence has a useful future trigger. Do not invent events, places, or deadlines.",
     "If URL metadata is blocked, infer only from the URL path and shared text and mark low confidence when needed.",
     "",
@@ -368,21 +375,6 @@ async function runOpenAi(capture: CaptureRow, urlMetadata: unknown) {
   };
 }
 
-function searchDocument(capture: CaptureRow, analysis: any) {
-  return [
-    analysis.display_title,
-    analysis.summary,
-    analysis.default_intent?.category,
-    analysis.default_intent?.rationale,
-    capture.source_url,
-    capture.source_text,
-    ...(analysis.search_phrases ?? []),
-    ...(analysis.entities ?? []).map((entity: any) => `${entity.name} ${entity.type}`)
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
 async function processCapture(captureId: string, userId: string) {
   const supabase = adminClient();
   const { data: capture, error: captureError } = await supabase
@@ -430,82 +422,6 @@ async function processCapture(captureId: string, userId: string) {
       .select("id")
       .single();
     if (runError) throw runError;
-
-    await Promise.all([
-      supabase.from("captured_entities").delete().eq("capture_id", captureId),
-      supabase.from("reminder_suggestions").delete().eq("capture_id", captureId),
-      supabase.from("reminders").delete().eq("capture_id", captureId),
-      supabase.from("collection_suggestions").delete().eq("capture_id", captureId),
-      supabase.from("search_documents").delete().eq("capture_id", captureId)
-    ]);
-
-    if (analysis.entities?.length) {
-      await supabase.from("captured_entities").insert(
-        analysis.entities.map((entity: any) => ({
-          user_id: userId,
-          capture_id: captureId,
-          analysis_run_id: run.id,
-          entity_type: entity.type,
-          display_name: entity.name,
-          normalized_name: String(entity.name || "").toLowerCase(),
-          evidence: entity.evidence,
-          source: "llm",
-          confidence: entity.confidence
-        }))
-      );
-    }
-
-    const realReminders = (analysis.suggested_reminders ?? []).filter(
-      (reminder: any) => reminder.trigger_type !== "none"
-    );
-    if (realReminders.length) {
-      await supabase.from("reminder_suggestions").insert(
-        realReminders.map((reminder: any) => ({
-          user_id: userId,
-          capture_id: captureId,
-          analysis_run_id: run.id,
-          trigger_type: reminder.trigger_type,
-          trigger_value: reminder.trigger_value,
-          rationale: reminder.rationale,
-          confidence: reminder.confidence
-        }))
-      );
-      const remindersToSet = realReminders
-        .filter((reminder: any) => Number(reminder.confidence ?? 0) >= 0.55)
-        .map((reminder: any) => ({
-          user_id: userId,
-          capture_id: captureId,
-          analysis_run_id: run.id,
-          trigger_type: reminder.trigger_type,
-          trigger_value: reminder.trigger_value,
-          rationale: reminder.rationale,
-          confidence: reminder.confidence,
-          status: "pending"
-        }));
-      if (remindersToSet.length) {
-        await supabase.from("reminders").insert(remindersToSet);
-      }
-    }
-
-    if (analysis.suggested_collections?.length) {
-      await supabase.from("collection_suggestions").insert(
-        analysis.suggested_collections.map((collection: any) => ({
-          user_id: userId,
-          capture_id: captureId,
-          analysis_run_id: run.id,
-          name: collection.name,
-          rationale: collection.rationale,
-          confidence: collection.confidence
-        }))
-      );
-    }
-
-    await supabase.from("search_documents").insert({
-      user_id: userId,
-      capture_id: captureId,
-      analysis_run_id: run.id,
-      document: searchDocument(capture, analysis)
-    });
 
     await supabase
       .from("captures")
@@ -676,7 +592,7 @@ Deno.serve(async (request) => {
       const archived = url.searchParams.get("archived") === "true";
       let query = supabase
         .from("captures")
-        .select("*, captured_entities(*), reminder_suggestions(*), reminders!reminders_capture_id_fkey(*), collection_suggestions(*), capture_assets(*)")
+        .select("*, capture_assets(*)")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
       if (clientCaptureKey) query = query.eq("client_capture_key", clientCaptureKey).limit(1);
@@ -735,6 +651,9 @@ Deno.serve(async (request) => {
       }
       if (typeof body.note === "string") update.context_note = body.note.trim() || null;
       if (typeof body.currentSaveIntent === "string") {
+        if (!activeSaveIntentKeySet.has(body.currentSaveIntent)) {
+          return json({ error: "currentSaveIntent is not an active save intent" }, 400);
+        }
         update.current_save_intent = body.currentSaveIntent;
         update.intent_corrected_at = new Date().toISOString();
       }
