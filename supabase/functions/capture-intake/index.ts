@@ -313,6 +313,28 @@ function mergeAnalysisPatch(row: any, patch: Record<string, unknown>) {
   return { ...current, ...patch };
 }
 
+function confidenceRequiresReview(value: unknown) {
+  return value === "Maybe" || value === "Not sure" || value === "Couldn't tell";
+}
+
+function hasCollectionDecisions(analysis: Record<string, unknown>) {
+  return Array.isArray(analysis.collection_decisions) && analysis.collection_decisions.length > 0;
+}
+
+function analysisRequiresReview(analysis: Record<string, unknown>, reviewConfirmedAt?: unknown) {
+  if (reviewConfirmedAt) return false;
+  return Boolean(
+    analysis.needs_review ||
+      confidenceRequiresReview(analysis.confidence_label) ||
+      hasCollectionDecisions(analysis)
+  );
+}
+
+function normalizedReviewAnalysis(analysis: Record<string, unknown>, reviewConfirmedAt?: unknown) {
+  const needsReview = analysisRequiresReview(analysis, reviewConfirmedAt);
+  return { ...analysis, needs_review: needsReview };
+}
+
 async function readCapturePayload(request: Request): Promise<CapturePayload> {
   const contentType = request.headers.get("content-type") || "";
   if (!/multipart\/form-data/i.test(contentType)) {
@@ -1396,13 +1418,13 @@ async function processCapture(captureId: string, userId: string) {
     const retrievedCollections = await retrieveCollectionsForCapture(supabase, userId, captureForAnalysis, urlEvidence)
       .catch(() => []);
     const result = await runOpenAi(captureForAnalysis, urlEvidence, retrievedCollections);
-    const analysis = await autoLinkCollectionDecisions(
+    const analysis = normalizedReviewAnalysis(await autoLinkCollectionDecisions(
       supabase,
       userId,
       captureId,
       result.analysis,
       retrievedCollections
-    );
+    ));
     const { data: run, error: runError } = await supabase
       .from("analysis_runs")
       .insert({
@@ -1429,7 +1451,7 @@ async function processCapture(captureId: string, userId: string) {
     await supabase
       .from("captures")
       .update({
-        analysis_state: analysis.needs_review ? "needs_review" : "ready",
+        analysis_state: analysisRequiresReview(analysis) ? "needs_review" : "ready",
         analysis_error: null,
         analysis,
         analysis_provider: "openai",
@@ -1671,7 +1693,7 @@ async function markCollectionDecisionAccepted(
 ) {
   const { data, error } = await supabase
     .from("captures")
-    .select("id, analysis")
+    .select("id, analysis, review_confirmed_at")
     .eq("user_id", userId)
     .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
     .maybeSingle();
@@ -1683,9 +1705,16 @@ async function markCollectionDecisionAccepted(
   const nextDecisions = decisions.filter(
     (decision) => !sameCollectionDecision(decision as Record<string, unknown>, accepted)
   );
+  const nextAnalysis = normalizedReviewAnalysis(
+    { ...analysis, needs_review: false, collection_decisions: nextDecisions },
+    data.review_confirmed_at
+  );
   await supabase
     .from("captures")
-    .update({ analysis: { ...analysis, collection_decisions: nextDecisions } })
+    .update({
+      analysis: nextAnalysis,
+      analysis_state: analysisRequiresReview(nextAnalysis, data.review_confirmed_at) ? "needs_review" : "ready"
+    })
     .eq("user_id", userId)
     .eq("id", data.id);
 }
@@ -1941,6 +1970,57 @@ Deno.serve(async (request) => {
           result = await supabase
             .from("captures")
             .update({ analysis })
+            .eq("user_id", user.id)
+            .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
+            .select("*")
+            .single();
+        }
+        if (result.error) throw result.error;
+        return json({ capture: withCaptureState(result.data) });
+      }
+
+      if (body.action === "confirm_review") {
+        const currentAnalysis = existingResult.data.analysis && typeof existingResult.data.analysis === "object"
+          ? existingResult.data.analysis as Record<string, unknown>
+          : {};
+        if (hasCollectionDecisions(currentAnalysis)) {
+          return json({ error: "Resolve collection suggestions before confirming review." }, 409);
+        }
+        const confirmedAt = new Date().toISOString();
+        const update: Record<string, unknown> = {
+          analysis: { ...currentAnalysis, needs_review: false },
+          analysis_state: "ready",
+          review_confirmed_at: confirmedAt
+        };
+        if (typeof body.title === "string") {
+          const title = body.title.trim() || null;
+          update.title = title;
+          update.display_title = title;
+        }
+        if (typeof body.note === "string") update.context_note = body.note.trim() || null;
+        if (typeof body.currentSaveIntent === "string") {
+          if (!activeSaveIntentKeySet.has(body.currentSaveIntent)) {
+            return json({ error: "currentSaveIntent is not an active save intent" }, 400);
+          }
+          update.current_save_intent = body.currentSaveIntent;
+          update.intent_corrected_at = confirmedAt;
+        }
+        let result = await supabase
+          .from("captures")
+          .update(update)
+          .eq("user_id", user.id)
+          .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
+          .select("*")
+          .single();
+        if (result.error && /review_confirmed_at|intent_corrected_at|schema cache|column/i.test(String(result.error.message || result.error.details || ""))) {
+          const fallbackUpdate = { ...update };
+          delete fallbackUpdate.review_confirmed_at;
+          if (/intent_corrected_at/i.test(String(result.error.message || result.error.details || ""))) {
+            delete fallbackUpdate.intent_corrected_at;
+          }
+          result = await supabase
+            .from("captures")
+            .update(fallbackUpdate)
             .eq("user_id", user.id)
             .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
             .select("*")

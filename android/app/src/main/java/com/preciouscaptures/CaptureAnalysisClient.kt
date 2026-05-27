@@ -281,11 +281,13 @@ object CaptureAnalysisClient {
       .put("defaultIntent", defaultIntent.optString("category"))
       .put("intentRationale", defaultIntent.optString("rationale"))
       .put("confidenceLabel", analysis.optString("confidence_label"))
-      .put("needsReview", analysis.optBoolean("needs_review") || remoteCapture.optString("analysis_state") == "needs_review")
+      .put("needsReview", remoteCaptureRequiresReview(remoteCapture, analysis))
       .put("entities", normalizeEntities(remoteCapture, analysis))
       .put("suggestedReminders", normalizeReminders(remoteCapture, analysis))
+      .put("collectionDecisions", normalizeCollections(remoteCapture, analysis))
       .put("suggestedCollections", normalizeCollections(remoteCapture, analysis))
       .put("searchPhrases", analysis.optJSONArray("search_phrases") ?: org.json.JSONArray())
+      .put("reviewConfirmedAt", nullableString(remoteCapture, "review_confirmed_at"))
   }
 
   private fun isEdgeFunction(apiUrl: String): Boolean {
@@ -332,7 +334,18 @@ object CaptureAnalysisClient {
   }
 
   private fun normalizeCollections(remoteCapture: JSONObject, analysis: JSONObject): org.json.JSONArray {
-    return analysis.optJSONArray("suggested_collections") ?: org.json.JSONArray()
+    return analysis.optJSONArray("collection_decisions")
+      ?: analysis.optJSONArray("suggested_collections")
+      ?: org.json.JSONArray()
+  }
+
+  private fun remoteCaptureRequiresReview(remoteCapture: JSONObject, analysis: JSONObject): Boolean {
+    if (nullableString(remoteCapture, "review_confirmed_at").isNotBlank()) return false
+    if (analysis.optBoolean("needs_review") || remoteCapture.optString("analysis_state") == "needs_review") return true
+    return when (analysis.optString("confidence_label")) {
+      "Maybe", "Not sure", "Couldn't tell" -> true
+      else -> normalizeCollections(remoteCapture, analysis).length() > 0
+    }
   }
 
   private fun llmStillProcessingEnrichment(sourceText: String, sourceUrl: String?): JSONObject {

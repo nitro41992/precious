@@ -169,6 +169,28 @@ function mergeAnalysisPatch(row, patch) {
   return { ...current, ...patch };
 }
 
+function confidenceRequiresReview(value) {
+  return value === "Maybe" || value === "Not sure" || value === "Couldn't tell";
+}
+
+function hasCollectionDecisions(analysis) {
+  return Array.isArray(analysis?.collection_decisions) && analysis.collection_decisions.length > 0;
+}
+
+function analysisRequiresReview(analysis, reviewConfirmedAt) {
+  if (reviewConfirmedAt) return false;
+  return Boolean(
+    analysis?.needs_review ||
+      confidenceRequiresReview(analysis?.confidence_label) ||
+      hasCollectionDecisions(analysis)
+  );
+}
+
+function normalizedReviewAnalysis(analysis, reviewConfirmedAt) {
+  const needsReview = analysisRequiresReview(analysis, reviewConfirmedAt);
+  return { ...analysis, needs_review: needsReview };
+}
+
 async function readBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
   if (typeof req.body === "string") return JSON.parse(req.body || "{}");
@@ -891,10 +913,10 @@ async function analyzeCapture(supabase, userId, captureId) {
       ? { ...capture, asset_url: signedAsset.data.signedUrl, asset_mime_type: asset.mime_type }
       : capture;
   const result = await runOpenAi(captureForAnalysis, urlMetadata);
-  const analysis = {
+  const analysis = normalizedReviewAnalysis({
     ...result.analysis,
     url_metadata: urlMetadata
-  };
+  });
 
   const { data: run, error: runError } = await supabase
     .from("analysis_runs")
@@ -920,7 +942,7 @@ async function analyzeCapture(supabase, userId, captureId) {
     .from("captures")
     .update({
       capture_type: analysis.capture_type || capture.capture_type,
-      analysis_state: analysis.needs_review ? "needs_review" : "ready",
+      analysis_state: analysisRequiresReview(analysis) ? "needs_review" : "ready",
       analysis_error: null,
       analysis,
       analysis_provider: "openai",
@@ -995,6 +1017,8 @@ module.exports = {
   send,
   withCaptureState,
   withCaptureStates,
+  analysisRequiresReview,
+  hasCollectionDecisions,
   mergeAnalysisPatch,
   withUser
 };

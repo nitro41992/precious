@@ -167,6 +167,14 @@ function fallbackTitle(sourceText, sourceUrl) {
   return sourceText?.trim().split(/\n/)[0]?.slice(0, 72) || "Shared capture";
 }
 
+function analysisRequiresReview(analysis) {
+  return Boolean(
+    analysis?.needs_review ||
+      ["Maybe", "Not sure", "Couldn't tell"].includes(analysis?.confidence_label) ||
+      (Array.isArray(analysis?.collection_decisions) && analysis.collection_decisions.length > 0)
+  );
+}
+
 async function fetchUrlMetadata(sourceUrl) {
   if (!sourceUrl) return null;
   const endpoint = oembedEndpoint(sourceUrl);
@@ -312,10 +320,11 @@ async function runAnalysisJob(captureId) {
   try {
     const urlMetadata = await fetchUrlMetadata(capture.source_url);
     const result = await runOpenAiAnalysis(capture, urlMetadata);
+    const needsReview = analysisRequiresReview(result.analysis);
     await upsertCapture({
       ...capture,
-      analysis_state: result.analysis.needs_review ? "needs_review" : "ready",
-      analysis: result.analysis,
+      analysis_state: needsReview ? "needs_review" : "ready",
+      analysis: { ...result.analysis, needs_review: needsReview },
       analysis_provider: "openai",
       analysis_model: model,
       analysis_mode: "llm",

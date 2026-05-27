@@ -48,6 +48,15 @@ class PreciousCaptureStoreModule(
   }
 
   @ReactMethod
+  fun confirmCaptureReview(id: String, title: String, note: String, currentSaveIntent: String?, promise: Promise) {
+    try {
+      promise.resolve(PreciousCaptureStore.confirmReview(reactContext, id, title, note, currentSaveIntent).toString())
+    } catch (error: Exception) {
+      promise.reject("capture_store_confirm_failed", error)
+    }
+  }
+
+  @ReactMethod
   fun archiveCapture(id: String, promise: Promise) {
     try {
       promise.resolve(PreciousCaptureStore.archive(reactContext, id).toString())

@@ -54,6 +54,7 @@ type Capture = {
   searchPhrases?: string[];
   note: string;
   archivedAt?: number | null;
+  reviewConfirmedAt?: number | null;
   status: CaptureStatus;
   createdAt: number;
   updatedAt: number;
@@ -93,6 +94,7 @@ type CaptureStore = {
   captureSource: (sourceText: string) => Promise<string>;
   getCaptures: () => Promise<string>;
   updateCapture: (id: string, title: string, note: string, currentSaveIntent: string | null) => Promise<string>;
+  confirmCaptureReview?: (id: string, title: string, note: string, currentSaveIntent: string | null) => Promise<string>;
   archiveCapture: (id: string) => Promise<string>;
   restoreCapture: (id: string) => Promise<string>;
 };
@@ -225,7 +227,28 @@ function hasExtractedData(capture: Pick<Capture, "defaultIntent" | "summary" | "
   );
 }
 
+function confidenceRequiresReview(value: string | undefined) {
+  return value === "Maybe" || value === "Not sure" || value === "Couldn't tell";
+}
+
+function hasUnresolvedCollectionDecisions(capture: Pick<Capture, "collectionDecisions">) {
+  return Boolean(capture.collectionDecisions?.length);
+}
+
+function captureNeedsReview(
+  capture: Pick<Capture, "status" | "needsReview" | "confidenceLabel" | "collectionDecisions" | "reviewConfirmedAt">
+) {
+  if (capture.reviewConfirmedAt || capture.status === "processing" || capture.status === "failed") return false;
+  return Boolean(
+    capture.needsReview ||
+      capture.status === "needs_review" ||
+      confidenceRequiresReview(capture.confidenceLabel) ||
+      hasUnresolvedCollectionDecisions(capture)
+  );
+}
+
 function displayStatus(capture: Capture): CaptureStatus {
+  if (captureNeedsReview(capture)) return "needs_review";
   if (capture.status === "failed" && hasExtractedData(capture)) return "ready";
   return capture.status;
 }
@@ -268,6 +291,7 @@ function captureFromRemote(row: Record<string, any>): Capture {
   const analysis = row.analysis ?? {};
   const defaultIntent = analysis.default_intent ?? {};
   const archivedAtValue = row.archived_at || analysis.archived_at || null;
+  const reviewConfirmedAtValue = row.review_confirmed_at || analysis.review_confirmed_at || null;
   const analysisMode = nullableValue(row.analysis_mode) || (nullableValue(row.analysis_provider) ? "llm" : undefined);
   const collectionDecisions = Array.isArray(analysis.collection_decisions)
     ? analysis.collection_decisions.map(collectionDecisionFromRemote).filter(Boolean) as CollectionDecision[]
@@ -295,7 +319,13 @@ function captureFromRemote(row: Record<string, any>): Capture {
     defaultIntent: row.current_save_intent || row.default_intent || defaultIntent.category || undefined,
     intentRationale: row.intent_rationale || defaultIntent.rationale || undefined,
     confidenceLabel: analysis.confidence_label || undefined,
-    needsReview: Boolean(analysis.needs_review || row.analysis_state === "needs_review"),
+    needsReview: Boolean(
+      !reviewConfirmedAtValue &&
+        (analysis.needs_review ||
+          row.analysis_state === "needs_review" ||
+          confidenceRequiresReview(analysis.confidence_label) ||
+          collectionDecisions.length)
+    ),
     entities: analysis.entities || [],
     suggestedReminders: analysis.suggested_reminders || [],
     linkedCollections: Array.isArray(row.linked_collections)
@@ -317,6 +347,12 @@ function captureFromRemote(row: Record<string, any>): Capture {
             ? Date.parse(row.updated_at)
             : Date.now()
           : null,
+    reviewConfirmedAt:
+      reviewConfirmedAtValue
+        ? typeof reviewConfirmedAtValue === "number"
+          ? reviewConfirmedAtValue
+          : Date.parse(String(reviewConfirmedAtValue))
+        : null,
     status:
       row.analysis_state === "ready"
         ? "ready"
@@ -706,7 +742,7 @@ export default function App() {
               captureId: selected.remoteId || selected.id,
               title: draftTitle.trim(),
               note: draftNote.trim(),
-              currentSaveIntent: draftIntent || undefined
+              currentSaveIntent: draftIntentDirty && draftIntent ? draftIntent : undefined
             }
           });
         let json: { capture: Record<string, any> };
@@ -731,13 +767,80 @@ export default function App() {
       return;
     }
     if (!nativeStore) return;
-    const raw = await nativeStore.updateCapture(selected.id, draftTitle.trim(), draftNote.trim(), draftIntent || null);
+    const raw = await nativeStore.updateCapture(
+      selected.id,
+      draftTitle.trim(),
+      draftNote.trim(),
+      draftIntentDirty && draftIntent ? draftIntent : null
+    );
     const next = JSON.parse(raw || "[]") as Capture[];
     setCaptures(sortCaptures(next));
     setDraftTitleDirty(false);
     setDraftNoteDirty(false);
     setDraftIntentDirty(false);
     setMessage("Saved.");
+  }
+
+  async function confirmReview() {
+    if (!selected) return;
+    if (hasUnresolvedCollectionDecisions(selected)) {
+      setMessage("Resolve collection suggestions before confirming review.");
+      return;
+    }
+    if (config?.apiUrl && session?.accessToken) {
+      try {
+        const activeSession = await getFreshSession();
+        if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
+        const confirmWithToken = (accessToken: string) =>
+          requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
+            method: "PATCH",
+            headers: {
+              apikey: config.supabaseAnonKey,
+              authorization: `Bearer ${accessToken}`,
+              "content-type": "application/json"
+            },
+            body: {
+              captureId: selected.remoteId || selected.id,
+              action: "confirm_review",
+              title: draftTitle.trim(),
+              note: draftNote.trim(),
+              currentSaveIntent: draftIntentDirty && draftIntent ? draftIntent : undefined
+            }
+          });
+        let json: { capture: Record<string, any> };
+        try {
+          json = await confirmWithToken(activeSession.accessToken);
+        } catch (error) {
+          if (!isAuthError(error)) throw error;
+          const refreshed = await getFreshSession(true);
+          if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
+          json = await confirmWithToken(refreshed.accessToken);
+        }
+        setCaptures((current) =>
+          current.map((item) => (item.id === selected.id ? captureFromRemote(json.capture) : item))
+        );
+        setDraftTitleDirty(false);
+        setDraftNoteDirty(false);
+        setDraftIntentDirty(false);
+        setMessage("Review confirmed.");
+      } catch (error) {
+        setMessage(friendlyError(error, "Could not confirm review."));
+      }
+      return;
+    }
+    if (!nativeStore?.confirmCaptureReview) return;
+    const raw = await nativeStore.confirmCaptureReview(
+      selected.id,
+      draftTitle.trim(),
+      draftNote.trim(),
+      draftIntentDirty && draftIntent ? draftIntent : null
+    );
+    const next = JSON.parse(raw || "[]") as Capture[];
+    setCaptures(sortCaptures(next));
+    setDraftTitleDirty(false);
+    setDraftNoteDirty(false);
+    setDraftIntentDirty(false);
+    setMessage("Review confirmed.");
   }
 
   async function collectionRequest<T>(
@@ -1171,6 +1274,8 @@ export default function App() {
   if (selected) {
     const selectedArchived = isArchived(selected);
     const sourceValue = selected.sourceUrl || selected.sourceText;
+    const hasDirtyDraft = draftTitleDirty || draftNoteDirty || draftIntentDirty;
+    const canConfirmReview = displayStatus(selected) === "needs_review" && !hasUnresolvedCollectionDecisions(selected);
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="dark-content" />
@@ -1343,6 +1448,13 @@ export default function App() {
           <Pressable onPress={() => void saveQuickEdit()} style={styles.primaryButton}>
             <Text style={styles.primaryButtonText}>Save</Text>
           </Pressable>
+          {canConfirmReview ? (
+            <Pressable onPress={() => void confirmReview()} style={styles.secondaryButton}>
+              <Text style={styles.secondaryButtonText}>
+                {hasDirtyDraft ? "Save and confirm" : "Confirm review"}
+              </Text>
+            </Pressable>
+          ) : null}
           <Pressable onPress={confirmArchive} style={styles.secondaryButton}>
             <Text style={selectedArchived ? styles.secondaryButtonText : styles.dangerButtonText}>
               {selectedArchived ? "Restore capture" : "Archive capture"}

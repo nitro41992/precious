@@ -43,6 +43,7 @@ object PreciousCaptureStore {
       .put("searchPhrases", JSONArray())
       .put("note", "")
       .put("archivedAt", JSONObject.NULL)
+      .put("reviewConfirmedAt", JSONObject.NULL)
       .put("status", "processing")
       .put("createdAt", now)
       .put("updatedAt", now)
@@ -97,7 +98,7 @@ object PreciousCaptureStore {
       if (capture.optString("id") == id) {
         val title = enrichment.optString("title").ifBlank { capture.optString("title", "Untitled capture") }
         val analysisMode = enrichment.optString("analysisMode", "pending_llm")
-        val needsReview = enrichment.optBoolean("needsReview", false)
+        val needsReview = enrichmentRequiresReview(enrichment)
         val nextStatus = when {
           analysisMode == "llm_processing" -> "processing"
           analysisMode == "llm_waiting_network" -> "processing"
@@ -123,6 +124,7 @@ object PreciousCaptureStore {
           .put("needsReview", needsReview)
           .put("entities", enrichment.optJSONArray("entities") ?: JSONArray())
           .put("suggestedReminders", enrichment.optJSONArray("suggestedReminders") ?: JSONArray())
+          .put("collectionDecisions", enrichment.optJSONArray("collectionDecisions") ?: JSONArray())
           .put("suggestedCollections", enrichment.optJSONArray("suggestedCollections") ?: JSONArray())
           .put("searchPhrases", enrichment.optJSONArray("searchPhrases") ?: JSONArray())
           .put("status", nextStatus)
@@ -147,6 +149,33 @@ object PreciousCaptureStore {
         capture
           .put("title", title.ifBlank { capture.optString("title", "Untitled capture") })
           .put("note", note)
+          .put("updatedAt", now)
+        if (!currentSaveIntent.isNullOrBlank()) {
+          capture
+            .put("defaultIntent", currentSaveIntent)
+            .put("intentCorrectedAt", now)
+        }
+      }
+      next.put(capture)
+    }
+    save(context, next)
+    return next
+  }
+
+  @Synchronized
+  fun confirmReview(context: Context, id: String, title: String, note: String, currentSaveIntent: String?): JSONArray {
+    val captures = list(context)
+    val now = System.currentTimeMillis()
+    val next = JSONArray()
+    for (index in 0 until captures.length()) {
+      val capture = captures.getJSONObject(index)
+      if (capture.optString("id") == id) {
+        capture
+          .put("title", title.ifBlank { capture.optString("title", "Untitled capture") })
+          .put("note", note)
+          .put("needsReview", false)
+          .put("status", "ready")
+          .put("reviewConfirmedAt", now)
           .put("updatedAt", now)
         if (!currentSaveIntent.isNullOrBlank()) {
           capture
@@ -189,6 +218,18 @@ object PreciousCaptureStore {
       .edit()
       .putString(STORE_KEY, captures.toString())
       .commit()
+  }
+
+  private fun enrichmentRequiresReview(enrichment: JSONObject): Boolean {
+    if (enrichment.optBoolean("needsReview", false)) return true
+    return when (enrichment.optString("confidenceLabel")) {
+      "Maybe", "Not sure", "Couldn't tell" -> true
+      else -> {
+        val decisions = enrichment.optJSONArray("collectionDecisions")
+          ?: enrichment.optJSONArray("suggestedCollections")
+        decisions != null && decisions.length() > 0
+      }
+    }
   }
 
   private fun extractUrl(value: String): String? {

@@ -3,6 +3,7 @@ const {
   createOrGetCaptureWithAsset,
   loadCapture,
   mergeAnalysisPatch,
+  hasCollectionDecisions,
   readBody,
   readCapturePayload,
   send,
@@ -97,6 +98,57 @@ module.exports = async function captures(req, res) {
           result = await supabase
             .from("captures")
             .update(update)
+            .eq("user_id", user.id)
+            .or(`id.eq.${body.captureId},client_capture_key.eq.${body.captureId}`)
+            .select("*")
+            .single();
+        }
+        if (result.error) throw result.error;
+        return send(res, 200, { capture: withCaptureState(result.data) });
+      }
+
+      if (body.action === "confirm_review") {
+        const existing = await loadCapture(supabase, user.id, body.captureId);
+        if (!existing) return send(res, 404, { error: "Capture not found" });
+        const analysis = existing.analysis && typeof existing.analysis === "object" ? existing.analysis : {};
+        if (hasCollectionDecisions(analysis)) {
+          return send(res, 409, { error: "Resolve collection suggestions before confirming review." });
+        }
+        const confirmedAt = new Date().toISOString();
+        const update = {
+          analysis: { ...analysis, needs_review: false },
+          analysis_state: "ready",
+          review_confirmed_at: confirmedAt
+        };
+        if (typeof body.title === "string") {
+          const title = body.title.trim() || null;
+          update.title = title;
+          update.display_title = title;
+        }
+        if (typeof body.note === "string") update.context_note = body.note.trim() || null;
+        if (typeof body.currentSaveIntent === "string") {
+          if (!activeSaveIntentKeys.has(body.currentSaveIntent)) {
+            return send(res, 400, { error: "currentSaveIntent is not an active save intent" });
+          }
+          update.current_save_intent = body.currentSaveIntent;
+          update.intent_corrected_at = confirmedAt;
+        }
+        let result = await supabase
+          .from("captures")
+          .update(update)
+          .eq("user_id", user.id)
+          .or(`id.eq.${body.captureId},client_capture_key.eq.${body.captureId}`)
+          .select("*")
+          .single();
+        if (result.error && /review_confirmed_at|intent_corrected_at|schema cache|column/i.test(String(result.error.message || result.error.details || ""))) {
+          const fallbackUpdate = { ...update };
+          delete fallbackUpdate.review_confirmed_at;
+          if (/intent_corrected_at/i.test(String(result.error.message || result.error.details || ""))) {
+            delete fallbackUpdate.intent_corrected_at;
+          }
+          result = await supabase
+            .from("captures")
+            .update(fallbackUpdate)
             .eq("user_id", user.id)
             .or(`id.eq.${body.captureId},client_capture_key.eq.${body.captureId}`)
             .select("*")
