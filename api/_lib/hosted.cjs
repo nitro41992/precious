@@ -154,6 +154,25 @@ function allowCors(req, res) {
   return false;
 }
 
+function captureState(row) {
+  const analysis = row?.analysis && typeof row.analysis === "object" ? row.analysis : {};
+  if (row?.archived_at || analysis.capture_state === "archived") return "archived";
+  return "active";
+}
+
+function withCaptureState(row) {
+  return row ? { ...row, capture_state: captureState(row) } : row;
+}
+
+function withCaptureStates(rows) {
+  return Array.isArray(rows) ? rows.map(withCaptureState) : [];
+}
+
+function mergeAnalysisPatch(row, patch) {
+  const current = row?.analysis && typeof row.analysis === "object" ? row.analysis : {};
+  return { ...current, ...patch };
+}
+
 async function readBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
   if (typeof req.body === "string") return JSON.parse(req.body || "{}");
@@ -1118,5 +1137,8 @@ module.exports = {
   readBody,
   readCapturePayload,
   send,
+  withCaptureState,
+  withCaptureStates,
+  mergeAnalysisPatch,
   withUser
 };

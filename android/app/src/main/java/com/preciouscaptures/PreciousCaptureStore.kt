@@ -42,6 +42,7 @@ object PreciousCaptureStore {
       .put("suggestedCollections", JSONArray())
       .put("searchPhrases", JSONArray())
       .put("note", "")
+      .put("archivedAt", JSONObject.NULL)
       .put("status", "processing")
       .put("createdAt", now)
       .put("updatedAt", now)
@@ -165,7 +166,7 @@ object PreciousCaptureStore {
   }
 
   @Synchronized
-  fun update(context: Context, id: String, title: String, note: String): JSONArray {
+  fun update(context: Context, id: String, title: String, note: String, currentSaveIntent: String?): JSONArray {
     val captures = list(context)
     val now = System.currentTimeMillis()
     val next = JSONArray()
@@ -175,6 +176,34 @@ object PreciousCaptureStore {
         capture
           .put("title", title.ifBlank { capture.optString("title", "Untitled capture") })
           .put("note", note)
+          .put("updatedAt", now)
+        if (!currentSaveIntent.isNullOrBlank()) {
+          capture
+            .put("defaultIntent", currentSaveIntent)
+            .put("intentCorrectedAt", now)
+        }
+      }
+      next.put(capture)
+    }
+    save(context, next)
+    return next
+  }
+
+  @Synchronized
+  fun archive(context: Context, id: String): JSONArray = setArchived(context, id, true)
+
+  @Synchronized
+  fun restore(context: Context, id: String): JSONArray = setArchived(context, id, false)
+
+  private fun setArchived(context: Context, id: String, archived: Boolean): JSONArray {
+    val captures = list(context)
+    val now = System.currentTimeMillis()
+    val next = JSONArray()
+    for (index in 0 until captures.length()) {
+      val capture = captures.getJSONObject(index)
+      if (capture.optString("id") == id) {
+        capture
+          .put("archivedAt", if (archived) now else JSONObject.NULL)
           .put("updatedAt", now)
       }
       next.put(capture)

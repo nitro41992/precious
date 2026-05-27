@@ -39,11 +39,29 @@ class PreciousCaptureStoreModule(
   }
 
   @ReactMethod
-  fun updateCapture(id: String, title: String, note: String, promise: Promise) {
+  fun updateCapture(id: String, title: String, note: String, currentSaveIntent: String?, promise: Promise) {
     try {
-      promise.resolve(PreciousCaptureStore.update(reactContext, id, title, note).toString())
+      promise.resolve(PreciousCaptureStore.update(reactContext, id, title, note, currentSaveIntent).toString())
     } catch (error: Exception) {
       promise.reject("capture_store_update_failed", error)
+    }
+  }
+
+  @ReactMethod
+  fun archiveCapture(id: String, promise: Promise) {
+    try {
+      promise.resolve(PreciousCaptureStore.archive(reactContext, id).toString())
+    } catch (error: Exception) {
+      promise.reject("capture_store_archive_failed", error)
+    }
+  }
+
+  @ReactMethod
+  fun restoreCapture(id: String, promise: Promise) {
+    try {
+      promise.resolve(PreciousCaptureStore.restore(reactContext, id).toString())
+    } catch (error: Exception) {
+      promise.reject("capture_store_restore_failed", error)
     }
   }
 }

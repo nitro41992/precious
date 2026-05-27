@@ -10,7 +10,8 @@ class PreciousCapturePackage : ReactPackage {
     listOf(
       PreciousCaptureStoreModule(reactContext),
       PreciousAuthModule(reactContext),
-      PreciousNetworkModule(reactContext)
+      PreciousNetworkModule(reactContext),
+      PreciousClipboardModule(reactContext)
     )
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =

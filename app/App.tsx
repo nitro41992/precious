@@ -2,6 +2,7 @@ import "react-native-url-polyfill/auto";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   AppState,
   BackHandler,
   FlatList,
@@ -48,6 +49,7 @@ type Capture = {
   suggestedCollections?: Array<{ name: string; rationale: string; confidence: number }>;
   searchPhrases?: string[];
   note: string;
+  archivedAt?: number | null;
   status: CaptureStatus;
   createdAt: number;
   updatedAt: number;
@@ -57,7 +59,9 @@ type Capture = {
 type CaptureStore = {
   captureSource: (sourceText: string) => Promise<string>;
   getCaptures: () => Promise<string>;
-  updateCapture: (id: string, title: string, note: string) => Promise<string>;
+  updateCapture: (id: string, title: string, note: string, currentSaveIntent: string | null) => Promise<string>;
+  archiveCapture: (id: string) => Promise<string>;
+  restoreCapture: (id: string) => Promise<string>;
 };
 
 type AuthSession = {
@@ -96,9 +100,27 @@ type NativeNetwork = {
   ) => Promise<string>;
 };
 
+type NativeClipboard = {
+  copy: (text: string) => Promise<boolean>;
+};
+
 const nativeStore = NativeModules.PreciousCaptureStore as CaptureStore | undefined;
 const nativeAuth = NativeModules.PreciousAuth as NativeAuth | undefined;
 const nativeNetwork = NativeModules.PreciousNetwork as NativeNetwork | undefined;
+const nativeClipboard = NativeModules.PreciousClipboard as NativeClipboard | undefined;
+
+const INTENT_OPTIONS = [
+  "watch_later",
+  "read_later",
+  "try_place",
+  "buy_later",
+  "cook_or_make",
+  "remember",
+  "follow_up",
+  "other"
+] as const;
+
+type CaptureListMode = "active" | "archived";
 
 class ApiRequestError extends Error {
   status: number;
@@ -137,6 +159,15 @@ function humanize(value: string | undefined) {
   return value
     .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function normalizeIntent(value: string | undefined) {
+  if (!value) return "";
+  return INTENT_OPTIONS.includes(value as (typeof INTENT_OPTIONS)[number]) ? value : "";
+}
+
+function isArchived(capture: Pick<Capture, "archivedAt">) {
+  return Boolean(capture.archivedAt);
 }
 
 function statusLabel(status: CaptureStatus) {
@@ -178,6 +209,7 @@ function friendlyError(error: unknown, fallback: string) {
 function captureFromRemote(row: Record<string, any>): Capture {
   const analysis = row.analysis ?? {};
   const defaultIntent = analysis.default_intent ?? {};
+  const archivedAtValue = row.archived_at || analysis.archived_at || null;
   const cancelRequested = Boolean(row.analysis_cancel_requested_at);
   const analysisMode = nullableValue(row.analysis_mode) || (nullableValue(row.analysis_provider) ? "llm" : undefined);
   const remoteHasExtractedData = Boolean(
@@ -208,7 +240,7 @@ function captureFromRemote(row: Record<string, any>): Capture {
     analysisError: cancelRequested
       ? row.analysis_error || "AI processing was cancelled."
       : row.analysis_error || undefined,
-    defaultIntent: row.default_intent || defaultIntent.category || undefined,
+    defaultIntent: row.current_save_intent || row.default_intent || defaultIntent.category || undefined,
     intentRationale: row.intent_rationale || defaultIntent.rationale || undefined,
     confidenceLabel: analysis.confidence_label || undefined,
     needsReview: Boolean(analysis.needs_review || row.analysis_state === "needs_review"),
@@ -217,6 +249,16 @@ function captureFromRemote(row: Record<string, any>): Capture {
     suggestedCollections: row.collection_suggestions || analysis.suggested_collections || [],
     searchPhrases: analysis.search_phrases || [],
     note: String(row.context_note || ""),
+    archivedAt:
+      archivedAtValue
+        ? typeof archivedAtValue === "number"
+          ? archivedAtValue
+          : Date.parse(String(archivedAtValue))
+        : analysis.capture_state === "archived" || row.capture_state === "archived"
+          ? row.updated_at
+            ? Date.parse(row.updated_at)
+            : Date.now()
+          : null,
     status:
       cancelRequested
         ? "cancelled"
@@ -245,10 +287,10 @@ function isEdgeCaptureApi(apiUrl: string) {
   return apiUrl.includes("/functions/v1/");
 }
 
-function captureListUrl(apiUrl: string) {
+function captureListUrl(apiUrl: string, archived = false) {
   return isEdgeCaptureApi(apiUrl)
     ? `${apiUrl}?limit=50`
-    : `${apiUrl}/api/captures?view=summary&limit=50`;
+    : `${apiUrl}/api/captures?view=summary&limit=50&archived=${archived ? "true" : "false"}`;
 }
 
 function captureMutationUrl(apiUrl: string) {
@@ -285,8 +327,10 @@ export default function App() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [listMode, setListMode] = useState<CaptureListMode>("active");
   const [draftTitle, setDraftTitle] = useState("");
   const [draftNote, setDraftNote] = useState("");
+  const [draftIntent, setDraftIntent] = useState("");
   const [message, setMessage] = useState("");
   const [sourceDraft, setSourceDraft] = useState("");
   const [savingCapture, setSavingCapture] = useState(false);
@@ -321,7 +365,7 @@ export default function App() {
       const activeSession = await getFreshSession();
       if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
       const loadWithToken = (accessToken: string) =>
-        requestJson<{ captures?: Array<Record<string, any>> }>(captureListUrl(config.apiUrl), {
+        requestJson<{ captures?: Array<Record<string, any>> }>(captureListUrl(config.apiUrl, listMode === "archived"), {
           headers: {
             accept: "application/json",
             apikey: config.supabaseAnonKey,
@@ -351,7 +395,7 @@ export default function App() {
     const next = JSON.parse(raw || "[]") as Capture[];
     next.sort((a, b) => b.createdAt - a.createdAt);
     setCaptures(next);
-  }, [config, getFreshSession, session]);
+  }, [config, getFreshSession, listMode, session]);
 
   const openCapture = useCallback(
     (captureId: string | null) => {
@@ -364,6 +408,7 @@ export default function App() {
       setSelectedId(capture.id);
       setDraftTitle(capture.title);
       setDraftNote(capture.note);
+      setDraftIntent(normalizeIntent(capture.defaultIntent));
     },
     [captures]
   );
@@ -415,6 +460,7 @@ export default function App() {
     if (!capture) return;
     setDraftTitle(capture.title);
     setDraftNote(capture.note);
+    setDraftIntent(normalizeIntent(capture.defaultIntent));
   }, [captures, selectedId]);
 
   useEffect(() => {
@@ -428,14 +474,15 @@ export default function App() {
 
   const filteredCaptures = useMemo(() => {
     const term = query.trim().toLowerCase();
-    if (!term) return captures;
-    return captures.filter((capture) =>
+    const visible = captures.filter((capture) => isArchived(capture) === (listMode === "archived"));
+    if (!term) return visible;
+    return visible.filter((capture) =>
       [capture.title, capture.summary ?? "", capture.note, capture.sourceText, capture.sourceUrl ?? ""]
         .join(" ")
         .toLowerCase()
         .includes(term)
     );
-  }, [captures, query]);
+  }, [captures, listMode, query]);
 
   const selected = selectedId ? captures.find((capture) => capture.id === selectedId) ?? null : null;
   const selectedAnalysisMode = nullableValue(selected?.analysisMode);
@@ -461,7 +508,8 @@ export default function App() {
             body: {
               captureId: selected.remoteId || selected.id,
               title: draftTitle.trim(),
-              note: draftNote.trim()
+              note: draftNote.trim(),
+              currentSaveIntent: draftIntent || undefined
             }
           });
         let json: { capture: Record<string, any> };
@@ -483,11 +531,86 @@ export default function App() {
       return;
     }
     if (!nativeStore) return;
-    const raw = await nativeStore.updateCapture(selected.id, draftTitle.trim(), draftNote.trim());
+    const raw = await nativeStore.updateCapture(selected.id, draftTitle.trim(), draftNote.trim(), draftIntent || null);
     const next = JSON.parse(raw || "[]") as Capture[];
     next.sort((a, b) => b.createdAt - a.createdAt);
     setCaptures(next);
     setMessage("Saved.");
+  }
+
+  async function copySource() {
+    if (!selected) return;
+    const source = selected.sourceUrl || selected.sourceText;
+    if (!source) return;
+    try {
+      if (!nativeClipboard) throw new Error("Clipboard is unavailable.");
+      await nativeClipboard?.copy(source);
+      setMessage("Source copied.");
+    } catch (error) {
+      setMessage(friendlyError(error, "Could not copy source."));
+    }
+  }
+
+  async function setArchiveState(archived: boolean) {
+    if (!selected) return;
+    if (config?.apiUrl && session?.accessToken) {
+      try {
+        const activeSession = await getFreshSession();
+        if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
+        const updateWithToken = (accessToken: string) =>
+          requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
+            method: "PATCH",
+            headers: {
+              apikey: config.supabaseAnonKey,
+              authorization: `Bearer ${accessToken}`,
+              "content-type": "application/json"
+            },
+            body: {
+              captureId: selected.remoteId || selected.id,
+              action: archived ? "archive" : "restore"
+            }
+          });
+        try {
+          await updateWithToken(activeSession.accessToken);
+        } catch (error) {
+          if (!isAuthError(error)) throw error;
+          const refreshed = await getFreshSession(true);
+          if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
+          await updateWithToken(refreshed.accessToken);
+        }
+        setSelectedId(null);
+        setMessage(archived ? "Archived." : "Restored.");
+        await loadCaptures();
+      } catch (error) {
+        setMessage(friendlyError(error, archived ? "Could not archive." : "Could not restore."));
+      }
+      return;
+    }
+    if (!nativeStore) return;
+    const raw = archived
+      ? await nativeStore.archiveCapture(selected.id)
+      : await nativeStore.restoreCapture(selected.id);
+    const next = JSON.parse(raw || "[]") as Capture[];
+    next.sort((a, b) => b.createdAt - a.createdAt);
+    setCaptures(next);
+    setSelectedId(null);
+    setMessage(archived ? "Archived." : "Restored.");
+  }
+
+  function confirmArchive() {
+    if (!selected) return;
+    if (isArchived(selected)) {
+      void setArchiveState(false);
+      return;
+    }
+    Alert.alert(
+      "Archive this capture?",
+      "You can restore it from Archived.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Archive", style: "destructive", onPress: () => void setArchiveState(true) }
+      ]
+    );
   }
 
   async function saveCaptureSource() {
@@ -603,32 +726,77 @@ export default function App() {
   }
 
   if (selected) {
+    const selectedArchived = isArchived(selected);
+    const sourceValue = selected.sourceUrl || selected.sourceText;
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="dark-content" />
         <ScrollView contentContainerStyle={styles.detail}>
-          <Pressable onPress={() => setSelectedId(null)} style={styles.textButton}>
-            <Text style={styles.textButtonText}>Back</Text>
-          </Pressable>
-          <Text style={styles.kicker}>{displayStatus(selected) === "processing" ? "Processing" : "Quick edit"}</Text>
+          <View style={styles.detailHeader}>
+            <Pressable onPress={() => setSelectedId(null)} style={styles.textButton}>
+              <Text style={styles.textButtonText}>Back</Text>
+            </Pressable>
+            <Text
+              style={[
+                styles.status,
+                displayStatus(selected) === "processing" && styles.statusProcessing,
+                displayStatus(selected) === "needs_review" && styles.statusReview,
+                displayStatus(selected) === "failed" && styles.statusFailed,
+                displayStatus(selected) === "cancelled" && styles.statusCancelled
+              ]}
+            >
+              {selectedArchived ? "Archived" : statusLabel(displayStatus(selected))}
+            </Text>
+          </View>
+          <Text style={styles.kicker}>Capture review</Text>
           <TextInput
+            multiline
             onChangeText={setDraftTitle}
             placeholder="Title"
             placeholderTextColor={colors.muted}
             style={styles.titleInput}
             value={draftTitle}
           />
-          <TextInput
-            multiline
-            onChangeText={setDraftNote}
-            placeholder="Why this is precious"
-            placeholderTextColor={colors.muted}
-            style={styles.noteInput}
-            value={draftNote}
-          />
+          <View style={styles.editBlock}>
+            <Text style={styles.fieldLabel}>Save intent</Text>
+            <View style={styles.intentGrid}>
+              {INTENT_OPTIONS.map((intent) => {
+                const selectedIntent = draftIntent === intent;
+                return (
+                  <Pressable
+                    key={intent}
+                    onPress={() => setDraftIntent(intent)}
+                    style={[styles.intentChip, selectedIntent && styles.intentChipSelected]}
+                  >
+                    <Text style={[styles.intentChipText, selectedIntent && styles.intentChipTextSelected]}>
+                      {humanize(intent)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+          <View style={styles.editBlock}>
+            <Text style={styles.fieldLabel}>Context note</Text>
+            <TextInput
+              multiline
+              onChangeText={setDraftNote}
+              placeholder="Add why you saved this, if the extraction missed it"
+              placeholderTextColor={colors.muted}
+              style={styles.noteInput}
+              value={draftNote}
+            />
+          </View>
           <View style={styles.sourceBlock}>
-            <Text style={styles.meta}>Source</Text>
-            <Text style={styles.sourceText}>{selected.sourceUrl || selected.sourceText}</Text>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.meta}>Source</Text>
+              {sourceValue ? (
+                <Pressable onPress={() => void copySource()} hitSlop={8}>
+                  <Text style={styles.inlineAction}>Copy</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            <Text selectable style={styles.sourceText}>{sourceValue}</Text>
           </View>
           {selectedSummary ? (
             <View style={styles.sourceBlock}>
@@ -691,8 +859,13 @@ export default function App() {
               ))}
             </View>
           ) : null}
-          <Pressable onPress={saveQuickEdit} style={styles.primaryButton}>
+          <Pressable onPress={() => void saveQuickEdit()} style={styles.primaryButton}>
             <Text style={styles.primaryButtonText}>Save</Text>
+          </Pressable>
+          <Pressable onPress={confirmArchive} style={styles.secondaryButton}>
+            <Text style={selectedArchived ? styles.secondaryButtonText : styles.dangerButtonText}>
+              {selectedArchived ? "Restore capture" : "Archive capture"}
+            </Text>
           </Pressable>
           {message ? <Text style={styles.message}>{message}</Text> : null}
         </ScrollView>
@@ -753,7 +926,7 @@ export default function App() {
       <StatusBar barStyle="dark-content" />
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.kicker}>{captures.length} captures</Text>
+          <Text style={styles.kicker}>{filteredCaptures.length} {listMode === "archived" ? "archived" : "active"} captures</Text>
           <Text style={styles.title}>Precious Captures</Text>
           {session ? (
             <Pressable onPress={() => void signOut()} style={styles.textButton}>
@@ -768,6 +941,22 @@ export default function App() {
           style={styles.search}
           value={query}
         />
+        <View style={styles.segmented}>
+          {(["active", "archived"] as const).map((mode) => (
+            <Pressable
+              key={mode}
+              onPress={() => {
+                setListMode(mode);
+                setSelectedId(null);
+              }}
+              style={[styles.segment, listMode === mode && styles.segmentSelected]}
+            >
+              <Text style={[styles.segmentText, listMode === mode && styles.segmentTextSelected]}>
+                {mode === "active" ? "Active" : "Archived"}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
         <View style={styles.captureBox}>
           <TextInput
             multiline
@@ -798,9 +987,13 @@ export default function App() {
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>Share something in.</Text>
+              <Text style={styles.emptyTitle}>
+                {listMode === "archived" ? "No archived captures." : "Share something in."}
+              </Text>
               <Text style={styles.emptyText}>
-                Use the Android share sheet from a browser, message, or notes app.
+                {listMode === "archived"
+                  ? "Archived captures will appear here so you can restore them later."
+                  : "Use the Android share sheet from a browser, message, or notes app."}
               </Text>
             </View>
           }
@@ -856,6 +1049,30 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingHorizontal: 14,
     paddingVertical: 12
+  },
+  segmented: {
+    backgroundColor: colors.soft,
+    borderRadius: 8,
+    flexDirection: "row",
+    marginBottom: 12,
+    padding: 3
+  },
+  segment: {
+    alignItems: "center",
+    borderRadius: 6,
+    flex: 1,
+    paddingVertical: 8
+  },
+  segmentSelected: {
+    backgroundColor: colors.paper
+  },
+  segmentText: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "700"
+  },
+  segmentTextSelected: {
+    color: colors.ink
   },
   captureBox: {
     borderBottomColor: colors.line,
@@ -960,6 +1177,11 @@ const styles = StyleSheet.create({
     gap: 16,
     padding: 22
   },
+  detailHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between"
+  },
   textButton: {
     alignSelf: "flex-start",
     paddingVertical: 8
@@ -971,16 +1193,49 @@ const styles = StyleSheet.create({
   },
   titleInput: {
     color: colors.ink,
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: "700",
+    lineHeight: 34,
     paddingVertical: 6
+  },
+  editBlock: {
+    gap: 8
+  },
+  fieldLabel: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "700"
+  },
+  intentGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  intentChip: {
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8
+  },
+  intentChipSelected: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink
+  },
+  intentChipText: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "700"
+  },
+  intentChipTextSelected: {
+    color: colors.paper
   },
   noteInput: {
     backgroundColor: colors.soft,
     borderRadius: 8,
     color: colors.ink,
-    fontSize: 17,
-    minHeight: 132,
+    fontSize: 15,
+    minHeight: 104,
     padding: 14,
     textAlignVertical: "top"
   },
@@ -989,6 +1244,16 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 8,
     paddingTop: 16
+  },
+  sectionHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between"
+  },
+  inlineAction: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "700"
   },
   sourceText: {
     color: colors.ink,
@@ -1028,6 +1293,11 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: colors.ink,
+    fontSize: 16,
+    fontWeight: "700"
+  },
+  dangerButtonText: {
+    color: "#9f3d2e",
     fontSize: 16,
     fontWeight: "700"
   },
