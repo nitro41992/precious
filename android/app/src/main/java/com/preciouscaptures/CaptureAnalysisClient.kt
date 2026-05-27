@@ -129,8 +129,8 @@ object CaptureAnalysisClient {
     val edge = isEdgeFunction(apiUrl)
     val url = if (edge) apiUrl else "$apiUrl/api/captures"
     val asset = assetPath?.ifBlank { null }?.let { File(it) }
-    if (asset != null && asset.exists() && asset.length() > 0 && !edge) {
-      return postMultipartCapture(url, accessToken, captureId, sourceText, sourceUrl, asset, assetMimeType, assetFileName)
+    if (asset != null && asset.exists() && asset.length() > 0) {
+      return postMultipartCapture(url, accessToken, captureId, sourceText, sourceUrl, asset, assetMimeType, assetFileName, edge)
         ?.optJSONObject("capture")
     }
     return request(url, "POST", accessToken) { connection ->
@@ -152,7 +152,8 @@ object CaptureAnalysisClient {
     sourceUrl: String?,
     asset: File,
     assetMimeType: String?,
-    assetFileName: String?
+    assetFileName: String?,
+    autoAnalyze: Boolean
   ): JSONObject? {
     val boundary = "PreciousCapture-${UUID.randomUUID()}"
     return runCatching {
@@ -181,7 +182,7 @@ object CaptureAnalysisClient {
         field("sourceText", sourceText)
         field("sourceUrl", sourceUrl)
         field("sourceApp", "Android Share")
-        field("autoAnalyze", "false")
+        field("autoAnalyze", if (autoAnalyze) "true" else "false")
         output.write("--$boundary\r\n".toByteArray())
         output.write(
           "Content-Disposition: form-data; name=\"asset\"; filename=\"${safeMultipartFilename(assetFileName ?: asset.name)}\"\r\n"

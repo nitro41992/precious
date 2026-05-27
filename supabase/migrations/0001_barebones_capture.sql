@@ -1,7 +1,7 @@
-create extension if not exists "uuid-ossp";
+create extension if not exists "pgcrypto";
 
 create table if not exists captures (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   client_capture_key text,
   source_url text,
@@ -47,7 +47,7 @@ alter table captures add column if not exists analysis_cancel_reason text;
 alter table captures add column if not exists processed_at timestamptz;
 
 create table if not exists analysis_runs (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   capture_id uuid not null references captures(id) on delete cascade,
   provider text not null,
@@ -68,7 +68,7 @@ alter table analysis_runs add column if not exists raw_model_output text;
 alter table analysis_runs add column if not exists error_message text;
 
 create table if not exists captured_entities (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   capture_id uuid not null references captures(id) on delete cascade,
   analysis_run_id uuid references analysis_runs(id) on delete set null,
@@ -89,7 +89,7 @@ alter table captured_entities add column if not exists source text;
 alter table captured_entities add column if not exists confidence numeric;
 
 create table if not exists reminder_suggestions (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   capture_id uuid not null references captures(id) on delete cascade,
   analysis_run_id uuid references analysis_runs(id) on delete set null,
@@ -103,7 +103,7 @@ create table if not exists reminder_suggestions (
 );
 
 create table if not exists reminders (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   capture_id uuid not null references captures(id) on delete cascade,
   analysis_run_id uuid references analysis_runs(id) on delete set null,
@@ -123,7 +123,7 @@ alter table reminders add column if not exists analysis_run_id uuid references a
 alter table reminders add column if not exists confidence numeric;
 
 create table if not exists collection_suggestions (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   capture_id uuid not null references captures(id) on delete cascade,
   analysis_run_id uuid references analysis_runs(id) on delete set null,
@@ -136,7 +136,7 @@ create table if not exists collection_suggestions (
 );
 
 create table if not exists collections (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   name text not null,
   rationale text,
@@ -146,7 +146,7 @@ create table if not exists collections (
 );
 
 create table if not exists search_documents (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   capture_id uuid not null references captures(id) on delete cascade,
   analysis_run_id uuid references analysis_runs(id) on delete set null,

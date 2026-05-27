@@ -47,7 +47,7 @@ class ShareProcessWorker(
     if (!assetPath.isNullOrBlank()) {
       runCatching { File(assetPath).delete() }
     }
-    if (PreciousCaptureStore.isCancelled(applicationContext, captureId) || isStopped) {
+    if (PreciousCaptureStore.isCancelled(applicationContext, captureId)) {
       PreciousCaptureStore.cancel(applicationContext, captureId)
       CaptureNotifications.showCancelled(applicationContext, captureId)
       return Result.success()

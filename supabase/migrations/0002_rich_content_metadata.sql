@@ -1,10 +1,10 @@
-create extension if not exists "uuid-ossp";
+create extension if not exists "pgcrypto";
 
 alter table captures add column if not exists capture_type text;
 alter table captures add column if not exists thumbnail_url text;
 
 create table if not exists capture_assets (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   capture_id uuid not null references captures(id) on delete cascade,
   storage_path text not null,
@@ -18,7 +18,7 @@ create index if not exists capture_assets_capture_idx on capture_assets(capture_
 create index if not exists capture_assets_user_created_idx on capture_assets(user_id, created_at desc);
 
 create table if not exists url_metadata (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   normalized_url text not null,
   source_url text,

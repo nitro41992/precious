@@ -10,7 +10,7 @@ function loadEnvFile(path) {
     if (index === -1) continue;
     const key = line.slice(0, index).trim();
     const value = line.slice(index + 1).trim().replace(/^['"]|['"]$/g, "");
-    if (key && process.env[key] == null) process.env[key] = value;
+    if (key && value && !process.env[key]) process.env[key] = value;
   }
 }
 

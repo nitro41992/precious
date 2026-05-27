@@ -11,7 +11,7 @@ function loadEnvFile(path) {
     if (index === -1) continue;
     const key = line.slice(0, index).trim();
     const value = line.slice(index + 1).trim().replace(/^['"]|['"]$/g, "");
-    if (key && process.env[key] == null) process.env[key] = value;
+    if (key && value && !process.env[key]) process.env[key] = value;
   }
 }
 
@@ -29,11 +29,6 @@ const supabaseUrl =
 const match = supabaseUrl.match(/^https:\/\/([a-z0-9-]+)\.supabase\.co\/?$/i);
 if (!match) {
   console.error("Missing or invalid EXPO_PUBLIC_SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL.");
-  process.exit(1);
-}
-
-if (!process.env.SUPABASE_ACCESS_TOKEN) {
-  console.error("Missing SUPABASE_ACCESS_TOKEN. Create one in Supabase account settings or run `npx supabase login`.");
   process.exit(1);
 }
 

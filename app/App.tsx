@@ -289,7 +289,7 @@ function isEdgeCaptureApi(apiUrl: string) {
 
 function captureListUrl(apiUrl: string, archived = false) {
   return isEdgeCaptureApi(apiUrl)
-    ? `${apiUrl}?limit=50`
+    ? `${apiUrl}?limit=50&archived=${archived ? "true" : "false"}`
     : `${apiUrl}/api/captures?view=summary&limit=50&archived=${archived ? "true" : "false"}`;
 }
 

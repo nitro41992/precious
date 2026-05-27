@@ -4,6 +4,7 @@ node_modules/
 .expo/
 .env
 .env.*
+!.env.example
 android/.gradle/
 android/app/.cxx/
 android/build/
@@ -11,6 +12,7 @@ android/app/build/
 android/local.properties
 android/app/debug.keystore
 server/data/
+supabase/.temp/
 *.log
 *.hprof
 tsconfig.tsbuildinfo

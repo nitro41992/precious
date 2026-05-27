@@ -3,9 +3,26 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 type CaptureRow = {
   id: string;
   user_id: string;
+  capture_type?: string | null;
   source_url: string | null;
   source_text: string | null;
   source_app: string | null;
+  asset_url?: string;
+  asset_mime_type?: string | null;
+  capture_assets?: Array<{
+    storage_path: string;
+    mime_type: string | null;
+  }>;
+};
+
+type CapturePayload = {
+  fields: Record<string, string>;
+  asset: {
+    filename: string;
+    contentType: string;
+    bytes: ArrayBuffer;
+    size: number;
+  } | null;
 };
 
 const PROMPT_VERSION = "precious-capture-analysis-v1";
@@ -113,6 +130,15 @@ function json(body: unknown, status = 200) {
   });
 }
 
+function errorMessage(error: unknown, fallback = "Unexpected error") {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object") {
+    const value = error as Record<string, unknown>;
+    return String(value.message || value.details || value.hint || value.code || fallback);
+  }
+  return fallback;
+}
+
 function env(name: string) {
   const value = Deno.env.get(name);
   if (!value) throw new Error(`${name} is not configured`);
@@ -146,6 +172,73 @@ function titleFallback(sourceText: string | null, sourceUrl: string | null) {
     }
   }
   return sourceText?.trim().split(/\n/)[0]?.slice(0, 80) || "Untitled capture";
+}
+
+function safeFilename(value: string) {
+  return String(value || "shared-file")
+    .replace(/[/\\?%*:|"<>]/g, "-")
+    .replace(/\s+/g, "-")
+    .slice(0, 120) || "shared-file";
+}
+
+function inferCaptureType(sourceUrl: string | null, sourceText: string | null) {
+  if (sourceUrl) return "link";
+  return sourceText ? "text_note" : "unknown";
+}
+
+function captureState(row: any) {
+  const analysis = row?.analysis && typeof row.analysis === "object" ? row.analysis : {};
+  if (row?.archived_at || analysis.capture_state === "archived") return "archived";
+  return "active";
+}
+
+function withCaptureState(row: any) {
+  return row ? { ...row, capture_state: captureState(row) } : row;
+}
+
+function withCaptureStates(rows: any[]) {
+  return Array.isArray(rows) ? rows.map(withCaptureState) : [];
+}
+
+function archivedFilter(row: any, archived: boolean) {
+  return archived ? captureState(row) === "archived" : captureState(row) !== "archived";
+}
+
+function mergeAnalysisPatch(row: any, patch: Record<string, unknown>) {
+  const current = row?.analysis && typeof row.analysis === "object" ? row.analysis : {};
+  return { ...current, ...patch };
+}
+
+async function readCapturePayload(request: Request): Promise<CapturePayload> {
+  const contentType = request.headers.get("content-type") || "";
+  if (!/multipart\/form-data/i.test(contentType)) {
+    return { fields: await request.json().catch(() => ({})), asset: null };
+  }
+
+  const form = await request.formData();
+  const fields: Record<string, string> = {};
+  let asset: CapturePayload["asset"] = null;
+  for (const [key, value] of form.entries()) {
+    if (value instanceof File) {
+      if (key === "asset" && value.size > 0 && !asset) {
+        asset = {
+          filename: value.name || "shared-file",
+          contentType: value.type || "application/octet-stream",
+          bytes: await value.arrayBuffer(),
+          size: value.size
+        };
+      }
+    } else {
+      fields[key] = value;
+    }
+  }
+  return { fields, asset };
+}
+
+async function ensureCaptureBucket(supabase: ReturnType<typeof adminClient>) {
+  const { error } = await supabase.storage.getBucket("captures");
+  if (!error) return;
+  await supabase.storage.createBucket("captures", { public: false }).catch(() => {});
 }
 
 async function fetchUrlMetadata(sourceUrl: string | null) {
@@ -206,6 +299,12 @@ function buildPrompt(capture: CaptureRow, urlMetadata: unknown) {
         source_app: capture.source_app,
         source_url: capture.source_url,
         source_text: capture.source_text,
+        asset: capture.asset_url
+          ? {
+              mime_type: capture.asset_mime_type || null,
+              purpose: "Optional shared image evidence from the Android share sheet."
+            }
+          : null,
         url_metadata: urlMetadata
       },
       null,
@@ -227,6 +326,10 @@ function responseText(payload: any) {
 async function runOpenAi(capture: CaptureRow, urlMetadata: unknown) {
   const started = Date.now();
   const model = Deno.env.get("OPENAI_MODEL") || "gpt-5-mini";
+  const userContent: Array<Record<string, unknown>> = [{ type: "input_text", text: buildPrompt(capture, urlMetadata) }];
+  if (capture.asset_url && String(capture.asset_mime_type || "").startsWith("image/")) {
+    userContent.push({ type: "input_image", image_url: capture.asset_url });
+  }
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -240,7 +343,7 @@ async function runOpenAi(capture: CaptureRow, urlMetadata: unknown) {
           role: "system",
           content: "You are Sharebook's capture analysis worker. Produce only schema-valid extraction output."
         },
-        { role: "user", content: buildPrompt(capture, urlMetadata) }
+        { role: "user", content: userContent }
       ],
       text: {
         format: {
@@ -284,7 +387,7 @@ async function processCapture(captureId: string, userId: string) {
   const supabase = adminClient();
   const { data: capture, error: captureError } = await supabase
     .from("captures")
-    .select("*")
+    .select("*, capture_assets(*)")
     .eq("id", captureId)
     .eq("user_id", userId)
     .single();
@@ -298,7 +401,16 @@ async function processCapture(captureId: string, userId: string) {
 
   try {
     const urlMetadata = await fetchUrlMetadata(capture.source_url);
-    const result = await runOpenAi(capture, urlMetadata);
+    const asset = Array.isArray(capture.capture_assets) ? capture.capture_assets[0] : null;
+    const signedAsset =
+      asset?.storage_path && String(asset.mime_type || "").startsWith("image/")
+        ? await supabase.storage.from("captures").createSignedUrl(asset.storage_path, 60 * 10)
+        : null;
+    const captureForAnalysis =
+      signedAsset?.data?.signedUrl
+        ? { ...capture, asset_url: signedAsset.data.signedUrl, asset_mime_type: asset.mime_type }
+        : capture;
+    const result = await runOpenAi(captureForAnalysis, urlMetadata);
     const analysis = result.analysis;
     const { data: run, error: runError } = await supabase
       .from("analysis_runs")
@@ -442,19 +554,21 @@ async function processCapture(captureId: string, userId: string) {
   }
 }
 
-async function createOrGetCapture(request: Request, userId: string) {
-  const body = await request.json().catch(() => ({}));
-  const sourceText = typeof body.sourceText === "string" ? body.sourceText.trim() : "";
+async function createOrGetCaptureFromFields(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  fields: Record<string, unknown>
+) {
+  const sourceText = typeof fields.sourceText === "string" ? fields.sourceText.trim() : "";
   const sourceUrl =
-    typeof body.sourceUrl === "string" && body.sourceUrl.trim()
-      ? body.sourceUrl.trim()
+    typeof fields.sourceUrl === "string" && fields.sourceUrl.trim()
+      ? fields.sourceUrl.trim()
       : extractUrl(sourceText);
   if (!sourceText && !sourceUrl) throw new Error("sourceText or sourceUrl is required");
 
-  const supabase = adminClient();
   const clientCaptureKey =
-    typeof body.clientCaptureKey === "string" && body.clientCaptureKey.trim()
-      ? body.clientCaptureKey.trim()
+    typeof fields.clientCaptureKey === "string" && fields.clientCaptureKey.trim()
+      ? fields.clientCaptureKey.trim()
       : crypto.randomUUID();
 
   const existing = await supabase
@@ -471,9 +585,10 @@ async function createOrGetCapture(request: Request, userId: string) {
     .insert({
       user_id: userId,
       client_capture_key: clientCaptureKey,
+      capture_type: inferCaptureType(sourceUrl, sourceText),
       source_url: sourceUrl,
       source_text: sourceText,
-      source_app: typeof body.sourceApp === "string" ? body.sourceApp : "Android Share",
+      source_app: typeof fields.sourceApp === "string" ? fields.sourceApp : "Android Share",
       display_title: titleFallback(sourceText, sourceUrl),
       analysis_state: "queued"
     })
@@ -481,6 +596,70 @@ async function createOrGetCapture(request: Request, userId: string) {
     .single();
   if (error) throw error;
   return data;
+}
+
+async function createOrGetCaptureWithAsset(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  fields: Record<string, unknown>,
+  asset: CapturePayload["asset"]
+) {
+  const sourceText =
+    typeof fields.sourceText === "string" && fields.sourceText.trim()
+      ? fields.sourceText.trim()
+      : asset
+        ? `Shared ${asset.contentType.split("/")[0] || "file"}: ${asset.filename || "attachment"}`
+        : "";
+  const capture = await createOrGetCaptureFromFields(supabase, userId, {
+    ...fields,
+    sourceText,
+    sourceUrl:
+      typeof fields.sourceUrl === "string" && fields.sourceUrl.trim()
+        ? fields.sourceUrl
+        : extractUrl(sourceText),
+    sourceApp: typeof fields.sourceApp === "string" ? fields.sourceApp : "Android Share"
+  });
+  if (!asset || !asset.size) return capture;
+
+  const existing = await supabase
+    .from("capture_assets")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("capture_id", capture.id)
+    .maybeSingle();
+  if (existing.error && existing.error.code !== "PGRST116") throw existing.error;
+  if (existing?.data) return capture;
+
+  const extension = safeFilename(asset.filename).split(".").pop() || "bin";
+  const storagePath = `${userId}/${capture.id}/${crypto.randomUUID()}.${extension}`;
+  await ensureCaptureBucket(supabase);
+  const upload = await supabase.storage.from("captures").upload(storagePath, asset.bytes, {
+    contentType: asset.contentType || "application/octet-stream",
+    upsert: false
+  });
+  if (upload.error) throw upload.error;
+
+  const { error: assetError } = await supabase.from("capture_assets").insert({
+    user_id: userId,
+    capture_id: capture.id,
+    storage_path: storagePath,
+    public_url: null,
+    mime_type: asset.contentType || "application/octet-stream",
+    byte_size: asset.size
+  });
+  if (assetError) throw assetError;
+
+  const { data: updated, error: updateError } = await supabase
+    .from("captures")
+    .update({
+      capture_type: asset.contentType.startsWith("image/") ? "image" : capture.capture_type
+    })
+    .eq("id", capture.id)
+    .eq("user_id", userId)
+    .select("*")
+    .single();
+  if (updateError) throw updateError;
+  return updated;
 }
 
 Deno.serve(async (request) => {
@@ -494,46 +673,108 @@ Deno.serve(async (request) => {
 
     if (request.method === "GET") {
       const clientCaptureKey = url.searchParams.get("clientCaptureKey");
+      const archived = url.searchParams.get("archived") === "true";
       let query = supabase
         .from("captures")
-        .select("*, captured_entities(*), reminder_suggestions(*), reminders(*), collection_suggestions(*)")
+        .select("*, captured_entities(*), reminder_suggestions(*), reminders!reminders_capture_id_fkey(*), collection_suggestions(*), capture_assets(*)")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
       if (clientCaptureKey) query = query.eq("client_capture_key", clientCaptureKey).limit(1);
       else query = query.limit(Number(url.searchParams.get("limit") || 50));
       const { data, error } = await query;
       if (error) throw error;
-      if (clientCaptureKey) return json({ capture: data?.[0] ?? null });
-      return json({ captures: data ?? [] });
+      if (clientCaptureKey) return json({ capture: withCaptureState(data?.[0] ?? null) });
+      return json({ captures: withCaptureStates(data ?? []).filter((row) => archivedFilter(row, archived)) });
     }
 
     if (request.method === "PATCH") {
       const body = await request.json().catch(() => ({}));
       const captureId = typeof body.captureId === "string" ? body.captureId : "";
       if (!captureId) return json({ error: "captureId is required" }, 400);
-      const { data, error } = await supabase
+
+      const existingResult = await supabase
         .from("captures")
-        .update({
-          title: typeof body.title === "string" ? body.title : undefined,
-          display_title: typeof body.title === "string" ? body.title : undefined,
-          context_note: typeof body.note === "string" ? body.note : undefined
-        })
+        .select("*")
+        .eq("user_id", user.id)
+        .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
+        .maybeSingle();
+      if (existingResult.error) throw existingResult.error;
+      if (!existingResult.data) return json({ error: "Capture not found" }, 404);
+
+      if (body.action === "archive" || body.action === "restore") {
+        const archivedAt = body.action === "archive" ? new Date().toISOString() : null;
+        const analysis = mergeAnalysisPatch(existingResult.data, {
+          capture_state: body.action === "archive" ? "archived" : "active",
+          archived_at: archivedAt
+        });
+        let result = await supabase
+          .from("captures")
+          .update({ analysis, archived_at: archivedAt })
+          .eq("user_id", user.id)
+          .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
+          .select("*")
+          .single();
+        if (result.error && /archived_at|schema cache|column/i.test(String(result.error.message || result.error.details || ""))) {
+          result = await supabase
+            .from("captures")
+            .update({ analysis })
+            .eq("user_id", user.id)
+            .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
+            .select("*")
+            .single();
+        }
+        if (result.error) throw result.error;
+        return json({ capture: withCaptureState(result.data) });
+      }
+
+      const update: Record<string, unknown> = {};
+      if (typeof body.title === "string") {
+        const title = body.title.trim() || null;
+        update.title = title;
+        update.display_title = title;
+      }
+      if (typeof body.note === "string") update.context_note = body.note.trim() || null;
+      if (typeof body.currentSaveIntent === "string") {
+        update.current_save_intent = body.currentSaveIntent;
+        update.intent_corrected_at = new Date().toISOString();
+      }
+      if (!Object.keys(update).length) {
+        return json({ capture: withCaptureState(existingResult.data) });
+      }
+
+      let result = await supabase
+        .from("captures")
+        .update(update)
         .eq("user_id", user.id)
         .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
         .select("*")
         .single();
-      if (error) throw error;
-      return json({ capture: data });
+      if (result.error && /intent_corrected_at|schema cache|column/i.test(String(result.error.message || result.error.details || ""))) {
+        const fallbackUpdate = { ...update };
+        delete fallbackUpdate.intent_corrected_at;
+        result = await supabase
+          .from("captures")
+          .update(fallbackUpdate)
+          .eq("user_id", user.id)
+          .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
+          .select("*")
+          .single();
+      }
+      if (result.error) throw result.error;
+      return json({ capture: withCaptureState(result.data) });
     }
 
     if (request.method !== "POST") return json({ error: "Not found" }, 404);
 
-    const capture = await createOrGetCapture(request, user.id);
+    const payload = await readCapturePayload(request);
+    const capture = payload.asset
+      ? await createOrGetCaptureWithAsset(supabase, user.id, payload.fields, payload.asset)
+      : await createOrGetCaptureFromFields(supabase, user.id, payload.fields);
     if (capture.analysis_state === "queued" || capture.analysis_state === "failed") {
       EdgeRuntime.waitUntil(processCapture(capture.id, user.id));
     }
     return json({ capture }, 202);
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "Unexpected error" }, 500);
+    return json({ error: errorMessage(error) }, 500);
   }
 });

@@ -11,7 +11,7 @@ function loadEnvFile(path) {
     if (index === -1) continue;
     const key = line.slice(0, index).trim();
     const value = line.slice(index + 1).trim().replace(/^['"]|['"]$/g, "");
-    if (key && process.env[key] == null) process.env[key] = value;
+    if (key && value && !process.env[key]) process.env[key] = value;
   }
 }
 
@@ -30,8 +30,8 @@ if (!process.env.EXPO_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_UR
 if (!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 }
-if (!process.env.PRECIOUS_API_URL && process.env.EXPO_PUBLIC_SHAREBOOK_API_URL) {
-  process.env.PRECIOUS_API_URL = process.env.EXPO_PUBLIC_SHAREBOOK_API_URL.replace(/\/$/, "");
+if (!process.env.PRECIOUS_API_URL && process.env.PRECIOUS_CAPTURE_FUNCTION_URL) {
+  process.env.PRECIOUS_API_URL = process.env.PRECIOUS_CAPTURE_FUNCTION_URL.replace(/\/$/, "");
 }
 
 const missing = ["EXPO_PUBLIC_SUPABASE_URL", "EXPO_PUBLIC_SUPABASE_ANON_KEY"].filter(
@@ -48,8 +48,8 @@ if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(supabaseUrl)) {
   process.exit(1);
 }
 
-if (process.env.PRECIOUS_API_URL && !/^https:\/\//i.test(process.env.PRECIOUS_API_URL)) {
-  console.error(`PRECIOUS_API_URL must be a reachable HTTPS URL. Current value: ${process.env.PRECIOUS_API_URL}`);
+if (process.env.PRECIOUS_API_URL && !/^https:\/\/.+\/functions\/v1\//i.test(process.env.PRECIOUS_API_URL)) {
+  console.error(`PRECIOUS_API_URL must be a Supabase Edge Function URL. Current value: ${process.env.PRECIOUS_API_URL}`);
   process.exit(1);
 }
 

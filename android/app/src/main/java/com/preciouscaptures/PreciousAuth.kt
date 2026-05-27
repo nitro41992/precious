@@ -100,7 +100,7 @@ class PreciousAuthModule(
 
 fun configuredApiUrl(): String {
   val explicit = BuildConfig.PRECIOUS_API_URL.trimEnd('/')
-  if (explicit.isNotBlank()) return explicit
+  if (explicit.contains("/functions/v1/")) return explicit
   val supabaseUrl = BuildConfig.SUPABASE_URL.trimEnd('/')
   if (supabaseUrl.isBlank()) return ""
   return "$supabaseUrl/functions/v1/capture-intake"
