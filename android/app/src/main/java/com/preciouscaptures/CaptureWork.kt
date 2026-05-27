@@ -13,9 +13,22 @@ private const val CAPTURE_WORK_TAG_PREFIX = "precious-capture-"
 
 fun captureWorkTag(captureId: String): String = "$CAPTURE_WORK_TAG_PREFIX$captureId"
 
-fun enqueueCaptureWork(context: Context, captureId: String, networkType: NetworkType) {
+fun enqueueCaptureWork(
+  context: Context,
+  captureId: String,
+  networkType: NetworkType,
+  assetPath: String? = null,
+  assetMimeType: String? = null,
+  assetFileName: String? = null
+) {
+  val input = Data.Builder()
+    .putString("captureId", captureId)
+    .putString("assetPath", assetPath)
+    .putString("assetMimeType", assetMimeType)
+    .putString("assetFileName", assetFileName)
+    .build()
   val request = OneTimeWorkRequestBuilder<ShareProcessWorker>()
-    .setInputData(Data.Builder().putString("captureId", captureId).build())
+    .setInputData(input)
     .setConstraints(Constraints.Builder().setRequiredNetworkType(networkType).build())
     .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
     .addTag(captureWorkTag(captureId))

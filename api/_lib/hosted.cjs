@@ -1,9 +1,15 @@
 const crypto = require("node:crypto");
+const dns = require("node:dns").promises;
+const net = require("node:net");
 const { createClient } = require("@supabase/supabase-js");
 
 const PROMPT_VERSION = "precious-capture-analysis-v1";
 const SCHEMA_VERSION = "precious-capture-analysis-v1";
 const MODEL = process.env.OPENAI_MODEL || "gpt-5-mini";
+const USER_AGENT = "PreciousCaptures/0.1 (+https://github.com/nitro41992/precious)";
+const METADATA_MAX_BYTES = 220_000;
+const METADATA_TIMEOUT_MS = 7000;
+const METADATA_CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 
 const analysisSchema = {
   type: "object",
@@ -151,14 +157,340 @@ function allowCors(req, res) {
 async function readBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
   if (typeof req.body === "string") return JSON.parse(req.body || "{}");
+  const raw = await readRawBody(req);
+  return raw.length ? JSON.parse(raw.toString("utf8")) : {};
+}
+
+async function readRawBody(req) {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
-  const raw = Buffer.concat(chunks).toString("utf8");
-  return raw ? JSON.parse(raw) : {};
+  return Buffer.concat(chunks);
+}
+
+function parseContentDisposition(value) {
+  const parsed = {};
+  for (const part of String(value || "").split(";")) {
+    const [rawKey, ...rest] = part.trim().split("=");
+    if (!rest.length) {
+      parsed.type = rawKey;
+      continue;
+    }
+    parsed[rawKey.toLowerCase()] = rest.join("=").replace(/^"|"$/g, "");
+  }
+  return parsed;
+}
+
+function parseMultipartBuffer(buffer, contentType) {
+  const match = String(contentType || "").match(/boundary=([^;]+)/i);
+  if (!match) throw new Error("multipart boundary is required");
+  const boundary = Buffer.from(`--${match[1].replace(/^"|"$/g, "")}`);
+  const fields = {};
+  let asset = null;
+  let offset = 0;
+  while (offset < buffer.length) {
+    const start = buffer.indexOf(boundary, offset);
+    if (start === -1) break;
+    const next = buffer.indexOf(boundary, start + boundary.length);
+    if (next === -1) break;
+    let part = buffer.subarray(start + boundary.length, next);
+    if (part.subarray(0, 2).toString() === "--") break;
+    if (part.subarray(0, 2).toString() === "\r\n") part = part.subarray(2);
+    if (part.subarray(-2).toString() === "\r\n") part = part.subarray(0, -2);
+    const headerEnd = part.indexOf(Buffer.from("\r\n\r\n"));
+    if (headerEnd === -1) {
+      offset = next;
+      continue;
+    }
+    const headerText = part.subarray(0, headerEnd).toString("utf8");
+    const body = part.subarray(headerEnd + 4);
+    const headers = {};
+    for (const line of headerText.split(/\r?\n/)) {
+      const index = line.indexOf(":");
+      if (index > 0) headers[line.slice(0, index).toLowerCase()] = line.slice(index + 1).trim();
+    }
+    const disposition = parseContentDisposition(headers["content-disposition"]);
+    const name = disposition.name;
+    if (!name) {
+      offset = next;
+      continue;
+    }
+    if (disposition.filename) {
+      asset = {
+        fieldName: name,
+        filename: disposition.filename,
+        contentType: headers["content-type"] || "application/octet-stream",
+        buffer: body
+      };
+    } else {
+      fields[name] = body.toString("utf8");
+    }
+    offset = next;
+  }
+  return { fields, asset };
+}
+
+async function readCapturePayload(req) {
+  const contentType = req.headers["content-type"] || "";
+  if (/multipart\/form-data/i.test(contentType)) {
+    return parseMultipartBuffer(await readRawBody(req), contentType);
+  }
+  return { fields: await readBody(req), asset: null };
 }
 
 function extractUrl(value) {
-  return value?.match(/https?:\/\/\S+/i)?.[0] ?? null;
+  return cleanUrl(value?.match(/https?:\/\/\S+/i)?.[0] ?? null);
+}
+
+function cleanUrl(value) {
+  if (!value || typeof value !== "string") return null;
+  return value.trim().replace(/[),.;\]]+$/g, "");
+}
+
+function normalizeUrl(value) {
+  const cleaned = cleanUrl(value);
+  if (!cleaned) return null;
+  try {
+    const url = new URL(cleaned);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    url.hash = "";
+    url.hostname = url.hostname.toLowerCase();
+    if ((url.protocol === "https:" && url.port === "443") || (url.protocol === "http:" && url.port === "80")) {
+      url.port = "";
+    }
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function absoluteUrl(value, baseUrl) {
+  if (!value || typeof value !== "string") return null;
+  try {
+    return new URL(value, baseUrl).toString();
+  } catch {
+    return null;
+  }
+}
+
+function hostFromUrl(value) {
+  try {
+    return new URL(value).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+function decodeHtml(value) {
+  if (!value || typeof value !== "string") return null;
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseAttrs(value) {
+  const attrs = {};
+  for (const match of value.matchAll(/([a-zA-Z_:.-]+)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g)) {
+    attrs[match[1].toLowerCase()] = decodeHtml(match[3] ?? match[4] ?? match[5] ?? "") || "";
+  }
+  return attrs;
+}
+
+function firstMeta(html, keys) {
+  const wanted = new Set(keys.map((key) => key.toLowerCase()));
+  for (const match of html.matchAll(/<meta\b([^>]+)>/gi)) {
+    const attrs = parseAttrs(match[1]);
+    const name = String(attrs.property || attrs.name || attrs.itemprop || "").toLowerCase();
+    if (wanted.has(name) && attrs.content) return attrs.content;
+  }
+  return null;
+}
+
+function firstLink(html, rels, baseUrl, typePredicate) {
+  const wanted = rels.map((rel) => rel.toLowerCase());
+  for (const match of html.matchAll(/<link\b([^>]+)>/gi)) {
+    const attrs = parseAttrs(match[1]);
+    const rel = String(attrs.rel || "").toLowerCase();
+    if (!attrs.href || !wanted.some((item) => rel.split(/\s+/).includes(item))) continue;
+    if (typePredicate && !typePredicate(String(attrs.type || "").toLowerCase())) continue;
+    return absoluteUrl(attrs.href, baseUrl);
+  }
+  return null;
+}
+
+function firstTitle(html) {
+  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  return decodeHtml(match?.[1] || "");
+}
+
+function imageFromJsonLd(value, baseUrl) {
+  if (!value) return null;
+  if (typeof value === "string") return absoluteUrl(value, baseUrl);
+  if (Array.isArray(value)) return imageFromJsonLd(value[0], baseUrl);
+  if (typeof value === "object") return imageFromJsonLd(value.url || value.contentUrl, baseUrl);
+  return null;
+}
+
+function authorFromJsonLd(value) {
+  if (!value) return null;
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return authorFromJsonLd(value[0]);
+  if (typeof value === "object") return value.name || value.author || value.creator || null;
+  return null;
+}
+
+function jsonLdCandidates(html) {
+  const candidates = [];
+  for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
+    const attrs = parseAttrs(match[1]);
+    if (!String(attrs.type || "").toLowerCase().includes("ld+json")) continue;
+    try {
+      const parsed = JSON.parse(match[2].trim());
+      if (Array.isArray(parsed)) candidates.push(...parsed);
+      else if (parsed?.["@graph"] && Array.isArray(parsed["@graph"])) candidates.push(...parsed["@graph"]);
+      else if (parsed) candidates.push(parsed);
+    } catch {
+      // Ignore malformed JSON-LD.
+    }
+  }
+  return candidates.slice(0, 8);
+}
+
+function parseHtmlMetadata(html, sourceUrl) {
+  const jsonLd = jsonLdCandidates(html);
+  const primaryJsonLd = jsonLd.find((item) => item && typeof item === "object" && (item.name || item.headline)) || null;
+  const canonical = firstLink(html, ["canonical"], sourceUrl) || sourceUrl;
+  const title =
+    firstMeta(html, ["og:title", "twitter:title"]) ||
+    primaryJsonLd?.headline ||
+    primaryJsonLd?.name ||
+    firstTitle(html);
+  const description =
+    firstMeta(html, ["og:description", "twitter:description", "description"]) ||
+    primaryJsonLd?.description ||
+    null;
+  const image =
+    absoluteUrl(firstMeta(html, ["og:image", "og:image:url", "twitter:image", "twitter:image:src"]), sourceUrl) ||
+    imageFromJsonLd(primaryJsonLd?.image, sourceUrl);
+  const siteName = firstMeta(html, ["og:site_name", "application-name"]) || hostFromUrl(sourceUrl);
+  const authorName =
+    firstMeta(html, ["article:author", "author", "twitter:creator"]) ||
+    authorFromJsonLd(primaryJsonLd?.author || primaryJsonLd?.creator) ||
+    null;
+  const favicon =
+    firstLink(html, ["icon"], sourceUrl) ||
+    firstLink(html, ["shortcut", "apple-touch-icon"], sourceUrl) ||
+    absoluteUrl("/favicon.ico", sourceUrl);
+  const type = firstMeta(html, ["og:type"]) || primaryJsonLd?.["@type"] || null;
+  const provider = firstMeta(html, ["og:site_name"]) || hostFromUrl(sourceUrl);
+  const raw = {
+    jsonLd: primaryJsonLd
+      ? {
+          type: primaryJsonLd["@type"] || null,
+          name: primaryJsonLd.name || null,
+          headline: primaryJsonLd.headline || null,
+          datePublished: primaryJsonLd.datePublished || null,
+          dateModified: primaryJsonLd.dateModified || null
+        }
+      : null
+  };
+  if (!title && !description && !image) return null;
+  return {
+    provider,
+    type,
+    title: title ? String(title).slice(0, 300) : null,
+    description: description ? String(description).slice(0, 1200) : null,
+    image,
+    canonical,
+    siteName,
+    favicon,
+    authorName: authorName ? String(authorName).slice(0, 240) : null,
+    authorUrl: null,
+    source: title || description ? "open_graph" : "html_metadata",
+    confidence: title || description ? 0.72 : 0.42,
+    status: "success",
+    raw
+  };
+}
+
+function isPrivateIp(address) {
+  const version = net.isIP(address);
+  if (!version) return false;
+  if (version === 6) {
+    const lower = address.toLowerCase();
+    return lower === "::1" || lower.startsWith("fc") || lower.startsWith("fd") || lower.startsWith("fe80:");
+  }
+  const parts = address.split(".").map(Number);
+  return (
+    parts[0] === 10 ||
+    parts[0] === 127 ||
+    (parts[0] === 169 && parts[1] === 254) ||
+    (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+    (parts[0] === 192 && parts[1] === 168) ||
+    parts[0] === 0
+  );
+}
+
+async function assertPublicUrl(value) {
+  const url = new URL(value);
+  if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("Only http/https URLs are supported");
+  if (url.username || url.password) throw new Error("Credentialed URLs are not supported");
+  if (isPrivateIp(url.hostname)) throw new Error("Private URLs are not supported");
+  const addresses = await dns.lookup(url.hostname, { all: true }).catch(() => []);
+  if (addresses.some((address) => isPrivateIp(address.address))) {
+    throw new Error("Private URLs are not supported");
+  }
+}
+
+async function fetchTextLimited(sourceUrl, options = {}) {
+  let current = normalizeUrl(sourceUrl);
+  if (!current) throw new Error("Invalid URL");
+  for (let redirect = 0; redirect <= 4; redirect += 1) {
+    await assertPublicUrl(current);
+    const response = await fetch(current, {
+      redirect: "manual",
+      headers: {
+        accept: options.accept || "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "user-agent": USER_AGENT
+      },
+      signal: AbortSignal.timeout(options.timeoutMs || METADATA_TIMEOUT_MS)
+    });
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      const location = response.headers.get("location");
+      if (!location) throw new Error("Redirect without location");
+      current = new URL(location, current).toString();
+      continue;
+    }
+    const contentType = response.headers.get("content-type") || "";
+    if (!response.ok) throw new Error(`Metadata fetch failed with ${response.status}`);
+    if (options.htmlOnly !== false && !/text\/html|application\/xhtml\+xml/i.test(contentType)) {
+      throw new Error(`Unsupported metadata content-type: ${contentType || "unknown"}`);
+    }
+    const reader = response.body?.getReader();
+    if (!reader) return { text: await response.text(), finalUrl: current, contentType };
+    const chunks = [];
+    let size = 0;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > (options.maxBytes || METADATA_MAX_BYTES)) {
+        await reader.cancel();
+        break;
+      }
+      chunks.push(value);
+    }
+    return {
+      text: Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8"),
+      finalUrl: current,
+      contentType
+    };
+  }
+  throw new Error("Too many redirects");
 }
 
 function titleFallback(sourceText, sourceUrl) {
@@ -197,6 +529,9 @@ function oembedEndpoint(value) {
   try {
     const url = new URL(value);
     const host = url.hostname.replace(/^www\./, "");
+    if (host === "youtube.com" || host === "m.youtube.com" || host === "youtu.be" || host === "music.youtube.com") {
+      return `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(value)}`;
+    }
     if (host === "reddit.com" || host.endsWith(".reddit.com")) {
       return `https://www.reddit.com/oembed?format=json&url=${encodeURIComponent(value)}`;
     }
@@ -206,37 +541,142 @@ function oembedEndpoint(value) {
   return null;
 }
 
-async function fetchUrlMetadata(sourceUrl) {
-  if (!sourceUrl) return null;
-  const endpoint = oembedEndpoint(sourceUrl);
-  if (endpoint) {
-    try {
-      const response = await fetch(endpoint, {
-        headers: {
-          accept: "application/json",
-          "user-agent": "PreciousCaptures/0.1"
-        },
-        signal: AbortSignal.timeout(7000)
-      });
-      if (response.ok) {
-        const data = await response.json();
-        if (typeof data.title === "string" && data.title) {
-          return {
-            provider: "oembed",
-            type: typeof data.type === "string" ? data.type : null,
-            title: data.title,
-            description: null,
-            image: typeof data.thumbnail_url === "string" ? data.thumbnail_url : null,
-            canonical: sourceUrl,
-            siteName: typeof data.provider_name === "string" ? data.provider_name : null,
-            authorName: typeof data.author_name === "string" ? data.author_name : null,
-            authorUrl: typeof data.author_url === "string" ? data.author_url : null
-          };
-        }
-      }
-    } catch {
-      return null;
+function oembedMetadata(data, sourceUrl, provider = "oembed") {
+  if (!data || typeof data.title !== "string" || !data.title) return null;
+  return {
+    provider,
+    type: typeof data.type === "string" ? data.type : null,
+    title: data.title,
+    description: typeof data.description === "string" ? data.description.slice(0, 1200) : null,
+    image: typeof data.thumbnail_url === "string" ? data.thumbnail_url : null,
+    canonical: sourceUrl,
+    siteName: typeof data.provider_name === "string" ? data.provider_name : null,
+    favicon: null,
+    authorName: typeof data.author_name === "string" ? data.author_name : null,
+    authorUrl: typeof data.author_url === "string" ? data.author_url : null,
+    source: "oembed",
+    confidence: 0.9,
+    status: "success",
+    raw: {
+      provider_name: data.provider_name || null,
+      type: data.type || null,
+      version: data.version || null,
+      thumbnail_url: data.thumbnail_url || null
     }
+  };
+}
+
+async function fetchOembedMetadata(sourceUrl, endpoint) {
+  if (endpoint) {
+    const { text } = await fetchTextLimited(endpoint, {
+      accept: "application/json",
+      htmlOnly: false,
+      maxBytes: 80_000
+    });
+    return oembedMetadata(JSON.parse(text), sourceUrl);
+  }
+  return null;
+}
+
+async function loadCachedUrlMetadata(supabase, userId, normalizedUrl) {
+  if (!supabase || !normalizedUrl) return null;
+  const { data, error } = await supabase
+    .from("url_metadata")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("normalized_url", normalizedUrl)
+    .maybeSingle();
+  if (error || !data || data.status !== "success") return null;
+  if (data.expires_at && new Date(data.expires_at).getTime() < Date.now()) return null;
+  return {
+    provider: data.provider,
+    type: data.content_type,
+    title: data.title,
+    description: data.description,
+    image: data.image_url,
+    canonical: data.canonical_url || normalizedUrl,
+    siteName: data.site_name,
+    favicon: data.favicon_url,
+    authorName: data.author_name,
+    authorUrl: data.author_url,
+    source: data.source_type,
+    confidence: Number(data.confidence ?? 0),
+    status: data.status,
+    raw: data.raw_metadata || null
+  };
+}
+
+async function persistUrlMetadata(supabase, userId, normalizedUrl, metadata, errorMessageValue) {
+  if (!supabase || !userId || !normalizedUrl) return;
+  const expiresAt = new Date(Date.now() + METADATA_CACHE_TTL_MS).toISOString();
+  const row = {
+    user_id: userId,
+    normalized_url: normalizedUrl,
+    canonical_url: metadata?.canonical || normalizedUrl,
+    source_url: normalizedUrl,
+    title: metadata?.title || null,
+    description: metadata?.description || null,
+    image_url: metadata?.image || null,
+    favicon_url: metadata?.favicon || null,
+    provider: metadata?.provider || metadata?.siteName || hostFromUrl(normalizedUrl),
+    site_name: metadata?.siteName || null,
+    author_name: metadata?.authorName || null,
+    author_url: metadata?.authorUrl || null,
+    content_type: metadata?.type || null,
+    source_type: metadata?.source || "none",
+    confidence: metadata?.confidence || 0,
+    status: metadata?.status || (errorMessageValue ? "failed" : "empty"),
+    error: errorMessageValue ? String(errorMessageValue).slice(0, 600) : null,
+    raw_metadata: metadata?.raw || {},
+    fetched_at: new Date().toISOString(),
+    expires_at: expiresAt
+  };
+  try {
+    const { error } = await supabase.from("url_metadata").upsert(row, { onConflict: "user_id,normalized_url" });
+    if (error) throw error;
+  } catch {
+    // URL metadata cache is an optimization; captures still persist the metadata in analysis JSON.
+  }
+}
+
+function hasUsefulMetadata(metadata) {
+  return Boolean(metadata && (metadata.title || metadata.description || metadata.image));
+}
+
+async function fetchUrlMetadata(sourceUrl, supabase, userId) {
+  const normalized = normalizeUrl(sourceUrl);
+  if (!normalized) return null;
+  const cached = await loadCachedUrlMetadata(supabase, userId, normalized).catch(() => null);
+  if (cached && hasUsefulMetadata(cached)) return cached;
+
+  try {
+    const directOembed = await fetchOembedMetadata(normalized, oembedEndpoint(normalized)).catch(() => null);
+    if (directOembed) {
+      await persistUrlMetadata(supabase, userId, normalized, directOembed);
+      return directOembed;
+    }
+
+    const { text: html, finalUrl } = await fetchTextLimited(normalized);
+    const discoveredOembed = firstLink(
+      html,
+      ["alternate"],
+      finalUrl,
+      (type) => type.includes("json+oembed") || type.includes("xml+oembed")
+    );
+    const discovered = await fetchOembedMetadata(finalUrl, discoveredOembed).catch(() => null);
+    if (discovered) {
+      await persistUrlMetadata(supabase, userId, normalized, discovered);
+      return discovered;
+    }
+
+    const parsed = parseHtmlMetadata(html, finalUrl);
+    if (parsed) {
+      await persistUrlMetadata(supabase, userId, normalized, parsed);
+      return parsed;
+    }
+    await persistUrlMetadata(supabase, userId, normalized, null, "No preview metadata found");
+  } catch (error) {
+    await persistUrlMetadata(supabase, userId, normalized, null, errorMessage(error, "Metadata fetch failed"));
   }
   return null;
 }
@@ -257,7 +697,13 @@ function buildPrompt(capture, urlMetadata) {
         source_app: capture.source_app,
         source_url: capture.source_url,
         source_text: capture.source_text,
-        url_metadata: urlMetadata
+        url_metadata: urlMetadata,
+        asset: capture.asset_url
+          ? {
+              mime_type: capture.asset_mime_type || null,
+              purpose: "Optional shared image evidence from the Android share sheet."
+            }
+          : null
       },
       null,
       2
@@ -277,7 +723,11 @@ function responseText(payload) {
 
 async function runOpenAi(capture, urlMetadata) {
   const started = Date.now();
-  const useWebSearch = Boolean(capture.source_url && !urlMetadata);
+  const useWebSearch = Boolean(capture.source_url && !hasUsefulMetadata(urlMetadata));
+  const userContent = [{ type: "input_text", text: buildPrompt(capture, urlMetadata) }];
+  if (capture.asset_url && String(capture.asset_mime_type || "").startsWith("image/")) {
+    userContent.push({ type: "input_image", image_url: capture.asset_url });
+  }
   const requestBody = {
     model: MODEL,
     reasoning: { effort: "low" },
@@ -287,7 +737,7 @@ async function runOpenAi(capture, urlMetadata) {
         role: "system",
         content: "You are Precious Captures' hosted analysis worker. Produce only schema-valid extraction output."
       },
-      { role: "user", content: buildPrompt(capture, urlMetadata) }
+      { role: "user", content: userContent }
     ],
     text: {
       format: {
@@ -384,10 +834,78 @@ async function createOrGetCapture(supabase, userId, body) {
   return data;
 }
 
+function safeFilename(value) {
+  return String(value || "shared-file")
+    .replace(/[/\\?%*:|"<>]/g, "-")
+    .replace(/\s+/g, "-")
+    .slice(0, 120) || "shared-file";
+}
+
+async function ensureCaptureBucket(supabase) {
+  const { error } = await supabase.storage.getBucket("captures");
+  if (!error) return;
+  await supabase.storage.createBucket("captures", { public: false }).catch(() => {});
+}
+
+async function createOrGetCaptureWithAsset(supabase, userId, fields, asset) {
+  const sourceText =
+    typeof fields.sourceText === "string" && fields.sourceText.trim()
+      ? fields.sourceText.trim()
+      : asset
+        ? `Shared ${asset.contentType?.split("/")[0] || "file"}: ${asset.filename || "attachment"}`
+        : "";
+  const capture = await createOrGetCapture(
+    supabase,
+    userId,
+    {
+      ...fields,
+      sourceText,
+      sourceUrl: typeof fields.sourceUrl === "string" && fields.sourceUrl.trim() ? fields.sourceUrl : extractUrl(sourceText),
+      sourceApp: typeof fields.sourceApp === "string" ? fields.sourceApp : "Android Share"
+    }
+  );
+  if (!asset || !asset.buffer?.length) return capture;
+
+  const existing = await supabase
+    .from("capture_assets")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("capture_id", capture.id)
+    .maybeSingle()
+    .catch(() => ({ data: null, error: null }));
+  if (existing?.data) return capture;
+
+  const extension = safeFilename(asset.filename).split(".").pop() || "bin";
+  const storagePath = `${userId}/${capture.id}/${crypto.randomUUID()}.${extension}`;
+  await ensureCaptureBucket(supabase);
+  const upload = await supabase.storage.from("captures").upload(storagePath, asset.buffer, {
+    contentType: asset.contentType || "application/octet-stream",
+    upsert: false
+  });
+  if (upload.error) throw upload.error;
+  const { error } = await supabase.from("capture_assets").insert({
+    user_id: userId,
+    capture_id: capture.id,
+    storage_path: storagePath,
+    public_url: null,
+    mime_type: asset.contentType || "application/octet-stream",
+    byte_size: asset.buffer.length
+  });
+  if (error) throw error;
+  await supabase
+    .from("captures")
+    .update({
+      capture_type: asset.contentType?.startsWith("image/") ? "image" : capture.capture_type
+    })
+    .eq("id", capture.id)
+    .eq("user_id", userId);
+  return capture;
+}
+
 async function loadCapture(supabase, userId, captureId) {
   const { data, error } = await supabase
     .from("captures")
-    .select("*, captured_entities(*), reminder_suggestions(*), collection_suggestions(*), analysis_runs(*)")
+    .select("*, captured_entities(*), reminder_suggestions(*), collection_suggestions(*), analysis_runs(*), capture_assets(*)")
     .eq("user_id", userId)
     .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
     .order("created_at", { referencedTable: "analysis_runs", ascending: false })
@@ -413,9 +931,21 @@ async function analyzeCapture(supabase, userId, captureId) {
     .eq("user_id", userId)
     .is("analysis_cancel_requested_at", null);
 
-  const urlMetadata = await fetchUrlMetadata(capture.source_url);
-  const result = await runOpenAi(capture, urlMetadata);
-  const analysis = result.analysis;
+  const urlMetadata = await fetchUrlMetadata(capture.source_url, supabase, userId);
+  const asset = Array.isArray(capture.capture_assets) ? capture.capture_assets[0] : null;
+  const signedAsset =
+    asset?.storage_path && String(asset.mime_type || "").startsWith("image/")
+      ? await supabase.storage.from("captures").createSignedUrl(asset.storage_path, 60 * 10)
+      : null;
+  const captureForAnalysis =
+    signedAsset?.data?.signedUrl
+      ? { ...capture, asset_url: signedAsset.data.signedUrl, asset_mime_type: asset.mime_type }
+      : capture;
+  const result = await runOpenAi(captureForAnalysis, urlMetadata);
+  const analysis = {
+    ...result.analysis,
+    url_metadata: urlMetadata
+  };
 
   const { data: run, error: runError } = await supabase
     .from("analysis_runs")
@@ -581,10 +1111,12 @@ async function withUser(req, res, handler) {
 module.exports = {
   analyzeCapture,
   createOrGetCapture,
+  createOrGetCaptureWithAsset,
   errorMessage,
   failAnalysis,
   loadCapture,
   readBody,
+  readCapturePayload,
   send,
   withUser
 };

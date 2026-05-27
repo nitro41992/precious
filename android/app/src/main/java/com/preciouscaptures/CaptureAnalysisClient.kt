@@ -11,7 +11,9 @@ import java.net.SocketTimeoutException
 import java.net.URL
 import java.net.URLEncoder
 import java.net.UnknownHostException
+import java.io.File
 import java.io.IOException
+import java.util.UUID
 
 private const val ANALYSIS_CLIENT_TAG = "PreciousAnalysisClient"
 private const val REMOTE_CAPTURE_PREFS = "precious_remote_captures"
@@ -31,6 +33,9 @@ object CaptureAnalysisClient {
     captureId: String,
     sourceText: String,
     sourceUrl: String?,
+    assetPath: String? = null,
+    assetMimeType: String? = null,
+    assetFileName: String? = null,
     onPhase: (CaptureProcessingPhase) -> Unit = {}
   ): JSONObject? {
     return try {
@@ -44,7 +49,7 @@ object CaptureAnalysisClient {
       if (token.isBlank()) return null
 
       onPhase(CaptureProcessingPhase.UPLOADING)
-      val created = postCapture(apiUrl, token, captureId, sourceText, sourceUrl)
+      val created = postCapture(apiUrl, token, captureId, sourceText, sourceUrl, assetPath, assetMimeType, assetFileName)
       if (created == null) {
         Log.w(ANALYSIS_CLIENT_TAG, "Hosted capture enqueue failed")
         return null
@@ -116,10 +121,18 @@ object CaptureAnalysisClient {
     accessToken: String,
     captureId: String,
     sourceText: String,
-    sourceUrl: String?
+    sourceUrl: String?,
+    assetPath: String? = null,
+    assetMimeType: String? = null,
+    assetFileName: String? = null
   ): JSONObject? {
     val edge = isEdgeFunction(apiUrl)
     val url = if (edge) apiUrl else "$apiUrl/api/captures"
+    val asset = assetPath?.ifBlank { null }?.let { File(it) }
+    if (asset != null && asset.exists() && asset.length() > 0 && !edge) {
+      return postMultipartCapture(url, accessToken, captureId, sourceText, sourceUrl, asset, assetMimeType, assetFileName)
+        ?.optJSONObject("capture")
+    }
     return request(url, "POST", accessToken) { connection ->
       val body = JSONObject()
         .put("clientCaptureKey", captureId)
@@ -129,6 +142,69 @@ object CaptureAnalysisClient {
         .put("autoAnalyze", edge)
       connection.outputStream.use { output -> output.write(body.toString().toByteArray()) }
     }?.optJSONObject("capture")
+  }
+
+  private fun postMultipartCapture(
+    url: String,
+    accessToken: String,
+    captureId: String,
+    sourceText: String,
+    sourceUrl: String?,
+    asset: File,
+    assetMimeType: String?,
+    assetFileName: String?
+  ): JSONObject? {
+    val boundary = "PreciousCapture-${UUID.randomUUID()}"
+    return runCatching {
+      val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+        requestMethod = "POST"
+        connectTimeout = 5000
+        readTimeout = 30000
+        doOutput = true
+        setRequestProperty("accept", "application/json")
+        setRequestProperty("authorization", "Bearer $accessToken")
+        setRequestProperty("content-type", "multipart/form-data; boundary=$boundary")
+        if (BuildConfig.SUPABASE_ANON_KEY.isNotBlank()) {
+          setRequestProperty("apikey", BuildConfig.SUPABASE_ANON_KEY)
+        }
+      }
+      connection.outputStream.use { output ->
+        fun field(name: String, value: String?) {
+          if (value == null) return
+          output.write("--$boundary\r\n".toByteArray())
+          output.write("Content-Disposition: form-data; name=\"$name\"\r\n\r\n".toByteArray())
+          output.write(value.toByteArray())
+          output.write("\r\n".toByteArray())
+        }
+
+        field("clientCaptureKey", captureId)
+        field("sourceText", sourceText)
+        field("sourceUrl", sourceUrl)
+        field("sourceApp", "Android Share")
+        field("autoAnalyze", "false")
+        output.write("--$boundary\r\n".toByteArray())
+        output.write(
+          "Content-Disposition: form-data; name=\"asset\"; filename=\"${safeMultipartFilename(assetFileName ?: asset.name)}\"\r\n"
+            .toByteArray()
+        )
+        output.write("Content-Type: ${(assetMimeType ?: "application/octet-stream")}\r\n\r\n".toByteArray())
+        asset.inputStream().use { input -> input.copyTo(output) }
+        output.write("\r\n--$boundary--\r\n".toByteArray())
+      }
+      val stream = if (connection.responseCode in 200..299) connection.inputStream else connection.errorStream
+      val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+      if (connection.responseCode !in 200..299) {
+        Log.w(ANALYSIS_CLIENT_TAG, "POST $url multipart failed ${connection.responseCode}: ${body.take(240)}")
+        return null
+      }
+      JSONObject(body)
+    }.getOrElse { error ->
+      if (error.isTransientNetworkError()) {
+        throw NetworkUnavailableException(error.message ?: "Network is unavailable", error)
+      }
+      Log.w(ANALYSIS_CLIENT_TAG, "POST $url multipart failed: ${error.message}")
+      null
+    }
   }
 
   private fun getCapture(apiUrl: String, accessToken: String, captureId: String, remoteCaptureId: String): JSONObject? {
@@ -416,6 +492,13 @@ object CaptureAnalysisClient {
     if (json.isNull(key)) return ""
     val value = json.optString(key)
     return if (value == "null") "" else value
+  }
+
+  private fun safeMultipartFilename(value: String): String {
+    return value
+      .replace(Regex("[\\\\/\\r\\n\\\"]"), "-")
+      .take(120)
+      .ifBlank { "shared-file" }
   }
 }
 

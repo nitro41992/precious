@@ -1,7 +1,9 @@
 const {
   createOrGetCapture,
+  createOrGetCaptureWithAsset,
   loadCapture,
   readBody,
+  readCapturePayload,
   send,
   withUser
 } = require("./_lib/hosted.cjs");
@@ -23,7 +25,7 @@ module.exports = async function captures(req, res) {
 
       const { data, error } = await supabase
         .from("captures")
-        .select("*, captured_entities(*), reminder_suggestions(*), collection_suggestions(*), analysis_runs(*)")
+        .select("*, captured_entities(*), reminder_suggestions(*), collection_suggestions(*), analysis_runs(*), capture_assets(*)")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(Number.isFinite(limit) ? limit : 50);
@@ -32,7 +34,10 @@ module.exports = async function captures(req, res) {
     }
 
     if (req.method === "POST") {
-      const capture = await createOrGetCapture(supabase, user.id, await readBody(req));
+      const payload = await readCapturePayload(req);
+      const capture = payload.asset
+        ? await createOrGetCaptureWithAsset(supabase, user.id, payload.fields, payload.asset)
+        : await createOrGetCapture(supabase, user.id, payload.fields);
       return send(res, 200, { capture });
     }
 

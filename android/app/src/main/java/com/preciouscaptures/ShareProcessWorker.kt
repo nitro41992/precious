@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.File
 
 class ShareProcessWorker(
   appContext: Context,
@@ -21,12 +22,16 @@ class ShareProcessWorker(
     CaptureNotifications.showUploading(applicationContext, captureId)
     delay(1600)
     val pendingCapture = PreciousCaptureStore.find(applicationContext, captureId)
+    val assetPath = inputData.getString("assetPath")
     val enrichment = withContext(Dispatchers.IO) {
       CaptureAnalysisClient.process(
         applicationContext,
         captureId,
         pendingCapture?.optString("sourceText").orEmpty(),
-        pendingCapture?.optString("sourceUrl")
+        pendingCapture?.optString("sourceUrl"),
+        assetPath,
+        inputData.getString("assetMimeType"),
+        inputData.getString("assetFileName")
       ) { phase ->
         when (phase) {
           CaptureProcessingPhase.UPLOADING -> CaptureNotifications.showUploading(applicationContext, captureId)
@@ -38,6 +43,9 @@ class ShareProcessWorker(
         pendingCapture?.optString("sourceText").orEmpty(),
         pendingCapture?.optString("sourceUrl")
       )
+    }
+    if (!assetPath.isNullOrBlank()) {
+      runCatching { File(assetPath).delete() }
     }
     if (PreciousCaptureStore.isCancelled(applicationContext, captureId) || isStopped) {
       PreciousCaptureStore.cancel(applicationContext, captureId)
