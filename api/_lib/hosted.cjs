@@ -15,6 +15,16 @@ const ACTIVE_SAVE_INTENT_KEYS = ACTIVE_SAVE_INTENTS.map((intent) => intent.key);
 const SAVE_INTENT_PROMPT = ACTIVE_SAVE_INTENTS
   .map((intent) => `- ${intent.key} (${intent.label}): ${intent.llm_description}`)
   .join("\n");
+const DB_CAPTURE_TYPES = new Set([
+  "link",
+  "social_post",
+  "screenshot",
+  "image",
+  "text_note",
+  "mixed",
+  "unknown",
+  "voice_note"
+]);
 
 const analysisSchema = {
   type: "object",
@@ -552,14 +562,26 @@ function inferSourceApp(sourceUrl) {
   return "Browser";
 }
 
+function normalizeCaptureType(value, sourceUrl, sourceText) {
+  const captureType = typeof value === "string" ? value.trim() : "";
+  if (DB_CAPTURE_TYPES.has(captureType)) return captureType;
+  if (sourceUrl) return "link";
+  if (String(sourceText || "").trim()) return "text_note";
+  return "unknown";
+}
+
 function inferCaptureType(sourceUrl, sourceText) {
+  let inferred = "unknown";
   if (sourceUrl) {
     if (/instagram\.com|tiktok\.com|reddit\.com|youtube\.com|youtu\.be|x\.com|twitter\.com/i.test(sourceUrl)) {
-      return "social_post";
+      inferred = "social_post";
+    } else {
+      inferred = "link";
     }
-    return "link";
+  } else if (sourceText) {
+    inferred = "text_note";
   }
-  return sourceText ? "text_note" : "unknown";
+  return normalizeCaptureType(inferred, sourceUrl, sourceText);
 }
 
 function oembedEndpoint(value) {
@@ -941,7 +963,11 @@ async function analyzeCapture(supabase, userId, captureId) {
   const { error: updateError } = await supabase
     .from("captures")
     .update({
-      capture_type: analysis.capture_type || capture.capture_type,
+      capture_type: normalizeCaptureType(
+        analysis.capture_type || capture.capture_type,
+        capture.source_url,
+        capture.source_text
+      ),
       analysis_state: analysisRequiresReview(analysis) ? "needs_review" : "ready",
       analysis_error: null,
       analysis,

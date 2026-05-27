@@ -56,7 +56,11 @@ class ShareProcessWorker(
         }
         return Result.retry()
       }
-      else -> CaptureNotifications.showFailed(applicationContext, captureId, title)
+      else -> CaptureNotifications.showFailed(
+        applicationContext,
+        captureId,
+        capture?.optString("analysisError")?.ifBlank { title } ?: title
+      )
     }
     return Result.success()
   }

@@ -17,6 +17,8 @@ import java.util.UUID
 
 private const val ANALYSIS_CLIENT_TAG = "PreciousAnalysisClient"
 private const val REMOTE_CAPTURE_PREFS = "precious_remote_captures"
+private const val CLIENT_EVENT_CONNECT_TIMEOUT_MS = 5000
+private const val CLIENT_EVENT_READ_TIMEOUT_MS = 10000
 
 enum class CaptureProcessingPhase {
   UPLOADING,
@@ -25,7 +27,17 @@ enum class CaptureProcessingPhase {
   WAITING_FOR_NETWORK
 }
 
-private class NetworkUnavailableException(message: String, cause: Throwable? = null) : IOException(message, cause)
+private class NetworkUnavailableException(
+  message: String,
+  cause: Throwable? = null,
+  val reasonCode: String = "unknown_network_error",
+  val phase: String = "unknown",
+  val requestMethod: String? = null,
+  val requestUrl: String? = null,
+  val connectTimeoutMs: Int? = null,
+  val readTimeoutMs: Int? = null,
+  val elapsedMs: Long? = null
+) : IOException(message, cause)
 
 object CaptureAnalysisClient {
   suspend fun process(
@@ -38,8 +50,11 @@ object CaptureAnalysisClient {
     assetFileName: String? = null,
     onPhase: (CaptureProcessingPhase) -> Unit = {}
   ): JSONObject? {
+    var apiUrl = ""
+    var accessToken = ""
+    var remoteCaptureId = readRemoteCapture(context, captureId)
     return try {
-      val apiUrl = configuredApiUrl()
+      apiUrl = configuredApiUrl()
       if (apiUrl.isBlank()) return null
       val session = validSession(context) ?: run {
         Log.w(ANALYSIS_CLIENT_TAG, "Hosted capture processing unavailable: no Supabase session")
@@ -47,6 +62,7 @@ object CaptureAnalysisClient {
       }
       val token = session.optString("accessToken")
       if (token.isBlank()) return null
+      accessToken = token
 
       onPhase(CaptureProcessingPhase.UPLOADING)
       val created = postCapture(apiUrl, token, captureId, sourceText, sourceUrl, assetPath, assetMimeType, assetFileName)
@@ -54,16 +70,16 @@ object CaptureAnalysisClient {
         Log.w(ANALYSIS_CLIENT_TAG, "Hosted capture enqueue failed")
         return null
       }
-      val remoteCaptureId = created.optString("id", captureId)
-      rememberRemoteCapture(context, captureId, remoteCaptureId)
+      remoteCaptureId = created.optString("id", captureId)
+      rememberRemoteCapture(context, captureId, remoteCaptureId ?: captureId)
       if (!isEdgeFunction(apiUrl)) {
         onPhase(CaptureProcessingPhase.ANALYZING)
-        triggerAnalyze(apiUrl, token, remoteCaptureId)
+        triggerAnalyze(apiUrl, token, remoteCaptureId ?: captureId)
       }
 
       repeat(60) {
         onPhase(CaptureProcessingPhase.ANALYZING)
-        val remote = getCapture(apiUrl, token, captureId, remoteCaptureId)
+        val remote = getCapture(apiUrl, token, captureId, remoteCaptureId ?: captureId)
         val state = remote?.optString("analysis_state").orEmpty()
         if (remote != null && (state == "ready" || state == "needs_review")) {
           onPhase(CaptureProcessingPhase.SAVING)
@@ -82,7 +98,8 @@ object CaptureAnalysisClient {
       Log.w(ANALYSIS_CLIENT_TAG, "Hosted analysis is still processing")
       llmStillProcessingEnrichment(sourceText, sourceUrl)
     } catch (error: NetworkUnavailableException) {
-      Log.w(ANALYSIS_CLIENT_TAG, "Hosted capture processing is waiting for network: ${error.message}")
+      Log.w(ANALYSIS_CLIENT_TAG, "Hosted capture processing is waiting for network (${error.reasonCode}/${error.phase}): ${error.message}")
+      reportClientNetworkEvent(apiUrl, accessToken, captureId, remoteCaptureId, error)
       onPhase(CaptureProcessingPhase.WAITING_FOR_NETWORK)
       waitingForNetworkEnrichment(sourceText, sourceUrl)
     }
@@ -105,7 +122,7 @@ object CaptureAnalysisClient {
       return postMultipartCapture(url, accessToken, captureId, sourceText, sourceUrl, asset, assetMimeType, assetFileName, edge)
         ?.optJSONObject("capture")
     }
-    return request(url, "POST", accessToken) { connection ->
+    return request(url, "POST", accessToken, phase = "enqueue_capture") { connection ->
       val body = JSONObject()
         .put("clientCaptureKey", captureId)
         .put("sourceText", sourceText)
@@ -128,6 +145,7 @@ object CaptureAnalysisClient {
     autoAnalyze: Boolean
   ): JSONObject? {
     val boundary = "PreciousCapture-${UUID.randomUUID()}"
+    val started = System.currentTimeMillis()
     return runCatching {
       val connection = (URL(url).openConnection() as HttpURLConnection).apply {
         requestMethod = "POST"
@@ -173,7 +191,17 @@ object CaptureAnalysisClient {
       JSONObject(body)
     }.getOrElse { error ->
       if (error.isTransientNetworkError()) {
-        throw NetworkUnavailableException(error.message ?: "Network is unavailable", error)
+        throw NetworkUnavailableException(
+          error.message ?: "Network is unavailable",
+          error,
+          reasonCode = networkReasonCode(error),
+          phase = "enqueue_capture_multipart",
+          requestMethod = "POST",
+          requestUrl = url,
+          connectTimeoutMs = 5000,
+          readTimeoutMs = 30000,
+          elapsedMs = System.currentTimeMillis() - started
+        )
       }
       Log.w(ANALYSIS_CLIENT_TAG, "POST $url multipart failed: ${error.message}")
       null
@@ -183,15 +211,15 @@ object CaptureAnalysisClient {
   private fun getCapture(apiUrl: String, accessToken: String, captureId: String, remoteCaptureId: String): JSONObject? {
     return if (isEdgeFunction(apiUrl)) {
       val encoded = URLEncoder.encode(captureId, "UTF-8")
-      request("$apiUrl?clientCaptureKey=$encoded", "GET", accessToken)?.optJSONObject("capture")
+      request("$apiUrl?clientCaptureKey=$encoded", "GET", accessToken, phase = "poll_capture")?.optJSONObject("capture")
     } else {
       val encoded = URLEncoder.encode(remoteCaptureId, "UTF-8")
-      request("$apiUrl/api/captures?view=detail&captureId=$encoded", "GET", accessToken)?.optJSONObject("capture")
+      request("$apiUrl/api/captures?view=detail&captureId=$encoded", "GET", accessToken, phase = "poll_capture")?.optJSONObject("capture")
     }
   }
 
   private fun triggerAnalyze(apiUrl: String, accessToken: String, remoteCaptureId: String) {
-    request("$apiUrl/api/analyze", "POST", accessToken, readTimeoutMs = 120000) { connection ->
+    request("$apiUrl/api/analyze", "POST", accessToken, readTimeoutMs = 120000, phase = "trigger_analyze") { connection ->
       val body = JSONObject()
         .put("captureId", remoteCaptureId)
         .put("route", "openai_mini")
@@ -204,8 +232,10 @@ object CaptureAnalysisClient {
     method: String,
     accessToken: String,
     readTimeoutMs: Int = 8000,
+    phase: String,
     writeBody: ((HttpURLConnection) -> Unit)? = null
   ): JSONObject? {
+    val started = System.currentTimeMillis()
     return runCatching {
       val connection = (URL(url).openConnection() as HttpURLConnection).apply {
         requestMethod = method
@@ -231,7 +261,17 @@ object CaptureAnalysisClient {
       JSONObject(body)
     }.getOrElse { error ->
       if (error.isTransientNetworkError()) {
-        throw NetworkUnavailableException(error.message ?: "Network is unavailable", error)
+        throw NetworkUnavailableException(
+          error.message ?: "Network is unavailable",
+          error,
+          reasonCode = networkReasonCode(error),
+          phase = phase,
+          requestMethod = method,
+          requestUrl = url,
+          connectTimeoutMs = 5000,
+          readTimeoutMs = readTimeoutMs,
+          elapsedMs = System.currentTimeMillis() - started
+        )
       }
       Log.w(ANALYSIS_CLIENT_TAG, "$method $url failed: ${error.message}")
       null
@@ -243,7 +283,12 @@ object CaptureAnalysisClient {
       refreshNativeAuthSession(context)
     } catch (error: Exception) {
       if (error.isTransientNativeNetworkError()) {
-        throw NetworkUnavailableException(error.message ?: "Network is unavailable", error)
+        throw NetworkUnavailableException(
+          error.message ?: "Network is unavailable",
+          error,
+          reasonCode = networkReasonCode(error),
+          phase = "refresh_auth_session"
+        )
       }
       null
     }
@@ -372,6 +417,63 @@ object CaptureAnalysisClient {
       .put("needsReview", false)
   }
 
+  private fun reportClientNetworkEvent(
+    apiUrl: String,
+    accessToken: String,
+    captureId: String,
+    remoteCaptureId: String?,
+    error: NetworkUnavailableException
+  ) {
+    if (apiUrl.isBlank() || accessToken.isBlank() || !isEdgeFunction(apiUrl)) return
+    runCatching {
+      val body = JSONObject()
+        .put("captureId", remoteCaptureId ?: captureId)
+        .put("clientCaptureKey", captureId)
+        .put("eventType", "hosted_capture_waiting")
+        .put("phase", error.phase)
+        .put("reasonCode", error.reasonCode)
+        .put("message", error.message ?: "Hosted capture processing is waiting")
+        .put(
+          "diagnostics",
+          JSONObject()
+            .put("exception_class", error.cause?.javaClass?.simpleName ?: error.javaClass.simpleName)
+            .put("exception_message", error.cause?.message ?: error.message.orEmpty())
+            .put("request_method", error.requestMethod ?: JSONObject.NULL)
+            .put("request_host", urlHost(error.requestUrl))
+            .put("request_path", urlPath(error.requestUrl))
+            .put("api_host", urlHost(apiUrl))
+            .put("connect_timeout_ms", error.connectTimeoutMs ?: JSONObject.NULL)
+            .put("read_timeout_ms", error.readTimeoutMs ?: JSONObject.NULL)
+            .put("elapsed_ms", error.elapsedMs ?: JSONObject.NULL)
+            .put("remote_capture_id", remoteCaptureId ?: JSONObject.NULL)
+            .put("app_version", BuildConfig.VERSION_NAME)
+            .put("app_version_code", BuildConfig.VERSION_CODE)
+        )
+      val connection = (URL("$apiUrl?resource=client-events").openConnection() as HttpURLConnection).apply {
+        requestMethod = "POST"
+        connectTimeout = CLIENT_EVENT_CONNECT_TIMEOUT_MS
+        readTimeout = CLIENT_EVENT_READ_TIMEOUT_MS
+        doOutput = true
+        setRequestProperty("accept", "application/json")
+        setRequestProperty("content-type", "application/json")
+        setRequestProperty("authorization", "Bearer $accessToken")
+        if (BuildConfig.SUPABASE_ANON_KEY.isNotBlank()) {
+          setRequestProperty("apikey", BuildConfig.SUPABASE_ANON_KEY)
+        }
+      }
+      connection.outputStream.use { output -> output.write(body.toString().toByteArray()) }
+      val status = connection.responseCode
+      if (status !in 200..299) {
+        val stream = connection.errorStream ?: connection.inputStream
+        val response = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+        Log.w(ANALYSIS_CLIENT_TAG, "Client event upload failed $status: ${response.take(160)}")
+      }
+      connection.disconnect()
+    }.onFailure { eventError ->
+      Log.w(ANALYSIS_CLIENT_TAG, "Client event upload failed: ${eventError.message}")
+    }
+  }
+
   private fun rememberRemoteCapture(context: Context, captureId: String, remoteCaptureId: String) {
     context
       .getSharedPreferences(REMOTE_CAPTURE_PREFS, Context.MODE_PRIVATE)
@@ -387,6 +489,16 @@ object CaptureAnalysisClient {
   private fun hostFromUrl(value: String): String {
     if (value.isBlank()) return ""
     return runCatching { URL(value).host.removePrefix("www.") }.getOrDefault("")
+  }
+
+  private fun urlHost(value: String?): String {
+    if (value.isNullOrBlank()) return ""
+    return runCatching { URL(value).host.removePrefix("www.") }.getOrDefault("")
+  }
+
+  private fun urlPath(value: String?): String {
+    if (value.isNullOrBlank()) return ""
+    return runCatching { URL(value).path.ifBlank { "/" } }.getOrDefault("")
   }
 
   private fun nullableString(json: JSONObject, key: String): String {
@@ -410,4 +522,19 @@ private fun Throwable.isTransientNetworkError(): Boolean {
     this is ConnectException ||
     this is NoRouteToHostException ||
     (this is IOException && message?.contains("Unable to resolve host", ignoreCase = true) == true)
+}
+
+private fun networkReasonCode(error: Throwable): String {
+  val value = error.message.orEmpty()
+  return when {
+    error is UnknownHostException -> "dns_resolution_failed"
+    error is SocketTimeoutException -> "request_timeout"
+    error is ConnectException -> "connection_refused"
+    error is NoRouteToHostException -> "no_route_to_host"
+    value.contains("Unable to resolve host", ignoreCase = true) -> "dns_resolution_failed"
+    value.contains("Connection reset", ignoreCase = true) -> "connection_reset"
+    value.contains("Software caused connection abort", ignoreCase = true) -> "connection_aborted"
+    value.contains("unexpected end of stream", ignoreCase = true) -> "unexpected_end_of_stream"
+    else -> "unknown_network_error"
+  }
 }

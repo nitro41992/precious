@@ -100,6 +100,7 @@ object PreciousCaptureStore {
         val analysisMode = enrichment.optString("analysisMode", "pending_llm")
         val needsReview = enrichmentRequiresReview(enrichment)
         val nextStatus = when {
+          analysisMode == "preflight_rejected" -> "failed"
           analysisMode == "llm_processing" -> "processing"
           analysisMode == "llm_waiting_network" -> "processing"
           analysisMode == "llm" && !needsReview -> "ready"
