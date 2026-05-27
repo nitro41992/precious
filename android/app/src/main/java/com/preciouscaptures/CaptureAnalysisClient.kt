@@ -13,6 +13,10 @@ import java.net.URLEncoder
 import java.net.UnknownHostException
 import java.io.File
 import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import java.util.UUID
 
 private const val ANALYSIS_CLIENT_TAG = "PreciousAnalysisClient"
@@ -45,6 +49,9 @@ object CaptureAnalysisClient {
     captureId: String,
     sourceText: String,
     sourceUrl: String?,
+    clientResolutionAttemptCount: Int = 0,
+    clientResolvedUrl: String? = null,
+    clientResolutionSource: String? = null,
     assetPath: String? = null,
     assetMimeType: String? = null,
     assetFileName: String? = null,
@@ -65,7 +72,19 @@ object CaptureAnalysisClient {
       accessToken = token
 
       onPhase(CaptureProcessingPhase.UPLOADING)
-      val created = postCapture(apiUrl, token, captureId, sourceText, sourceUrl, assetPath, assetMimeType, assetFileName)
+      val created = postCapture(
+        apiUrl,
+        token,
+        captureId,
+        sourceText,
+        sourceUrl,
+        assetPath,
+        assetMimeType,
+        assetFileName,
+        clientResolvedUrl,
+        clientResolutionSource,
+        clientResolutionAttemptCount.takeIf { it > 0 }
+      )
       if (created == null) {
         Log.w(ANALYSIS_CLIENT_TAG, "Hosted capture enqueue failed")
         return null
@@ -77,10 +96,35 @@ object CaptureAnalysisClient {
         triggerAnalyze(apiUrl, token, remoteCaptureId ?: captureId)
       }
 
+      var clientResolutionAttempted = clientResolutionAttemptCount > 0
       repeat(60) {
         onPhase(CaptureProcessingPhase.ANALYZING)
         val remote = getCapture(apiUrl, token, captureId, remoteCaptureId ?: captureId)
         val state = remote?.optString("analysis_state").orEmpty()
+        if (
+          remote != null &&
+          !clientResolutionAttempted &&
+          needsClientResolution(remote) &&
+          !sourceUrl.isNullOrBlank()
+        ) {
+          clientResolutionAttempted = true
+          val attemptCount = PreciousCaptureStore.incrementClientResolutionAttempt(context, captureId)
+          val resolvedUrl = ClientUrlResolver.resolve(sourceUrl)
+          if (!resolvedUrl.isNullOrBlank() && resolvedUrl != sourceUrl) {
+            postCapture(
+              apiUrl,
+              token,
+              captureId,
+              sourceText,
+              sourceUrl,
+              clientResolvedUrl = resolvedUrl,
+              clientResolutionSource = "android_redirect_resolver",
+              clientResolutionAttemptCount = attemptCount
+            )
+            delay(1000)
+            return@repeat
+          }
+        }
         if (remote != null && (state == "ready" || state == "needs_review")) {
           onPhase(CaptureProcessingPhase.SAVING)
           if (!isEdgeFunction(apiUrl)) {
@@ -113,7 +157,10 @@ object CaptureAnalysisClient {
     sourceUrl: String?,
     assetPath: String? = null,
     assetMimeType: String? = null,
-    assetFileName: String? = null
+    assetFileName: String? = null,
+    clientResolvedUrl: String? = null,
+    clientResolutionSource: String? = null,
+    clientResolutionAttemptCount: Int? = null
   ): JSONObject? {
     val edge = isEdgeFunction(apiUrl)
     val url = if (edge) apiUrl else "$apiUrl/api/captures"
@@ -127,6 +174,11 @@ object CaptureAnalysisClient {
         .put("clientCaptureKey", captureId)
         .put("sourceText", sourceText)
         .put("sourceUrl", sourceUrl ?: JSONObject.NULL)
+        .put("original_url", sourceUrl ?: JSONObject.NULL)
+        .put("client_resolved_url", clientResolvedUrl ?: JSONObject.NULL)
+        .put("client_resolution_source", clientResolutionSource ?: JSONObject.NULL)
+        .put("client_resolution_timestamp", if (clientResolvedUrl.isNullOrBlank()) JSONObject.NULL else isoNow())
+        .put("client_resolution_attempt_count", clientResolutionAttemptCount ?: JSONObject.NULL)
         .put("sourceApp", "Android Share")
         .put("autoAnalyze", edge)
       connection.outputStream.use { output -> output.write(body.toString().toByteArray()) }
@@ -171,6 +223,7 @@ object CaptureAnalysisClient {
         field("clientCaptureKey", captureId)
         field("sourceText", sourceText)
         field("sourceUrl", sourceUrl)
+        field("original_url", sourceUrl)
         field("sourceApp", "Android Share")
         field("autoAnalyze", if (autoAnalyze) "true" else "false")
         output.write("--$boundary\r\n".toByteArray())
@@ -296,6 +349,7 @@ object CaptureAnalysisClient {
 
   private fun toEnrichment(remoteCapture: JSONObject): JSONObject {
     val analysis = remoteCapture.optJSONObject("analysis") ?: analysisFromCapture(remoteCapture)
+    val urlEvidence = analysis.optJSONObject("url_evidence")
     val defaultIntent = analysis.optJSONObject("default_intent") ?: JSONObject()
     val analysisRun = firstAnalysisRun(remoteCapture)
     val analysisMode = nullableString(remoteCapture, "analysis_mode").ifBlank {
@@ -318,7 +372,11 @@ object CaptureAnalysisClient {
       .put("summary", analysis.optString("summary"))
       .put("siteName", hostFromUrl(remoteCapture.optString("source_url")))
       .put("sourceUrl", remoteCapture.optString("source_url"))
+      .put("clientResolvedUrl", nullableString(remoteCapture, "client_resolved_url"))
+      .put("clientResolutionSource", nullableString(remoteCapture, "client_resolution_source"))
+      .put("clientResolutionAttemptCount", remoteCapture.optInt("client_resolution_attempt_count", 0))
       .put("analysis", analysis)
+      .put("urlEvidence", urlEvidence ?: JSONObject.NULL)
       .put("analysisMode", analysisMode)
       .put("analysisProvider", analysisProvider)
       .put("analysisModel", analysisModel)
@@ -335,8 +393,21 @@ object CaptureAnalysisClient {
       .put("reviewConfirmedAt", nullableString(remoteCapture, "review_confirmed_at"))
   }
 
+  private fun needsClientResolution(remoteCapture: JSONObject): Boolean {
+    if (remoteCapture.optString("analysis_mode") == "needs_client_resolution") return true
+    val analysis = remoteCapture.optJSONObject("analysis") ?: return false
+    val evidence = analysis.optJSONObject("url_evidence") ?: return false
+    return evidence.optString("status") == "needs_client_resolution"
+  }
+
   private fun isEdgeFunction(apiUrl: String): Boolean {
     return apiUrl.contains("/functions/v1/")
+  }
+
+  private fun isoNow(): String {
+    return SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+      timeZone = TimeZone.getTimeZone("UTC")
+    }.format(Date())
   }
 
   private fun firstAnalysisRun(remoteCapture: JSONObject): JSONObject? {

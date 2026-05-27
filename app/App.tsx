@@ -25,6 +25,16 @@ import saveIntents from "../supabase/functions/_shared/save-intents.json";
 type CaptureStatus = "processing" | "ready" | "needs_review" | "failed";
 type ReviewReason = "intent" | "collection" | "analysis";
 
+type UrlEvidence = {
+  status?: "extracted" | "partial_evidence" | "needs_client_resolution" | "insufficient_url_evidence" | "failed";
+  evidence_quality?: "high" | "medium" | "low" | "none";
+  user_facing_message?: string;
+  failure_reason?: string;
+  canonical_url?: string;
+  client_resolved_url?: string;
+  missing_evidence?: string[];
+};
+
 type Capture = {
   id: string;
   remoteId?: string;
@@ -33,6 +43,7 @@ type Capture = {
   sourceUrl: string | null;
   siteName?: string;
   summary?: string;
+  urlEvidence?: UrlEvidence | null;
   analysisMode?: string;
   analysisProvider?: string;
   analysisModel?: string;
@@ -52,6 +63,7 @@ type Capture = {
   linkedCollections?: LinkedCollection[];
   collectionDecisions?: CollectionDecision[];
   suggestedCollections?: CollectionDecision[];
+  manualCollectionOverrides?: CollectionChoiceOverride[];
   searchPhrases?: string[];
   note: string;
   archivedAt?: number | null;
@@ -78,6 +90,12 @@ type CollectionDecision = {
   description?: string | null;
   rationale: string;
   confidence: number;
+};
+
+type CollectionChoiceOverride = {
+  collectionId: string;
+  source?: string;
+  restoredDecisions: CollectionDecision[];
 };
 
 type Collection = {
@@ -133,6 +151,7 @@ type CaptureReviewDraft = {
 
 type CaptureStore = {
   captureSource: (sourceText: string) => Promise<string>;
+  submitExpandedUrl?: (id: string, expandedUrl: string) => Promise<string>;
   getCaptures: () => Promise<string>;
   updateCapture: (id: string, title: string, note: string, currentSaveIntent: string | null) => Promise<string>;
   confirmCaptureReview?: (id: string, title: string, note: string, currentSaveIntent: string | null) => Promise<string>;
@@ -180,6 +199,7 @@ type NativeNetwork = {
 
 type NativeClipboard = {
   copy: (text: string) => Promise<boolean>;
+  paste?: () => Promise<string>;
 };
 
 const nativeStore = NativeModules.PreciousCaptureStore as CaptureStore | undefined;
@@ -222,6 +242,17 @@ function hostFromUrl(value: string | null) {
   if (!value) return "";
   try {
     return new URL(value).host.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function extractHttpUrl(value: string | null | undefined) {
+  const match = String(value || "").match(/https?:\/\/\S+/i);
+  if (!match) return "";
+  try {
+    const url = new URL(match[0].replace(/[),.;\]]+$/g, ""));
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : "";
   } catch {
     return "";
   }
@@ -369,6 +400,20 @@ function reviewReasonSummary(reasons: ReviewReason[]) {
   return reasons.map(reviewReasonLabel).join(", ");
 }
 
+function urlEvidenceMessage(evidence?: UrlEvidence | null) {
+  if (!evidence) return "";
+  if (evidence.status === "needs_client_resolution") {
+    return evidence.user_facing_message || "We couldn't access the exact content from this shared link. Open it once so we can categorize it accurately.";
+  }
+  if (evidence.status === "insufficient_url_evidence") {
+    return evidence.user_facing_message || "We couldn't verify enough public information to categorize this exact link.";
+  }
+  if (evidence.status === "partial_evidence" || evidence.evidence_quality === "low") {
+    return "Categorized from limited public information.";
+  }
+  return "";
+}
+
 function captureNeedsReview(
   capture: Pick<Capture, "status" | "needsReview" | "confidenceLabel" | "collectionDecisions" | "reviewConfirmedAt">
 ) {
@@ -426,6 +471,9 @@ function captureFromRemote(row: Record<string, any>): Capture {
     : Array.isArray(analysis.suggested_collections)
       ? analysis.suggested_collections.map(collectionDecisionFromRemote).filter(Boolean) as CollectionDecision[]
       : [];
+  const manualCollectionOverrides = Array.isArray(analysis.collection_choice_overrides)
+    ? analysis.collection_choice_overrides.map(collectionChoiceOverrideFromRemote).filter(Boolean) as CollectionChoiceOverride[]
+    : [];
   const remoteHasExtractedData = Boolean(
     row.default_intent ||
       row.analysis_provider ||
@@ -440,6 +488,7 @@ function captureFromRemote(row: Record<string, any>): Capture {
     sourceUrl: typeof row.source_url === "string" ? row.source_url : null,
     siteName: hostFromUrl(typeof row.source_url === "string" ? row.source_url : null),
     summary: analysis.summary || undefined,
+    urlEvidence: analysis.url_evidence || row.urlEvidence || null,
     analysisMode,
     analysisProvider: nullableValue(row.analysis_provider),
     analysisModel: nullableValue(row.analysis_model),
@@ -463,6 +512,7 @@ function captureFromRemote(row: Record<string, any>): Capture {
         : [],
     collectionDecisions,
     suggestedCollections: collectionDecisions,
+    manualCollectionOverrides,
     searchPhrases: analysis.search_phrases || [],
     note: String(row.context_note || ""),
     archivedAt:
@@ -561,6 +611,19 @@ function collectionDecisionFromRemote(row: Record<string, any>): CollectionDecis
   };
 }
 
+function collectionChoiceOverrideFromRemote(row: Record<string, any>): CollectionChoiceOverride | null {
+  const collectionId = nullableValue(row.collection_id || row.collectionId);
+  if (!collectionId) return null;
+  const restoredDecisions = Array.isArray(row.restored_decisions || row.restoredDecisions)
+    ? (row.restored_decisions || row.restoredDecisions).map(collectionDecisionFromRemote).filter(Boolean) as CollectionDecision[]
+    : [];
+  return {
+    collectionId,
+    source: nullableValue(row.source),
+    restoredDecisions
+  };
+}
+
 async function requestJson<T>(
   url: string,
   input: { method?: string; headers?: Record<string, string>; body?: unknown } = {}
@@ -606,6 +669,11 @@ export default function App() {
   const [quickIntentOpen, setQuickIntentOpen] = useState(false);
   const [reminderDrafts, setReminderDrafts] = useState<Record<string, ReminderDraftAction>>({});
   const [collectionDrafts, setCollectionDrafts] = useState<Record<string, CollectionDraftAction>>({});
+  const [collectionPickerOpen, setCollectionPickerOpen] = useState(false);
+  const [collectionPickerQuery, setCollectionPickerQuery] = useState("");
+  const [collectionCreateTitle, setCollectionCreateTitle] = useState("");
+  const [collectionCreateDescription, setCollectionCreateDescription] = useState("");
+  const [collectionChoiceSaving, setCollectionChoiceSaving] = useState<string | null>(null);
   const [reviewDraftsByCapture, setReviewDraftsByCapture] = useState<Record<string, CaptureReviewDraft>>({});
   const [reviewDraftsLoaded, setReviewDraftsLoaded] = useState(false);
   const [noteSaveState, setNoteSaveState] = useState<NoteSaveState>("idle");
@@ -681,7 +749,7 @@ export default function App() {
     setCaptures(sortCaptures(next));
   }, [config, getFreshSession, listMode, session]);
 
-  const loadCollections = useCallback(async () => {
+  const loadCollections = useCallback(async (mode: CollectionListMode = collectionListMode) => {
     if (!config?.apiUrl || !session?.accessToken) {
       setCollections([]);
       return;
@@ -691,7 +759,7 @@ export default function App() {
     const loadWithToken = (accessToken: string) =>
       requestJson<{ collections?: Array<Record<string, any>> }>(
         edgeResourceUrl(config.apiUrl, "collections", {
-          archived: collectionListMode === "archived" ? "true" : "false"
+          archived: mode === "archived" ? "true" : "false"
         }),
         {
           headers: {
@@ -1017,6 +1085,10 @@ export default function App() {
       setReminderDrafts({});
       setCollectionDrafts({});
       setQuickIntentOpen(false);
+      setCollectionPickerOpen(false);
+      setCollectionPickerQuery("");
+      setCollectionCreateTitle("");
+      setCollectionCreateDescription("");
       return;
     }
     const savedDraft = reviewDraftsByCapture[captureDraftKey(selected)] || {};
@@ -1034,6 +1106,10 @@ export default function App() {
     setCollectionDrafts(savedDraft.collections || {});
     setNoteSaveState("idle");
     setQuickIntentOpen(false);
+    setCollectionPickerOpen(false);
+    setCollectionPickerQuery("");
+    setCollectionCreateTitle("");
+    setCollectionCreateDescription("");
   }, [reviewDraftsByCapture, selectedDraftKey]);
 
   useEffect(() => {
@@ -1060,6 +1136,19 @@ export default function App() {
     const text = cleanSentence(rationale);
     if (!text) return;
     Alert.alert(title, text, [{ text: "Done" }]);
+  }
+
+  function applyUpdatedCapture(updatedCapture: Capture, previousId: string) {
+    setCaptures((current) =>
+      current.map((item) => (item.id === previousId ? updatedCapture : item))
+    );
+    setCollectionCaptures((current) =>
+      current.map((item) => (item.id === previousId ? updatedCapture : item))
+    );
+  }
+
+  function manualOverrideForCollection(capture: Capture, collectionId: string) {
+    return (capture.manualCollectionOverrides || []).find((override) => override.collectionId === collectionId);
   }
 
   async function saveContextNote(capture: Capture, noteValue: string) {
@@ -1399,6 +1488,121 @@ export default function App() {
     }
   }
 
+  async function sendCaptureCollectionChoice(input: {
+    choice: { type: "existing"; collectionId: string } | { type: "new"; title: string; description: string };
+    source: "manual" | "analysis";
+    suggestionIndex?: number;
+    dismissCurrentCollectionSuggestions?: boolean;
+    rationale?: string | null;
+    confidence?: number | null;
+    savingKey: string;
+  }) {
+    if (!selected) return;
+    if (!config?.apiUrl || !session?.accessToken) {
+      setMessage("Sign in to manage collections.");
+      return;
+    }
+    const previousId = selected.id;
+    setCollectionChoiceSaving(input.savingKey);
+    try {
+      const activeSession = await getFreshSession();
+      if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
+      const send = (accessToken: string) =>
+        requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
+          method: "PATCH",
+          headers: {
+            apikey: config.supabaseAnonKey,
+            authorization: `Bearer ${accessToken}`,
+            "content-type": "application/json"
+          },
+          body: {
+            captureId: selected.remoteId || selected.id,
+            action: "apply_collection_choice",
+            choice: input.choice,
+            source: input.source,
+            suggestionIndex: input.suggestionIndex,
+            dismissCurrentCollectionSuggestions: input.dismissCurrentCollectionSuggestions,
+            rationale: input.rationale,
+            confidence: input.confidence
+          }
+        });
+      let json: { capture: Record<string, any> };
+      try {
+        json = await send(activeSession.accessToken);
+      } catch (error) {
+        if (!isAuthError(error)) throw error;
+        const refreshed = await getFreshSession(true);
+        if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
+        json = await send(refreshed.accessToken);
+      }
+      const updatedCapture = captureFromRemote(json.capture);
+      applyUpdatedCapture(updatedCapture, previousId);
+      setCollectionPickerOpen(false);
+      setCollectionPickerQuery("");
+      setCollectionCreateTitle("");
+      setCollectionCreateDescription("");
+      await loadCollections("active");
+      setMessage("Collection updated.");
+    } catch (error) {
+      setMessage(friendlyError(error, "Could not update collection."));
+    } finally {
+      setCollectionChoiceSaving(null);
+    }
+  }
+
+  async function undoCollectionChoice(collection: LinkedCollection) {
+    if (!selected) return;
+    if (!config?.apiUrl || !session?.accessToken) {
+      await undoAddedCollection(collection);
+      return;
+    }
+    const previousId = selected.id;
+    setCollectionChoiceSaving(`undo:${collection.id}`);
+    try {
+      const activeSession = await getFreshSession();
+      if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
+      const send = (accessToken: string) =>
+        requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
+          method: "PATCH",
+          headers: {
+            apikey: config.supabaseAnonKey,
+            authorization: `Bearer ${accessToken}`,
+            "content-type": "application/json"
+          },
+          body: {
+            captureId: selected.remoteId || selected.id,
+            action: "undo_collection_choice",
+            collectionId: collection.id
+          }
+        });
+      let json: { capture: Record<string, any> };
+      try {
+        json = await send(activeSession.accessToken);
+      } catch (error) {
+        if (!isAuthError(error)) throw error;
+        const refreshed = await getFreshSession(true);
+        if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
+        json = await send(refreshed.accessToken);
+      }
+      applyUpdatedCapture(captureFromRemote(json.capture), previousId);
+      await loadCollections("active");
+      setMessage("AI suggestion restored.");
+    } catch (error) {
+      setMessage(friendlyError(error, "Could not undo collection."));
+    } finally {
+      setCollectionChoiceSaving(null);
+    }
+  }
+
+  async function openCollectionPicker() {
+    setCollectionPickerOpen((current) => !current);
+    if (!collectionPickerOpen) {
+      void loadCollections("active").catch((error) => {
+        setMessage(friendlyError(error, "Could not load collections."));
+      });
+    }
+  }
+
   async function saveCollection() {
     const title = collectionTitle.trim();
     const description = collectionDescription.trim();
@@ -1496,90 +1700,21 @@ export default function App() {
     await unlinkCaptureFromCollection(collectionId, selected);
   }
 
-  async function autosaveCollectionDecision(decision: CollectionDecision, decisionKey: string) {
-    if (!selected) return;
-    const captureId = selected.remoteId || selected.id;
-    try {
-      let linkedCollection: LinkedCollection | null = null;
-      if (decision.type === "existing" && decision.collectionId) {
-        await collectionRequest<{ ok: boolean }>("collection-links", {
-          method: "POST",
-          body: {
-            collectionId: decision.collectionId,
-            captureId,
-            title: decision.title,
-            rationale: decision.rationale,
-            confidence: decision.confidence,
-            createdBy: "analysis"
-          }
-        });
-        linkedCollection = {
-          id: decision.collectionId,
-          title: decision.title,
-          description: decision.description || undefined,
-          createdBy: "analysis",
-          rationale: decision.rationale,
-          confidence: decision.confidence
-        };
-      } else if (decision.type === "new" && decision.title.trim() && decision.description?.trim()) {
-        const json = await collectionRequest<{ collection: Record<string, any> }>("collections", {
-          method: "POST",
-          body: {
-            title: decision.title.trim(),
-            description: decision.description.trim(),
-            captureId,
-            rationale: decision.rationale,
-            confidence: decision.confidence,
-            createdBy: "analysis"
-          }
-        });
-        const collection = collectionFromRemote(json.collection);
-        linkedCollection = {
-          id: collection.id,
-          title: collection.title,
-          description: collection.description,
-          createdBy: "analysis",
-          rationale: decision.rationale,
-          confidence: decision.confidence
-        };
-      }
-      if (!linkedCollection) return;
-      const linkedKey = linkedCollectionDraftKey(linkedCollection.id);
-      const nextDrafts = { ...collectionDrafts, [decisionKey]: decision.type === "new" ? "create" as const : "link" as const, [linkedKey]: "added" as const };
-      setCollectionDrafts(nextDrafts);
-      updateSelectedReviewDraft({ collections: nextDrafts });
-      setCaptures((current) =>
-        current.map((capture) => {
-          if (capture.id !== selected.id) return capture;
-          const linked = capture.linkedCollections || [];
-          return {
-            ...capture,
-            linkedCollections: linked.some((collection) => collection.id === linkedCollection.id)
-              ? linked
-              : [...linked, linkedCollection],
-            collectionDecisions: (capture.collectionDecisions || []).filter((item) => item !== decision),
-            suggestedCollections: (capture.suggestedCollections || []).filter((item) => item !== decision)
-          };
-        })
-      );
-      setCollectionCaptures((current) =>
-        current.map((capture) =>
-          capture.id === selected.id
-            ? {
-                ...capture,
-                linkedCollections: [
-                  ...(capture.linkedCollections || []).filter((collection) => collection.id !== linkedCollection.id),
-                  linkedCollection
-                ]
-              }
-            : capture
-        )
-      );
-      if (homeMode === "collections") await loadCollections();
-      setMessage("Collection updated.");
-    } catch (error) {
-      setMessage(friendlyError(error, "Could not update collection."));
-    }
+  async function autosaveCollectionDecision(decision: CollectionDecision, index: number) {
+    const choice = decision.type === "existing" && decision.collectionId
+      ? { type: "existing" as const, collectionId: decision.collectionId }
+      : decision.type === "new" && decision.title.trim() && decision.description?.trim()
+        ? { type: "new" as const, title: decision.title.trim(), description: decision.description.trim() }
+        : null;
+    if (!choice) return;
+    await sendCaptureCollectionChoice({
+      choice,
+      source: "analysis",
+      suggestionIndex: index,
+      rationale: decision.rationale,
+      confidence: decision.confidence,
+      savingKey: `suggestion:${index}`
+    });
   }
 
   async function undoAddedCollection(collection: LinkedCollection) {
@@ -1718,6 +1853,28 @@ export default function App() {
       setMessage("Source copied.");
     } catch (error) {
       setMessage(friendlyError(error, "Could not copy source."));
+    }
+  }
+
+  async function pasteExpandedUrl() {
+    if (!selected) return;
+    if (!nativeStore?.submitExpandedUrl || !nativeClipboard?.paste) {
+      setMessage("Copy the expanded URL, then paste it as a new capture.");
+      return;
+    }
+    try {
+      const clipboardText = await nativeClipboard.paste();
+      const expandedUrl = extractHttpUrl(clipboardText);
+      if (!expandedUrl) {
+        setMessage("Copy the expanded URL first, then tap Paste expanded URL.");
+        return;
+      }
+      const raw = await nativeStore.submitExpandedUrl(selected.id, expandedUrl);
+      const next = JSON.parse(raw || "[]") as Capture[];
+      setCaptures(sortCaptures(next));
+      setMessage("Expanded URL saved. AI extraction is running.");
+    } catch (error) {
+      setMessage(friendlyError(error, "Could not use the expanded URL."));
     }
   }
 
@@ -2105,6 +2262,25 @@ export default function App() {
     const reminderRows = selected.suggestedReminders || [];
     const collectionRows = selected.linkedCollections || [];
     const collectionSuggestionRows = selected.collectionDecisions || [];
+    const replacedCollectionSuggestions = (selected.manualCollectionOverrides || [])
+      .filter((override) => override.restoredDecisions.length)
+      .flatMap((override) =>
+        override.restoredDecisions.map((decision, index) => ({
+          override,
+          decision,
+          key: `${override.collectionId}:${index}:${decision.collectionId || decision.title}`
+        }))
+      );
+    const linkedCollectionIds = new Set(collectionRows.map((collection) => collection.id));
+    const activeCollections = collections.filter((collection) => collection.status === "active");
+    const collectionPickerTerm = collectionPickerQuery.trim().toLowerCase();
+    const collectionPickerRows = activeCollections
+      .filter((collection) => !linkedCollectionIds.has(collection.id))
+      .filter((collection) =>
+        !collectionPickerTerm ||
+        [collection.title, collection.description].join(" ").toLowerCase().includes(collectionPickerTerm)
+      );
+    const collectionCreateDisabled = !collectionCreateTitle.trim() || !collectionCreateDescription.trim();
     const primaryReminder = reminderRows[0];
     const primaryLinkedCollection = collectionRows[0];
     const primaryCollectionDecision = collectionSuggestionRows[0];
@@ -2112,6 +2288,7 @@ export default function App() {
     const primaryCollectionRationale = primaryLinkedCollection?.rationale || primaryCollectionDecision?.rationale;
     const primaryRationale = primaryReminder?.rationale || primaryCollectionRationale || selected.intentRationale;
     const quickBecause = becauseSentence(primaryRationale);
+    const urlEvidenceNotice = urlEvidenceMessage(selected.urlEvidence);
     const noteStatusLabel =
       noteSaveState === "saving"
         ? "Saving..."
@@ -2122,6 +2299,77 @@ export default function App() {
             : draftNoteDirty
               ? "Autosaves"
               : "";
+    const collectionPickerContent = collectionPickerOpen ? (
+      <View style={styles.collectionPicker}>
+        <TextInput
+          onChangeText={setCollectionPickerQuery}
+          placeholder="Search collections"
+          placeholderTextColor={colors.muted}
+          style={styles.search}
+          value={collectionPickerQuery}
+        />
+        {collectionPickerRows.slice(0, 6).map((collection) => (
+          <Pressable
+            key={collection.id}
+            disabled={Boolean(collectionChoiceSaving)}
+            onPress={() => void sendCaptureCollectionChoice({
+              choice: { type: "existing", collectionId: collection.id },
+              source: "manual",
+              dismissCurrentCollectionSuggestions: collectionSuggestionRows.length > 0,
+              savingKey: `existing:${collection.id}`
+            })}
+            style={styles.collectionPickerRow}
+          >
+            <View style={styles.suggestionValue}>
+              <Text style={styles.suggestionText}>{collection.title}</Text>
+              <Text numberOfLines={2} style={styles.meta}>{collection.description}</Text>
+            </View>
+            <Text style={styles.suggestionAction}>
+              {collectionChoiceSaving === `existing:${collection.id}` ? "Adding..." : "Add"}
+            </Text>
+          </Pressable>
+        ))}
+        {!collectionPickerRows.length ? (
+          <Text style={styles.meta}>No matching active collections.</Text>
+        ) : null}
+        <View style={styles.collectionCreateBox}>
+          <Text style={styles.quickLabel}>New collection</Text>
+          <TextInput
+            onChangeText={setCollectionCreateTitle}
+            placeholder="Title"
+            placeholderTextColor={colors.muted}
+            style={styles.search}
+            value={collectionCreateTitle}
+          />
+          <TextInput
+            multiline
+            onChangeText={setCollectionCreateDescription}
+            placeholder="What belongs here"
+            placeholderTextColor={colors.muted}
+            style={styles.detailInput}
+            value={collectionCreateDescription}
+          />
+          <Pressable
+            disabled={collectionCreateDisabled || Boolean(collectionChoiceSaving)}
+            onPress={() => void sendCaptureCollectionChoice({
+              choice: {
+                type: "new",
+                title: collectionCreateTitle.trim(),
+                description: collectionCreateDescription.trim()
+              },
+              source: "manual",
+              dismissCurrentCollectionSuggestions: collectionSuggestionRows.length > 0,
+              savingKey: "new"
+            })}
+            style={[styles.smallButton, (collectionCreateDisabled || Boolean(collectionChoiceSaving)) && styles.disabledButton]}
+          >
+            <Text style={styles.smallButtonText}>
+              {collectionChoiceSaving === "new" ? "Creating..." : "Create and add"}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    ) : null;
     const showStatus = selectedArchived || displayStatus(selected) !== "ready";
     return (
       <SafeAreaView style={styles.safe}>
@@ -2241,7 +2489,9 @@ export default function App() {
               </View>
             ) : null}
             <View style={styles.suggestionRail}>
-              <Text style={styles.quickLabel}>AI suggestions</Text>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.quickLabel}>AI suggestions</Text>
+              </View>
               {reminderRows.length ? (
                 reminderRows.slice(0, 3).map((reminder, index) => {
                   const key = reminderDraftKey(reminder, index);
@@ -2289,12 +2539,13 @@ export default function App() {
                 const key = linkedCollectionDraftKey(collection.id);
                 const removed = collectionDrafts[key] === "remove";
                 const added = collectionDrafts[key] === "added";
+                const hasAiFallback = Boolean(manualOverrideForCollection(selected, collection.id)?.restoredDecisions.length);
                 return (
-                  <View key={collection.id} style={[styles.suggestionPill, (removed || added) && styles.suggestionPillChanged]}>
+                  <View key={collection.id} style={[styles.suggestionPill, (removed || added || hasAiFallback) && styles.suggestionPillChanged]}>
                     <View style={styles.suggestionLabelColumn}>
                       <Text style={styles.suggestionLabel}>Collection</Text>
-                      <Text style={[styles.suggestionState, (removed || added) && styles.suggestionStateChanged]}>
-                        {removed ? "Removed" : added ? "Added" : "Linked"}
+                      <Text style={[styles.suggestionState, (removed || added || hasAiFallback) && styles.suggestionStateChanged]}>
+                        {removed ? "Removed" : added || hasAiFallback ? "Added" : "Linked"}
                       </Text>
                     </View>
                     <Pressable
@@ -2323,7 +2574,41 @@ export default function App() {
                         }}
                       hitSlop={8}
                     >
-                      <Text style={styles.suggestionAction}>{removed || added ? "Undo" : "Remove"}</Text>
+                      <Text style={styles.suggestionAction}>
+                        {removed || added ? "Undo" : "Remove"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                );
+              })}
+              {replacedCollectionSuggestions.map(({ override, decision, key }) => {
+                const undoing = collectionChoiceSaving === `undo:${override.collectionId}`;
+                return (
+                  <View key={key} style={[styles.suggestionPill, styles.suggestionPillChanged]}>
+                    <View style={styles.suggestionLabelColumn}>
+                      <Text style={styles.suggestionLabel}>Collection</Text>
+                      <Text style={[styles.suggestionState, styles.suggestionStateChanged]}>AI suggested</Text>
+                    </View>
+                    <Pressable
+                      onLongPress={() => showRationale("Why this collection?", decision.rationale)}
+                      onPress={() => showRationale("Why this collection?", decision.rationale)}
+                      style={styles.suggestionValue}
+                    >
+                      <Text style={[styles.suggestionText, styles.suggestionTextMuted]}>
+                        {decision.title}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => void undoCollectionChoice({
+                        id: override.collectionId,
+                        title: decision.title,
+                        description: decision.description || undefined,
+                        rationale: decision.rationale,
+                        confidence: decision.confidence
+                      })}
+                      hitSlop={8}
+                    >
+                      <Text style={styles.suggestionAction}>{undoing ? "Restoring..." : "Undo"}</Text>
                     </Pressable>
                   </View>
                 );
@@ -2332,6 +2617,7 @@ export default function App() {
                 const key = suggestedCollectionDraftKey(collection, index);
                 const action = collectionDrafts[key] || "ignore";
                 const staged = action === "link" || action === "create";
+                const saving = collectionChoiceSaving === `suggestion:${index}`;
                 const defaultAction = collection.type === "new" ? "Create" : "Link";
                 return (
                   <View
@@ -2351,30 +2637,42 @@ export default function App() {
                     >
                       <Text style={styles.suggestionText}>{collection.title}</Text>
                     </Pressable>
-                    <Pressable
-                      onPress={() => {
-                        if (staged) {
-                          const next = { ...collectionDrafts };
-                          delete next[key];
-                          setCollectionDrafts(next);
-                          updateSelectedReviewDraft({ collections: next });
-                          return;
-                        }
-                        void autosaveCollectionDecision(collection, key);
-                      }}
-                      hitSlop={8}
-                    >
-                      <Text style={styles.suggestionAction}>{staged ? "Undo" : defaultAction}</Text>
-                    </Pressable>
+                    <View style={styles.suggestionActions}>
+                      <Pressable
+                        onPress={() => {
+                          if (staged) {
+                            const next = { ...collectionDrafts };
+                            delete next[key];
+                            setCollectionDrafts(next);
+                            updateSelectedReviewDraft({ collections: next });
+                            return;
+                          }
+                          void autosaveCollectionDecision(collection, index);
+                        }}
+                        hitSlop={8}
+                      >
+                        <Text style={styles.suggestionAction}>{saving ? "Saving..." : staged ? "Undo" : defaultAction}</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => void openCollectionPicker()}
+                        hitSlop={8}
+                      >
+                        <Text style={styles.suggestionAction}>{collectionPickerOpen ? "Close" : "Different"}</Text>
+                      </Pressable>
+                    </View>
                   </View>
                 );
               })}
-              {!collectionRows.length && !collectionSuggestionRows.length ? (
+              {!collectionRows.length && !collectionSuggestionRows.length && !replacedCollectionSuggestions.length ? (
                 <View style={styles.suggestionPill}>
                   <Text style={styles.suggestionLabel}>Collection</Text>
                   <Text style={[styles.suggestionText, styles.suggestionValue]}>None</Text>
+                  <Pressable onPress={() => void openCollectionPicker()} hitSlop={8}>
+                    <Text style={styles.suggestionAction}>{collectionPickerOpen ? "Close" : "Add collection"}</Text>
+                  </Pressable>
                 </View>
               ) : null}
+              {(!collectionRows.length || collectionSuggestionRows.length) ? collectionPickerContent : null}
             </View>
           </View>
           {selectedReviewReasons.length ? (
@@ -2385,6 +2683,22 @@ export default function App() {
                   {reviewReasonLabel(reason)}
                 </Text>
               ))}
+            </View>
+          ) : null}
+          {urlEvidenceNotice ? (
+            <View style={styles.sourceBlock}>
+              <Text style={styles.meta}>Link evidence</Text>
+              <Text style={styles.supportingText}>{urlEvidenceNotice}</Text>
+              {selected.urlEvidence?.status === "needs_client_resolution" && selected.sourceUrl ? (
+                <>
+                  <Pressable onPress={() => void Linking.openURL(selected.sourceUrl || "")} style={styles.secondaryButton}>
+                    <Text style={styles.secondaryButtonText}>Open link</Text>
+                  </Pressable>
+                  <Pressable onPress={() => void pasteExpandedUrl()} style={styles.secondaryButton}>
+                    <Text style={styles.secondaryButtonText}>Paste expanded URL</Text>
+                  </Pressable>
+                </>
+              ) : null}
             </View>
           ) : null}
           <View style={styles.sourceBlock}>
@@ -3007,6 +3321,26 @@ const styles = StyleSheet.create({
   suggestionRail: {
     gap: 8
   },
+  collectionPicker: {
+    backgroundColor: colors.paper,
+    borderRadius: 8,
+    gap: 10,
+    padding: 10
+  },
+  collectionPickerRow: {
+    alignItems: "center",
+    borderTopColor: colors.line,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 10,
+    paddingTop: 10
+  },
+  collectionCreateBox: {
+    borderTopColor: colors.line,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 8,
+    paddingTop: 10
+  },
   suggestionPill: {
     alignItems: "center",
     backgroundColor: colors.paper,
@@ -3055,6 +3389,10 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 13,
     fontWeight: "700"
+  },
+  suggestionActions: {
+    alignItems: "flex-end",
+    gap: 6
   },
   editBlock: {
     gap: 8

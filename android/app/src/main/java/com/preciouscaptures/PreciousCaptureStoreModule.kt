@@ -39,6 +39,34 @@ class PreciousCaptureStoreModule(
   }
 
   @ReactMethod
+  fun submitExpandedUrl(id: String, expandedUrl: String, promise: Promise) {
+    try {
+      if (configuredApiUrl().isNotBlank() && readNativeAuthSession(reactContext) == null) {
+        promise.reject("capture_auth_required", "Sign in before resolving captures.")
+        return
+      }
+      val normalized = runCatching {
+        val url = java.net.URL(expandedUrl.trim())
+        if (url.protocol != "http" && url.protocol != "https") null else url.toString()
+      }.getOrNull()
+      if (normalized.isNullOrBlank()) {
+        promise.reject("invalid_expanded_url", "Paste a valid http or https URL.")
+        return
+      }
+      val capture = PreciousCaptureStore.submitExpandedUrl(reactContext, id, normalized)
+      if (capture == null) {
+        promise.reject("capture_not_found", "Capture not found.")
+        return
+      }
+      CaptureNotifications.showQueued(reactContext, id)
+      enqueueCaptureWork(reactContext, id, NetworkType.CONNECTED)
+      promise.resolve(PreciousCaptureStore.list(reactContext).toString())
+    } catch (error: Exception) {
+      promise.reject("capture_resolve_enqueue_failed", error)
+    }
+  }
+
+  @ReactMethod
   fun updateCapture(id: String, title: String, note: String, currentSaveIntent: String?, promise: Promise) {
     try {
       promise.resolve(PreciousCaptureStore.update(reactContext, id, title, note, currentSaveIntent).toString())

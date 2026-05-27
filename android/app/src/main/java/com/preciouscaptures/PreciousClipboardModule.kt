@@ -23,4 +23,15 @@ class PreciousClipboardModule(
       promise.reject("clipboard_copy_failed", error)
     }
   }
+
+  @ReactMethod
+  fun paste(promise: Promise) {
+    try {
+      val clipboard = reactContext.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+      val value = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(reactContext)?.toString()
+      promise.resolve(value ?: "")
+    } catch (error: Exception) {
+      promise.reject("clipboard_paste_failed", error)
+    }
+  }
 }

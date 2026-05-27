@@ -30,6 +30,8 @@ object PreciousCaptureStore {
       .put("siteName", "")
       .put("summary", "")
       .put("analysis", JSONObject.NULL)
+      .put("urlEvidence", JSONObject.NULL)
+      .put("clientResolutionAttemptCount", 0)
       .put("analysisMode", "")
       .put("analysisProvider", "")
       .put("analysisModel", "")
@@ -89,6 +91,53 @@ object PreciousCaptureStore {
   }
 
   @Synchronized
+  fun incrementClientResolutionAttempt(context: Context, id: String): Int {
+    val captures = list(context)
+    val now = System.currentTimeMillis()
+    var count = 0
+    val next = JSONArray()
+    for (index in 0 until captures.length()) {
+      val capture = captures.getJSONObject(index)
+      if (capture.optString("id") == id) {
+        count = capture.optInt("clientResolutionAttemptCount", 0) + 1
+        capture
+          .put("clientResolutionAttemptCount", count)
+          .put("updatedAt", now)
+      }
+      next.put(capture)
+    }
+    save(context, next)
+    return count
+  }
+
+  @Synchronized
+  fun submitExpandedUrl(context: Context, id: String, expandedUrl: String): JSONObject? {
+    val captures = list(context)
+    val now = System.currentTimeMillis()
+    var updated: JSONObject? = null
+    val next = JSONArray()
+    for (index in 0 until captures.length()) {
+      val capture = captures.getJSONObject(index)
+      if (capture.optString("id") == id) {
+        val count = capture.optInt("clientResolutionAttemptCount", 0) + 1
+        capture
+          .put("clientResolvedUrl", expandedUrl)
+          .put("clientResolutionSource", "manual_paste")
+          .put("clientResolutionAttemptCount", count)
+          .put("status", "processing")
+          .put("analysisMode", "pending_llm")
+          .put("analysisError", "")
+          .put("processedAt", JSONObject.NULL)
+          .put("updatedAt", now)
+        updated = capture
+      }
+      next.put(capture)
+    }
+    save(context, next)
+    return updated
+  }
+
+  @Synchronized
   fun complete(context: Context, id: String, enrichment: JSONObject): JSONObject? {
     val captures = list(context)
     val now = System.currentTimeMillis()
@@ -102,6 +151,8 @@ object PreciousCaptureStore {
         val needsReview = enrichmentRequiresReview(enrichment)
         val nextStatus = when {
           analysisMode == "preflight_rejected" -> "failed"
+          analysisMode == "needs_client_resolution" -> "needs_review"
+          analysisMode == "insufficient_url_evidence" -> "needs_review"
           analysisMode == "llm_processing" -> "processing"
           analysisMode == "llm_waiting_network" -> "processing"
           analysisMode == "llm" && !needsReview -> "ready"
@@ -115,7 +166,11 @@ object PreciousCaptureStore {
           .put("siteName", enrichment.optString("siteName"))
           .put("summary", enrichment.optString("summary"))
           .put("sourceUrl", enrichment.optString("sourceUrl", capture.optString("sourceUrl")))
+          .put("clientResolvedUrl", enrichment.optString("clientResolvedUrl", capture.optString("clientResolvedUrl")))
+          .put("clientResolutionSource", enrichment.optString("clientResolutionSource", capture.optString("clientResolutionSource")))
           .put("analysis", enrichment.opt("analysis") ?: JSONObject.NULL)
+          .put("urlEvidence", enrichment.opt("urlEvidence") ?: JSONObject.NULL)
+          .put("clientResolutionAttemptCount", enrichment.optInt("clientResolutionAttemptCount", capture.optInt("clientResolutionAttemptCount", 0)))
           .put("analysisMode", analysisMode)
           .put("analysisProvider", enrichment.optString("analysisProvider"))
           .put("analysisModel", enrichment.optString("analysisModel"))

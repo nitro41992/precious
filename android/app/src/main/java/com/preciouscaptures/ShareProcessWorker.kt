@@ -25,6 +25,9 @@ class ShareProcessWorker(
         captureId,
         pendingCapture?.optString("sourceText").orEmpty(),
         pendingCapture?.optString("sourceUrl"),
+        pendingCapture?.optInt("clientResolutionAttemptCount", 0) ?: 0,
+        pendingCapture?.optString("clientResolvedUrl")?.ifBlank { null },
+        pendingCapture?.optString("clientResolutionSource")?.ifBlank { null },
         assetPath,
         inputData.getString("assetMimeType"),
         inputData.getString("assetFileName")
