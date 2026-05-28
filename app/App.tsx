@@ -6,6 +6,7 @@ import {
   AppState,
   BackHandler,
   FlatList,
+  KeyboardAvoidingView,
   Linking,
   NativeModules,
   PermissionsAndroid,
@@ -282,6 +283,27 @@ function linkedCollectionDraftKey(collectionId: string) {
 
 function suggestedCollectionDraftKey(collection: CollectionDecision, index: number) {
   return `suggested:${index}:${collection.type}:${collection.collectionId || collection.title}`;
+}
+
+function collectionChoiceFromDecision(decision: CollectionDecision) {
+  if (decision.type === "existing" && decision.collectionId) {
+    return { type: "existing" as const, collectionId: decision.collectionId };
+  }
+  if (decision.type === "new" && decision.title.trim() && decision.description?.trim()) {
+    return {
+      type: "new" as const,
+      title: decision.title.trim(),
+      description: decision.description.trim()
+    };
+  }
+  return null;
+}
+
+function collectionConfidenceLabel(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "Selected";
+  if (value >= 0.72) return "Looks right";
+  if (value >= 0.5) return "Maybe";
+  return "Not sure";
 }
 
 function captureDraftKey(capture: Pick<Capture, "id" | "remoteId">) {
@@ -597,6 +619,7 @@ export default function App() {
   const [authPassword, setAuthPassword] = useState("");
   const [authLoading, setAuthLoading] = useState<"signin" | "signup" | null>(null);
   const latestNoteRef = useRef("");
+  const autoAppliedCollectionKeysRef = useRef<Set<string>>(new Set());
 
   const getFreshSession = useCallback(async (force = false) => {
     if (!session) return null;
@@ -1019,6 +1042,35 @@ export default function App() {
   }, [reviewDraftsByCapture, selectedDraftKey]);
 
   useEffect(() => {
+    if (!selected || !config?.apiUrl || !session?.accessToken || collectionChoiceSaving) return;
+    if ((selected.linkedCollections || []).length) return;
+    const topDecision = (selected.collectionDecisions || [])[0];
+    if (!topDecision) return;
+    const choice = collectionChoiceFromDecision(topDecision);
+    if (!choice) return;
+    const autoKey = `${captureDraftKey(selected)}:${suggestedCollectionDraftKey(topDecision, 0)}`;
+    if (autoAppliedCollectionKeysRef.current.has(autoKey)) return;
+    autoAppliedCollectionKeysRef.current.add(autoKey);
+    void sendCaptureCollectionChoice({
+      choice,
+      source: "analysis",
+      suggestionIndex: 0,
+      dismissCurrentCollectionSuggestions: true,
+      rationale: topDecision.rationale,
+      confidence: topDecision.confidence,
+      savingKey: `auto-suggestion:${autoKey}`
+    });
+  }, [
+    collectionChoiceSaving,
+    config?.apiUrl,
+    selected?.id,
+    selected?.remoteId,
+    selected?.linkedCollections?.length,
+    selected?.collectionDecisions?.length,
+    session?.accessToken
+  ]);
+
+  useEffect(() => {
     if (!selectedCollectionId) {
       if (!captureReturnCollectionId) {
         setCollectionCaptures([]);
@@ -1051,10 +1103,6 @@ export default function App() {
     setCollectionCaptures((current) =>
       current.map((item) => (item.id === previousId ? updatedCapture : item))
     );
-  }
-
-  function manualOverrideForCollection(capture: Capture, collectionId: string) {
-    return (capture.manualCollectionOverrides || []).find((override) => override.collectionId === collectionId);
   }
 
   async function saveContextNote(capture: Capture, noteValue: string) {
@@ -1456,94 +1504,6 @@ export default function App() {
     }
   }
 
-  async function undoCollectionChoice(collection: LinkedCollection) {
-    if (!selected) return;
-    if (!config?.apiUrl || !session?.accessToken) {
-      await undoAddedCollection(collection);
-      return;
-    }
-    const previousId = selected.id;
-    setCollectionChoiceSaving(`undo:${collection.id}`);
-    try {
-      const activeSession = await getFreshSession();
-      if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
-      const send = (accessToken: string) =>
-        requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
-          method: "PATCH",
-          headers: {
-            apikey: config.supabaseAnonKey,
-            authorization: `Bearer ${accessToken}`,
-            "content-type": "application/json"
-          },
-          body: {
-            captureId: selected.remoteId || selected.id,
-            action: "undo_collection_choice",
-            collectionId: collection.id
-          }
-        });
-      let json: { capture: Record<string, any> };
-      try {
-        json = await send(activeSession.accessToken);
-      } catch (error) {
-        if (!isAuthError(error)) throw error;
-        const refreshed = await getFreshSession(true);
-        if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
-        json = await send(refreshed.accessToken);
-      }
-      applyUpdatedCapture(captureFromRemote(json.capture), previousId);
-      await loadCollections("active");
-      setMessage("AI suggestion restored.");
-    } catch (error) {
-      setMessage(friendlyError(error, "Could not undo collection."));
-    } finally {
-      setCollectionChoiceSaving(null);
-    }
-  }
-
-  async function clearAiCollectionSuggestion(index: number) {
-    if (!selected) return;
-    if (!config?.apiUrl || !session?.accessToken) {
-      setMessage("Sign in to manage collections.");
-      return;
-    }
-    const previousId = selected.id;
-    const savingKey = `clear-suggestion:${index}`;
-    setCollectionChoiceSaving(savingKey);
-    try {
-      const activeSession = await getFreshSession();
-      if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
-      const send = (accessToken: string) =>
-        requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
-          method: "PATCH",
-          headers: {
-            apikey: config.supabaseAnonKey,
-            authorization: `Bearer ${accessToken}`,
-            "content-type": "application/json"
-          },
-          body: {
-            captureId: selected.remoteId || selected.id,
-            action: "clear_collection_suggestion",
-            suggestionIndex: index
-          }
-        });
-      let json: { capture: Record<string, any> };
-      try {
-        json = await send(activeSession.accessToken);
-      } catch (error) {
-        if (!isAuthError(error)) throw error;
-        const refreshed = await getFreshSession(true);
-        if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
-        json = await send(refreshed.accessToken);
-      }
-      applyUpdatedCapture(captureFromRemote(json.capture), previousId);
-      setMessage("AI suggestion cleared.");
-    } catch (error) {
-      setMessage(friendlyError(error, "Could not clear AI suggestion."));
-    } finally {
-      setCollectionChoiceSaving(null);
-    }
-  }
-
   async function openCollectionPicker() {
     setCollectionPickerOpen((current) => !current);
     if (!collectionPickerOpen) {
@@ -1651,11 +1611,7 @@ export default function App() {
   }
 
   async function autosaveCollectionDecision(decision: CollectionDecision, index: number) {
-    const choice = decision.type === "existing" && decision.collectionId
-      ? { type: "existing" as const, collectionId: decision.collectionId }
-      : decision.type === "new" && decision.title.trim() && decision.description?.trim()
-        ? { type: "new" as const, title: decision.title.trim(), description: decision.description.trim() }
-        : null;
+    const choice = collectionChoiceFromDecision(decision);
     if (!choice) return;
     await sendCaptureCollectionChoice({
       choice,
@@ -1678,53 +1634,6 @@ export default function App() {
       updateSelectedReviewDraft({ collections: nextDrafts });
     } catch {
       // unlinkCaptureFromCollection already reports the error.
-    }
-  }
-
-  async function acceptCollectionDecision(decision: CollectionDecision) {
-    if (!selected) return;
-    const captureId = selected.remoteId || selected.id;
-    try {
-      if (decision.type === "existing" && decision.collectionId) {
-        await collectionRequest<{ ok: boolean }>("collection-links", {
-          method: "POST",
-          body: {
-            collectionId: decision.collectionId,
-            captureId,
-            rationale: decision.rationale,
-            confidence: decision.confidence,
-            createdBy: "analysis"
-          }
-        });
-      } else if (decision.type === "new" && decision.title.trim() && decision.description?.trim()) {
-        await collectionRequest<{ collection: Record<string, any> }>("collections", {
-          method: "POST",
-          body: {
-            title: decision.title.trim(),
-            description: decision.description.trim(),
-            captureId,
-            rationale: decision.rationale,
-            confidence: decision.confidence,
-            createdBy: "analysis"
-          }
-        });
-      }
-      setCaptures((current) =>
-        current.map((capture) =>
-          capture.id === selected.id
-            ? {
-                ...capture,
-                collectionDecisions: (capture.collectionDecisions || []).filter((item) => item !== decision),
-                suggestedCollections: (capture.suggestedCollections || []).filter((item) => item !== decision)
-              }
-            : capture
-        )
-      );
-      await loadCaptures();
-      if (homeMode === "collections") await loadCollections();
-      setMessage("Collection updated.");
-    } catch (error) {
-      setMessage(friendlyError(error, "Could not update collection."));
     }
   }
 
@@ -2249,11 +2158,33 @@ export default function App() {
       );
     const collectionCreateDisabled = !collectionCreateTitle.trim() || !collectionCreateDescription.trim();
     const primaryReminder = reminderRows[0];
+    const primaryReminderKey = primaryReminder ? reminderDraftKey(primaryReminder, 0) : "";
+    const primaryReminderRemoved = primaryReminder ? reminderDrafts[primaryReminderKey] === "remove" : false;
     const primaryLinkedCollection = collectionRows[0];
     const primaryCollectionDecision = collectionSuggestionRows[0];
+    const primaryCollectionTitle = primaryLinkedCollection?.title || primaryCollectionDecision?.title || "";
+    const primaryCollectionConfidence = primaryLinkedCollection?.confidence ?? primaryCollectionDecision?.confidence ?? null;
     const primaryCollectionRationale = primaryLinkedCollection?.rationale || primaryCollectionDecision?.rationale;
-    const primaryRationale = primaryReminder?.rationale || primaryCollectionRationale || selected.intentRationale;
+    const primaryRationale = (!primaryReminderRemoved ? primaryReminder?.rationale : "") || primaryCollectionRationale || selected.intentRationale;
     const quickBecause = becauseSentence(primaryRationale);
+    const selectedCollectionState = primaryCollectionTitle ? collectionConfidenceLabel(primaryCollectionConfidence) : "No collection";
+    const reminderSentenceValue = primaryReminder && !primaryReminderRemoved
+      ? reminderLabel(primaryReminder)
+      : "no reminder";
+    const reminderStateLabel = primaryReminder
+      ? primaryReminderRemoved
+        ? "Removed"
+        : collectionConfidenceLabel(primaryReminder.confidence)
+      : "None";
+    const pendingAutoCollection = Boolean(collectionChoiceSaving?.startsWith("auto-suggestion:"));
+    const otherActiveCollectionSuggestions = collectionSuggestionRows
+      .slice(primaryCollectionDecision ? 1 : 0, 3)
+      .map((decision, offset) => ({ decision, index: (primaryCollectionDecision ? 1 : 0) + offset }));
+    const restoredAiCollectionSuggestions = replacedCollectionSuggestions
+      .flatMap(({ decision, key }) => [{ decision, key }])
+      .filter(({ decision }) => decision.title !== primaryCollectionTitle)
+      .slice(0, 3);
+    const collectionActionPending = Boolean(collectionChoiceSaving);
     const urlEvidenceNotice = urlEvidenceMessage(selected.urlEvidence);
     const noteStatusLabel =
       noteSaveState === "saving"
@@ -2267,43 +2198,116 @@ export default function App() {
               : "";
     const collectionPickerContent = collectionPickerOpen ? (
       <View style={styles.collectionPicker}>
-        <TextInput
-          onChangeText={setCollectionPickerQuery}
-          placeholder="Search collections"
-          placeholderTextColor={colors.muted}
-          style={styles.search}
-          value={collectionPickerQuery}
-        />
-        {collectionPickerRows.slice(0, 6).map((collection) => (
-          <Pressable
-            key={collection.id}
-            disabled={Boolean(collectionChoiceSaving)}
-            onPress={() => void sendCaptureCollectionChoice({
-              choice: { type: "existing", collectionId: collection.id },
-              source: "manual",
-              dismissCurrentCollectionSuggestions: collectionSuggestionRows.length > 0,
-              savingKey: `existing:${collection.id}`
-            })}
-            style={styles.collectionPickerRow}
-          >
-            <View style={styles.suggestionValue}>
-              <Text style={styles.suggestionText}>{collection.title}</Text>
-              <Text numberOfLines={2} style={styles.meta}>{collection.description}</Text>
-            </View>
-            <Text style={styles.suggestionAction}>
-              {collectionChoiceSaving === `existing:${collection.id}`
-                ? collectionSuggestionRows.length
-                  ? "Replacing..."
-                  : "Adding..."
-                : collectionSuggestionRows.length
-                  ? "Replace"
-                  : "Add"}
-            </Text>
+        <View style={styles.sheetHeader}>
+          <View style={styles.sheetHeaderCopy}>
+            <Text style={styles.sheetTitle}>Collection</Text>
+            <Text style={styles.sheetSubtitle}>Choose where this capture belongs.</Text>
+          </View>
+          <Pressable onPress={() => setCollectionPickerOpen(false)} hitSlop={8} style={styles.sheetCloseButton}>
+            <Text style={styles.inlineAction}>Close</Text>
           </Pressable>
-        ))}
-        {!collectionPickerRows.length ? (
-          <Text style={styles.meta}>No matching active collections.</Text>
+        </View>
+
+        {primaryCollectionTitle ? (
+          <View style={styles.currentChoiceRow}>
+            <View style={styles.suggestionValue}>
+              <Text style={styles.quickLabel}>Selected</Text>
+              <Text style={styles.suggestionText}>{primaryCollectionTitle}</Text>
+              <Text style={styles.meta}>{selectedCollectionState}</Text>
+            </View>
+            {primaryLinkedCollection ? (
+              <Pressable onPress={() => void unlinkCollectionFromCapture(primaryLinkedCollection.id)} hitSlop={8}>
+                <Text style={styles.suggestionAction}>Remove</Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
+
+        {otherActiveCollectionSuggestions.length || restoredAiCollectionSuggestions.length ? (
+          <View style={styles.sheetSection}>
+            <Text style={styles.quickLabel}>Other AI ideas</Text>
+            {otherActiveCollectionSuggestions.map(({ decision, index }) => (
+              <Pressable
+                key={suggestedCollectionDraftKey(decision, index)}
+                disabled={Boolean(collectionChoiceSaving)}
+                onPress={() => void autosaveCollectionDecision(decision, index)}
+                style={styles.collectionPickerRow}
+              >
+                <View style={styles.suggestionValue}>
+                  <Text style={styles.suggestionText}>{decision.title}</Text>
+                  <Text numberOfLines={2} style={styles.meta}>{collectionConfidenceLabel(decision.confidence)}</Text>
+                </View>
+                <Text style={styles.suggestionAction}>
+                  {collectionChoiceSaving === `suggestion:${index}` ? "Selecting..." : "Use"}
+                </Text>
+              </Pressable>
+            ))}
+            {restoredAiCollectionSuggestions.map(({ decision, key }) => {
+              const choice = collectionChoiceFromDecision(decision);
+              return (
+                <Pressable
+                  key={key}
+                  disabled={!choice || Boolean(collectionChoiceSaving)}
+                  onPress={() => {
+                    if (!choice) return;
+                    void sendCaptureCollectionChoice({
+                      choice,
+                      source: "analysis",
+                      rationale: decision.rationale,
+                      confidence: decision.confidence,
+                      savingKey: `restored:${key}`
+                    });
+                  }}
+                  style={styles.collectionPickerRow}
+                >
+                  <View style={styles.suggestionValue}>
+                    <Text style={styles.suggestionText}>{decision.title}</Text>
+                    <Text numberOfLines={2} style={styles.meta}>{collectionConfidenceLabel(decision.confidence)}</Text>
+                  </View>
+                  <Text style={styles.suggestionAction}>
+                    {collectionChoiceSaving === `restored:${key}` ? "Selecting..." : "Use"}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+
+        <View style={styles.sheetSection}>
+          <Text style={styles.quickLabel}>Find collection</Text>
+          <TextInput
+            onChangeText={setCollectionPickerQuery}
+            placeholder="Search collections"
+            placeholderTextColor={colors.muted}
+            style={styles.search}
+            value={collectionPickerQuery}
+          />
+          {collectionPickerRows.slice(0, 6).map((collection) => (
+            <Pressable
+              key={collection.id}
+              disabled={Boolean(collectionChoiceSaving)}
+              onPress={() => void sendCaptureCollectionChoice({
+                choice: { type: "existing", collectionId: collection.id },
+                source: "manual",
+                dismissCurrentCollectionSuggestions: collectionSuggestionRows.length > 0,
+                savingKey: `existing:${collection.id}`
+              })}
+              style={styles.collectionPickerRow}
+            >
+              <View style={styles.suggestionValue}>
+                <Text style={styles.suggestionText}>{collection.title}</Text>
+                <Text numberOfLines={2} style={styles.meta}>{collection.description}</Text>
+              </View>
+              <Text style={styles.suggestionAction}>
+                {collectionChoiceSaving === `existing:${collection.id}` ? "Selecting..." : "Use"}
+              </Text>
+            </Pressable>
+          ))}
+          {!collectionPickerRows.length ? (
+            <Text style={styles.meta}>No matching active collections.</Text>
+          ) : null}
+        </View>
+
         <View style={styles.collectionCreateBox}>
           <Text style={styles.quickLabel}>New collection</Text>
           <TextInput
@@ -2336,13 +2340,7 @@ export default function App() {
             style={[styles.smallButton, (collectionCreateDisabled || Boolean(collectionChoiceSaving)) && styles.disabledButton]}
           >
             <Text style={styles.smallButtonText}>
-              {collectionChoiceSaving === "new"
-                ? collectionSuggestionRows.length
-                  ? "Replacing..."
-                  : "Creating..."
-                : collectionSuggestionRows.length
-                  ? "Create and replace"
-                  : "Create and add"}
+              {collectionChoiceSaving === "new" ? "Creating..." : "Create collection"}
             </Text>
           </Pressable>
         </View>
@@ -2352,68 +2350,132 @@ export default function App() {
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="dark-content" />
-        <ScrollView contentContainerStyle={styles.detail}>
-          <View style={styles.detailHeader}>
-            <Pressable
-              onPress={() => {
-                if (captureReturnCollectionId) {
-                  const collectionId = captureReturnCollectionId;
-                  selectCapture(null);
-                  selectCollection(collectionId);
-                } else {
-                  selectCapture(null);
-                }
-              }}
-              style={styles.textButton}
-            >
-              <Text style={styles.textButtonText}>Back</Text>
-            </Pressable>
-            {showStatus ? (
-              <Text
-                style={[
-                  styles.status,
-                  displayStatus(selected) === "processing" && styles.statusProcessing,
-                  displayStatus(selected) === "needs_review" && styles.statusReview,
-                  displayStatus(selected) === "failed" && styles.statusFailed
-                ]}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.reviewShell}
+        >
+          <ScrollView
+            contentContainerStyle={[styles.detail, styles.reviewDetail]}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.detailHeader}>
+              <Pressable
+                onPress={() => {
+                  if (captureReturnCollectionId) {
+                    const collectionId = captureReturnCollectionId;
+                    selectCapture(null);
+                    selectCollection(collectionId);
+                  } else {
+                    selectCapture(null);
+                  }
+                }}
+                style={styles.textButton}
               >
-                {selectedArchived ? "Archived" : statusLabel(displayStatus(selected))}
-              </Text>
-            ) : null}
-          </View>
-          <Text style={styles.kicker}>Capture review</Text>
-          <View style={styles.quickEditBlock}>
-            <TextInput
-              multiline
-              onChangeText={(value) => {
-                setDraftTitleDirty(true);
-                setDraftTitle(value);
-                updateSelectedReviewDraft({ title: value, titleDirty: true });
-              }}
-              placeholder="Title"
-              placeholderTextColor={colors.muted}
-              style={styles.reviewTitleInput}
-              testID="pc.review.title"
-              value={draftTitle}
-            />
-            <View style={styles.quickTopRow}>
-              <View style={styles.quickTopCopy}>
-                <Text style={styles.quickLabel}>Inferred intent</Text>
-                <View style={styles.quickSentenceRow}>
-                  <Pressable
-                    onLongPress={() => showRationale("Why this intent?", selected.intentRationale)}
-                    style={styles.quickChip}
-                  >
-                    <Text style={styles.quickChipText}>{quickIntentLabel}</Text>
+                <Text style={styles.textButtonText}>Back</Text>
+              </Pressable>
+              {showStatus ? (
+                <Text
+                  style={[
+                    styles.status,
+                    displayStatus(selected) === "processing" && styles.statusProcessing,
+                    displayStatus(selected) === "needs_review" && styles.statusReview,
+                    displayStatus(selected) === "failed" && styles.statusFailed
+                  ]}
+                >
+                  {selectedArchived ? "Archived" : statusLabel(displayStatus(selected))}
+                </Text>
+              ) : null}
+            </View>
+            <View style={styles.quickEditBlock}>
+              <View style={styles.reviewHeroTop}>
+                <Text style={styles.kicker}>Capture review</Text>
+                <Text style={styles.reviewState}>
+                  {pendingAutoCollection
+                    ? "Selecting collection"
+                    : selectedReviewReasons.length
+                      ? reviewReasonSummary(selectedReviewReasons)
+                      : "Ready to save"}
+                </Text>
+              </View>
+              <TextInput
+                multiline
+                onChangeText={(value) => {
+                  setDraftTitleDirty(true);
+                  setDraftTitle(value);
+                  updateSelectedReviewDraft({ title: value, titleDirty: true });
+                }}
+                placeholder="Title"
+                placeholderTextColor={colors.muted}
+                style={styles.reviewTitleInput}
+                testID="pc.review.title"
+                value={draftTitle}
+              />
+              <View style={styles.reviewSentence}>
+                <Text style={styles.reviewSentenceText}>Saved as</Text>
+                <Pressable
+                  onLongPress={() => showRationale("Why this intent?", selected.intentRationale)}
+                  onPress={() => setQuickIntentOpen((current) => !current)}
+                  style={[styles.sentenceChip, quickIntentOpen && styles.sentenceChipActive]}
+                >
+                  <Text style={styles.sentenceChipText}>{quickIntentLabel}</Text>
+                  <Text style={styles.sentenceChipMeta}>
+                    {draftIntentDirty ? "Changed" : selected.confidenceLabel || "Inferred"}
+                  </Text>
+                </Pressable>
+                <Text style={styles.reviewSentenceText}>
+                  {primaryCollectionTitle || pendingAutoCollection ? "in" : "with"}
+                </Text>
+                <Pressable
+                  onLongPress={() => showRationale("Why this collection?", primaryCollectionRationale)}
+                  onPress={() => void openCollectionPicker()}
+                  style={[styles.sentenceChip, collectionPickerOpen && styles.sentenceChipActive]}
+                >
+                  <Text style={styles.sentenceChipText}>
+                    {pendingAutoCollection ? "choosing..." : primaryCollectionTitle || "no collection"}
+                  </Text>
+                  <Text style={styles.sentenceChipMeta}>{pendingAutoCollection ? "Applying AI pick" : selectedCollectionState}</Text>
+                </Pressable>
+                <Text style={styles.reviewSentenceText}>.</Text>
+                {primaryReminder ? (
+                  <>
+                    <Text style={styles.reviewSentenceText}>Reminder suggested</Text>
+                    <Pressable
+                      onLongPress={() => showRationale("Why this reminder?", primaryReminder.rationale)}
+                      onPress={() => {
+                        const next = { ...reminderDrafts };
+                        if (primaryReminderRemoved) delete next[primaryReminderKey];
+                        else next[primaryReminderKey] = "remove";
+                        setReminderDrafts(next);
+                        updateSelectedReviewDraft({ reminders: next });
+                      }}
+                      style={[styles.sentenceChip, primaryReminderRemoved && styles.sentenceChipMuted]}
+                    >
+                      <Text style={[styles.sentenceChipText, primaryReminderRemoved && styles.suggestionTextMuted]}>
+                        {reminderSentenceValue}
+                      </Text>
+                      <Text style={styles.sentenceChipMeta}>{reminderStateLabel}</Text>
+                    </Pressable>
+                  </>
+                ) : (
+                  <Pressable style={styles.sentenceChip}>
+                    <Text style={styles.sentenceChipText}>No reminder</Text>
+                    <Text style={styles.sentenceChipMeta}>None</Text>
                   </Pressable>
-                  <Pressable onPress={() => setQuickIntentOpen((current) => !current)} hitSlop={8}>
-                    <Text style={styles.suggestionAction}>
-                      {quickIntentOpen ? "Close" : "Change"}
-                    </Text>
+                )}
+                <Text style={styles.reviewSentenceText}>.</Text>
+              </View>
+              {quickBecause ? (
+                <View style={styles.rationaleBlock}>
+                  <Text style={styles.becauseText}>{quickBecause}</Text>
+                  <Pressable
+                    onLongPress={() => showRationale("Why?", primaryRationale)}
+                    onPress={() => showRationale("Why?", primaryRationale)}
+                    hitSlop={8}
+                  >
+                    <Text style={styles.hintText}>Why</Text>
                   </Pressable>
                 </View>
-              </View>
-            </View>
+              ) : null}
             {quickIntentOpen ? (
               <View style={styles.quickOptions}>
                 {INTENT_OPTIONS.map((intent) => {
@@ -2455,230 +2517,9 @@ export default function App() {
                 </Pressable>
               </View>
             ) : null}
-            {quickBecause ? (
-              <View style={styles.rationaleBlock}>
-                <Text style={styles.quickLabel}>Rationale</Text>
-                <Text style={styles.becauseText}>{quickBecause}</Text>
-                <Pressable
-                  onLongPress={() => showRationale("Why?", primaryRationale)}
-                  onPress={() => showRationale("Why?", primaryRationale)}
-                  hitSlop={8}
-                >
-                  <Text style={styles.hintText}>Why</Text>
-                </Pressable>
-              </View>
-            ) : null}
-            {selectedReviewReasons.length ? (
-              <View style={styles.reviewCallout}>
-                <View style={styles.reviewCalloutCopy}>
-                  <Text style={styles.reviewCalloutLabel}>Needs review</Text>
-                  <Text style={styles.reviewCalloutText}>
-                    {reviewReasonSummary(selectedReviewReasons)}
-                  </Text>
-                </View>
-              </View>
-            ) : null}
-            <View style={styles.suggestionRail}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.quickLabel}>Suggestions</Text>
-              </View>
-              {reminderRows.length ? (
-                reminderRows.slice(0, 3).map((reminder, index) => {
-                  const key = reminderDraftKey(reminder, index);
-                  const action = reminderDrafts[key] || "keep";
-                  const removed = action === "remove";
-                  return (
-                    <View key={key} style={[styles.suggestionPill, removed && styles.suggestionPillChanged]}>
-                      <View style={styles.suggestionLabelColumn}>
-                        <Text style={styles.suggestionLabel}>Reminder</Text>
-                        <Text style={[styles.suggestionState, removed && styles.suggestionStateChanged]}>
-                          {removed ? "Removed" : "AI suggested"}
-                        </Text>
-                      </View>
-                      <Pressable
-                        onLongPress={() => showRationale("Why this reminder?", reminder.rationale)}
-                        onPress={() => showRationale("Why this reminder?", reminder.rationale)}
-                        style={styles.suggestionValue}
-                      >
-                        <Text style={[styles.suggestionText, removed && styles.suggestionTextMuted]}>
-                          {conciseText(reminderLabel(reminder), 64)}
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => {
-                          const next = { ...reminderDrafts };
-                          if (removed) delete next[key];
-                          else next[key] = "remove";
-                          setReminderDrafts(next);
-                          updateSelectedReviewDraft({ reminders: next });
-                        }}
-                        hitSlop={8}
-                      >
-                        <Text style={styles.suggestionAction}>{removed ? "Undo" : "Remove"}</Text>
-                      </Pressable>
-                    </View>
-                  );
-                })
-              ) : (
-                <View style={styles.suggestionPill}>
-                  <Text style={styles.suggestionLabel}>Reminder</Text>
-                  <Text style={[styles.suggestionText, styles.suggestionValue]}>None</Text>
-                </View>
-              )}
-              {collectionRows.map((collection) => {
-                const key = linkedCollectionDraftKey(collection.id);
-                const removed = collectionDrafts[key] === "remove";
-                const added = collectionDrafts[key] === "added";
-                const hasAiFallback = collection.createdBy !== "analysis" &&
-                  Boolean(manualOverrideForCollection(selected, collection.id)?.restoredDecisions.length);
-                const collectionSourceLabel = collection.createdBy === "analysis" ? "AI confirmed" : "Linked";
-                return (
-                  <View key={collection.id} style={[styles.suggestionPill, (removed || added || hasAiFallback) && styles.suggestionPillChanged]}>
-                    <View style={styles.suggestionLabelColumn}>
-                      <Text style={styles.suggestionLabel}>Collection</Text>
-                      <Text style={[styles.suggestionState, (removed || added || hasAiFallback) && styles.suggestionStateChanged]}>
-                        {removed ? "Cleared" : added || hasAiFallback ? "Added" : collectionSourceLabel}
-                      </Text>
-                    </View>
-                    <Pressable
-                      onLongPress={() => showRationale("Why this collection?", collection.rationale)}
-                      onPress={() => showRationale("Why this collection?", collection.rationale)}
-                      style={styles.suggestionValue}
-                    >
-                      <Text style={[styles.suggestionText, removed && styles.suggestionTextMuted]}>
-                        {collection.title}
-                      </Text>
-                    </Pressable>
-                      <Pressable
-                        onPress={() => {
-                          if (added) {
-                            void undoAddedCollection(collection);
-                            return;
-                          }
-                          if (removed) {
-                            const next = { ...collectionDrafts };
-                            delete next[key];
-                            setCollectionDrafts(next);
-                            updateSelectedReviewDraft({ collections: next });
-                            return;
-                          }
-                          void unlinkCollectionFromCapture(collection.id);
-                        }}
-                      hitSlop={8}
-                    >
-                      <Text style={styles.suggestionAction}>
-                        {removed || added ? "Undo" : "Clear collection"}
-                      </Text>
-                    </Pressable>
-                  </View>
-                );
-              })}
-              {replacedCollectionSuggestions.map(({ override, decision, key }) => {
-                const undoing = collectionChoiceSaving === `undo:${override.collectionId}`;
-                const stateLabel = collectionRows.length ? "AI suggestion replaced" : "AI suggestion cleared";
-                return (
-                  <View key={key} style={[styles.suggestionPill, styles.suggestionPillChanged]}>
-                    <View style={styles.suggestionLabelColumn}>
-                      <Text style={styles.suggestionLabel}>Collection</Text>
-                      <Text style={[styles.suggestionState, styles.suggestionStateChanged]}>{stateLabel}</Text>
-                    </View>
-                    <Pressable
-                      onLongPress={() => showRationale("Why this collection?", decision.rationale)}
-                      onPress={() => showRationale("Why this collection?", decision.rationale)}
-                      style={styles.suggestionValue}
-                    >
-                      <Text style={[styles.suggestionText, styles.suggestionTextMuted]}>
-                        {decision.title}
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => void undoCollectionChoice({
-                        id: override.collectionId,
-                        title: decision.title,
-                        description: decision.description || undefined,
-                        rationale: decision.rationale,
-                        confidence: decision.confidence
-                      })}
-                      hitSlop={8}
-                    >
-                      <Text style={styles.suggestionAction}>{undoing ? "Restoring..." : "Restore AI"}</Text>
-                    </Pressable>
-                  </View>
-                );
-              })}
-              {collectionSuggestionRows.slice(0, 3).map((collection, index) => {
-                const key = suggestedCollectionDraftKey(collection, index);
-                const action = collectionDrafts[key] || "ignore";
-                const staged = action === "link" || action === "create";
-                const saving = collectionChoiceSaving === `suggestion:${index}`;
-                const clearing = collectionChoiceSaving === `clear-suggestion:${index}`;
-                return (
-                  <View
-                    key={key}
-                    style={[styles.suggestionPill, staged && styles.suggestionPillChanged]}
-                  >
-                    <View style={styles.suggestionLabelColumn}>
-                      <Text style={styles.suggestionLabel}>Collection</Text>
-                      <Text style={[styles.suggestionState, staged && styles.suggestionStateChanged]}>
-                        {staged ? (action === "create" ? "Will create" : "Will link") : "AI suggestion"}
-                      </Text>
-                    </View>
-                    <Pressable
-                      onLongPress={() => showRationale("Why this collection?", collection.rationale)}
-                      onPress={() => showRationale("Why this collection?", collection.rationale)}
-                      style={styles.suggestionValue}
-                    >
-                      <Text style={styles.suggestionText}>{collection.title}</Text>
-                    </Pressable>
-                    <View style={styles.suggestionActions}>
-                      <Pressable
-                        onPress={() => {
-                          if (staged) {
-                            const next = { ...collectionDrafts };
-                            delete next[key];
-                            setCollectionDrafts(next);
-                            updateSelectedReviewDraft({ collections: next });
-                            return;
-                          }
-                          void autosaveCollectionDecision(collection, index);
-                        }}
-                        hitSlop={8}
-                      >
-                        <Text style={styles.suggestionAction}>
-                          {saving ? "Confirming..." : staged ? "Undo" : "Confirm"}
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => void openCollectionPicker()}
-                        hitSlop={8}
-                      >
-                        <Text style={styles.suggestionAction}>
-                          {collectionPickerOpen ? "Close" : "Replace"}
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => void clearAiCollectionSuggestion(index)}
-                        hitSlop={8}
-                      >
-                        <Text style={styles.suggestionAction}>{clearing ? "Clearing..." : "Clear AI"}</Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                );
-              })}
-              {!collectionRows.length && !collectionSuggestionRows.length ? (
-                <View style={styles.suggestionPill}>
-                  <Text style={styles.suggestionLabel}>Collection</Text>
-                  <Text style={[styles.suggestionText, styles.suggestionValue]}>None</Text>
-                  <Pressable onPress={() => void openCollectionPicker()} hitSlop={8}>
-                    <Text style={styles.suggestionAction}>{collectionPickerOpen ? "Close" : "Add collection"}</Text>
-                  </Pressable>
-                </View>
-              ) : null}
               {collectionPickerContent}
             </View>
-          </View>
-          {urlEvidenceNotice ? (
+            {urlEvidenceNotice ? (
             <View style={styles.sourceBlock}>
               <Text style={styles.meta}>Link evidence</Text>
               <Text style={styles.supportingText}>{urlEvidenceNotice}</Text>
@@ -2694,7 +2535,7 @@ export default function App() {
               ) : null}
             </View>
           ) : null}
-          <View style={styles.sourceBlock}>
+            <View style={styles.sourceBlock}>
             <View style={styles.sectionHeader}>
               <Text style={styles.meta}>Context note</Text>
               {noteStatusLabel ? (
@@ -2717,7 +2558,7 @@ export default function App() {
               value={draftNote}
             />
           </View>
-          <View style={styles.sourceBlock}>
+            <View style={styles.sourceBlock}>
             <View style={styles.sectionHeader}>
               <Text style={styles.meta}>Source</Text>
               {sourceValue ? (
@@ -2728,13 +2569,26 @@ export default function App() {
             </View>
             <Text selectable style={styles.sourceText}>{sourceValue}</Text>
           </View>
-          <Pressable onPress={confirmArchive} style={styles.secondaryButton} testID="pc.capture.archive-toggle">
-            <Text style={selectedArchived ? styles.secondaryButtonText : styles.dangerButtonText}>
-              {selectedArchived ? "Restore capture" : "Archive capture"}
-            </Text>
-          </Pressable>
-          {message ? <Text style={styles.message}>{message}</Text> : null}
-        </ScrollView>
+            <Pressable onPress={confirmArchive} style={styles.secondaryButton} testID="pc.capture.archive-toggle">
+              <Text style={selectedArchived ? styles.secondaryButtonText : styles.dangerButtonText}>
+                {selectedArchived ? "Restore capture" : "Archive capture"}
+              </Text>
+            </Pressable>
+            {message ? <Text style={styles.message}>{message}</Text> : null}
+          </ScrollView>
+          <View style={styles.reviewFooter}>
+            <Pressable
+              disabled={collectionActionPending}
+              onPress={() => void saveReviewDecisions()}
+              style={[styles.primaryButton, collectionActionPending && styles.disabledButton]}
+              testID="pc.review.save"
+            >
+              <Text style={styles.primaryButtonText}>
+                {collectionActionPending ? "Updating collection..." : "Save review"}
+              </Text>
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     );
   }
@@ -2997,12 +2851,14 @@ export default function App() {
 }
 
 const colors = {
-  paper: "#fbfbf8",
-  ink: "#20201d",
-  muted: "#7c7a72",
-  line: "#e4e1da",
-  soft: "#f2f1ec",
-  processing: "#8a806d",
+  paper: "#f8faf7",
+  ink: "#1d211f",
+  muted: "#66706a",
+  line: "#dce4de",
+  soft: "#edf4ef",
+  accent: "#1f7a5b",
+  accentSoft: "#dcefe7",
+  processing: "#6d766f",
   danger: "#9f3a2f"
 };
 
@@ -3205,6 +3061,20 @@ const styles = StyleSheet.create({
     gap: 16,
     padding: 22
   },
+  reviewShell: {
+    flex: 1
+  },
+  reviewDetail: {
+    paddingBottom: 118
+  },
+  reviewFooter: {
+    backgroundColor: colors.paper,
+    borderTopColor: colors.line,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingBottom: Platform.OS === "android" ? 16 : 22,
+    paddingHorizontal: 22,
+    paddingTop: 10
+  },
   detailHeader: {
     alignItems: "center",
     flexDirection: "row",
@@ -3227,17 +3097,74 @@ const styles = StyleSheet.create({
     paddingVertical: 6
   },
   quickEditBlock: {
-    backgroundColor: colors.soft,
+    backgroundColor: "#ffffff",
+    borderColor: colors.line,
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 8,
-    gap: 14,
+    gap: 16,
     padding: 16
+  },
+  reviewHeroTop: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between"
+  },
+  reviewState: {
+    color: colors.accent,
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "800",
+    textAlign: "right"
   },
   reviewTitleInput: {
     color: colors.ink,
-    fontSize: 25,
+    fontSize: 24,
     fontWeight: "700",
-    lineHeight: 31,
+    lineHeight: 30,
     padding: 0
+  },
+  reviewSentence: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7,
+    paddingTop: 2
+  },
+  reviewSentenceText: {
+    color: colors.ink,
+    fontSize: 21,
+    fontWeight: "600",
+    lineHeight: 30
+  },
+  sentenceChip: {
+    backgroundColor: colors.soft,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 10,
+    paddingVertical: 6
+  },
+  sentenceChipActive: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent
+  },
+  sentenceChipMuted: {
+    backgroundColor: "#f1f1ee"
+  },
+  sentenceChipText: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "800",
+    lineHeight: 20
+  },
+  sentenceChipMeta: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: "800",
+    lineHeight: 14
   },
   quickTopRow: {
     alignItems: "flex-start",
@@ -3338,9 +3265,51 @@ const styles = StyleSheet.create({
   },
   collectionPicker: {
     backgroundColor: colors.paper,
+    borderColor: colors.line,
     borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 12,
+    padding: 12
+  },
+  sheetHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between"
+  },
+  sheetHeaderCopy: {
+    flex: 1,
+    gap: 3
+  },
+  sheetTitle: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: "800"
+  },
+  sheetSubtitle: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18
+  },
+  sheetCloseButton: {
+    minHeight: 44,
+    justifyContent: "center"
+  },
+  sheetSection: {
+    borderTopColor: colors.line,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 8,
+    paddingTop: 12
+  },
+  currentChoiceRow: {
+    alignItems: "center",
+    backgroundColor: colors.accentSoft,
+    borderRadius: 8,
+    flexDirection: "row",
     gap: 10,
-    padding: 10
+    minHeight: 58,
+    paddingHorizontal: 12,
+    paddingVertical: 10
   },
   collectionPickerRow: {
     alignItems: "center",
@@ -3348,6 +3317,7 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 10,
+    minHeight: 50,
     paddingTop: 10
   },
   collectionCreateBox: {
@@ -3518,6 +3488,8 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     backgroundColor: colors.ink,
     borderRadius: 8,
+    justifyContent: "center",
+    minHeight: 44,
     paddingHorizontal: 12,
     paddingVertical: 8
   },
@@ -3535,6 +3507,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.ink,
     borderRadius: 8,
+    justifyContent: "center",
+    minHeight: 50,
     paddingVertical: 14
   },
   disabledButton: {
@@ -3550,6 +3524,8 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 50,
     paddingVertical: 14
   },
   secondaryButtonText: {

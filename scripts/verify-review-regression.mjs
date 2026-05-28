@@ -176,7 +176,18 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-function baseAnalysis({ existingCollection, label }) {
+function collectionDecisionFor(collection, rationale = "The capture matches the seeded collection topic.", confidence = 0.8) {
+  return {
+    type: "existing",
+    collection_id: collection.id,
+    title: collection.title,
+    description: collection.description,
+    rationale,
+    confidence
+  };
+}
+
+function baseAnalysis({ existingCollection, label, extraCollectionDecisions = [] }) {
   return {
     summary: `${label} summary`,
     default_intent: {
@@ -204,14 +215,8 @@ function baseAnalysis({ existingCollection, label }) {
       }
     ],
     collection_decisions: [
-      {
-        type: "existing",
-        collection_id: existingCollection.id,
-        title: existingCollection.title,
-        description: existingCollection.description,
-        rationale: "The capture matches the seeded collection topic.",
-        confidence: 0.8
-      }
+      collectionDecisionFor(existingCollection),
+      ...extraCollectionDecisions
     ],
     suggested_collections: []
   };
@@ -232,7 +237,7 @@ async function seedCollection({ supabaseUrl, serviceRoleKey, userId, prefix, suf
   });
 }
 
-async function seedCapture({ supabaseUrl, serviceRoleKey, userId, prefix, existingCollection, suffix }) {
+async function seedCapture({ supabaseUrl, serviceRoleKey, userId, prefix, existingCollection, suffix, extraCollectionDecisions = [] }) {
   return restInsert({
     supabaseUrl,
     serviceRoleKey,
@@ -253,7 +258,7 @@ async function seedCapture({ supabaseUrl, serviceRoleKey, userId, prefix, existi
       default_intent_confidence: 0.82,
       current_save_intent: "remember",
       intent_rationale: "The text is useful reference material worth saving.",
-      analysis: baseAnalysis({ existingCollection, label: suffix })
+      analysis: baseAnalysis({ existingCollection, label: suffix, extraCollectionDecisions })
     }
   });
 }
@@ -279,7 +284,8 @@ async function main() {
   try {
     const suggested = await seedCollection({ supabaseUrl, serviceRoleKey, userId, prefix, suffix: "Suggested" });
     const replacement = await seedCollection({ supabaseUrl, serviceRoleKey, userId, prefix, suffix: "Replacement" });
-    cleanup.collections.push(suggested.id, replacement.id);
+    const alternative = await seedCollection({ supabaseUrl, serviceRoleKey, userId, prefix, suffix: "Alternative" });
+    cleanup.collections.push(suggested.id, replacement.id, alternative.id);
 
     const choiceCapture = await seedCapture({
       supabaseUrl,
@@ -344,6 +350,46 @@ async function main() {
     });
     capture = await fetchCapture({ supabaseUrl, serviceRoleKey, captureId: choiceCapture.id });
     assert((capture.analysis.collection_decisions || []).length === 0, "Clear AI did not remove the restored collection suggestion.");
+
+    const autoCapture = await seedCapture({
+      supabaseUrl,
+      serviceRoleKey,
+      userId,
+      prefix,
+      existingCollection: suggested,
+      suffix: "auto",
+      extraCollectionDecisions: [
+        collectionDecisionFor(alternative, "The capture could also fit the alternative collection.", 0.58)
+      ]
+    });
+    cleanup.captures.push(autoCapture.id);
+    await patchCapture({
+      apiUrl,
+      anonKey,
+      accessToken,
+      body: {
+        captureId: autoCapture.id,
+        action: "apply_collection_choice",
+        choice: { type: "existing", collectionId: suggested.id },
+        source: "analysis",
+        suggestionIndex: 0,
+        dismissCurrentCollectionSuggestions: true,
+        rationale: "The capture matches the seeded collection topic.",
+        confidence: 0.8
+      }
+    });
+    capture = await fetchCapture({ supabaseUrl, serviceRoleKey, captureId: autoCapture.id });
+    links = await activeLinks({ supabaseUrl, serviceRoleKey, captureId: autoCapture.id });
+    assert(links.some((link) => link.collection_id === suggested.id), "Auto analysis selection did not link the top collection suggestion.");
+    assert((capture.analysis.collection_decisions || []).length === 0, "Auto analysis selection did not clear pending collection suggestions.");
+    assert(
+      (capture.analysis.collection_choice_overrides || []).some((override) =>
+        override.collection_id === suggested.id &&
+          override.source === "analysis" &&
+          override.restored_decisions?.some((decision) => decision.collection_id === alternative.id)
+      ),
+      "Auto analysis selection did not preserve alternate AI collection ideas."
+    );
 
     const reviewCapture = await seedCapture({
       supabaseUrl,

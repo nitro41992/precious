@@ -3358,10 +3358,14 @@ async function applyCollectionChoice(
       : null;
 
   let collectionId = typeof choice.collectionId === "string" ? choice.collectionId : "";
+  let choiceTitle = "";
+  let choiceDescription = "";
   if (choice.type === "new") {
     const title = cleanRequiredText(choice.title);
     const description = cleanRequiredText(choice.description);
     if (!title || !description) return json({ error: "title and description are required" }, 400);
+    choiceTitle = title;
+    choiceDescription = description;
     const created = await supabase
       .from("collections")
       .insert({
@@ -3412,6 +3416,25 @@ async function applyCollectionChoice(
       restored_decisions: dismissedDecisions,
       applied_at: new Date().toISOString()
     });
+  } else if (source === "analysis" && dismissedDecisions.length > 1) {
+    const acceptedDecision = {
+      type: choice.type,
+      collectionId,
+      collection_id: collectionId,
+      title: choiceTitle,
+      description: choiceDescription
+    };
+    const alternatives = dismissedDecisions.filter(
+      (decision) => !sameCollectionDecision(decision, acceptedDecision)
+    );
+    if (alternatives.length) {
+      overrides.push({
+        collection_id: collectionId,
+        source: "analysis",
+        restored_decisions: alternatives,
+        applied_at: new Date().toISOString()
+      });
+    }
   }
 
   const nextAnalysis = normalizedReviewAnalysis(
