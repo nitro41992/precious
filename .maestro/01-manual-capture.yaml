@@ -2,7 +2,6 @@ appId: com.preciouscaptures
 name: 01 manual capture
 ---
 - launchApp
-- assertVisible: "Precious Captures"
 - runFlow:
     when:
       visible: "Sign in"
@@ -20,8 +19,10 @@ name: 01 manual capture
       - runFlow: dismiss-password-save.yaml
       - assertVisible:
           id: "pc.home.captures"
-- tapOn:
+- assertVisible:
     id: "pc.home.captures"
+- tapOn:
+    id: "pc.capture.open"
 - tapOn:
     id: "pc.capture.source"
 - inputText: "https://example.com/quiet-place Maestro regression capture"
@@ -30,4 +31,4 @@ name: 01 manual capture
     id: "pc.capture.save"
     enabled: true
 - assertVisible:
-    text: "Saving|Processing|Ready|Needs review|Maestro regression capture|example.com"
+    text: "Saving|Analyzing|Ready|Needs review|Maestro regression capture|example.com"

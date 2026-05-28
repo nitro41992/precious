@@ -1,8 +1,7 @@
 appId: com.preciouscaptures
-name: 02 collections
+name: 02 search
 ---
 - launchApp
-- assertVisible: "Precious Captures"
 - runFlow:
     when:
       visible: "Sign in"
@@ -20,18 +19,12 @@ name: 02 collections
       - runFlow: dismiss-password-save.yaml
       - assertVisible:
           id: "pc.home.captures"
+- assertVisible:
+    id: "pc.home.captures"
 - tapOn:
-    id: "pc.home.collections"
-- tapOn:
-    id: "pc.collection.add"
-- tapOn:
-    id: "pc.collection.title"
-- inputText: "Maestro Regression"
-- tapOn:
-    id: "pc.collection.description"
-- inputText: "Created by the mobile E2E smoke suite"
-- hideKeyboard
-- tapOn:
-    id: "pc.collection.save"
-    enabled: true
-- assertVisible: "Maestro Regression"
+    id: "pc.home.search"
+- assertVisible:
+    id: "pc.search.input"
+- inputText: "Maestro"
+- assertVisible:
+    text: "Maestro|No matches yet|Ready|Needs review|Analyzing"

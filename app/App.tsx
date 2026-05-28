@@ -3,8 +3,10 @@ import "react-native-url-polyfill/auto";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Animated,
   AppState,
   BackHandler,
+  Easing,
   FlatList,
   KeyboardAvoidingView,
   Linking,
@@ -31,7 +33,6 @@ import {
   mergeRemoteCaptures,
   normalizeIntent as normalizeKnownIntent,
   parseCaptureUrl,
-  reviewReasonSummary,
   reviewReasons,
   sortCaptures,
   statusLabel
@@ -233,8 +234,16 @@ const INTENT_OPTIONS = INTENT_CONFIG.map((intent) => intent.key);
 const INTENT_LABELS = new Map(INTENT_CONFIG.map((intent) => [intent.key, intent.label]));
 
 type CaptureListMode = "active" | "archived";
-type HomeMode = "captures" | "collections";
 type CollectionListMode = "active" | "archived";
+type SearchScope = "active" | "archived" | "all";
+type HomeListRow =
+  | { type: "section"; id: string; title: string }
+  | { type: "capture"; id: string; capture: Capture };
+type SnackbarState = {
+  text: string;
+  actionLabel?: string;
+  action?: () => void;
+};
 
 const PROCESSING_REFRESH_MS = 3000;
 
@@ -251,8 +260,22 @@ function isAuthError(error: unknown) {
   return error instanceof ApiRequestError && (error.status === 401 || error.status === 403);
 }
 
-function formatTime(value: number) {
-  return new Date(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+function formatDateTime(value: number) {
+  return new Date(value).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
+function isoDateText(value: number | null | undefined) {
+  if (!value) return "";
+  try {
+    return new Date(value).toISOString();
+  } catch {
+    return "";
+  }
 }
 
 function humanize(value: string | undefined) {
@@ -271,6 +294,173 @@ function normalizeIntent(value: string | undefined) {
 function reminderLabel(reminder: ReminderSuggestion | undefined) {
   if (!reminder) return "";
   return reminder.trigger_value || humanize(reminder.trigger_type);
+}
+
+function captureSourceLabel(capture: Capture) {
+  return capture.siteName || hostFromUrl(capture.sourceUrl) || conciseText(capture.sourceText, 56) || "Shared text";
+}
+
+function captureStatusLabel(capture: Capture) {
+  if (isArchived(capture)) return "Archived";
+  const status = displayStatus(capture);
+  if (status === "processing") return "Analyzing";
+  if (status === "failed") return "Could not analyze";
+  return statusLabel(status);
+}
+
+function captureMeaningLine(capture: Capture) {
+  if (!capture.defaultIntent) return "";
+  return `Saved as ${humanize(capture.defaultIntent)}`;
+}
+
+function captureVisibleStatus(capture: Capture) {
+  const status = displayStatus(capture);
+  if (isArchived(capture) || status === "processing" || status === "needs_review" || status === "failed") {
+    return captureStatusLabel(capture);
+  }
+  return "";
+}
+
+function consumerSummary(capture: Capture) {
+  const cleaned = (capture.summary || "")
+    .replace(/\s*[—-]\s*likely\b.*$/i, "")
+    .replace(/\.\s*likely\b.*$/i, ".")
+    .replace(/\s*[—-]\s*the user\b.*$/i, "")
+    .replace(/\.\s*the user\b.*$/i, ".");
+  const summary = conciseText(cleaned, 128);
+  if (!summary) return "";
+  if (/url returned|generic evidence|insufficient url|extraction|analysis|confidence|model|provider/i.test(summary)) {
+    return "";
+  }
+  return summary;
+}
+
+function reviewStatusCue(capture: Capture, pendingAutoCollection: boolean, hasReviewReasons: boolean) {
+  if (pendingAutoCollection) return "Choosing collection";
+  if (displayStatus(capture) === "processing") return "Checking source";
+  if (displayStatus(capture) === "failed") return "Needs a quick look";
+  if (hasReviewReasons) return "Needs a quick look";
+  return "Ready";
+}
+
+function shortTrustCue(value: string | null | undefined) {
+  if (!cleanSentence(value)) return "";
+  return "Suggestion based on saved content.";
+}
+
+function recencyGroupLabel(value: number, now = Date.now()) {
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const captured = new Date(value);
+  captured.setHours(0, 0, 0, 0);
+  const diff = today.getTime() - captured.getTime();
+  if (diff <= 0) return "Today";
+  if (diff <= 24 * 60 * 60 * 1000) return "Yesterday";
+  if (diff <= 7 * 24 * 60 * 60 * 1000) return "This week";
+  return "Earlier";
+}
+
+function groupedCaptureRows(captures: Capture[]) {
+  const rows: HomeListRow[] = [];
+  const seenGroups = new Set<string>();
+  for (const capture of captures) {
+    const group = recencyGroupLabel(capture.createdAt);
+    if (!seenGroups.has(group)) {
+      rows.push({ type: "section", id: `section:${group}`, title: group });
+      seenGroups.add(group);
+    }
+    rows.push({ type: "capture", id: capture.id, capture });
+  }
+  return rows;
+}
+
+function uniqueCaptures(captures: Capture[]) {
+  const seen = new Set<string>();
+  return captures.filter((capture) => {
+    const key = capture.remoteId || capture.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function captureSearchParts(capture: Capture) {
+  return [
+    capture.title,
+    capture.summary,
+    capture.note,
+    capture.sourceText,
+    capture.sourceUrl,
+    capture.siteName,
+    capture.defaultIntent,
+    humanize(capture.defaultIntent),
+    capture.intentRationale,
+    capture.confidenceLabel,
+    captureStatusLabel(capture),
+    formatDateTime(capture.createdAt),
+    isoDateText(capture.createdAt),
+    isoDateText(capture.updatedAt),
+    isoDateText(capture.processedAt),
+    ...(capture.searchPhrases || []),
+    ...(capture.entities || []).flatMap((entity) => [entity.type, entity.name, entity.evidence]),
+    ...(capture.linkedCollections || []).flatMap((collection) => [
+      collection.title,
+      collection.description,
+      collection.rationale
+    ]),
+    ...(capture.collectionDecisions || []).flatMap((collection) => [
+      collection.title,
+      collection.description,
+      collection.rationale
+    ]),
+    ...(capture.manualCollectionOverrides || []).flatMap((override) =>
+      override.restoredDecisions.flatMap((collection) => [
+        collection.title,
+        collection.description,
+        collection.rationale
+      ])
+    ),
+    ...(capture.suggestedReminders || []).flatMap((reminder) => [
+      reminder.trigger_type,
+      reminder.trigger_value,
+      reminder.rationale,
+      reminder.status
+    ])
+  ].filter(Boolean).map(String);
+}
+
+function searchableCaptureText(capture: Capture) {
+  return captureSearchParts(capture).join(" ").toLowerCase();
+}
+
+function matchReasonForCapture(capture: Capture, term: string) {
+  const query = term.trim().toLowerCase();
+  if (!query) return isArchived(capture) ? "Archived capture" : "Recent capture";
+  const matches = (values: Array<string | null | undefined>) =>
+    values.filter(Boolean).some((value) => String(value).toLowerCase().includes(query));
+  if (matches([capture.title])) return "Matched title";
+  if (matches([capture.summary])) return "Matched summary";
+  if (matches([capture.note])) return "Matched note";
+  if (matches([capture.sourceText, capture.sourceUrl, capture.siteName])) return "Matched source";
+  if (matches([capture.defaultIntent, humanize(capture.defaultIntent)])) return "Matched save intent";
+  if (matches((capture.linkedCollections || []).flatMap((collection) => [collection.title, collection.description]))) {
+    return "Matched collection";
+  }
+  if (matches((capture.collectionDecisions || []).flatMap((collection) => [collection.title, collection.description, collection.rationale]))) {
+    return "Matched collection suggestion";
+  }
+  if (matches((capture.entities || []).flatMap((entity) => [entity.type, entity.name, entity.evidence]))) {
+    return "Matched saved detail";
+  }
+  if (matches((capture.suggestedReminders || []).flatMap((reminder) => [
+    reminder.trigger_type,
+    reminder.trigger_value,
+    reminder.rationale
+  ]))) {
+    return "Matched reminder idea";
+  }
+  if (matches([formatDateTime(capture.createdAt), isoDateText(capture.createdAt)])) return "Matched time saved";
+  return "Matched saved detail";
 }
 
 function reminderDraftKey(reminder: ReminderSuggestion, index: number) {
@@ -350,13 +540,6 @@ function conciseText(value: string | null | undefined, maxLength = 110) {
   const clipped = text.slice(0, maxLength);
   const breakIndex = Math.max(clipped.lastIndexOf(","), clipped.lastIndexOf(";"), clipped.lastIndexOf(" "));
   return `${clipped.slice(0, breakIndex > 60 ? breakIndex : maxLength).trim()}...`;
-}
-
-function becauseSentence(value: string | null | undefined) {
-  const text = conciseText(value);
-  if (!text) return "";
-  const body = text.replace(/^because[:\s]*/i, "");
-  return `Because ${body.charAt(0).toLowerCase()}${body.slice(1)}.`;
 }
 
 function urlEvidenceMessage(evidence?: UrlEvidence | null) {
@@ -578,16 +761,21 @@ async function requestJson<T>(
 
 export default function App() {
   const [captures, setCaptures] = useState<Capture[]>([]);
+  const [archivedCaptures, setArchivedCaptures] = useState<Capture[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [session, setSession] = useState<AuthSession | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [captureReturnCollectionId, setCaptureReturnCollectionId] = useState<string | null>(null);
-  const [homeMode, setHomeMode] = useState<HomeMode>("captures");
-  const [query, setQuery] = useState("");
-  const [listMode, setListMode] = useState<CaptureListMode>("active");
-  const [collectionListMode, setCollectionListMode] = useState<CollectionListMode>("active");
+  const [capturesLoading, setCapturesLoading] = useState(false);
+  const [capturesError, setCapturesError] = useState("");
+  const [archivedCapturesLoading, setArchivedCapturesLoading] = useState(false);
+  const [archivedCapturesError, setArchivedCapturesError] = useState("");
+  const [archivedCapturesLoaded, setArchivedCapturesLoaded] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchScope, setSearchScope] = useState<SearchScope>("active");
   const [collectionCaptures, setCollectionCaptures] = useState<Capture[]>([]);
   const [collectionCapturesForId, setCollectionCapturesForId] = useState<string | null>(null);
   const [collectionCapturesLoading, setCollectionCapturesLoading] = useState(false);
@@ -613,13 +801,17 @@ export default function App() {
   const [draftNoteDirty, setDraftNoteDirty] = useState(false);
   const [draftIntentDirty, setDraftIntentDirty] = useState(false);
   const [message, setMessage] = useState("");
+  const [snackbar, setSnackbar] = useState<SnackbarState | null>(null);
   const [sourceDraft, setSourceDraft] = useState("");
+  const [showCaptureComposer, setShowCaptureComposer] = useState(false);
   const [savingCapture, setSavingCapture] = useState(false);
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authLoading, setAuthLoading] = useState<"signin" | "signup" | null>(null);
   const latestNoteRef = useRef("");
   const autoAppliedCollectionKeysRef = useRef<Set<string>>(new Set());
+  const searchMotion = useRef(new Animated.Value(0)).current;
+  const reviewMotion = useRef(new Animated.Value(0)).current;
 
   const getFreshSession = useCallback(async (force = false) => {
     if (!session) return null;
@@ -630,6 +822,8 @@ export default function App() {
       await nativeAuth?.clearSession();
       setSession(null);
       setCaptures([]);
+      setArchivedCaptures([]);
+      setArchivedCapturesLoaded(false);
       return null;
     }
     const next = JSON.parse(raw) as AuthSession;
@@ -643,42 +837,75 @@ export default function App() {
     return next;
   }, [session]);
 
-  const loadCaptures = useCallback(async () => {
+  const loadCaptures = useCallback(async (mode: CaptureListMode = "active") => {
+    const loadingSetter = mode === "archived" ? setArchivedCapturesLoading : setCapturesLoading;
+    const errorSetter = mode === "archived" ? setArchivedCapturesError : setCapturesError;
+    loadingSetter(true);
+    errorSetter("");
     if (config?.apiUrl && session?.accessToken) {
-      const activeSession = await getFreshSession();
-      if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
-      const loadWithToken = (accessToken: string) =>
-        requestJson<{ captures?: Array<Record<string, any>> }>(captureListUrl(config.apiUrl, listMode === "archived"), {
-          headers: {
-            accept: "application/json",
-            apikey: config.supabaseAnonKey,
-            authorization: `Bearer ${accessToken}`
-          }
-        });
-      let json: { captures?: Array<Record<string, any>> };
       try {
-        json = await loadWithToken(activeSession.accessToken);
+        const activeSession = await getFreshSession();
+        if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
+        const loadWithToken = (accessToken: string) =>
+          requestJson<{ captures?: Array<Record<string, any>> }>(captureListUrl(config.apiUrl, mode === "archived"), {
+            headers: {
+              accept: "application/json",
+              apikey: config.supabaseAnonKey,
+              authorization: `Bearer ${accessToken}`
+            }
+          });
+        let json: { captures?: Array<Record<string, any>> };
+        try {
+          json = await loadWithToken(activeSession.accessToken);
+        } catch (error) {
+          if (!isAuthError(error)) throw error;
+          const refreshed = await getFreshSession(true);
+          if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
+          json = await loadWithToken(refreshed.accessToken);
+        }
+        const next = ((json.captures ?? []) as Array<Record<string, any>>).map(captureFromRemote);
+        if (mode === "archived") {
+          setArchivedCaptures(sortCaptures(next));
+          setArchivedCapturesLoaded(true);
+        } else {
+          setCaptures((current) => mergeRemoteCaptures(next, current, "active"));
+        }
       } catch (error) {
-        if (!isAuthError(error)) throw error;
-        const refreshed = await getFreshSession(true);
-        if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
-        json = await loadWithToken(refreshed.accessToken);
+        errorSetter(friendlyError(error, mode === "archived" ? "Could not load archived captures" : "Could not load captures"));
+        throw error;
+      } finally {
+        loadingSetter(false);
       }
-      const next = ((json.captures ?? []) as Array<Record<string, any>>).map(captureFromRemote);
-      setCaptures((current) => mergeRemoteCaptures(next, current, listMode));
       return;
     }
 
-    if (!nativeStore) {
-      setMessage("Native capture store is unavailable.");
-      return;
+    try {
+      if (!nativeStore) {
+        throw new Error("Native capture store is unavailable.");
+      }
+      const raw = await nativeStore.getCaptures();
+      const next = JSON.parse(raw || "[]") as Capture[];
+      const active = next.filter((capture) => !isArchived(capture));
+      const archived = next.filter(isArchived);
+      if (mode === "archived") {
+        setArchivedCaptures(sortCaptures(archived));
+        setArchivedCapturesLoaded(true);
+      } else {
+        setCaptures(sortCaptures(active));
+        setArchivedCaptures(sortCaptures(archived));
+        setArchivedCapturesLoaded(true);
+      }
+    } catch (error) {
+      const text = friendlyError(error, mode === "archived" ? "Could not load archived captures" : "Could not load captures");
+      errorSetter(text);
+      setMessage(text);
+      throw error;
+    } finally {
+      loadingSetter(false);
     }
-    const raw = await nativeStore.getCaptures();
-    const next = JSON.parse(raw || "[]") as Capture[];
-    setCaptures(sortCaptures(next));
-  }, [config, getFreshSession, listMode, session]);
+  }, [config, getFreshSession, session]);
 
-  const loadCollections = useCallback(async (mode: CollectionListMode = collectionListMode) => {
+  const loadCollections = useCallback(async (mode: CollectionListMode = "active") => {
     if (!config?.apiUrl || !session?.accessToken) {
       setCollections([]);
       return;
@@ -708,7 +935,7 @@ export default function App() {
       json = await loadWithToken(refreshed.accessToken);
     }
     setCollections((json.collections ?? []).map(collectionFromRemote));
-  }, [collectionListMode, config, getFreshSession, session]);
+  }, [config, getFreshSession, session]);
 
   const loadCollectionCaptures = useCallback(async (collectionId: string) => {
     if (!config?.apiUrl || !session?.accessToken) {
@@ -770,8 +997,11 @@ export default function App() {
   const openCapture = useCallback(
     (captureId: string | null) => {
       if (!captureId) return;
+      setSearchOpen(false);
       setCaptureReturnCollectionId(null);
-      const capture = captures.find((item) => item.id === captureId);
+      const capture =
+        captures.find((item) => item.id === captureId) ??
+        archivedCaptures.find((item) => item.id === captureId);
       if (!capture) {
         selectCapture(captureId);
         return;
@@ -781,10 +1011,11 @@ export default function App() {
       setDraftNote(capture.note);
       setDraftIntent(normalizeIntent(capture.defaultIntent));
     },
-    [captures, selectCapture]
+    [archivedCaptures, captures, selectCapture]
   );
 
   const openCaptureFromCollection = useCallback((capture: Capture, collectionId: string) => {
+    setSearchOpen(false);
     setSelectedCollectionId(null);
     setCaptureReturnCollectionId(collectionId);
     selectCapture(capture.id);
@@ -792,6 +1023,29 @@ export default function App() {
     setDraftNote(capture.note);
     setDraftIntent(normalizeIntent(capture.defaultIntent));
   }, [selectCapture]);
+
+  function openSearch() {
+    selectCapture(null);
+    selectCollection(null);
+    setMessage("");
+    setSearchOpen(true);
+  }
+
+  function openAccountActions() {
+    Alert.alert(
+      "Account",
+      "Manage this device session.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign out", style: "destructive", onPress: () => void signOut() }
+      ]
+    );
+  }
+
+  function replaceLocalCaptureLists(next: Capture[]) {
+    setCaptures(sortCaptures(next.filter((capture) => !isArchived(capture))));
+    setArchivedCaptures(sortCaptures(next.filter(isArchived)));
+  }
 
   useEffect(() => {
     nativeAuth?.getConfig().then((raw) => {
@@ -827,13 +1081,6 @@ export default function App() {
     });
   }, [loadCaptures]);
 
-  useEffect(() => {
-    if (homeMode !== "collections") return;
-    void loadCollections().catch((error) => {
-      setMessage((current) => current || friendlyError(error, "Could not load collections"));
-    });
-  }, [homeMode, loadCollections]);
-
   const hasProcessingCapture = useMemo(
     () => captures.some((capture) => displayStatus(capture) === "processing"),
     [captures]
@@ -848,6 +1095,13 @@ export default function App() {
     }, PROCESSING_REFRESH_MS);
     return () => clearInterval(timer);
   }, [hasProcessingCapture, loadCaptures]);
+
+  useEffect(() => {
+    if (!searchOpen || searchScope === "active" || archivedCapturesLoaded || archivedCapturesLoading) return;
+    void loadCaptures("archived").catch((error) => {
+      setMessage((current) => current || friendlyError(error, "Could not load archived captures"));
+    });
+  }, [archivedCapturesLoaded, archivedCapturesLoading, loadCaptures, searchOpen, searchScope]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -867,8 +1121,12 @@ export default function App() {
   }, [collectionDraftDirty, collections, selectedCollectionId]);
 
   useEffect(() => {
-    if (!selectedId && !selectedCollectionId) return;
+    if (!selectedId && !selectedCollectionId && !searchOpen) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (searchOpen) {
+        setSearchOpen(false);
+        return true;
+      }
       if (selectedId && captureReturnCollectionId) {
         selectCapture(null);
         selectCollection(captureReturnCollectionId);
@@ -879,31 +1137,46 @@ export default function App() {
       return true;
     });
     return () => subscription.remove();
-  }, [captureReturnCollectionId, selectCapture, selectCollection, selectedCollectionId, selectedId]);
+  }, [captureReturnCollectionId, searchOpen, selectCapture, selectCollection, selectedCollectionId, selectedId]);
 
-  const filteredCaptures = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    const visible = captures.filter((capture) => isArchived(capture) === (listMode === "archived"));
-    if (!term) return visible;
-    return visible.filter((capture) =>
-      [capture.title, capture.summary ?? "", capture.note, capture.sourceText, capture.sourceUrl ?? ""]
-        .join(" ")
-        .toLowerCase()
-        .includes(term)
-    );
-  }, [captures, listMode, query]);
+  useEffect(() => {
+    if (!searchOpen) return;
+    searchMotion.setValue(0);
+    Animated.timing(searchMotion, {
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: false
+    }).start();
+  }, [searchMotion, searchOpen]);
 
-  const filteredCollections = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    const visible = collections.filter((collection) => collection.status === collectionListMode);
-    if (!term) return visible;
-    return visible.filter((collection) =>
-      [collection.title, collection.description].join(" ").toLowerCase().includes(term)
-    );
-  }, [collectionListMode, collections, query]);
+  useEffect(() => {
+    if (!selectedId) return;
+    reviewMotion.setValue(0);
+    Animated.timing(reviewMotion, {
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: false
+    }).start();
+  }, [reviewMotion, selectedId]);
+
+  const homeCaptures = useMemo(() => captures.filter((capture) => !isArchived(capture)), [captures]);
+  const homeRows = useMemo(() => groupedCaptureRows(homeCaptures), [homeCaptures]);
+  const searchPool = useMemo(() => {
+    if (searchScope === "archived") return archivedCaptures;
+    if (searchScope === "all") return uniqueCaptures([...captures, ...archivedCaptures]);
+    return captures;
+  }, [archivedCaptures, captures, searchScope]);
+  const searchResults = useMemo(() => {
+    const term = searchQuery.trim().toLowerCase();
+    if (!term) return [];
+    return searchPool.filter((capture) => searchableCaptureText(capture).includes(term));
+  }, [searchPool, searchQuery]);
 
   const selected = selectedId
     ? captures.find((capture) => capture.id === selectedId) ??
+      archivedCaptures.find((capture) => capture.id === selectedId) ??
       collectionCaptures.find((capture) => capture.id === selectedId) ??
       null
     : null;
@@ -915,6 +1188,12 @@ export default function App() {
   useEffect(() => {
     latestNoteRef.current = draftNote;
   }, [draftNote]);
+
+  useEffect(() => {
+    if (!snackbar) return;
+    const timer = setTimeout(() => setSnackbar(null), 6000);
+    return () => clearTimeout(timer);
+  }, [snackbar]);
 
   useEffect(() => {
     const appSubscription = AppState.addEventListener("change", (state) => {
@@ -1046,6 +1325,7 @@ export default function App() {
     if ((selected.linkedCollections || []).length) return;
     const topDecision = (selected.collectionDecisions || [])[0];
     if (!topDecision) return;
+    if (topDecision.type !== "existing" || !topDecision.collectionId || topDecision.confidence < 0.72) return;
     const choice = collectionChoiceFromDecision(topDecision);
     if (!choice) return;
     const autoKey = `${captureDraftKey(selected)}:${suggestedCollectionDraftKey(topDecision, 0)}`;
@@ -1097,11 +1377,19 @@ export default function App() {
   }
 
   function applyUpdatedCapture(updatedCapture: Capture, previousId: string) {
+    const matchesCapture = (item: Capture) =>
+      item.id === previousId ||
+      item.remoteId === previousId ||
+      item.id === updatedCapture.id ||
+      Boolean(updatedCapture.remoteId && item.remoteId === updatedCapture.remoteId);
     setCaptures((current) =>
-      current.map((item) => (item.id === previousId ? updatedCapture : item))
+      current.map((item) => (matchesCapture(item) ? updatedCapture : item))
+    );
+    setArchivedCaptures((current) =>
+      current.map((item) => (matchesCapture(item) ? updatedCapture : item))
     );
     setCollectionCaptures((current) =>
-      current.map((item) => (item.id === previousId ? updatedCapture : item))
+      current.map((item) => (matchesCapture(item) ? updatedCapture : item))
     );
   }
 
@@ -1135,12 +1423,7 @@ export default function App() {
           json = await saveWithToken(refreshed.accessToken);
         }
         const updatedCapture = captureFromRemote(json.capture);
-        setCaptures((current) =>
-          current.map((item) => (item.id === capture.id ? updatedCapture : item))
-        );
-        setCollectionCaptures((current) =>
-          current.map((item) => (item.id === capture.id ? updatedCapture : item))
-        );
+        applyUpdatedCapture(updatedCapture, capture.id);
         if (latestNoteRef.current === noteValue) {
           setDraftNoteDirty(false);
           clearAutosavedNoteDraft(captureKey, noteValue);
@@ -1156,7 +1439,7 @@ export default function App() {
     try {
       const raw = await nativeStore.updateCapture(capture.id, capture.title, noteValue.trim(), null);
       const next = JSON.parse(raw || "[]") as Capture[];
-      setCaptures(sortCaptures(next));
+      replaceLocalCaptureLists(next);
       if (latestNoteRef.current === noteValue) {
         setDraftNoteDirty(false);
         clearAutosavedNoteDraft(captureKey, noteValue);
@@ -1199,12 +1482,7 @@ export default function App() {
           json = await saveWithToken(refreshed.accessToken);
         }
         const updatedCapture = captureFromRemote(json.capture);
-        setCaptures((current) =>
-          current.map((item) => (item.id === selected.id ? updatedCapture : item))
-        );
-        setCollectionCaptures((current) =>
-          current.map((item) => (item.id === selected.id ? updatedCapture : item))
-        );
+        applyUpdatedCapture(updatedCapture, selected.id);
         setDraftTitleDirty(false);
         setDraftNoteDirty(false);
         setDraftIntentDirty(false);
@@ -1222,7 +1500,7 @@ export default function App() {
       intentOverride || (draftIntentDirty && draftIntent ? draftIntent : null)
     );
     const next = JSON.parse(raw || "[]") as Capture[];
-    setCaptures(sortCaptures(next));
+    replaceLocalCaptureLists(next);
     setDraftTitleDirty(false);
     setDraftNoteDirty(false);
     setDraftIntentDirty(false);
@@ -1297,19 +1575,13 @@ export default function App() {
           json = await saveWithToken(refreshed.accessToken);
         }
         const updatedCapture = captureFromRemote(json.capture);
-        setCaptures((current) =>
-          current.map((item) => (item.id === selected.id ? updatedCapture : item))
-        );
-        setCollectionCaptures((current) =>
-          current.map((item) => (item.id === selected.id ? updatedCapture : item))
-        );
+        applyUpdatedCapture(updatedCapture, selected.id);
         setDraftTitleDirty(false);
         setDraftNoteDirty(false);
         setDraftIntentDirty(false);
         setReminderDrafts({});
         setCollectionDrafts({});
         clearSelectedReviewDraft(selected);
-        if (homeMode === "collections") await loadCollections();
         setMessage("Saved.");
       } catch (error) {
         setMessage(friendlyError(error, "Could not save."));
@@ -1340,7 +1612,7 @@ export default function App() {
         })
       };
     });
-    setCaptures(sortCaptures(next));
+    replaceLocalCaptureLists(next);
     setDraftTitleDirty(false);
     setDraftNoteDirty(false);
     setDraftIntentDirty(false);
@@ -1382,12 +1654,7 @@ export default function App() {
           json = await confirmWithToken(refreshed.accessToken);
         }
         const updatedCapture = captureFromRemote(json.capture);
-        setCaptures((current) =>
-          current.map((item) => (item.id === selected.id ? updatedCapture : item))
-        );
-        setCollectionCaptures((current) =>
-          current.map((item) => (item.id === selected.id ? updatedCapture : item))
-        );
+        applyUpdatedCapture(updatedCapture, selected.id);
         setDraftTitleDirty(false);
         setDraftNoteDirty(false);
         setDraftIntentDirty(false);
@@ -1405,7 +1672,7 @@ export default function App() {
       draftIntentDirty && draftIntent ? draftIntent : null
     );
     const next = JSON.parse(raw || "[]") as Capture[];
-    setCaptures(sortCaptures(next));
+    replaceLocalCaptureLists(next);
     setCollectionCaptures((current) =>
       current.map((item) => next.find((capture) => capture.id === item.id) ?? item)
     );
@@ -1575,6 +1842,7 @@ export default function App() {
 
   async function unlinkCaptureFromCollection(collectionId: string, capture: Capture) {
     const captureId = capture.remoteId || capture.id;
+    const removedCollection = (capture.linkedCollections || []).find((collection) => collection.id === collectionId);
     try {
       await collectionRequest<{ ok: boolean }>("collection-links", {
         method: "PATCH",
@@ -1598,10 +1866,52 @@ export default function App() {
             : capture
         )
       );
-      setMessage("Removed from collection.");
+      setMessage("");
+      if (removedCollection) {
+        setSnackbar({
+          text: "Removed from collection.",
+          actionLabel: "Undo",
+          action: () => void restoreCollectionLink(collectionId, capture, removedCollection)
+        });
+      } else {
+        setSnackbar({ text: "Removed from collection." });
+      }
       await loadCaptures();
     } catch (error) {
       setMessage(friendlyError(error, "Could not remove collection."));
+    }
+  }
+
+  async function restoreCollectionLink(collectionId: string, capture: Capture, collection: LinkedCollection) {
+    const captureId = capture.remoteId || capture.id;
+    try {
+      await collectionRequest<{ ok: boolean }>("collection-links", {
+        method: "POST",
+        body: {
+          collectionId,
+          captureId,
+          createdBy: collection.createdBy === "analysis" ? "analysis" : "user",
+          rationale: collection.rationale,
+          confidence: collection.confidence,
+          title: collection.title
+        }
+      });
+      const addCollection = (item: Capture) =>
+        item.id === capture.id || item.remoteId === captureId
+          ? {
+              ...item,
+              linkedCollections: (item.linkedCollections || []).some((linked) => linked.id === collectionId)
+                ? item.linkedCollections
+                : [...(item.linkedCollections || []), collection]
+            }
+          : item;
+      setCaptures((current) => current.map(addCollection));
+      setCollectionCaptures((current) => current.map(addCollection));
+      setSnackbar(null);
+      setMessage("Collection restored.");
+      await loadCaptures();
+    } catch (error) {
+      setMessage(friendlyError(error, "Could not restore collection."));
     }
   }
 
@@ -1667,38 +1977,23 @@ export default function App() {
           json = await dismissWithToken(refreshed.accessToken);
         }
         const updatedCapture = captureFromRemote(json.capture);
-        setCaptures((current) =>
-          current.map((capture) => (capture.id === selected.id ? updatedCapture : capture))
-        );
-        setCollectionCaptures((current) =>
-          current.map((capture) => (capture.id === selected.id ? updatedCapture : capture))
-        );
+        applyUpdatedCapture(updatedCapture, selected.id);
         setMessage("Reminder removed.");
       } catch (error) {
         setMessage(friendlyError(error, "Could not remove reminder."));
       }
       return;
     }
-    setCaptures((current) =>
-      current.map((capture) =>
-        capture.id === selected.id
-          ? {
-              ...capture,
-              suggestedReminders: (capture.suggestedReminders || []).filter((_, index) => index !== reminderIndex)
-            }
-          : capture
-      )
-    );
-    setCollectionCaptures((current) =>
-      current.map((capture) =>
-        capture.id === selected.id
-          ? {
-              ...capture,
-              suggestedReminders: (capture.suggestedReminders || []).filter((_, index) => index !== reminderIndex)
-            }
-          : capture
-      )
-    );
+    const removeReminder = (capture: Capture) =>
+      capture.id === selected.id
+        ? {
+            ...capture,
+            suggestedReminders: (capture.suggestedReminders || []).filter((_, index) => index !== reminderIndex)
+          }
+        : capture;
+    setCaptures((current) => current.map(removeReminder));
+    setArchivedCaptures((current) => current.map(removeReminder));
+    setCollectionCaptures((current) => current.map(removeReminder));
     setMessage("Reminder removed.");
   }
 
@@ -1730,8 +2025,8 @@ export default function App() {
       }
       const raw = await nativeStore.submitExpandedUrl(selected.id, expandedUrl);
       const next = JSON.parse(raw || "[]") as Capture[];
-      setCaptures(sortCaptures(next));
-      setMessage("Expanded URL saved. AI extraction is running.");
+      replaceLocalCaptureLists(next);
+      setMessage("Expanded URL saved. Checking the source now.");
     } catch (error) {
       setMessage(friendlyError(error, "Could not use the expanded URL."));
     }
@@ -1768,6 +2063,7 @@ export default function App() {
         selectCapture(null);
         if (returnCollectionId) selectCollection(returnCollectionId);
         setMessage(archived ? "Archived." : "Restored.");
+        setArchivedCapturesLoaded(false);
         await loadCaptures();
       } catch (error) {
         setMessage(friendlyError(error, archived ? "Could not archive." : "Could not restore."));
@@ -1779,7 +2075,7 @@ export default function App() {
       ? await nativeStore.archiveCapture(selected.id)
       : await nativeStore.restoreCapture(selected.id);
     const next = JSON.parse(raw || "[]") as Capture[];
-    setCaptures(sortCaptures(next));
+    replaceLocalCaptureLists(next);
     const returnCollectionId = captureReturnCollectionId;
     selectCapture(null);
     if (returnCollectionId) selectCollection(returnCollectionId);
@@ -1816,7 +2112,8 @@ export default function App() {
       const localCapture = JSON.parse(raw) as Capture;
       setCaptures((current) => [localCapture, ...current.filter((item) => item.id !== localCapture.id)]);
       setSourceDraft("");
-      setMessage("Saved. AI extraction is running.");
+      setShowCaptureComposer(false);
+      setMessage("Saved. Checking the source now.");
     } catch (error) {
       setMessage(friendlyError(error, "Could not save capture."));
     } finally {
@@ -1866,55 +2163,58 @@ export default function App() {
     await nativeAuth?.clearSession();
     setSession(null);
     setCaptures([]);
+    setArchivedCaptures([]);
+    setArchivedCapturesLoaded(false);
     setCollections([]);
     setCollectionCaptures([]);
     setCollectionCapturesForId(null);
     setCaptureReturnCollectionId(null);
+    setSearchOpen(false);
+    setSearchQuery("");
     selectCapture(null);
     selectCollection(null);
   }
 
   function renderCapture({ item }: { item: Capture }) {
-    const source = item.siteName || hostFromUrl(item.sourceUrl) || item.sourceText.slice(0, 56);
     const itemStatus = displayStatus(item);
-    const itemReviewReasons = reviewReasons(item);
+    const itemStatusText = captureVisibleStatus(item);
+    const itemSummary = consumerSummary(item);
     return (
       <Pressable
         onPress={() => openCapture(item.id)}
         style={({ pressed }) => [styles.captureRow, pressed && styles.pressed]}
         testID={`pc.capture.row.${item.id}`}
       >
-        <View style={styles.rowTop}>
-          <Text numberOfLines={1} style={styles.captureTitle}>
+        <View style={styles.rowTitleLine}>
+          <Text numberOfLines={2} style={styles.captureTitle}>
             {item.title}
           </Text>
-          <Text
-            style={[
-              styles.status,
-              itemStatus === "processing" && styles.statusProcessing,
-              itemStatus === "needs_review" && styles.statusReview,
-              itemStatus === "failed" && styles.statusFailed
-            ]}
-          >
-            {statusLabel(itemStatus)}
-          </Text>
         </View>
-        <Text numberOfLines={1} style={styles.meta}>
-          {source || "Shared text"} · {formatTime(item.createdAt)}
-        </Text>
-        {item.summary ? (
+        <View style={styles.rowMetaLine}>
+          <Text numberOfLines={1} style={styles.meta}>
+            {captureSourceLabel(item)} · {formatDateTime(item.createdAt)}
+          </Text>
+          {itemStatusText ? (
+            <Text
+              style={[
+                styles.statusPill,
+                itemStatus === "processing" && styles.statusPillProcessing,
+                itemStatus === "needs_review" && styles.statusPillReview,
+                itemStatus === "failed" && styles.statusPillFailed
+              ]}
+            >
+              {itemStatusText}
+            </Text>
+          ) : null}
+        </View>
+        {itemSummary ? (
           <Text numberOfLines={2} style={styles.summaryPreview}>
-            {item.summary}
+            {itemSummary}
           </Text>
         ) : null}
         {item.defaultIntent ? (
           <Text numberOfLines={1} style={styles.intentPreview}>
-            {humanize(item.defaultIntent)} · {item.confidenceLabel || nullableValue(item.analysisMode) || "Analyzed"}
-          </Text>
-        ) : null}
-        {itemReviewReasons.length ? (
-          <Text numberOfLines={1} style={styles.reviewReasonPreview}>
-            {reviewReasonSummary(itemReviewReasons)}
+            {captureMeaningLine(item)}
           </Text>
         ) : null}
         {item.note ? (
@@ -1927,9 +2227,9 @@ export default function App() {
   }
 
   function renderCollectionCapture({ item }: { item: Capture }) {
-    const source = item.siteName || hostFromUrl(item.sourceUrl) || item.sourceText.slice(0, 56);
     const itemStatus = displayStatus(item);
-    const itemReviewReasons = reviewReasons(item);
+    const itemStatusText = captureVisibleStatus(item);
+    const itemSummary = consumerSummary(item);
     return (
       <View style={styles.collectionCaptureRow}>
         <Pressable
@@ -1938,37 +2238,36 @@ export default function App() {
           }}
           style={({ pressed }) => [styles.collectionCaptureMain, pressed && styles.pressed]}
         >
-          <View style={styles.rowTop}>
-            <Text numberOfLines={1} style={styles.captureTitle}>
+          <View style={styles.rowTitleLine}>
+            <Text numberOfLines={2} style={styles.captureTitle}>
               {item.title}
             </Text>
-            <Text
-              style={[
-                styles.status,
-                itemStatus === "processing" && styles.statusProcessing,
-                itemStatus === "needs_review" && styles.statusReview,
-                itemStatus === "failed" && styles.statusFailed
-              ]}
-            >
-              {statusLabel(itemStatus)}
-            </Text>
           </View>
-          <Text numberOfLines={1} style={styles.meta}>
-            {source || "Shared text"} · {formatTime(item.createdAt)}
-          </Text>
-          {item.summary ? (
+          <View style={styles.rowMetaLine}>
+            <Text numberOfLines={1} style={styles.meta}>
+              {captureSourceLabel(item)} · {formatDateTime(item.createdAt)}
+            </Text>
+            {itemStatusText ? (
+              <Text
+                style={[
+                  styles.statusPill,
+                  itemStatus === "processing" && styles.statusPillProcessing,
+                  itemStatus === "needs_review" && styles.statusPillReview,
+                  itemStatus === "failed" && styles.statusPillFailed
+                ]}
+              >
+                {itemStatusText}
+              </Text>
+            ) : null}
+          </View>
+          {itemSummary ? (
             <Text numberOfLines={2} style={styles.summaryPreview}>
-              {item.summary}
+              {itemSummary}
             </Text>
           ) : null}
           {item.defaultIntent ? (
             <Text numberOfLines={1} style={styles.intentPreview}>
-              {humanize(item.defaultIntent)} · {item.confidenceLabel || nullableValue(item.analysisMode) || "Analyzed"}
-            </Text>
-          ) : null}
-          {itemReviewReasons.length ? (
-            <Text numberOfLines={1} style={styles.reviewReasonPreview}>
-              {reviewReasonSummary(itemReviewReasons)}
+              {captureMeaningLine(item)}
             </Text>
           ) : null}
         </Pressable>
@@ -2007,6 +2306,95 @@ export default function App() {
           {item.description}
         </Text>
       </Pressable>
+    );
+  }
+
+  function renderHomeRow({ item }: { item: HomeListRow }) {
+    if (item.type === "section") {
+      return <Text style={styles.groupHeader}>{item.title}</Text>;
+    }
+    return renderCapture({ item: item.capture });
+  }
+
+  function renderSearchResult({ item }: { item: Capture }) {
+    const itemStatus = displayStatus(item);
+    const itemStatusText = captureVisibleStatus(item);
+    const itemSummary = consumerSummary(item);
+    return (
+      <Pressable
+        onPress={() => openCapture(item.id)}
+        style={({ pressed }) => [styles.captureRow, pressed && styles.pressed]}
+        testID={`pc.search.result.${item.id}`}
+      >
+        <View style={styles.rowTitleLine}>
+          <Text numberOfLines={2} style={styles.captureTitle}>
+            {item.title}
+          </Text>
+        </View>
+        <View style={styles.rowMetaLine}>
+          <Text numberOfLines={1} style={styles.meta}>
+            {captureSourceLabel(item)} · {formatDateTime(item.createdAt)}
+          </Text>
+          {itemStatusText ? (
+            <Text
+              style={[
+                styles.statusPill,
+                itemStatus === "processing" && styles.statusPillProcessing,
+                itemStatus === "needs_review" && styles.statusPillReview,
+                itemStatus === "failed" && styles.statusPillFailed
+              ]}
+            >
+              {itemStatusText}
+            </Text>
+          ) : null}
+        </View>
+        <Text numberOfLines={1} style={styles.searchMatchText}>
+          {matchReasonForCapture(item, searchQuery)}
+        </Text>
+        {itemSummary ? (
+          <Text numberOfLines={2} style={styles.summaryPreview}>
+            {itemSummary}
+          </Text>
+        ) : null}
+        {item.defaultIntent ? (
+          <Text numberOfLines={1} style={styles.intentPreview}>
+            {captureMeaningLine(item)}
+          </Text>
+        ) : null}
+        {item.note ? (
+          <Text numberOfLines={2} style={styles.notePreview}>
+            {item.note}
+          </Text>
+        ) : null}
+      </Pressable>
+    );
+  }
+
+  function renderLoadingRows() {
+    return (
+      <View style={styles.loadingRows}>
+        {[0, 1, 2].map((item) => (
+          <View key={item} style={styles.loadingRow}>
+            <View style={styles.loadingTitle} />
+            <View style={styles.loadingLine} />
+            <View style={styles.loadingLineShort} />
+          </View>
+        ))}
+      </View>
+    );
+  }
+
+  function renderSnackbar() {
+    if (!snackbar) return null;
+    return (
+      <View style={styles.snackbar}>
+        <Text style={styles.snackbarText}>{snackbar.text}</Text>
+        {snackbar.action && snackbar.actionLabel ? (
+          <Pressable onPress={snackbar.action} hitSlop={8}>
+            <Text style={styles.snackbarAction}>{snackbar.actionLabel}</Text>
+          </Pressable>
+        ) : null}
+      </View>
     );
   }
 
@@ -2166,7 +2554,7 @@ export default function App() {
     const primaryCollectionConfidence = primaryLinkedCollection?.confidence ?? primaryCollectionDecision?.confidence ?? null;
     const primaryCollectionRationale = primaryLinkedCollection?.rationale || primaryCollectionDecision?.rationale;
     const primaryRationale = (!primaryReminderRemoved ? primaryReminder?.rationale : "") || primaryCollectionRationale || selected.intentRationale;
-    const quickBecause = becauseSentence(primaryRationale);
+    const quickBecause = shortTrustCue(primaryRationale);
     const selectedCollectionState = primaryCollectionTitle ? collectionConfidenceLabel(primaryCollectionConfidence) : "No collection";
     const reminderSentenceValue = primaryReminder && !primaryReminderRemoved
       ? reminderLabel(primaryReminder)
@@ -2177,6 +2565,7 @@ export default function App() {
         : collectionConfidenceLabel(primaryReminder.confidence)
       : "None";
     const pendingAutoCollection = Boolean(collectionChoiceSaving?.startsWith("auto-suggestion:"));
+    const selectedReviewState = reviewStatusCue(selected, pendingAutoCollection, selectedReviewReasons.length > 0);
     const otherActiveCollectionSuggestions = collectionSuggestionRows
       .slice(primaryCollectionDecision ? 1 : 0, 3)
       .map((decision, offset) => ({ decision, index: (primaryCollectionDecision ? 1 : 0) + offset }));
@@ -2225,7 +2614,7 @@ export default function App() {
 
         {otherActiveCollectionSuggestions.length || restoredAiCollectionSuggestions.length ? (
           <View style={styles.sheetSection}>
-            <Text style={styles.quickLabel}>Other AI ideas</Text>
+            <Text style={styles.quickLabel}>Other suggestions</Text>
             {otherActiveCollectionSuggestions.map(({ decision, index }) => (
               <Pressable
                 key={suggestedCollectionDraftKey(decision, index)}
@@ -2238,7 +2627,7 @@ export default function App() {
                   <Text numberOfLines={2} style={styles.meta}>{collectionConfidenceLabel(decision.confidence)}</Text>
                 </View>
                 <Text style={styles.suggestionAction}>
-                  {collectionChoiceSaving === `suggestion:${index}` ? "Selecting..." : "Use"}
+                  {collectionChoiceSaving === `suggestion:${index}` ? "Selecting..." : "Use suggestion"}
                 </Text>
               </Pressable>
             ))}
@@ -2265,7 +2654,7 @@ export default function App() {
                     <Text numberOfLines={2} style={styles.meta}>{collectionConfidenceLabel(decision.confidence)}</Text>
                   </View>
                   <Text style={styles.suggestionAction}>
-                    {collectionChoiceSaving === `restored:${key}` ? "Selecting..." : "Use"}
+                    {collectionChoiceSaving === `restored:${key}` ? "Selecting..." : "Use suggestion"}
                   </Text>
                 </Pressable>
               );
@@ -2350,8 +2739,24 @@ export default function App() {
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="dark-content" />
+        <Animated.View
+          style={[
+            styles.reviewShell,
+            {
+              opacity: reviewMotion,
+              transform: [
+                {
+                  translateY: reviewMotion.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [12, 0]
+                  })
+                }
+              ]
+            }
+          ]}
+        >
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.reviewShell}
         >
           <ScrollView
@@ -2382,20 +2787,14 @@ export default function App() {
                     displayStatus(selected) === "failed" && styles.statusFailed
                   ]}
                 >
-                  {selectedArchived ? "Archived" : statusLabel(displayStatus(selected))}
+                  {captureStatusLabel(selected)}
                 </Text>
               ) : null}
             </View>
             <View style={styles.quickEditBlock}>
               <View style={styles.reviewHeroTop}>
-                <Text style={styles.kicker}>Capture review</Text>
-                <Text style={styles.reviewState}>
-                  {pendingAutoCollection
-                    ? "Selecting collection"
-                    : selectedReviewReasons.length
-                      ? reviewReasonSummary(selectedReviewReasons)
-                      : "Ready to save"}
-                </Text>
+                <Text style={styles.kicker}>Meaning</Text>
+                <Text style={styles.reviewState}>{selectedReviewState}</Text>
               </View>
               <TextInput
                 multiline
@@ -2417,28 +2816,25 @@ export default function App() {
                   onPress={() => setQuickIntentOpen((current) => !current)}
                   style={[styles.sentenceChip, quickIntentOpen && styles.sentenceChipActive]}
                 >
-                  <Text style={styles.sentenceChipText}>{quickIntentLabel}</Text>
-                  <Text style={styles.sentenceChipMeta}>
-                    {draftIntentDirty ? "Changed" : selected.confidenceLabel || "Inferred"}
-                  </Text>
+                  <Text numberOfLines={2} style={styles.sentenceChipText}>{quickIntentLabel}</Text>
                 </Pressable>
-                <Text style={styles.reviewSentenceText}>
-                  {primaryCollectionTitle || pendingAutoCollection ? "in" : "with"}
-                </Text>
-                <Pressable
-                  onLongPress={() => showRationale("Why this collection?", primaryCollectionRationale)}
-                  onPress={() => void openCollectionPicker()}
-                  style={[styles.sentenceChip, collectionPickerOpen && styles.sentenceChipActive]}
-                >
-                  <Text style={styles.sentenceChipText}>
-                    {pendingAutoCollection ? "choosing..." : primaryCollectionTitle || "no collection"}
-                  </Text>
-                  <Text style={styles.sentenceChipMeta}>{pendingAutoCollection ? "Applying AI pick" : selectedCollectionState}</Text>
-                </Pressable>
-                <Text style={styles.reviewSentenceText}>.</Text>
+                {primaryCollectionTitle || pendingAutoCollection ? (
+                  <>
+                    <Text style={styles.reviewSentenceText}>in</Text>
+                    <Pressable
+                      onLongPress={() => showRationale("Why this collection?", primaryCollectionRationale)}
+                      onPress={() => void openCollectionPicker()}
+                      style={[styles.sentenceChip, collectionPickerOpen && styles.sentenceChipActive]}
+                    >
+                      <Text numberOfLines={2} style={styles.sentenceChipText}>
+                        {pendingAutoCollection ? "choosing..." : primaryCollectionTitle}
+                      </Text>
+                    </Pressable>
+                  </>
+                ) : null}
                 {primaryReminder ? (
                   <>
-                    <Text style={styles.reviewSentenceText}>Reminder suggested</Text>
+                    <Text style={styles.reviewSentenceText}>Reminder idea:</Text>
                     <Pressable
                       onLongPress={() => showRationale("Why this reminder?", primaryReminder.rationale)}
                       onPress={() => {
@@ -2450,20 +2846,26 @@ export default function App() {
                       }}
                       style={[styles.sentenceChip, primaryReminderRemoved && styles.sentenceChipMuted]}
                     >
-                      <Text style={[styles.sentenceChipText, primaryReminderRemoved && styles.suggestionTextMuted]}>
+                      <Text numberOfLines={2} style={[styles.sentenceChipText, primaryReminderRemoved && styles.suggestionTextMuted]}>
                         {reminderSentenceValue}
                       </Text>
-                      <Text style={styles.sentenceChipMeta}>{reminderStateLabel}</Text>
                     </Pressable>
                   </>
-                ) : (
-                  <Pressable style={styles.sentenceChip}>
-                    <Text style={styles.sentenceChipText}>No reminder</Text>
-                    <Text style={styles.sentenceChipMeta}>None</Text>
-                  </Pressable>
-                )}
-                <Text style={styles.reviewSentenceText}>.</Text>
+                ) : null}
               </View>
+              <Text style={styles.reviewSentenceSubtext}>
+                {draftIntentDirty
+                  ? `Changed from ${humanize(aiIntentValue) || "the original suggestion"}`
+                  : primaryCollectionTitle
+                    ? selectedCollectionState
+                    : "A capture can stay without a collection."}
+                {primaryReminder ? ` · Reminder ${reminderStateLabel.toLowerCase()}` : ""}
+              </Text>
+              {!primaryCollectionTitle && !pendingAutoCollection ? (
+                <Pressable onPress={() => void openCollectionPicker()} style={styles.addCollectionButton}>
+                  <Text style={styles.inlineAction}>Add to collection</Text>
+                </Pressable>
+              ) : null}
               {quickBecause ? (
                 <View style={styles.rationaleBlock}>
                   <Text style={styles.becauseText}>{quickBecause}</Text>
@@ -2503,7 +2905,7 @@ export default function App() {
             {draftIntentDirty ? (
               <View style={styles.changeLine}>
                 <Text style={styles.changeText}>
-                  AI suggested {humanize(aiIntentValue) || "something useful"}
+                  Original suggestion: {humanize(aiIntentValue) || "something useful"}
                 </Text>
                 <Pressable
                   onPress={() => {
@@ -2551,7 +2953,7 @@ export default function App() {
                 setDraftNote(value);
                 updateSelectedReviewDraft({ note: value, noteDirty: true });
               }}
-              placeholder="Add why you saved this, if the extraction missed it"
+              placeholder="Add why you saved this, if anything is missing"
               placeholderTextColor={colors.muted}
               style={styles.noteInput}
               testID="pc.review.note"
@@ -2589,6 +2991,8 @@ export default function App() {
             </Pressable>
           </View>
         </KeyboardAvoidingView>
+        </Animated.View>
+        {renderSnackbar()}
       </SafeAreaView>
     );
   }
@@ -2644,66 +3048,145 @@ export default function App() {
     );
   }
 
+  if (searchOpen) {
+    const searchIsLoading = searchScope !== "active" && archivedCapturesLoading && !archivedCapturesLoaded;
+    const emptyTitle = searchQuery.trim()
+      ? "No matches yet."
+      : searchScope === "archived"
+        ? "No archived captures."
+        : "Start with what you remember.";
+    const emptyText = searchQuery.trim()
+      ? "Try a place, product, source, collection, note, date, or why you saved it."
+      : searchScope === "archived"
+        ? "Archived captures stay searchable here after you move them out of Recent Captures."
+        : "Search looks across titles, notes, sources, collections, reminders, and saved details.";
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="dark-content" />
+        <Animated.View
+          style={[
+            styles.searchScreen,
+            {
+              opacity: searchMotion,
+              transform: [
+                {
+                  translateY: searchMotion.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [12, 0]
+                  })
+                }
+              ]
+            }
+          ]}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={styles.searchScreen}
+          >
+            <View style={styles.searchTop}>
+              <View style={styles.searchBarRow}>
+                <Pressable onPress={() => setSearchOpen(false)} style={styles.searchBackButton}>
+                  <Text style={styles.textButtonText}>Back</Text>
+                </Pressable>
+                <TextInput
+                  autoFocus
+                  onChangeText={setSearchQuery}
+                  placeholder="Search anything you saved"
+                  placeholderTextColor={colors.muted}
+                  returnKeyType="search"
+                  style={styles.searchInputLarge}
+                  testID="pc.search.input"
+                  value={searchQuery}
+                />
+              </View>
+              <View style={styles.scopeRow}>
+                {(["active", "archived", "all"] as const).map((scope) => (
+                  <Pressable
+                    key={scope}
+                    onPress={() => setSearchScope(scope)}
+                    style={[styles.scopeChip, searchScope === scope && styles.scopeChipSelected]}
+                    testID={`pc.search.scope.${scope}`}
+                  >
+                    <Text style={[styles.scopeChipText, searchScope === scope && styles.scopeChipTextSelected]}>
+                      {scope === "active" ? "Active" : scope === "archived" ? "Archived" : "All"}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              {archivedCapturesError && searchScope !== "active" ? (
+                <Text style={styles.errorText}>{archivedCapturesError}</Text>
+              ) : null}
+            </View>
+            <FlatList
+              data={searchResults}
+              keyExtractor={(item) => item.id}
+              renderItem={renderSearchResult}
+              ItemSeparatorComponent={() => <View style={styles.separator} />}
+              ListEmptyComponent={
+                searchIsLoading ? (
+                  renderLoadingRows()
+                ) : (
+                  <View style={styles.searchEmpty}>
+                    <Text style={styles.emptyTitle}>{emptyTitle}</Text>
+                    <Text style={styles.emptyText}>{emptyText}</Text>
+                  </View>
+                )
+              }
+              contentContainerStyle={searchResults.length ? styles.searchResultsContent : styles.searchEmptyContent}
+              keyboardDismissMode="on-drag"
+              keyboardShouldPersistTaps="handled"
+            />
+          </KeyboardAvoidingView>
+        </Animated.View>
+        {renderSnackbar()}
+      </SafeAreaView>
+    );
+  }
+
+  const homeCountLabel = capturesLoading && !homeCaptures.length
+    ? "Loading captures"
+    : `${homeCaptures.length} recent ${homeCaptures.length === 1 ? "capture" : "captures"}`;
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.kicker}>
-            {homeMode === "captures"
-              ? `${filteredCaptures.length} ${listMode === "archived" ? "archived" : "active"} captures`
-              : `${filteredCollections.length} ${collectionListMode} collections`}
-          </Text>
-          <Text style={styles.title}>Precious Captures</Text>
-          {session ? (
-            <Pressable onPress={() => void signOut()} style={styles.textButton}>
-              <Text style={styles.textButtonText}>Sign out</Text>
-            </Pressable>
-          ) : null}
-        </View>
-        <TextInput
-          onChangeText={setQuery}
-          placeholder="Search"
-          placeholderTextColor={colors.muted}
-          style={styles.search}
-          value={query}
-        />
-        <View style={styles.segmented}>
-          {(["captures", "collections"] as const).map((mode) => (
-            <Pressable
-              key={mode}
-              onPress={() => {
-                setHomeMode(mode);
-                selectCapture(null);
-                selectCollection(null);
-              }}
-              style={[styles.segment, homeMode === mode && styles.segmentSelected]}
-              testID={`pc.home.${mode}`}
-            >
-              <Text style={[styles.segmentText, homeMode === mode && styles.segmentTextSelected]}>
-                {mode === "captures" ? "Captures" : "Collections"}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-        {homeMode === "captures" ? (
-          <>
-            <View style={styles.segmented}>
-          {(["active", "archived"] as const).map((mode) => (
-            <Pressable
-              key={mode}
-              onPress={() => {
-                setListMode(mode);
-                selectCapture(null);
-              }}
-              style={[styles.segment, listMode === mode && styles.segmentSelected]}
-            >
-              <Text style={[styles.segmentText, listMode === mode && styles.segmentTextSelected]}>
-                {mode === "active" ? "Active" : "Archived"}
-              </Text>
-            </Pressable>
-          ))}
+        <View style={styles.header} testID="pc.home.captures">
+          <View style={styles.headerRow}>
+            <View style={styles.headerCopy}>
+              <Text style={styles.kicker}>{homeCountLabel}</Text>
+              <Text style={styles.title}>Recent Captures</Text>
             </View>
+            {session ? (
+              <Pressable onPress={openAccountActions} style={styles.accountButton} hitSlop={8}>
+                <Text style={styles.accountButtonText}>Account</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          <View style={styles.homeActionRow}>
+            <Pressable
+              onPress={openSearch}
+              style={({ pressed }) => [styles.searchAffordance, pressed && styles.pressed]}
+              testID="pc.home.search"
+            >
+              <View style={styles.searchAffordanceCopy}>
+                <Text style={styles.searchAffordanceText}>Search anything you saved</Text>
+                <Text numberOfLines={1} style={styles.searchAffordanceMeta}>
+                  Places, notes, sources, collections
+                </Text>
+              </View>
+              <Text style={styles.searchAffordanceAction}>Search</Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Paste link or note"
+              onPress={() => setShowCaptureComposer((current) => !current)}
+              style={({ pressed }) => [styles.fallbackCaptureToggle, pressed && styles.pressed]}
+              testID="pc.capture.open"
+            >
+              <Text style={styles.fallbackCaptureToggleText}>+</Text>
+            </Pressable>
+          </View>
+          {showCaptureComposer ? (
             <View style={styles.captureBox}>
               <TextInput
                 multiline
@@ -2724,141 +3207,69 @@ export default function App() {
                 testID="pc.capture.save"
               >
                 <Text style={styles.primaryButtonText}>
-                  {savingCapture ? "Saving..." : "Save and analyze"}
+                  {savingCapture ? "Saving..." : "Save capture"}
                 </Text>
               </Pressable>
-              {message ? <Text style={styles.message}>{message}</Text> : null}
             </View>
-            <FlatList
-              data={filteredCaptures}
-              keyExtractor={(item) => item.id}
-              renderItem={renderCapture}
-              ItemSeparatorComponent={() => <View style={styles.separator} />}
-              ListEmptyComponent={
-                <View style={styles.empty}>
-                  <Text style={styles.emptyTitle}>
-                    {listMode === "archived" ? "No archived captures." : "Share something in."}
-                  </Text>
-                  <Text style={styles.emptyText}>
-                    {listMode === "archived"
-                      ? "Archived captures will appear here so you can restore them later."
-                      : "Use the Android share sheet from a browser, message, or notes app."}
-                  </Text>
-                </View>
-              }
-              contentContainerStyle={filteredCaptures.length ? styles.listContent : styles.emptyContent}
-            />
-          </>
-        ) : (
-          <>
-            <View style={styles.segmented}>
-              {(["active", "archived"] as const).map((mode) => (
-                <Pressable
-                  key={mode}
-                  onPress={() => {
-                    setCollectionListMode(mode);
-                    selectCollection(null);
-                  }}
-                  style={[styles.segment, collectionListMode === mode && styles.segmentSelected]}
-                >
-                  <Text style={[styles.segmentText, collectionListMode === mode && styles.segmentTextSelected]}>
-                    {mode === "active" ? "Active" : "Archived"}
-                  </Text>
+          ) : null}
+          {message ? <Text style={styles.messageInline}>{message}</Text> : null}
+        </View>
+        <FlatList
+          data={homeRows}
+          keyExtractor={(item) => item.id}
+          renderItem={renderHomeRow}
+          ItemSeparatorComponent={({ leadingItem }) =>
+            leadingItem?.type === "section" ? null : <View style={styles.separator} />
+          }
+          ListEmptyComponent={
+            capturesLoading ? (
+              renderLoadingRows()
+            ) : capturesError ? (
+              <View style={styles.empty}>
+                <Text style={styles.emptyTitle}>Could not load captures.</Text>
+                <Text style={styles.emptyText}>{capturesError}</Text>
+                <Pressable onPress={() => void loadCaptures()} style={styles.secondaryButton}>
+                  <Text style={styles.secondaryButtonText}>Try again</Text>
                 </Pressable>
-              ))}
-            </View>
-            {collectionListMode === "active" ? (
-              <View style={styles.captureBox}>
-                {showCollectionForm ? (
-                  <>
-                    <TextInput
-                      onChangeText={(value) => {
-                        setCollectionDraftDirty(true);
-                        setCollectionTitle(value);
-                      }}
-                      placeholder="Collection title"
-                      placeholderTextColor={colors.muted}
-                      style={styles.search}
-                      testID="pc.collection.title"
-                      value={collectionTitle}
-                    />
-                    <TextInput
-                      multiline
-                      onChangeText={(value) => {
-                        setCollectionDraftDirty(true);
-                        setCollectionDescription(value);
-                      }}
-                      placeholder="Description"
-                      placeholderTextColor={colors.muted}
-                      style={styles.captureInput}
-                      testID="pc.collection.description"
-                      value={collectionDescription}
-                    />
-                    <Pressable
-                      disabled={!collectionTitle.trim() || !collectionDescription.trim()}
-                      onPress={() => void saveCollection()}
-                      style={[
-                        styles.primaryButton,
-                        (!collectionTitle.trim() || !collectionDescription.trim()) && styles.disabledButton
-                      ]}
-                      testID="pc.collection.save"
-                    >
-                      <Text style={styles.primaryButtonText}>Save collection</Text>
-                    </Pressable>
-                  </>
-                ) : (
-                  <Pressable
-                    onPress={() => {
-                      setCollectionTitle("");
-                      setCollectionDescription("");
-                      setShowCollectionForm(true);
-                    }}
-                    style={styles.primaryButton}
-                    testID="pc.collection.add"
-                  >
-                    <Text style={styles.primaryButtonText}>Add collection</Text>
-                  </Pressable>
-                )}
-                {message ? <Text style={styles.message}>{message}</Text> : null}
               </View>
-            ) : message ? (
-              <Text style={styles.message}>{message}</Text>
-            ) : null}
-            <FlatList
-              data={filteredCollections}
-              keyExtractor={(item) => item.id}
-              renderItem={renderCollection}
-              ItemSeparatorComponent={() => <View style={styles.separator} />}
-              ListEmptyComponent={
-                <View style={styles.empty}>
-                  <Text style={styles.emptyTitle}>
-                    {collectionListMode === "archived" ? "No archived collections." : "No collections yet."}
-                  </Text>
-                  <Text style={styles.emptyText}>
-                    {collectionListMode === "archived"
-                      ? "Archived collections can be restored with their archive-time snapshot."
-                      : "Create a bucket with a title and description."}
-                  </Text>
-                </View>
-              }
-              contentContainerStyle={filteredCollections.length ? styles.listContent : styles.emptyContent}
-            />
-          </>
-        )}
+            ) : (
+              <View style={styles.empty}>
+                <Text style={styles.emptyTitle}>Share something in.</Text>
+                <Text style={styles.emptyText}>
+                  Use the share sheet from a browser, message, notes app, or photos.
+                </Text>
+                <Pressable
+                  onPress={() => setShowCaptureComposer(true)}
+                  style={styles.primaryButton}
+                  testID="pc.capture.empty.open"
+                >
+                  <Text style={styles.primaryButtonText}>Paste link or note</Text>
+                </Pressable>
+                <Text style={styles.emptyCue}>You can review details after the capture is saved.</Text>
+              </View>
+            )
+          }
+          contentContainerStyle={homeRows.length ? styles.listContent : styles.emptyContent}
+          keyboardShouldPersistTaps="handled"
+        />
       </View>
+      {renderSnackbar()}
     </SafeAreaView>
   );
 }
 
 const colors = {
   paper: "#f8faf7",
+  surface: "#ffffff",
   ink: "#1d211f",
   muted: "#66706a",
   line: "#dce4de",
   soft: "#edf4ef",
   accent: "#1f7a5b",
   accentSoft: "#dcefe7",
-  processing: "#6d766f",
+  processing: "#5d7187",
+  review: "#9a6b1f",
+  reviewSoft: "#f3efe6",
   danger: "#9f3a2f"
 };
 
@@ -2871,11 +3282,21 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 22,
-    paddingTop: 18
+    paddingTop: 16
   },
   header: {
     gap: 4,
-    paddingBottom: 18
+    paddingBottom: 14
+  },
+  headerRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between"
+  },
+  headerCopy: {
+    flex: 1,
+    gap: 4
   },
   kicker: {
     color: colors.muted,
@@ -2886,9 +3307,21 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.ink,
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: "700",
-    letterSpacing: 0
+    letterSpacing: 0,
+    lineHeight: 31
+  },
+  accountButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 4
+  },
+  accountButtonText: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "700"
   },
   search: {
     backgroundColor: colors.soft,
@@ -2899,35 +3332,122 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12
   },
-  segmented: {
+  searchAffordance: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    flex: 1,
+    flexDirection: "row",
+    gap: 5,
+    justifyContent: "space-between",
+    minHeight: 58,
+    paddingHorizontal: 14,
+    paddingVertical: 11
+  },
+  homeActionRow: {
+    alignItems: "stretch",
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 13
+  },
+  searchAffordanceCopy: {
+    flex: 1,
+    gap: 3,
+    minWidth: 0
+  },
+  searchAffordanceText: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "800",
+    lineHeight: 21
+  },
+  searchAffordanceMeta: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18
+  },
+  searchAffordanceAction: {
+    color: colors.accent,
+    fontSize: 13,
+    fontWeight: "800"
+  },
+  fallbackCaptureToggle: {
+    alignItems: "center",
+    backgroundColor: colors.ink,
+    borderRadius: 8,
+    justifyContent: "center",
+    minHeight: 58,
+    width: 50
+  },
+  fallbackCaptureToggleText: {
+    color: colors.paper,
+    fontSize: 26,
+    fontWeight: "500",
+    lineHeight: 30
+  },
+  searchScreen: {
+    flex: 1
+  },
+  searchTop: {
+    paddingHorizontal: 22,
+    paddingTop: 14
+  },
+  searchBarRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12
+  },
+  searchBackButton: {
+    justifyContent: "center",
+    minHeight: 50
+  },
+  searchInputLarge: {
     backgroundColor: colors.soft,
     borderRadius: 8,
-    flexDirection: "row",
-    marginBottom: 12,
-    padding: 3
-  },
-  segment: {
-    alignItems: "center",
-    borderRadius: 6,
     flex: 1,
-    paddingVertical: 8
+    color: colors.ink,
+    fontSize: 17,
+    fontWeight: "600",
+    minHeight: 50,
+    paddingHorizontal: 14,
+    paddingVertical: 12
   },
-  segmentSelected: {
-    backgroundColor: colors.paper
+  scopeRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingTop: 12
   },
-  segmentText: {
+  scopeChip: {
+    alignItems: "center",
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: "center",
+    minHeight: 38,
+    paddingHorizontal: 12
+  },
+  scopeChipSelected: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink
+  },
+  scopeChipText: {
     color: colors.muted,
     fontSize: 13,
     fontWeight: "700"
   },
-  segmentTextSelected: {
-    color: colors.ink
+  scopeChipTextSelected: {
+    color: colors.paper
   },
   captureBox: {
-    borderBottomColor: colors.line,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
     gap: 10,
-    paddingBottom: 16
+    marginTop: 10,
+    padding: 12
   },
   captureInput: {
     backgroundColor: colors.soft,
@@ -2940,11 +3460,30 @@ const styles = StyleSheet.create({
     textAlignVertical: "top"
   },
   listContent: {
-    paddingBottom: 40
+    paddingBottom: 40,
+    paddingTop: 2
+  },
+  searchResultsContent: {
+    paddingBottom: 180,
+    paddingTop: 10,
+    paddingHorizontal: 22
+  },
+  searchEmptyContent: {
+    flexGrow: 1,
+    paddingHorizontal: 22,
+    paddingTop: 20
+  },
+  groupHeader: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "800",
+    paddingBottom: 2,
+    paddingTop: 18
   },
   captureRow: {
     gap: 7,
-    paddingVertical: 16
+    minHeight: 74,
+    paddingVertical: 15
   },
   rowTop: {
     alignItems: "center",
@@ -2952,11 +3491,22 @@ const styles = StyleSheet.create({
     gap: 12,
     justifyContent: "space-between"
   },
+  rowTitleLine: {
+    alignItems: "flex-start",
+    flexDirection: "row"
+  },
+  rowMetaLine: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 20
+  },
   captureTitle: {
     color: colors.ink,
     flex: 1,
     fontSize: 18,
-    fontWeight: "600"
+    fontWeight: "600",
+    lineHeight: 23
   },
   status: {
     color: colors.ink,
@@ -2967,14 +3517,31 @@ const styles = StyleSheet.create({
     color: colors.processing
   },
   statusReview: {
-    color: "#9a6b1f"
+    color: colors.review
   },
   statusFailed: {
     color: "#9f3d2e"
   },
   meta: {
     color: colors.muted,
-    fontSize: 13
+    flexShrink: 1,
+    fontSize: 13,
+    lineHeight: 18
+  },
+  statusPill: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: "800",
+    flexShrink: 0
+  },
+  statusPillProcessing: {
+    color: colors.processing
+  },
+  statusPillReview: {
+    color: colors.review
+  },
+  statusPillFailed: {
+    color: colors.danger
   },
   notePreview: {
     color: colors.ink,
@@ -2987,15 +3554,16 @@ const styles = StyleSheet.create({
     lineHeight: 21
   },
   intentPreview: {
-    color: colors.ink,
+    color: colors.accent,
     fontSize: 13,
-    fontWeight: "600",
-    textTransform: "capitalize"
+    fontWeight: "700",
+    lineHeight: 18
   },
-  reviewReasonPreview: {
-    color: "#9a6b1f",
+  searchMatchText: {
+    color: colors.accent,
     fontSize: 13,
-    fontWeight: "600"
+    fontWeight: "700",
+    lineHeight: 18
   },
   separator: {
     backgroundColor: colors.line,
@@ -3012,6 +3580,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingBottom: 80
   },
+  searchEmpty: {
+    gap: 8,
+    paddingTop: 22
+  },
   emptyTitle: {
     color: colors.ink,
     fontSize: 24,
@@ -3023,6 +3595,38 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 23,
     maxWidth: 280
+  },
+  emptyCue: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 19,
+    maxWidth: 280
+  },
+  loadingRows: {
+    gap: 1,
+    paddingTop: 10
+  },
+  loadingRow: {
+    gap: 8,
+    paddingVertical: 16
+  },
+  loadingTitle: {
+    backgroundColor: colors.soft,
+    borderRadius: 6,
+    height: 18,
+    width: "74%"
+  },
+  loadingLine: {
+    backgroundColor: colors.soft,
+    borderRadius: 6,
+    height: 13,
+    width: "92%"
+  },
+  loadingLineShort: {
+    backgroundColor: colors.soft,
+    borderRadius: 6,
+    height: 13,
+    width: "58%"
   },
   collectionDetailContent: {
     paddingBottom: 40,
@@ -3097,12 +3701,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6
   },
   quickEditBlock: {
-    backgroundColor: "#ffffff",
-    borderColor: colors.line,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
-    gap: 16,
-    padding: 16
+    gap: 14,
+    paddingBottom: 2
   },
   reviewHeroTop: {
     alignItems: "center",
@@ -3119,30 +3719,32 @@ const styles = StyleSheet.create({
   },
   reviewTitleInput: {
     color: colors.ink,
-    fontSize: 24,
+    fontSize: 25,
     fontWeight: "700",
-    lineHeight: 30,
+    lineHeight: 31,
     padding: 0
   },
   reviewSentence: {
     alignItems: "center",
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 7,
+    gap: 6,
     paddingTop: 2
   },
   reviewSentenceText: {
     color: colors.ink,
-    fontSize: 21,
+    fontSize: 18,
     fontWeight: "600",
-    lineHeight: 30
+    lineHeight: 28
   },
   sentenceChip: {
-    backgroundColor: colors.soft,
-    borderColor: colors.line,
+    backgroundColor: colors.accentSoft,
+    borderColor: "#c6dfd4",
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
+    flexShrink: 1,
     justifyContent: "center",
+    maxWidth: "100%",
     minHeight: 44,
     paddingHorizontal: 10,
     paddingVertical: 6
@@ -3157,14 +3759,14 @@ const styles = StyleSheet.create({
   sentenceChipText: {
     color: colors.ink,
     fontSize: 16,
-    fontWeight: "800",
-    lineHeight: 20
+    fontWeight: "700",
+    lineHeight: 21
   },
-  sentenceChipMeta: {
+  reviewSentenceSubtext: {
     color: colors.muted,
-    fontSize: 11,
-    fontWeight: "800",
-    lineHeight: 14
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 19
   },
   quickTopRow: {
     alignItems: "flex-start",
@@ -3211,6 +3813,16 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingTop: 2
   },
+  addCollectionButton: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 12
+  },
   changeLine: {
     alignItems: "center",
     backgroundColor: colors.paper,
@@ -3228,19 +3840,23 @@ const styles = StyleSheet.create({
     fontWeight: "700"
   },
   rationaleBlock: {
-    alignItems: "flex-start",
-    borderTopColor: colors.line,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 7,
-    paddingTop: 12
+    alignItems: "center",
+    backgroundColor: colors.soft,
+    borderRadius: 8,
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 10
   },
   becauseText: {
     color: colors.muted,
-    fontSize: 15,
-    lineHeight: 22
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20
   },
   reviewCallout: {
-    backgroundColor: "#f3efe6",
+    backgroundColor: colors.reviewSoft,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10
@@ -3249,7 +3865,7 @@ const styles = StyleSheet.create({
     gap: 3
   },
   reviewCalloutLabel: {
-    color: "#9a6b1f",
+    color: colors.review,
     fontSize: 12,
     fontWeight: "800",
     textTransform: "uppercase"
@@ -3542,5 +4158,38 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 14,
     textAlign: "center"
+  },
+  messageInline: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20,
+    paddingTop: 8
+  },
+  snackbar: {
+    alignItems: "center",
+    backgroundColor: colors.ink,
+    borderRadius: 8,
+    bottom: Platform.OS === "android" ? 16 : 22,
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+    left: 22,
+    minHeight: 50,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    position: "absolute",
+    right: 22
+  },
+  snackbarText: {
+    color: colors.paper,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 19
+  },
+  snackbarAction: {
+    color: colors.accentSoft,
+    fontSize: 14,
+    fontWeight: "800"
   }
 });

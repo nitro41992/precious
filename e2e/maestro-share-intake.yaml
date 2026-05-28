@@ -2,10 +2,9 @@ appId: com.preciouscaptures
 name: android share intake
 ---
 - launchApp
-- assertVisible: "Precious Captures"
-- tapOn:
+- assertVisible:
     id: "pc.home.captures"
 - extendedWaitUntil:
     visible:
-      text: "android-share-smoke|example.com|quiet-place|Processing|Ready|Needs review"
+      text: "android-share-smoke|example.com|quiet-place|Analyzing|Ready|Needs review"
     timeout: 30000
