@@ -16,6 +16,7 @@
     "hosted:db:push": "node scripts/push-supabase-db.mjs",
     "hosted:create-user": "node scripts/create-password-user.mjs",
     "hosted:verify": "node scripts/verify-hosted-capture.mjs",
+    "hosted:verify:review": "node scripts/verify-review-regression.mjs",
     "server:dev": "node server/index.mjs",
     "typecheck": "tsc --noEmit",
     "validate:intents": "node scripts/validate-save-intents.mjs",

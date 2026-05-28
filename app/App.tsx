@@ -2336,7 +2336,6 @@ export default function App() {
     const primaryReminder = reminderRows[0];
     const primaryLinkedCollection = collectionRows[0];
     const primaryCollectionDecision = collectionSuggestionRows[0];
-    const primaryCollectionTitle = primaryLinkedCollection?.title || primaryCollectionDecision?.title || "";
     const primaryCollectionRationale = primaryLinkedCollection?.rationale || primaryCollectionDecision?.rationale;
     const primaryRationale = primaryReminder?.rationale || primaryCollectionRationale || selected.intentRationale;
     const quickBecause = becauseSentence(primaryRationale);
@@ -2483,7 +2482,7 @@ export default function App() {
             />
             <View style={styles.quickTopRow}>
               <View style={styles.quickTopCopy}>
-                <Text style={styles.quickLabel}>Intent</Text>
+                <Text style={styles.quickLabel}>Inferred intent</Text>
                 <View style={styles.quickSentenceRow}>
                   <Pressable
                     onLongPress={() => showRationale("Why this intent?", selected.intentRationale)}
@@ -2541,7 +2540,8 @@ export default function App() {
               </View>
             ) : null}
             {quickBecause ? (
-              <View style={styles.becauseRow}>
+              <View style={styles.rationaleBlock}>
+                <Text style={styles.quickLabel}>Rationale</Text>
                 <Text style={styles.becauseText}>{quickBecause}</Text>
                 <Pressable
                   onLongPress={() => showRationale("Why?", primaryRationale)}
@@ -2552,9 +2552,19 @@ export default function App() {
                 </Pressable>
               </View>
             ) : null}
+            {selectedReviewReasons.length ? (
+              <View style={styles.reviewCallout}>
+                <View style={styles.reviewCalloutCopy}>
+                  <Text style={styles.reviewCalloutLabel}>Needs review</Text>
+                  <Text style={styles.reviewCalloutText}>
+                    {reviewReasonSummary(selectedReviewReasons)}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
             <View style={styles.suggestionRail}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.quickLabel}>AI suggestions</Text>
+                <Text style={styles.quickLabel}>Suggestions</Text>
               </View>
               {reminderRows.length ? (
                 reminderRows.slice(0, 3).map((reminder, index) => {
@@ -2752,16 +2762,6 @@ export default function App() {
               {collectionPickerContent}
             </View>
           </View>
-          {selectedReviewReasons.length ? (
-            <View style={styles.reviewReasonBlock}>
-              <Text style={styles.meta}>Needs review</Text>
-              {selectedReviewReasons.map((reason) => (
-                <Text key={reason} style={styles.reviewReasonText}>
-                  {reviewReasonLabel(reason)}
-                </Text>
-              ))}
-            </View>
-          ) : null}
           {urlEvidenceNotice ? (
             <View style={styles.sourceBlock}>
               <Text style={styles.meta}>Link evidence</Text>
@@ -2811,16 +2811,6 @@ export default function App() {
             </View>
             <Text selectable style={styles.sourceText}>{sourceValue}</Text>
           </View>
-          {selected.entities?.length ? (
-            <View style={styles.sourceBlock}>
-              <Text style={styles.meta}>Detected details</Text>
-              {selected.entities.slice(0, 5).map((entity) => (
-                <Text key={`${entity.type}-${entity.name}`} style={styles.sourceText}>
-                  {entity.name} · {entity.type}
-                </Text>
-              ))}
-            </View>
-          ) : null}
           <Pressable onPress={confirmArchive} style={styles.secondaryButton}>
             <Text style={selectedArchived ? styles.secondaryButtonText : styles.dangerButtonText}>
               {selectedArchived ? "Restore capture" : "Archive capture"}
@@ -3383,17 +3373,38 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700"
   },
-  becauseRow: {
+  rationaleBlock: {
     alignItems: "flex-start",
     borderTopColor: colors.line,
     borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 6,
+    gap: 7,
     paddingTop: 12
   },
   becauseText: {
     color: colors.muted,
     fontSize: 15,
     lineHeight: 22
+  },
+  reviewCallout: {
+    backgroundColor: "#f3efe6",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  reviewCalloutCopy: {
+    gap: 3
+  },
+  reviewCalloutLabel: {
+    color: "#9a6b1f",
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase"
+  },
+  reviewCalloutText: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 20
   },
   suggestionRail: {
     gap: 8
@@ -3473,17 +3484,6 @@ const styles = StyleSheet.create({
   },
   editBlock: {
     gap: 8
-  },
-  reviewReasonBlock: {
-    backgroundColor: colors.soft,
-    borderRadius: 8,
-    gap: 6,
-    padding: 12
-  },
-  reviewReasonText: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: "700"
   },
   fieldLabel: {
     color: colors.ink,
