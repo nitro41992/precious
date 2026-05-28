@@ -5,6 +5,11 @@
   "main": "index.js",
   "scripts": {
     "build": "next build",
+    "test": "npm run typecheck && npm run validate:intents && npm run test:unit",
+    "test:unit": "node --test test/*.test.js",
+    "test:e2e:maestro": "node scripts/run-maestro-smoke.mjs",
+    "test:e2e:android-share": "node scripts/run-android-share-smoke.mjs",
+    "test:e2e:hosted": "npm run hosted:verify -- --allow-no-reminder && npm run hosted:verify:review",
     "android:build": "cd android && ./gradlew :app:assembleDebug",
     "android:build:hosted": "node scripts/build-hosted-apk.mjs",
     "android:build:release": "cd android && ./gradlew :app:assembleRelease",

@@ -24,10 +24,13 @@ Copied product/design requirements live in `docs/requirements/`. They are refere
 ## Commands
 
 ```sh
+npm test
 npm run typecheck
 npm run android:build:hosted
 npm run android:install
 ```
+
+See `docs/testing.md` for the full regression strategy, including hosted Supabase checks and Maestro Android release smoke tests.
 
 Set these environment variables before building Android:
 

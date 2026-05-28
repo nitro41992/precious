@@ -21,9 +21,22 @@ import {
 } from "react-native";
 
 import saveIntents from "../supabase/functions/_shared/save-intents.json";
+import {
+  confidenceRequiresReview,
+  displayStatus,
+  extractHttpUrl,
+  hostFromUrl,
+  isArchived,
+  mergeRemoteCaptures,
+  normalizeIntent as normalizeKnownIntent,
+  parseCaptureUrl,
+  reviewReasonSummary,
+  reviewReasons,
+  sortCaptures,
+  statusLabel
+} from "./captureLogic";
 
 type CaptureStatus = "processing" | "ready" | "needs_review" | "failed";
-type ReviewReason = "intent" | "collection" | "analysis";
 
 type UrlEvidence = {
   status?: "extracted" | "partial_evidence" | "needs_client_resolution" | "insufficient_url_evidence" | "failed";
@@ -223,7 +236,6 @@ type HomeMode = "captures" | "collections";
 type CollectionListMode = "active" | "archived";
 
 const PROCESSING_REFRESH_MS = 3000;
-const LOCAL_PROCESSING_GRACE_MS = 30 * 60 * 1000;
 
 class ApiRequestError extends Error {
   status: number;
@@ -236,32 +248,6 @@ class ApiRequestError extends Error {
 
 function isAuthError(error: unknown) {
   return error instanceof ApiRequestError && (error.status === 401 || error.status === 403);
-}
-
-function hostFromUrl(value: string | null) {
-  if (!value) return "";
-  try {
-    return new URL(value).host.replace(/^www\./, "");
-  } catch {
-    return "";
-  }
-}
-
-function extractHttpUrl(value: string | null | undefined) {
-  const match = String(value || "").match(/https?:\/\/\S+/i);
-  if (!match) return "";
-  try {
-    const url = new URL(match[0].replace(/[),.;\]]+$/g, ""));
-    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : "";
-  } catch {
-    return "";
-  }
-}
-
-function parseCaptureUrl(url: string | null) {
-  if (!url) return null;
-  const id = url.match(/preciouscaptures:\/\/capture\/([^/?#]+)/)?.[1];
-  return id ? decodeURIComponent(id) : null;
 }
 
 function formatTime(value: number) {
@@ -278,8 +264,7 @@ function humanize(value: string | undefined) {
 }
 
 function normalizeIntent(value: string | undefined) {
-  if (!value) return "";
-  return INTENT_OPTIONS.includes(value) ? value : "";
+  return normalizeKnownIntent(value, INTENT_OPTIONS);
 }
 
 function reminderLabel(reminder: ReminderSuggestion | undefined) {
@@ -352,54 +337,6 @@ function becauseSentence(value: string | null | undefined) {
   return `Because ${body.charAt(0).toLowerCase()}${body.slice(1)}.`;
 }
 
-function isArchived(capture: Pick<Capture, "archivedAt">) {
-  return Boolean(capture.archivedAt);
-}
-
-function statusLabel(status: CaptureStatus) {
-  if (status === "processing") return "Processing";
-  if (status === "needs_review") return "Needs review";
-  if (status === "failed") return "Failed";
-  return "Ready";
-}
-
-function hasExtractedData(capture: Pick<Capture, "defaultIntent" | "summary" | "analysisProvider" | "analysisMode">) {
-  return Boolean(
-    capture.defaultIntent ||
-      capture.summary ||
-      (capture.analysisProvider && capture.analysisProvider !== "none")
-  );
-}
-
-function confidenceRequiresReview(value: string | undefined) {
-  return value === "Maybe" || value === "Not sure" || value === "Couldn't tell";
-}
-
-function hasUnresolvedCollectionDecisions(capture: Pick<Capture, "collectionDecisions">) {
-  return Boolean(capture.collectionDecisions?.length);
-}
-
-function reviewReasons(
-  capture: Pick<Capture, "status" | "needsReview" | "confidenceLabel" | "collectionDecisions" | "reviewConfirmedAt">
-): ReviewReason[] {
-  if (capture.reviewConfirmedAt || capture.status === "processing" || capture.status === "failed") return [];
-  const reasons: ReviewReason[] = [];
-  if (confidenceRequiresReview(capture.confidenceLabel)) reasons.push("intent");
-  if (hasUnresolvedCollectionDecisions(capture)) reasons.push("collection");
-  if ((capture.needsReview || capture.status === "needs_review") && !reasons.length) reasons.push("analysis");
-  return reasons;
-}
-
-function reviewReasonLabel(reason: ReviewReason) {
-  if (reason === "intent") return "Intent uncertain";
-  if (reason === "collection") return "Collection suggestions";
-  return "Analysis needs review";
-}
-
-function reviewReasonSummary(reasons: ReviewReason[]) {
-  return reasons.map(reviewReasonLabel).join(", ");
-}
-
 function urlEvidenceMessage(evidence?: UrlEvidence | null) {
   if (!evidence) return "";
   if (evidence.status === "needs_client_resolution") {
@@ -412,37 +349,6 @@ function urlEvidenceMessage(evidence?: UrlEvidence | null) {
     return "Categorized from limited public information.";
   }
   return "";
-}
-
-function captureNeedsReview(
-  capture: Pick<Capture, "status" | "needsReview" | "confidenceLabel" | "collectionDecisions" | "reviewConfirmedAt">
-) {
-  return reviewReasons(capture).length > 0;
-}
-
-function displayStatus(capture: Capture): CaptureStatus {
-  if (captureNeedsReview(capture)) return "needs_review";
-  if (capture.status === "failed" && hasExtractedData(capture)) return "ready";
-  return capture.status;
-}
-
-function sortCaptures(captures: Capture[]) {
-  return [...captures].sort((a, b) => b.createdAt - a.createdAt);
-}
-
-function mergeRemoteCaptures(remoteCaptures: Capture[], currentCaptures: Capture[], listMode: CaptureListMode) {
-  if (listMode === "archived") return sortCaptures(remoteCaptures);
-  const remoteIds = new Set(remoteCaptures.map((capture) => capture.id));
-  const now = Date.now();
-  const freshLocalProcessing = currentCaptures.filter((capture) => {
-    return (
-      !remoteIds.has(capture.id) &&
-      !isArchived(capture) &&
-      displayStatus(capture) === "processing" &&
-      now - capture.createdAt < LOCAL_PROCESSING_GRACE_MS
-    );
-  });
-  return sortCaptures([...remoteCaptures, ...freshLocalProcessing]);
 }
 
 function friendlyError(error: unknown, fallback: string) {
@@ -2067,6 +1973,7 @@ export default function App() {
       <Pressable
         onPress={() => openCapture(item.id)}
         style={({ pressed }) => [styles.captureRow, pressed && styles.pressed]}
+        testID={`pc.capture.row.${item.id}`}
       >
         <View style={styles.rowTop}>
           <Text numberOfLines={1} style={styles.captureTitle}>
@@ -2177,6 +2084,7 @@ export default function App() {
           setCollectionDescription(item.description);
         }}
         style={({ pressed }) => [styles.captureRow, pressed && styles.pressed]}
+        testID={`pc.collection.row.${item.id}`}
       >
         <View style={styles.rowTop}>
           <Text numberOfLines={1} style={styles.captureTitle}>
@@ -2260,6 +2168,7 @@ export default function App() {
                     placeholder="Title"
                     placeholderTextColor={colors.muted}
                     style={styles.search}
+                    testID="pc.collection.detail.title"
                     value={collectionTitle}
                   />
                   <TextInput
@@ -2271,18 +2180,24 @@ export default function App() {
                     placeholder="What belongs in this collection"
                     placeholderTextColor={colors.muted}
                     style={styles.noteInput}
+                    testID="pc.collection.detail.description"
                     value={collectionDescription}
                   />
                   <Pressable
                     disabled={saveDisabled}
                     onPress={() => void saveCollection()}
                     style={[styles.primaryButton, saveDisabled && styles.disabledButton]}
+                    testID="pc.collection.detail.save"
                   >
                     <Text style={styles.primaryButtonText}>Save collection</Text>
                   </Pressable>
                 </>
               ) : null}
-              <Pressable onPress={() => confirmArchiveCollection(selectedCollection)} style={styles.secondaryButton}>
+              <Pressable
+                onPress={() => confirmArchiveCollection(selectedCollection)}
+                style={styles.secondaryButton}
+                testID="pc.collection.archive-toggle"
+              >
                 <Text style={selectedCollection.status === "archived" ? styles.secondaryButtonText : styles.dangerButtonText}>
                   {selectedCollection.status === "archived" ? "Restore collection" : "Archive collection"}
                 </Text>
@@ -2478,6 +2393,7 @@ export default function App() {
               placeholder="Title"
               placeholderTextColor={colors.muted}
               style={styles.reviewTitleInput}
+              testID="pc.review.title"
               value={draftTitle}
             />
             <View style={styles.quickTopRow}>
@@ -2797,6 +2713,7 @@ export default function App() {
               placeholder="Add why you saved this, if the extraction missed it"
               placeholderTextColor={colors.muted}
               style={styles.noteInput}
+              testID="pc.review.note"
               value={draftNote}
             />
           </View>
@@ -2811,7 +2728,7 @@ export default function App() {
             </View>
             <Text selectable style={styles.sourceText}>{sourceValue}</Text>
           </View>
-          <Pressable onPress={confirmArchive} style={styles.secondaryButton}>
+          <Pressable onPress={confirmArchive} style={styles.secondaryButton} testID="pc.capture.archive-toggle">
             <Text style={selectedArchived ? styles.secondaryButtonText : styles.dangerButtonText}>
               {selectedArchived ? "Restore capture" : "Archive capture"}
             </Text>
@@ -2836,6 +2753,7 @@ export default function App() {
             placeholder="Email"
             placeholderTextColor={colors.muted}
             style={styles.search}
+            testID="pc.auth.email"
             value={authEmail}
           />
           <TextInput
@@ -2844,12 +2762,14 @@ export default function App() {
             placeholderTextColor={colors.muted}
             secureTextEntry
             style={styles.search}
+            testID="pc.auth.password"
             value={authPassword}
           />
           <Pressable
             disabled={Boolean(authLoading)}
             onPress={() => void submitAuth("signin")}
             style={styles.primaryButton}
+            testID="pc.auth.sign-in"
           >
             <Text style={styles.primaryButtonText}>
               {authLoading === "signin" ? "Signing in..." : "Sign in"}
@@ -2904,6 +2824,7 @@ export default function App() {
                 selectCollection(null);
               }}
               style={[styles.segment, homeMode === mode && styles.segmentSelected]}
+              testID={`pc.home.${mode}`}
             >
               <Text style={[styles.segmentText, homeMode === mode && styles.segmentTextSelected]}>
                 {mode === "captures" ? "Captures" : "Collections"}
@@ -2936,6 +2857,7 @@ export default function App() {
                 placeholder="Paste a link or note"
                 placeholderTextColor={colors.muted}
                 style={styles.captureInput}
+                testID="pc.capture.source"
                 value={sourceDraft}
               />
               <Pressable
@@ -2945,6 +2867,7 @@ export default function App() {
                   styles.primaryButton,
                   (savingCapture || !sourceDraft.trim()) && styles.disabledButton
                 ]}
+                testID="pc.capture.save"
               >
                 <Text style={styles.primaryButtonText}>
                   {savingCapture ? "Saving..." : "Save and analyze"}
@@ -3002,6 +2925,7 @@ export default function App() {
                       placeholder="Collection title"
                       placeholderTextColor={colors.muted}
                       style={styles.search}
+                      testID="pc.collection.title"
                       value={collectionTitle}
                     />
                     <TextInput
@@ -3013,6 +2937,7 @@ export default function App() {
                       placeholder="Description"
                       placeholderTextColor={colors.muted}
                       style={styles.captureInput}
+                      testID="pc.collection.description"
                       value={collectionDescription}
                     />
                     <Pressable
@@ -3022,6 +2947,7 @@ export default function App() {
                         styles.primaryButton,
                         (!collectionTitle.trim() || !collectionDescription.trim()) && styles.disabledButton
                       ]}
+                      testID="pc.collection.save"
                     >
                       <Text style={styles.primaryButtonText}>Save collection</Text>
                     </Pressable>
@@ -3034,6 +2960,7 @@ export default function App() {
                       setShowCollectionForm(true);
                     }}
                     style={styles.primaryButton}
+                    testID="pc.collection.add"
                   >
                     <Text style={styles.primaryButtonText}>Add collection</Text>
                   </Pressable>

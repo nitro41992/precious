@@ -1,0 +1,74 @@
+# Testing Precious Captures
+
+## Fast PR checks
+
+Run this before opening a PR:
+
+```sh
+npm test
+```
+
+That runs:
+
+- `npm run typecheck`
+- `npm run validate:intents`
+- `npm run test:unit`
+
+The unit tests use Node's built-in test runner against shared app logic in `app/captureLogic.js`, so they do not need Metro, an emulator, or live Supabase credentials.
+
+## Hosted product-path checks
+
+Run these when backend behavior, capture review, collections, assets, or extraction output shape changes:
+
+```sh
+npm run test:e2e:hosted
+```
+
+Required environment:
+
+```sh
+EXPO_PUBLIC_SUPABASE_URL=...
+EXPO_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+PRECIOUS_E2E_PASSWORD=...
+PRECIOUS_E2E_EMAIL=precious-captures-e2e@example.com # optional
+```
+
+`hosted:verify` exercises capture intake, polling, LLM analysis evidence, persisted `analysis_runs`, and optional image assets. `hosted:verify:review` seeds deterministic review/collection fixtures and verifies review mutations without relying on a fresh LLM response.
+
+## Android release smoke tests
+
+Build and install the standalone hosted release APK before running Maestro:
+
+```sh
+npm run android:build:hosted
+npm run android:install
+npm run test:e2e:maestro
+```
+
+The Maestro scripts load `.env`, `.env.local`, and the legacy parent app env files. They need:
+
+```sh
+PRECIOUS_E2E_EMAIL=...
+PRECIOUS_E2E_PASSWORD=...
+```
+
+Keep Maestro coverage focused on user-critical flows: sign-in, manual capture, review/edit, collection creation, archive/restore, and Android share intake. Prefer visible text for stable user-facing assertions and `testID` only for controls whose labels or placement may change during design iteration.
+
+After the sign-in flow has established a session on the device, run the Android share-intake smoke:
+
+```sh
+npm run test:e2e:android-share
+```
+
+This sends an Android `ACTION_SEND` text intent to `ShareIntakeActivity`, then uses Maestro to confirm the capture appears in the app.
+
+## Phone handoff
+
+For normal phone handoff, do not install the debug APK. Use:
+
+```sh
+npm run android:build:hosted
+adb install -r android/app/build/outputs/apk/release/app-release.apk
+adb shell am start -n com.preciouscaptures/.MainActivity
+```

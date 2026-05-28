@@ -1,0 +1,120 @@
+const LOCAL_PROCESSING_GRACE_MS = 30 * 60 * 1000;
+
+function hostFromUrl(value) {
+  if (!value) return "";
+  try {
+    return new URL(value).host.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function extractHttpUrl(value) {
+  const match = String(value || "").match(/https?:\/\/\S+/i);
+  if (!match) return "";
+  try {
+    const url = new URL(match[0].replace(/[),.;\]]+$/g, ""));
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
+function parseCaptureUrl(url) {
+  if (!url) return null;
+  const id = url.match(/preciouscaptures:\/\/capture\/([^/?#]+)/)?.[1];
+  return id ? decodeURIComponent(id) : null;
+}
+
+function normalizeIntent(value, allowedIntents = []) {
+  if (!value) return "";
+  return allowedIntents.includes(value) ? value : "";
+}
+
+function isArchived(capture) {
+  return Boolean(capture.archivedAt);
+}
+
+function statusLabel(status) {
+  if (status === "processing") return "Processing";
+  if (status === "needs_review") return "Needs review";
+  if (status === "failed") return "Failed";
+  return "Ready";
+}
+
+function hasExtractedData(capture) {
+  return Boolean(
+    capture.defaultIntent ||
+      capture.summary ||
+      (capture.analysisProvider && capture.analysisProvider !== "none")
+  );
+}
+
+function confidenceRequiresReview(value) {
+  return value === "Maybe" || value === "Not sure" || value === "Couldn't tell";
+}
+
+function hasUnresolvedCollectionDecisions(capture) {
+  return Boolean(capture.collectionDecisions?.length);
+}
+
+function reviewReasons(capture) {
+  if (capture.reviewConfirmedAt || capture.status === "processing" || capture.status === "failed") return [];
+  const reasons = [];
+  if (confidenceRequiresReview(capture.confidenceLabel)) reasons.push("intent");
+  if (hasUnresolvedCollectionDecisions(capture)) reasons.push("collection");
+  if ((capture.needsReview || capture.status === "needs_review") && !reasons.length) reasons.push("analysis");
+  return reasons;
+}
+
+function reviewReasonLabel(reason) {
+  if (reason === "intent") return "Intent uncertain";
+  if (reason === "collection") return "Collection suggestions";
+  return "Analysis needs review";
+}
+
+function reviewReasonSummary(reasons) {
+  return reasons.map(reviewReasonLabel).join(", ");
+}
+
+function displayStatus(capture) {
+  if (reviewReasons(capture).length > 0) return "needs_review";
+  if (capture.status === "failed" && hasExtractedData(capture)) return "ready";
+  return capture.status;
+}
+
+function sortCaptures(captures) {
+  return [...captures].sort((a, b) => b.createdAt - a.createdAt);
+}
+
+function mergeRemoteCaptures(remoteCaptures, currentCaptures, listMode, now = Date.now()) {
+  if (listMode === "archived") return sortCaptures(remoteCaptures);
+  const remoteIds = new Set(remoteCaptures.map((capture) => capture.id));
+  const freshLocalProcessing = currentCaptures.filter((capture) => {
+    return (
+      !remoteIds.has(capture.id) &&
+      !isArchived(capture) &&
+      displayStatus(capture) === "processing" &&
+      now - capture.createdAt < LOCAL_PROCESSING_GRACE_MS
+    );
+  });
+  return sortCaptures([...remoteCaptures, ...freshLocalProcessing]);
+}
+
+module.exports = {
+  LOCAL_PROCESSING_GRACE_MS,
+  displayStatus,
+  extractHttpUrl,
+  confidenceRequiresReview,
+  hasExtractedData,
+  hostFromUrl,
+  isArchived,
+  mergeRemoteCaptures,
+  normalizeIntent,
+  parseCaptureUrl,
+  reviewReasonLabel,
+  reviewReasonSummary,
+  reviewReasons,
+  sortCaptures,
+  statusLabel
+};

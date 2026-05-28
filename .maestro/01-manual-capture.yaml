@@ -1,0 +1,33 @@
+appId: com.preciouscaptures
+name: 01 manual capture
+---
+- launchApp
+- assertVisible: "Precious Captures"
+- runFlow:
+    when:
+      visible: "Sign in"
+    commands:
+      - tapOn:
+          id: "pc.auth.email"
+      - inputText: "${PRECIOUS_E2E_EMAIL}"
+      - tapOn:
+          id: "pc.auth.password"
+      - inputText: "${PRECIOUS_E2E_PASSWORD}"
+      - hideKeyboard
+      - tapOn:
+          id: "pc.auth.sign-in"
+          enabled: true
+      - runFlow: dismiss-password-save.yaml
+      - assertVisible:
+          id: "pc.home.captures"
+- tapOn:
+    id: "pc.home.captures"
+- tapOn:
+    id: "pc.capture.source"
+- inputText: "https://example.com/quiet-place Maestro regression capture"
+- hideKeyboard
+- tapOn:
+    id: "pc.capture.save"
+    enabled: true
+- assertVisible:
+    text: "Saving|Processing|Ready|Needs review|Maestro regression capture|example.com"
