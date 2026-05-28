@@ -1,5 +1,17 @@
 # Agent Notes
 
+## Product Documentation
+
+Before product, UI, workflow, capture-review, search, collection, reminder, or navigation changes, read these artifacts and keep them consistent:
+
+- `docs/precious-style-guide.md`
+- `docs/requirements/consumer-ui-revamp-acceptance.md`
+- `docs/requirements/CONTEXT.md`
+- `docs/requirements/PRODUCT.md`
+- `docs/adr/`
+
+If a product decision changes, update the smallest relevant artifact immediately. Use `CONTEXT.md` only for domain language, use the acceptance doc for current UI criteria, use the style guide for visual/workflow rules, and create or update an ADR when the decision is durable, surprising without context, and the result of a real trade-off.
+
 ## Android Phone Installs
 
 Do not install `android/app/build/outputs/apk/debug/app-debug.apk` onto the phone for normal handoff. The debug APK expects a Metro/dev-server JavaScript bundle and can show `Unable to load script` when Metro is not running.

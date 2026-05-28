@@ -61,19 +61,23 @@ The focused single-Capture surface opened from a Capture Completion Notification
 _Avoid_: Analysis report, debug view, model score screen
 
 **Retrieval Lens**:
-A user-facing view over Captures and related entities that helps the user find saved things by a primary access pattern, such as meaning, place, time, or recency. Search, Map, Agenda, and Review Inbox are Retrieval Lenses, not separate saved object types.
+A user-facing view over Captures and related entities that helps the user find saved things by a primary access pattern, such as meaning, place, time, or recency. Recent Captures, Search, Map, Agenda, Library, and Review Inbox are Retrieval Lenses, not separate saved object types.
 _Avoid_: Item type, folder, separate app
 
+**Recent Captures**:
+The default home Retrieval Lens that shows active Captures in most-recently-captured order, with Search as the primary action for retrieval. Archived Captures remain retrievable through a secondary archived view or filter rather than appearing in the default list.
+_Avoid_: Upcoming, daily dashboard, activity feed, productivity homepage
+
 **Upcoming**:
-The default home Retrieval Lens that surfaces saved things when they become relevant across days or weeks, such as upcoming Reminders, unresolved review needs, time-relevant Captures, or place cues. Upcoming should not imply the user has something to do in Sharebook every day; when no Captures exist, it becomes a first-capture empty state rather than an empty dashboard.
+An optional Retrieval Lens that surfaces saved things when they become relevant across days or weeks, such as upcoming Reminders, unresolved review needs, time-relevant Captures, or place cues. Upcoming should not imply the user has something to do in Sharebook every day; when unsupported by reminder functionality, it should not be treated as the default home surface.
 _Avoid_: Daily dashboard, activity feed, productivity homepage
 
 **Map**:
-A Retrieval Lens that shows Captures associated with place-like Captured Entities, such as restaurants, venues, stores, hotels, trip ideas, or event locations. High-confidence captured places may appear on Map automatically, while uncertain places should go to Review Inbox before appearing as normal pins. Map should not show where the user happened to be when saving unless that location is part of the Capture's meaning or a user-approved Reminder trigger.
+A deferred Retrieval Lens that shows Captures associated with place-like Captured Entities, such as restaurants, venues, stores, hotels, trip ideas, or event locations. High-confidence captured places may appear on Map automatically, while uncertain places should go to Review Inbox before appearing as normal pins. Map should not show where the user happened to be when saving unless that location is part of the Capture's meaning or a user-approved Reminder trigger.
 _Avoid_: Location history, check-in map, GPS trail
 
 **Agenda**:
-A Retrieval Lens for time-relevant Captures and Confirmed Reminders. Confirmed Reminders appear as scheduled agenda items, while unconfirmed reminder suggestions or date-like Captures should go to a review inbox rather than becoming obligations.
+A deferred Retrieval Lens for time-relevant Captures and Confirmed Reminders. Agenda depends on functioning Confirmed Reminders; without them, it should not be treated as a primary navigation surface. Confirmed Reminders appear as scheduled agenda items, while unconfirmed reminder suggestions or date-like Captures should go to a review inbox rather than becoming obligations.
 _Avoid_: Calendar replacement, automatic schedule, notification queue
 
 **Library**:
@@ -81,8 +85,12 @@ The Retrieval Lens hub for browsing saved Captures by recency, place, time, Coll
 _Avoid_: Folder tree, archive dump, database browser
 
 **Search**:
-A fuzzy-memory Retrieval Lens for finding Captures by meaning, entity, Save Intent, Collection, place, time, source, or remembered context. Search may include command-like filters for Collections, entities, intent, Map, and Agenda, but it should not default to a generic chat assistant.
+A full-screen fuzzy-memory Retrieval Lens for finding Captures by meaning, entity, Save Intent, Collection, place, time, source, or remembered context. Search may use persisted Searchable Extraction Detail and command-like filters for Collections, entities, intent, Map, and Agenda, but it should not default to a generic chat assistant or remain a small embedded field on the Recent Captures home lens.
 _Avoid_: Chatbot, database query builder, tag search
+
+**Searchable Extraction Detail**:
+Analysis-derived Capture data that remains persisted and available to Search, such as extracted entities, summary, Save Intent, Platform Evidence, Collection links, Reminder suggestions, source URL, and timestamps. Searchable Extraction Detail may improve retrieval without appearing as audit metadata in the Recent Captures row.
+_Avoid_: Debug metadata, visible model output, analysis report
 
 **Capture Context**:
 The surrounding signals available when a Capture is created, such as source app, share text, screenshot content, timestamp, collection name, sender, calendar context, travel context, location, or a one-tap correction.
@@ -93,7 +101,7 @@ A bounded set of relevant prior Captures, Reminders, Collections, and preference
 _Avoid_: Raw history, memory dump, prompt history
 
 **Quiet Confidence**:
-Sharebook's trust posture for AI output: quietly persist low-risk, reversible decisions while asking before creating interruptions, obligations, or new organizational structures. Default Intent and high-confidence existing Collection attachment may persist; Confirmed Reminders and new Collections require user acceptance.
+Sharebook's trust posture for AI output: quietly persist low-risk, reversible decisions while asking before creating interruptions, obligations, or new organizational structures. Default Intent and high-confidence attachment to an existing Collection may persist and remain editable; Confirmed Reminders and new Collections require explicit user acceptance.
 _Avoid_: Autopilot, always ask, confidence score UI
 
 **Confidence State**:
@@ -129,15 +137,23 @@ The lightweight network of Captures, Captured Entities, Capture Context, and Sav
 _Avoid_: Knowledge graph, database, collection
 
 **Collection**:
-A user- or system-created grouping of Captures that share an ongoing purpose, such as a trip, purchase decision, research topic, event, recipe queue, or project.
+A user- or system-created grouping of Captures that share an ongoing purpose, such as a trip, purchase decision, research topic, event, recipe queue, or project. A Capture may intentionally have no Collection.
 _Avoid_: Folder, plan
+
+**Collection Suggestion**:
+An AI-proposed Collection attachment for a Capture. High-confidence suggestions for existing Collections may be quietly applied because they are reversible; suggestions for new Collections require explicit user acceptance before the Collection is created. If a user removes or changes a Collection, the prior suggestion may remain available as a suggestion, but the Capture should not be treated as unresolved.
+_Avoid_: Required filing, folder audit, automatic new Collection
 
 **Reminder**:
 A first-class prompt to resurface one or more Captures at a specific time, relative time, location, event, or other future context.
 _Avoid_: Notification setting, capture property
 
+**Reminder Suggestion**:
+An AI-proposed future resurfacing idea for a Capture. Reminder Suggestions are not Confirmed Reminders and must not notify until the user explicitly accepts or edits them.
+_Avoid_: Automatic reminder, scheduled obligation, AI nudge
+
 **Confirmed Reminder**:
-A Reminder that the user explicitly created or accepted from a suggestion and that may produce a notification.
+A Reminder that the user explicitly created or accepted from a suggestion. A Confirmed Reminder has a user-approved trigger and should be persisted even before notification delivery or Agenda is implemented.
 _Avoid_: AI nudge, automatic notification
 
 **Reminder Rationale**:

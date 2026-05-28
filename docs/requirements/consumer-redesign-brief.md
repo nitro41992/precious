@@ -10,7 +10,7 @@ Sharebook is a provisional app name. The domain model should remain stable while
 
 ## Core Loop
 
-The first consumer design sprint should optimize for the share-to-understanding loop:
+The first consumer design sprint should optimize for the share-to-understanding-to-search loop:
 
 1. User shares a link, post, screenshot, image, or note to Sharebook.
 2. Sharebook immediately creates a durable Capture without requiring confirmation.
@@ -19,41 +19,43 @@ The first consumer design sprint should optimize for the share-to-understanding 
 5. If the result has low confidence or user-actionable suggestions, the processed notification includes a Review CTA.
 6. Tapping the notification opens Capture Review with AI extraction Confidence States, rationale, and focused Quick Edit.
 7. User accepts, changes, or dismisses inferred intent, suggested Reminder, and Collection attachment.
-8. Sharebook preserves the Capture and makes it retrievable through Upcoming, Search, Library, Map, and Agenda.
+8. Sharebook preserves the Capture and makes it retrievable through Recent Captures and full-screen Search.
 
 Silent instant save is the prerequisite trust moment for native share. Useful post-analysis Capture Review with human-readable Confidence States and Quick Edit is the first differentiated wow moment.
 
 ## Retrieval Model
 
-Search, Map, Agenda, Upcoming, Library, and Review Inbox are Retrieval Lenses over Captures and related entities. They are not separate saved object types.
+Recent Captures, Search, Map, Agenda, Library, and Review Inbox are Retrieval Lenses over Captures and related entities. They are not separate saved object types.
 
+- Recent Captures is the default home lens. It shows active Captures ordered by most recently captured, grouped by recency, with Search as the primary retrieval action.
 - Search retrieves by fuzzy memory, meaning, entity, Save Intent, Collection, place, time, source, or remembered context.
-- Map retrieves by place-like Captured Entities, not where the user happened to be when saving.
-- Agenda retrieves time-relevant Captures and Confirmed Reminders. Suggestions go to review, not the schedule.
-- Library is organized memory: saved Captures browsed by recency, place, time, Collection, and archived state.
-- Upcoming is the default home lens. It spans across days or weeks and should not imply the user has something to check every day. With no Captures, it becomes a first-capture empty state.
-- Review Inbox is one segmented triage surface for low-confidence intent, suggested Reminders, suggested Collections, failed analysis, and Quick Edit actions.
+- Search is a full-screen lens opened from Home, not a small embedded filter field or generic chatbot.
+- Search may use persisted extraction details such as entities, summary, Save Intent, Platform Evidence, Collection links, Reminder suggestions, source URL, notes, and timestamps.
+- Map retrieves by place-like Captured Entities, not where the user happened to be when saving. Map is deferred for this revamp.
+- Agenda retrieves time-relevant Captures and Confirmed Reminders. Agenda is deferred until Confirmed Reminders function.
+- Library can later become organized memory for browsing saved Captures by recency, place, time, Collection, and archived state. It is not top-level for this revamp.
+- Review Inbox remains a useful concept for low-confidence intent, suggested Reminders, suggested Collections, failed analysis, and Quick Edit actions, but it is not a top-level screen in this revamp.
 
 ## Navigation
 
 Primary mobile navigation:
 
-- Upcoming
+- Home
 - Search
-- Library
-- Settings
+- Settings/account as a small contextual action
 
 Capture should remain globally available through a prominent floating action button and through native share surfaces.
 
-Library should contain prominent lenses:
+Do not expose these as top-level destinations in the current revamp:
 
-- All
 - Map
 - Agenda
 - Collections
 - Archived
+- Upcoming
+- Library
 
-Map and Agenda are important, but they are not bottom-navigation destinations in the first consumer design.
+Collections remain editable from Capture Review. Archived Captures remain available through a secondary filter or view, not the default Home list.
 
 ## Intake
 
@@ -77,9 +79,9 @@ Quick Edit should feel like an editable sentence, not a correction form.
 Example structure:
 
 > Saved as **try this place** in **SF trip**.  
-> Reminder suggested: **next Saturday afternoon**.
+> Reminder idea: **next Saturday afternoon**.
 
-The tappable parts are chips. The user can change intent, accept/edit/dismiss the Reminder suggestion, adjust Collection attachment, or add a short Context Note.
+The tappable parts are chips. The user can change intent, adjust Collection attachment, open an Add Reminder flow, or add a short Context Note.
 
 Captured Entities may appear as supporting context, but entity editing should not be the main task. The feeling should be fast, tactile, and low-stakes.
 
@@ -94,6 +96,8 @@ If the user dismisses Quick Edit:
 - Unconfirmed Reminders do not persist.
 - High-confidence attachment to an existing Collection may persist.
 - New Collections are not created without confirmation.
+- A Capture may intentionally have no Collection.
+- Prior AI Collection suggestions may remain available as `Use suggestion`, but should not reattach automatically after user removal.
 
 If the user misses or dismisses the Capture Completion Notification, the completed Capture and its suggestions should remain available in the Review Inbox for later triage when there is something actionable to review.
 
@@ -115,7 +119,7 @@ Confidence States should be supported by concise rationale when the user is aske
 Behavior mapping:
 
 - Looks right: may persist when low-risk and reversible, but remains editable.
-- Maybe: must appear as a suggestion in Quick Edit, Review Inbox, or Upcoming review prompts; it must not create obligations.
+- Maybe: must appear as a suggestion in Quick Edit, Review Inbox, or another review surface; it must not create obligations.
 - Not sure: must appear in Review Inbox as something to resolve.
 - Couldn't tell: preserves the Capture, avoids inventing, and offers a useful fallback such as review later or add note.
 
@@ -131,7 +135,7 @@ Notifications should not include extensive extraction details. Confidence States
 
 ## First-Run Empty State
 
-Zero-capture Upcoming should not feel like an empty dashboard or daily agenda. Its job is to help the user create the first real Capture.
+Zero-capture Home should not feel like an empty dashboard or daily agenda. Its job is to help the user create the first real Capture.
 
 Primary first-run action:
 
@@ -147,14 +151,28 @@ The empty state should teach by action, not by a long onboarding tour.
 
 ## Upcoming Review Module
 
-Upcoming should include a gentle review module when suggestions or uncertain predictions are waiting, such as "2 saves need a quick look." This module should surface Maybe, Not sure, and Couldn't tell items without making Sharebook feel like a daily chore list.
+Upcoming is deferred. Do not build an Upcoming review module until reminder functionality and review-surface priorities are revalidated.
+
+## Recent Captures Home
+
+Home should feel like a consumer memory surface, not an audit table.
+
+- Show active Captures only, ordered by most recently captured.
+- Group rows by recency, such as `Today`, `Yesterday`, `This week`, and `Earlier`.
+- Row metadata must include source and date/time, not only time.
+- Rows should show consumer-facing meaning: title, source/date/time, summary, `Saved as [intent]`, meaningful status, and optional note preview.
+- Rows should not show model/provider details, analysis mode, confidence percentages, generic `Analyzed` labels, or other audit metadata.
+- Put a large `Search anything you saved` affordance at the top that opens full-screen Search.
+- Use smooth transitions, loading states, press feedback, and snackbar undo for reversible removal actions.
 
 ## Design Principles
 
 - Optimize the first visual direction for Personal Memory with Native Calm: warmer and more human than internal tooling, but still restrained, fast, and familiar.
 - Capture first, analysis second, review when useful.
 - Preserve momentum during intake.
+- Make Recent Captures and full-screen Search feel like the primary consumer product.
 - Make AI correction feel lightweight and satisfying.
+- Treat smooth transitions, loading states, and draft-preserving feedback as required polish.
 - Do not show confidence percentages to users.
 - Do not turn suggestions into obligations.
 - Do not map location history.

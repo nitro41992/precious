@@ -3,15 +3,15 @@
 Register: product
 
 Users:
-The first user is a dogfooder saving links, screenshots, social posts, products, places, tickets, and reminders from a phone throughout the day. They are often between apps, deciding quickly, and want capture to feel nearly invisible.
+The primary user is a consumer saving links, screenshots, social posts, products, places, tickets, and notes from a phone throughout the day. They are often between apps, deciding quickly, and want capture to feel nearly invisible while retrieval feels polished, trustworthy, and personal.
 
 Product Purpose:
-Sharebook preserves why something was saved so it can be found, reviewed, and acted on later. The 0A mobile app exists to prove the market wedge: phone-native capture plus useful reminder review.
+Sharebook preserves why something was saved so it can be found, reviewed, and acted on later. The mobile app should feel like a consumer memory surface first, with internal validation and dogfooding needs kept out of the primary UI.
 
 Current Architecture:
 The mobile product path is Supabase-only for now. Android share intake sends links,
 notes, screenshots, and images to the `capture-intake` Supabase Edge Function. The
-function writes captures, image assets, analysis runs, reminders, and archive state to
+function writes captures, image assets, analysis runs, reminder suggestions, collections, and archive state to
 Supabase and calls OpenAI from server-side code. Vercel/Next routes may exist as legacy
 or development harnesses, but they should not be treated as a second mobile capture API.
 
@@ -20,8 +20,9 @@ Calm, precise, low-friction, practical. Sharebook should feel like a trusted mem
 
 Design Principles:
 - Capture first, analysis second, review when useful.
-- The phone UI should support quick saving and clear reminder judgment.
+- The phone UI should support quick saving and beautiful search-first retrieval.
 - Editing after extraction should feel snappy through pills, shorthand, and quick shortcuts rather than gamification mechanics.
+- Smooth transitions, loading states, and draft-preserving feedback are part of the consumer experience, not optional decoration.
 - Dense information is acceptable when reviewing, but capture must stay almost weightless.
 - Use prior context carefully. Never make the interface imply Sharebook knows more than it does.
 
