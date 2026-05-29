@@ -6,6 +6,7 @@ const {
   displayStatus,
   extractHttpUrl,
   hostFromUrl,
+  mapsSearchUrls,
   mergeRemoteCaptures,
   normalizeIntent,
   parseCaptureUrl,
@@ -42,6 +43,17 @@ test("extractHttpUrl returns the first clean http URL from shared text", () => {
 test("parseCaptureUrl extracts deep-link capture ids", () => {
   assert.equal(parseCaptureUrl("preciouscaptures://capture/local%20id?from=notification"), "local id");
   assert.equal(parseCaptureUrl("https://example.com/capture/local-id"), null);
+});
+
+test("mapsSearchUrls creates Google and Apple Maps search links from a query", () => {
+  assert.deepEqual(
+    mapsSearchUrls("Sanwits Ribeye Caldereta sandwich"),
+    {
+      google: "https://www.google.com/maps/search/?api=1&query=Sanwits%20Ribeye%20Caldereta%20sandwich",
+      apple: "https://maps.apple.com/?q=Sanwits%20Ribeye%20Caldereta%20sandwich"
+    }
+  );
+  assert.deepEqual(mapsSearchUrls("  "), { google: "", apple: "" });
 });
 
 test("reviewReasons prioritizes unresolved review causes and confirmed reviews stay ready", () => {

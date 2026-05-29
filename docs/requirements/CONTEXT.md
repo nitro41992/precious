@@ -28,6 +28,10 @@ _Avoid_: Tag taxonomy, folder structure
 A person, place, product, event, media object, concept, or other meaningful thing extracted from a Capture.
 _Avoid_: Keyword, tag
 
+**Visit Target**:
+A maps-searchable candidate extracted from Capture evidence when the Capture appears to reference a real-world venue, business, restaurant, shop, park, hotel, event venue, or other place the user may want to visit. A Visit Target stores a name, search query, confidence state, evidence, and `verified_place: false` until a future resolver verifies it. It may power Google Maps or Apple Maps search links without becoming a canonical place record.
+_Avoid_: Verified location, place ID, address, map pin
+
 **Platform Evidence**:
 Optional source-specific details preserved from the capture surface, such as creator, caption, transcript, comment text, collection name, sender, post type, or URL metadata.
 _Avoid_: Required platform metadata, full integration data

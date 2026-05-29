@@ -52,6 +52,7 @@ New Capture must:
 
 - Open from the primary `+` action as a bottom sheet, not as an inline form in Recent Captures.
 - Keep the paste input, close action, and save action visible and reachable when the keyboard is open on a small Android phone.
+- Open with one upward sheet motion; keyboard focus must not make the sheet appear to pull down or jump against its entrance.
 - Hide optional context behind a secondary `Add context` action until the user asks for it.
 
 ## Capture Review
@@ -66,6 +67,7 @@ Capture Review must:
 - Show prior AI Collection suggestions as `Use suggestion` when useful, without reattaching automatically after user removal.
 - Offer snackbar undo for immediate collection removal when feasible.
 - Use `Reminder idea: [before Saturday]` for AI reminder suggestions until Confirmed Reminders and notification delivery are implemented.
+- Show an `Open in Maps` action when Capture Analysis has a maps-searchable Visit Target. This action opens Google Maps or Apple Maps search from the persisted query; it must not imply a verified address, coordinates, place ID, or a first-class Map destination.
 - Include an `Add reminder` flow only when the selected reminder can at least persist as a capture-local or otherwise durable value. Do not imply notification delivery until it exists.
 - Keep raw source, destructive archive actions, and detailed rationale visually secondary.
 

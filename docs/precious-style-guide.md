@@ -214,6 +214,7 @@ Rules:
 
 - Native share is the primary path and should stay silent after durable acceptance.
 - In-app capture is a fallback. It should be compact: paste link or note, optional context note, save.
+- Keyboard-open composer states must keep the sheet, inputs, close, and save action reachable on small Android phones.
 - The capture receipt should say the save happened immediately, then show analysis as background work.
 - Do not block saving on AI analysis.
 
@@ -256,6 +257,8 @@ Each chip can expand into a small picker. Keep concise rationale visible only wh
 `Because the post mentions a SoHo ramen shop.`
 
 When reminders are not fully implemented, use `Reminder idea: [before Saturday]` rather than copy that implies notification delivery.
+
+When a Capture has a maps-searchable Visit Target, Capture Review may show `Open in Maps` actions for Google Maps and Apple Maps. Treat this as a Maps search action from persisted evidence, not a verified address, place ID, or top-level Map lens.
 
 ### Collection Management
 

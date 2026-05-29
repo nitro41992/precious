@@ -31,6 +31,16 @@ function normalizeIntent(value, allowedIntents = []) {
   return allowedIntents.includes(value) ? value : "";
 }
 
+function mapsSearchUrls(query) {
+  const cleaned = String(query || "").trim();
+  if (!cleaned) return { google: "", apple: "" };
+  const encoded = encodeURIComponent(cleaned);
+  return {
+    google: `https://www.google.com/maps/search/?api=1&query=${encoded}`,
+    apple: `https://maps.apple.com/?q=${encoded}`
+  };
+}
+
 function isArchived(capture) {
   return Boolean(capture.archivedAt);
 }
@@ -109,6 +119,7 @@ module.exports = {
   hasExtractedData,
   hostFromUrl,
   isArchived,
+  mapsSearchUrls,
   mergeRemoteCaptures,
   normalizeIntent,
   parseCaptureUrl,

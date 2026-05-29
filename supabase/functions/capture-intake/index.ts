@@ -20,6 +20,7 @@ type CaptureRow = {
   client_resolution_timestamp?: string | null;
   client_resolution_attempt_count?: number | null;
   source_text: string | null;
+  context_note?: string | null;
   source_app: string | null;
   asset_url?: string;
   asset_mime_type?: string | null;
@@ -148,8 +149,8 @@ type PreflightDecision = {
   evidence_summary: string;
 };
 
-const PROMPT_VERSION = "precious-capture-analysis-v3";
-const SCHEMA_VERSION = "precious-capture-analysis-v3";
+const PROMPT_VERSION = "precious-capture-analysis-v4";
+const SCHEMA_VERSION = "precious-capture-analysis-v4";
 const PREFLIGHT_PROMPT_VERSION = "precious-capture-preflight-v1";
 const CLIENT_EVENT_RETENTION_DAYS = 90;
 const clientEventTypes = new Set(["hosted_capture_waiting"]);
@@ -239,6 +240,11 @@ const analysisSchema = {
     "summary",
     "default_intent",
     "entities",
+    "visit_target_name",
+    "visit_target_query",
+    "visit_target_confidence",
+    "visit_target_evidence",
+    "verified_place",
     "suggested_reminders",
     "collection_decisions",
     "search_phrases",
@@ -275,6 +281,14 @@ const analysisSchema = {
         },
       },
     },
+    visit_target_name: { type: ["string", "null"] },
+    visit_target_query: { type: ["string", "null"] },
+    visit_target_confidence: {
+      type: "string",
+      enum: ["high", "medium", "low", "none"],
+    },
+    visit_target_evidence: { type: "array", items: { type: "string" } },
+    verified_place: { type: "boolean" },
     suggested_reminders: {
       type: "array",
       items: {
@@ -620,7 +634,11 @@ function normalizedReviewAnalysis(
   reviewConfirmedAt?: unknown,
 ): AnalysisOutput {
   const needsReview = analysisRequiresReview(analysis, reviewConfirmedAt);
-  return { ...analysis, needs_review: needsReview };
+  return {
+    ...analysis,
+    ...normalizeVisitTargetFields(analysis),
+    needs_review: needsReview,
+  };
 }
 
 async function readCapturePayload(request: Request): Promise<CapturePayload> {
@@ -3179,6 +3197,43 @@ function normalizeCollectionDecision(decision: Record<string, unknown>) {
   };
 }
 
+function stringOrNull(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizeVisitTargetFields(analysis: Record<string, unknown>) {
+  const name = stringOrNull(analysis.visit_target_name);
+  const query = stringOrNull(analysis.visit_target_query);
+  const rawConfidence = typeof analysis.visit_target_confidence === "string"
+    ? analysis.visit_target_confidence
+    : "none";
+  const confidence = name && query &&
+      ["high", "medium", "low"].includes(rawConfidence)
+    ? rawConfidence
+    : "none";
+  const evidence = Array.isArray(analysis.visit_target_evidence)
+    ? analysis.visit_target_evidence
+      .map((item) => String(item || "").trim())
+      .filter(Boolean)
+      .slice(0, 6)
+    : [];
+  return confidence === "none"
+    ? {
+      visit_target_name: null,
+      visit_target_query: null,
+      visit_target_confidence: "none",
+      visit_target_evidence: [],
+      verified_place: false,
+    }
+    : {
+      visit_target_name: name,
+      visit_target_query: query,
+      visit_target_confidence: confidence,
+      visit_target_evidence: evidence,
+      verified_place: false,
+    };
+}
+
 async function linkCaptureToCollection(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
@@ -3294,6 +3349,10 @@ function buildPrompt(
     "Categorize only from explicit url_evidence fields, shared text, and image evidence. Never infer exact article, post, video, product, or media details from a weak URL path or opaque token.",
     "If url_evidence.evidence_quality is high or medium, categorize normally. If it is low, return only broad categories directly supported by the domain, path, or shared text. If status is needs_client_resolution or insufficient_url_evidence, do not infer exact content details.",
     "If URL evidence is weak and web search is available, search for the exact shared URL, canonical URL, exact title, or stable public identifier. Use only evidence that clearly matches that exact URL or identifier. Topic-level search results are not exact evidence.",
+    "Extract visit_target_* only when the provided capture evidence references a real-world venue, business, restaurant, shop, park, hotel, event venue, or other place the user could intentionally visit.",
+    "For visit_target_name, prefer the venue or business name over a dish, product, creator, neighborhood, or city. For visit_target_query, include disambiguating context from the title, caption, transcript, OCR, source profile, source text, image evidence, or user note when it would help Maps search.",
+    "This is a maps-searchable candidate, not verified place resolution. Never invent or return an address, latitude, longitude, phone number, hours, or place ID. verified_place must always be false.",
+    "When there is no real-world visit target, set visit_target_name and visit_target_query to null, visit_target_confidence to none, visit_target_evidence to [], and verified_place to false.",
     "Suggest a reminder only when the evidence has a useful future trigger. Do not invent events, places, or deadlines.",
     "You may choose from only the retrieved active collections listed below. If one fits strongly, return an existing collection decision with its exact collection_id and title.",
     "If no retrieved collection is a good fit, you may suggest one new collection. New collection decisions must include both a non-empty title and description.",
@@ -3305,6 +3364,7 @@ function buildPrompt(
         source_app: capture.source_app,
         source_url: capture.source_url,
         source_text: capture.source_text,
+        context_note: capture.context_note || null,
         asset: capture.asset_url
           ? {
             mime_type: capture.asset_mime_type || null,
@@ -3592,6 +3652,11 @@ function rejectedAnalysis(
       rationale: preflight.user_message,
     },
     entities: compactUrlEvidence(urlEvidence)?.entities || [],
+    visit_target_name: null,
+    visit_target_query: null,
+    visit_target_confidence: "none",
+    visit_target_evidence: [],
+    verified_place: false,
     suggested_reminders: [],
     collection_decisions: [],
     search_phrases: [],
@@ -3647,6 +3712,11 @@ function broadLowEvidenceAnalysis(
         confidence: 0.45,
       }]
       : [],
+    visit_target_name: null,
+    visit_target_query: null,
+    visit_target_confidence: "none",
+    visit_target_evidence: [],
+    verified_place: false,
     suggested_reminders: [],
     collection_decisions: [],
     search_phrases: [],
@@ -5512,6 +5582,7 @@ export const __urlEvidenceTest = {
   evidenceSources,
   fetchExtractusOembedEvidence,
   metaOembedEndpoint,
+  normalizeVisitTargetFields,
   normalizedUrlEvidence,
   oembedEndpoint,
   oembedMetadata,

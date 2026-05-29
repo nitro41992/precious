@@ -6,6 +6,7 @@ import {
   Animated,
   AppState,
   BackHandler,
+  Easing,
   FlatList,
   Image,
   Keyboard,
@@ -58,6 +59,7 @@ import {
   extractHttpUrl,
   hostFromUrl,
   isArchived,
+  mapsSearchUrls,
   mergeRemoteCaptures,
   normalizeIntent as normalizeKnownIntent,
   parseCaptureUrl,
@@ -100,6 +102,7 @@ type Capture = {
   confidenceLabel?: string;
   needsReview?: boolean;
   entities?: Array<{ type: string; name: string; evidence: string; confidence: number }>;
+  visitTarget?: VisitTarget | null;
   suggestedReminders?: Array<{
     trigger_type: string;
     trigger_value: string;
@@ -143,6 +146,14 @@ type CollectionChoiceOverride = {
   collectionId: string;
   source?: string;
   restoredDecisions: CollectionDecision[];
+};
+
+type VisitTarget = {
+  name: string;
+  query: string;
+  confidence: "high" | "medium" | "low";
+  evidence: string[];
+  verifiedPlace: boolean;
 };
 
 type Collection = {
@@ -540,6 +551,10 @@ function captureSearchParts(capture: Capture) {
     capture.defaultIntent,
     humanize(capture.defaultIntent),
     capture.intentRationale,
+    capture.visitTarget?.name,
+    capture.visitTarget?.query,
+    capture.visitTarget?.confidence,
+    ...(capture.visitTarget?.evidence || []),
     capture.confidenceLabel,
     captureStatusLabel(capture),
     formatDateTime(capture.createdAt),
@@ -588,6 +603,13 @@ function matchReasonForCapture(capture: Capture, term: string) {
   if (matches([capture.note])) return "Matched note";
   if (matches([capture.sourceText, capture.sourceUrl, capture.siteName])) return "Matched source";
   if (matches([capture.defaultIntent, humanize(capture.defaultIntent)])) return "Matched save intent";
+  if (matches([
+    capture.visitTarget?.name,
+    capture.visitTarget?.query,
+    ...(capture.visitTarget?.evidence || [])
+  ])) {
+    return "Matched visit target";
+  }
   if (matches((capture.linkedCollections || []).flatMap((collection) => [collection.title, collection.description]))) {
     return "Matched collection";
   }
@@ -773,6 +795,7 @@ function captureFromRemote(row: Record<string, any>): Capture {
           collectionDecisions.length)
     ),
     entities: analysis.entities || [],
+    visitTarget: visitTargetFromRemote(analysis),
     suggestedReminders: analysis.suggested_reminders || [],
     linkedCollections: Array.isArray(row.linked_collections)
       ? row.linked_collections.map(linkedCollectionFromRemote)
@@ -820,6 +843,22 @@ function nullableValue(value: unknown) {
   if (value === null || value === undefined) return undefined;
   const text = String(value);
   return text && text !== "null" ? text : undefined;
+}
+
+function visitTargetFromRemote(analysis: Record<string, any>): VisitTarget | null {
+  const name = nullableValue(analysis.visit_target_name);
+  const query = nullableValue(analysis.visit_target_query);
+  const confidence = analysis.visit_target_confidence;
+  if (!name || !query || !["high", "medium", "low"].includes(confidence)) return null;
+  return {
+    name,
+    query,
+    confidence,
+    evidence: Array.isArray(analysis.visit_target_evidence)
+      ? analysis.visit_target_evidence.map(String).filter(Boolean)
+      : [],
+    verifiedPlace: analysis.verified_place === true
+  };
 }
 
 function isEdgeCaptureApi(apiUrl: string) {
@@ -1142,9 +1181,12 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState<"signin" | "signup" | null>(null);
   const latestNoteRef = useRef("");
   const autoAppliedCollectionKeysRef = useRef<Set<string>>(new Set());
+  const sourceInputRef = useRef<TextInput>(null);
+  const lastKeyboardHeightRef = useRef(0);
   const searchMotion = useRef(new Animated.Value(0)).current;
   const reviewMotion = useRef(new Animated.Value(0)).current;
   const captureComposerMotion = useRef(new Animated.Value(0)).current;
+  const captureKeyboardInset = useRef(new Animated.Value(0)).current;
 
   const getFreshSession = useCallback(async (force = false) => {
     if (!session) return null;
@@ -1372,6 +1414,31 @@ export default function App() {
     setAccountSheetOpen(true);
   }
 
+  function openCaptureComposer() {
+    const estimatedKeyboardHeight = lastKeyboardHeightRef.current || Math.round(windowHeight * (Platform.OS === "ios" ? 0.34 : 0.42));
+    setMessage("");
+    setKeyboardHeight(estimatedKeyboardHeight);
+    captureComposerMotion.setValue(0);
+    captureKeyboardInset.setValue(0);
+    Animated.timing(captureKeyboardInset, {
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+      toValue: estimatedKeyboardHeight,
+      useNativeDriver: false
+    }).start();
+    setShowCaptureComposer(true);
+  }
+
+  function closeCaptureComposer() {
+    Keyboard.dismiss();
+    setShowCaptureComposer(false);
+    setKeyboardHeight(0);
+    captureKeyboardInset.setValue(0);
+    if (!sourceDraft.trim() && !sourceContextDraft.trim()) {
+      setShowCaptureContext(false);
+    }
+  }
+
   async function openCollectionsScreen(mode: CollectionListMode = collectionsMode) {
     selectCapture(null);
     setSearchOpen(false);
@@ -1504,7 +1571,7 @@ export default function App() {
         return true;
       }
       if (showCaptureComposer) {
-        setShowCaptureComposer(false);
+        closeCaptureComposer();
         return true;
       }
       if (searchOpen) {
@@ -1581,19 +1648,43 @@ export default function App() {
   }, [captureComposerMotion, showCaptureComposer]);
 
   useEffect(() => {
+    if (!showCaptureComposer) return;
+    const frame = requestAnimationFrame(() => {
+      sourceInputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [showCaptureComposer]);
+
+  useEffect(() => {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
     const showSubscription = Keyboard.addListener(showEvent, (event) => {
-      setKeyboardHeight(event.endCoordinates.height);
+      const nextHeight = event.endCoordinates.height;
+      lastKeyboardHeightRef.current = nextHeight;
+      setKeyboardHeight(nextHeight);
+      if (Platform.OS === "ios") Keyboard.scheduleLayoutAnimation(event);
+      Animated.timing(captureKeyboardInset, {
+        duration: Math.max(140, Math.min(event.duration || 240, 340)),
+        easing: Easing.out(Easing.cubic),
+        toValue: nextHeight,
+        useNativeDriver: false
+      }).start();
     });
-    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+    const hideSubscription = Keyboard.addListener(hideEvent, (event) => {
       setKeyboardHeight(0);
+      if (Platform.OS === "ios") Keyboard.scheduleLayoutAnimation(event);
+      Animated.timing(captureKeyboardInset, {
+        duration: Math.max(120, Math.min(event.duration || 200, 300)),
+        easing: Easing.out(Easing.cubic),
+        toValue: 0,
+        useNativeDriver: false
+      }).start();
     });
     return () => {
       showSubscription.remove();
       hideSubscription.remove();
     };
-  }, []);
+  }, [captureKeyboardInset]);
 
   const homeCaptures = useMemo(() => captures.filter((capture) => !isArchived(capture)), [captures]);
   const homeRows = useMemo(() => groupedCaptureRows(homeCaptures), [homeCaptures]);
@@ -2462,6 +2553,17 @@ export default function App() {
     }
   }
 
+  async function openVisitTargetMaps(target: VisitTarget, provider: "google" | "apple") {
+    const urls = mapsSearchUrls(target.query);
+    const url = provider === "google" ? urls.google : urls.apple;
+    if (!url) return;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      setMessage(`Could not open ${provider === "google" ? "Google Maps" : "Apple Maps"}.`);
+    }
+  }
+
   async function pasteExpandedUrl() {
     if (!selected) return;
     if (!nativeStore?.submitExpandedUrl || !nativeClipboard?.paste) {
@@ -2561,7 +2663,7 @@ export default function App() {
       setSourceDraft("");
       setSourceContextDraft("");
       setShowCaptureContext(false);
-      setShowCaptureComposer(false);
+      closeCaptureComposer();
       setMessage("Saved. Checking the source now.");
     } catch (error) {
       setMessage(friendlyError(error, "Could not save capture."));
@@ -3217,6 +3319,7 @@ export default function App() {
       .slice(0, 3);
     const collectionActionPending = Boolean(collectionChoiceSaving);
     const urlEvidenceNotice = urlEvidenceMessage(selected.urlEvidence);
+    const selectedVisitTarget = selected.visitTarget;
     const selectedSourceMeta = `${captureSourceLabel(selected)} · ${formatDateTime(selected.createdAt)}`;
     const noteStatusLabel =
       noteSaveState === "saving"
@@ -3677,6 +3780,41 @@ export default function App() {
             ) : null}
               {collectionPickerContent}
             </View>
+            {selectedVisitTarget ? (
+              <View style={styles.sourceBlock}>
+                <Text style={styles.meta}>Open in Maps</Text>
+                <View style={styles.mapTargetRow}>
+                  <MapPin color={colors.muted} size={18} strokeWidth={2.2} />
+                  <View style={styles.mapTargetCopy}>
+                    <Text numberOfLines={1} style={styles.compactActionText}>{selectedVisitTarget.name}</Text>
+                    <Text numberOfLines={2} style={styles.supportingText}>
+                      {selectedVisitTarget.query}
+                    </Text>
+                  </View>
+                  {selectedVisitTarget.evidence.length ? (
+                    <IconButton
+                      Icon={Info}
+                      label="Why this place?"
+                      onPress={() => showRationale("Why this place?", selectedVisitTarget.evidence.join("\n"))}
+                    />
+                  ) : null}
+                </View>
+                <View style={styles.mapActionRow}>
+                  <Pressable
+                    onPress={() => void openVisitTargetMaps(selectedVisitTarget, "google")}
+                    style={({ pressed }) => [styles.mapActionButton, pressed && styles.subtlePressed]}
+                  >
+                    <Text style={styles.inlineAction}>Google Maps</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => void openVisitTargetMaps(selectedVisitTarget, "apple")}
+                    style={({ pressed }) => [styles.mapActionButton, pressed && styles.subtlePressed]}
+                  >
+                    <Text style={styles.inlineAction}>Apple Maps</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
             {urlEvidenceNotice ? (
             <View style={styles.sourceBlock}>
               <Text style={styles.meta}>Link evidence</Text>
@@ -3999,10 +4137,10 @@ export default function App() {
   const homeCountLabel = capturesLoading && !homeCaptures.length
     ? "Loading captures"
     : `${homeCaptures.length} recent ${homeCaptures.length === 1 ? "capture" : "captures"}`;
-  const captureSheetKeyboardOffset = Platform.OS === "android" && showCaptureComposer ? keyboardHeight : 0;
-  const captureSheetMaxHeight = captureSheetKeyboardOffset
-    ? Math.max(220, windowHeight - captureSheetKeyboardOffset - 40)
-    : undefined;
+  const composerKeyboardVisible = showCaptureComposer && keyboardHeight > 0;
+  const captureSheetMaxHeight = composerKeyboardVisible
+    ? Math.min(430, Math.max(300, windowHeight * 0.52))
+    : Math.min(560, Math.max(340, windowHeight * 0.72));
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -4053,7 +4191,7 @@ export default function App() {
             <Pressable
               android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
               accessibilityLabel="Paste link or note"
-              onPress={() => setShowCaptureComposer(true)}
+              onPress={openCaptureComposer}
               style={({ pressed }) => [styles.fallbackCaptureToggle, pressed && styles.subtlePressed]}
               testID="pc.capture.open"
             >
@@ -4087,7 +4225,7 @@ export default function App() {
                   Use the share sheet from a browser, message, notes app, or photos.
                 </Text>
                 <Pressable
-                  onPress={() => setShowCaptureComposer(true)}
+                  onPress={openCaptureComposer}
                   style={styles.primaryButton}
                   testID="pc.capture.empty.open"
                 >
@@ -4105,19 +4243,19 @@ export default function App() {
         <View style={styles.sheetLayer} pointerEvents="box-none">
           <Pressable
             accessibilityLabel="Close capture composer"
-            onPress={() => setShowCaptureComposer(false)}
+            onPress={closeCaptureComposer}
             style={styles.sheetBackdrop}
           />
           <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
             pointerEvents="box-none"
             style={styles.sheetKeyboard}
           >
             <Animated.View
               style={[
                 styles.captureSheet,
+                composerKeyboardVisible && styles.captureSheetCompact,
                 {
-                  marginBottom: captureSheetKeyboardOffset,
+                  marginBottom: captureKeyboardInset,
                   maxHeight: captureSheetMaxHeight,
                   opacity: captureComposerMotion,
                   transform: [
@@ -4137,7 +4275,7 @@ export default function App() {
                   <Text style={styles.sheetTitle}>New capture</Text>
                 </View>
                 <View style={styles.sheetActions}>
-                  <IconButton Icon={X} label="Close" onPress={() => setShowCaptureComposer(false)} />
+                  <IconButton Icon={X} label="Close" onPress={closeCaptureComposer} />
                   <IconButton
                     Icon={Check}
                     label={savingCapture ? "Saving capture" : "Save capture"}
@@ -4149,17 +4287,20 @@ export default function App() {
                 </View>
               </View>
               <ScrollView
-                contentContainerStyle={styles.captureSheetBodyContent}
+                contentContainerStyle={[
+                  styles.captureSheetBodyContent,
+                  composerKeyboardVisible && styles.captureSheetBodyContentCompact
+                ]}
                 keyboardShouldPersistTaps="handled"
                 style={styles.captureSheetBody}
               >
                 <TextInput
-                  autoFocus
+                  ref={sourceInputRef}
                   multiline
                   onChangeText={setSourceDraft}
-                  placeholder="Paste a link or note"
+                  placeholder="Paste a link or write a note"
                   placeholderTextColor={colors.muted}
-                  style={styles.captureInput}
+                  style={[styles.captureInput, composerKeyboardVisible && styles.captureInputCompact]}
                   testID="pc.capture.source"
                   value={sourceDraft}
                 />
@@ -4169,7 +4310,7 @@ export default function App() {
                     onChangeText={setSourceContextDraft}
                     placeholder="Why did you save this?"
                     placeholderTextColor={colors.muted}
-                    style={styles.captureContextInput}
+                    style={[styles.captureContextInput, composerKeyboardVisible && styles.captureContextInputCompact]}
                     testID="pc.capture.context"
                     value={sourceContextDraft}
                   />
@@ -4423,6 +4564,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     textAlignVertical: "top"
   },
+  captureInputCompact: {
+    minHeight: 68,
+    paddingVertical: 10
+  },
   captureContextInput: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
@@ -4435,6 +4580,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     textAlignVertical: "top"
+  },
+  captureContextInputCompact: {
+    minHeight: 52,
+    paddingVertical: 8
   },
   addContextButton: {
     alignItems: "center",
@@ -4496,11 +4645,17 @@ const styles = StyleSheet.create({
   captureSheet: {
     backgroundColor: colors.surfaceContainer,
     borderTopColor: colors.line,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 14,
     paddingBottom: Platform.OS === "android" ? 18 : 26,
     paddingHorizontal: 22,
     paddingTop: 8
+  },
+  captureSheetCompact: {
+    gap: 10,
+    paddingBottom: Platform.OS === "android" ? 12 : 20
   },
   captureSheetBody: {
     flexShrink: 1
@@ -4508,6 +4663,10 @@ const styles = StyleSheet.create({
   captureSheetBodyContent: {
     gap: 14,
     paddingBottom: 2
+  },
+  captureSheetBodyContentCompact: {
+    gap: 10,
+    paddingBottom: 0
   },
   sheetGrabber: {
     alignSelf: "center",
@@ -5406,6 +5565,38 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 8,
     paddingTop: 16
+  },
+  mapTargetRow: {
+    alignItems: "center",
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 58,
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  mapTargetCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0
+  },
+  mapActionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  mapActionButton: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 12
   },
   compactActionRow: {
     alignItems: "center",

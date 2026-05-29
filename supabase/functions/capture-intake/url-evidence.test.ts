@@ -372,3 +372,49 @@ Deno.test("Tier 1 platform detection avoids treating commerce and maps as social
     "Spotify platform",
   );
 });
+
+Deno.test("Visit target normalization keeps map candidates unverified", () => {
+  const normalized = urlEvidence.normalizeVisitTargetFields({
+    visit_target_name: " Sanwits ",
+    visit_target_query: "Sanwits Ribeye Caldereta sandwich",
+    visit_target_confidence: "medium",
+    visit_target_evidence: [
+      "title mentions Sanwits",
+      "",
+      "title mentions Ribeye Caldereta sandwich",
+    ],
+    verified_place: true,
+  });
+  assertEqual(
+    normalized.visit_target_name,
+    "Sanwits",
+    "visit target name is trimmed",
+  );
+  assertEqual(
+    normalized.visit_target_confidence,
+    "medium",
+    "visit target confidence is preserved",
+  );
+  assertEqual(
+    normalized.verified_place,
+    false,
+    "visit targets stay unverified until a resolver confirms them",
+  );
+  assert(
+    Array.isArray(normalized.visit_target_evidence) &&
+      normalized.visit_target_evidence.length === 2,
+    "blank visit target evidence should be removed",
+  );
+  const empty = urlEvidence.normalizeVisitTargetFields({
+    visit_target_name: "Corner Cafe",
+    visit_target_query: "",
+    visit_target_confidence: "high",
+    visit_target_evidence: ["name present"],
+  });
+  assertEqual(
+    empty.visit_target_confidence,
+    "none",
+    "missing query clears visit target confidence",
+  );
+  assertEqual(empty.visit_target_name, null, "missing query clears name");
+});

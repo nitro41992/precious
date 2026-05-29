@@ -28,6 +28,7 @@ export function extractHttpUrl(value?: string | null): string;
 export function hasExtractedData(capture: StatusCapture): boolean;
 export function hostFromUrl(value?: string | null): string;
 export function isArchived(capture: { archivedAt?: number | null }): boolean;
+export function mapsSearchUrls(query?: string | null): { google: string; apple: string };
 export function mergeRemoteCaptures<T extends SortableCapture>(
   remoteCaptures: T[],
   currentCaptures: T[],
