@@ -9,7 +9,7 @@ import {
   Dimensions,
   Easing,
   FlatList,
-  Image,
+  InteractionManager,
   Keyboard,
   KeyboardAvoidingView,
   Linking,
@@ -26,6 +26,7 @@ import {
   useWindowDimensions,
   View
 } from "react-native";
+import { Image } from "expo-image";
 import {
   AlertTriangle,
   Archive,
@@ -92,6 +93,7 @@ type Capture = {
   summary?: string;
   thumbnailUrl?: string;
   imageAssetUrl?: string;
+  imageAssetCacheKey?: string;
   imageAssetMimeType?: string;
   urlEvidence?: UrlEvidence | null;
   analysisMode?: string;
@@ -292,6 +294,20 @@ type SnackbarState = {
 };
 
 const PROCESSING_REFRESH_MS = 3000;
+const CAPTURE_LIST_PERF_PROPS = {
+  initialNumToRender: 8,
+  maxToRenderPerBatch: 8,
+  removeClippedSubviews: Platform.OS === "android",
+  updateCellsBatchingPeriod: 40,
+  windowSize: 7
+};
+const COLLECTION_LIST_PERF_PROPS = {
+  initialNumToRender: 12,
+  maxToRenderPerBatch: 12,
+  removeClippedSubviews: Platform.OS === "android",
+  updateCellsBatchingPeriod: 40,
+  windowSize: 7
+};
 const SEARCH_PROMPTS = [
   { label: "Places", query: "places", Icon: MapPin },
   { label: "Links from yesterday", query: "links from yesterday", Icon: Link2 },
@@ -851,6 +867,9 @@ function captureFromRemote(row: Record<string, any>): Capture {
     summary: analysis.summary || undefined,
     thumbnailUrl: nullableValue(row.thumbnail_url || row.thumbnailUrl || analysis.thumbnail_url),
     imageAssetUrl: assetUrl,
+    imageAssetCacheKey: imageAsset
+      ? nullableValue(imageAsset.signed_url_cache_key || imageAsset.signedUrlCacheKey)
+      : undefined,
     imageAssetMimeType: imageAsset ? nullableValue(imageAsset.mime_type || imageAsset.mimeType) : undefined,
     urlEvidence: analysis.url_evidence || row.urlEvidence || null,
     analysisMode,
@@ -938,14 +957,23 @@ function isEdgeCaptureApi(apiUrl: string) {
   return apiUrl.includes("/functions/v1/");
 }
 
-function captureListUrl(apiUrl: string, archived = false) {
-  return isEdgeCaptureApi(apiUrl)
-    ? `${apiUrl}?limit=50&archived=${archived ? "true" : "false"}`
-    : `${apiUrl}/api/captures?view=summary&limit=50&archived=${archived ? "true" : "false"}`;
+function captureListUrl(apiUrl: string, archived = false, params: { limit?: number; before?: string | null } = {}) {
+  const url = new URL(isEdgeCaptureApi(apiUrl) ? apiUrl : `${apiUrl}/api/captures`);
+  if (!isEdgeCaptureApi(apiUrl)) url.searchParams.set("view", "summary");
+  url.searchParams.set("limit", String(params.limit || 30));
+  url.searchParams.set("archived", archived ? "true" : "false");
+  if (params.before) url.searchParams.set("before", params.before);
+  return url.toString();
 }
 
 function captureMutationUrl(apiUrl: string) {
   return isEdgeCaptureApi(apiUrl) ? apiUrl : `${apiUrl}/api/captures`;
+}
+
+function captureDetailUrl(apiUrl: string, captureRef: string) {
+  const url = new URL(isEdgeCaptureApi(apiUrl) ? apiUrl : `${apiUrl}/api/captures`);
+  url.searchParams.set("clientCaptureKey", captureRef);
+  return url.toString();
 }
 
 function edgeResourceUrl(apiUrl: string, resource: string, params: Record<string, string> = {}) {
@@ -1085,7 +1113,7 @@ function SourceMark({
   size?: "row" | "detail";
 }) {
   const host = captureSourceHost(capture).replace(/^www\./i, "");
-  const faviconUri = !isMapSource(capture) && !failedFavicons[host] ? sourceFaviconUrl(host) : "";
+  const faviconUri = size === "detail" && !isMapSource(capture) && !failedFavicons[host] ? sourceFaviconUrl(host) : "";
   const imageUri = size === "row" ? captureImageUrl(capture) : "";
   const Icon = sourceIconForCapture(capture);
   const itemStatus = displayStatus(capture);
@@ -1098,7 +1126,13 @@ function SourceMark({
         accessible
         style={styles.captureThumbnailFrame}
       >
-        <Image source={{ uri: imageUri }} style={styles.captureThumbnailImage} />
+        <Image
+          cachePolicy="memory-disk"
+          contentFit="cover"
+          source={{ uri: imageUri }}
+          style={styles.captureThumbnailImage}
+          transition={90}
+        />
       </View>
     );
   }
@@ -1116,6 +1150,8 @@ function SourceMark({
       <Icon color={sourceIconColor(itemStatus)} size={iconSize} strokeWidth={2.3} />
       {faviconUri ? (
         <Image
+          cachePolicy="memory-disk"
+          contentFit="contain"
           onError={() => onFaviconFailure(host)}
           source={{ uri: faviconUri }}
           style={[
@@ -1202,6 +1238,8 @@ export default function App() {
   const [archivedCapturesLoading, setArchivedCapturesLoading] = useState(false);
   const [archivedCapturesError, setArchivedCapturesError] = useState("");
   const [archivedCapturesLoaded, setArchivedCapturesLoaded] = useState(false);
+  const [capturesNextCursor, setCapturesNextCursor] = useState<string | null>(null);
+  const [archivedCapturesNextCursor, setArchivedCapturesNextCursor] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchScope, setSearchScope] = useState<SearchScope>("active");
@@ -1213,6 +1251,7 @@ export default function App() {
   const [collectionCaptures, setCollectionCaptures] = useState<Capture[]>([]);
   const [collectionCapturesForId, setCollectionCapturesForId] = useState<string | null>(null);
   const [collectionCapturesLoading, setCollectionCapturesLoading] = useState(false);
+  const [collectionCapturesNextCursor, setCollectionCapturesNextCursor] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftNote, setDraftNote] = useState("");
   const [draftIntent, setDraftIntent] = useState("");
@@ -1255,6 +1294,12 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState<"signin" | "signup" | null>(null);
   const latestNoteRef = useRef("");
   const autoAppliedCollectionKeysRef = useRef<Set<string>>(new Set());
+  const collectionsCacheRef = useRef<Record<CollectionListMode, Collection[]>>({ active: [], archived: [] });
+  const collectionCapturesCacheRef = useRef<Record<string, Capture[]>>({});
+  const collectionCapturesCursorCacheRef = useRef<Record<string, string | null>>({});
+  const captureDetailHydrationRef = useRef<Set<string>>(new Set());
+  const prefetchedImageKeysRef = useRef<Set<string>>(new Set());
+  const collectionsPrefetchStartedRef = useRef(false);
   const sourceInputRef = useRef<TextInput>(null);
   const collectionTitleInputRef = useRef<TextInput>(null);
   const lastKeyboardHeightRef = useRef(0);
@@ -1275,6 +1320,13 @@ export default function App() {
       setCaptures([]);
       setArchivedCaptures([]);
       setArchivedCapturesLoaded(false);
+      setCapturesNextCursor(null);
+      setArchivedCapturesNextCursor(null);
+      setCollections([]);
+      collectionsCacheRef.current = { active: [], archived: [] };
+      collectionCapturesCacheRef.current = {};
+      collectionCapturesCursorCacheRef.current = {};
+      setCollectionCapturesNextCursor(null);
       return null;
     }
     const next = JSON.parse(raw) as AuthSession;
@@ -1288,7 +1340,10 @@ export default function App() {
     return next;
   }, [session]);
 
-  const loadCaptures = useCallback(async (mode: CaptureListMode = "active") => {
+  const loadCaptures = useCallback(async (
+    mode: CaptureListMode = "active",
+    options: { append?: boolean; before?: string | null } = {}
+  ) => {
     const loadingSetter = mode === "archived" ? setArchivedCapturesLoading : setCapturesLoading;
     const errorSetter = mode === "archived" ? setArchivedCapturesError : setCapturesError;
     loadingSetter(true);
@@ -1298,14 +1353,16 @@ export default function App() {
         const activeSession = await getFreshSession();
         if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
         const loadWithToken = (accessToken: string) =>
-          requestJson<{ captures?: Array<Record<string, any>> }>(captureListUrl(config.apiUrl, mode === "archived"), {
+          requestJson<{ captures?: Array<Record<string, any>>; next_cursor?: string | null }>(
+            captureListUrl(config.apiUrl, mode === "archived", { before: options.before }),
+            {
             headers: {
               accept: "application/json",
               apikey: config.supabaseAnonKey,
               authorization: `Bearer ${accessToken}`
             }
           });
-        let json: { captures?: Array<Record<string, any>> };
+        let json: { captures?: Array<Record<string, any>>; next_cursor?: string | null };
         try {
           json = await loadWithToken(activeSession.accessToken);
         } catch (error) {
@@ -1316,10 +1373,18 @@ export default function App() {
         }
         const next = ((json.captures ?? []) as Array<Record<string, any>>).map(captureFromRemote);
         if (mode === "archived") {
-          setArchivedCaptures(sortCaptures(next));
+          setArchivedCaptures((current) =>
+            options.append ? sortCaptures(uniqueCaptures([...current, ...next])) : sortCaptures(next)
+          );
           setArchivedCapturesLoaded(true);
+          setArchivedCapturesNextCursor(json.next_cursor || null);
         } else {
-          setCaptures((current) => mergeRemoteCaptures(next, current, "active"));
+          setCaptures((current) =>
+            options.append
+              ? sortCaptures(uniqueCaptures([...current, ...next]))
+              : mergeRemoteCaptures(next, current, "active")
+          );
+          setCapturesNextCursor(json.next_cursor || null);
         }
       } catch (error) {
         errorSetter(friendlyError(error, mode === "archived" ? "Could not load archived captures" : "Could not load captures"));
@@ -1341,10 +1406,13 @@ export default function App() {
       if (mode === "archived") {
         setArchivedCaptures(sortCaptures(archived));
         setArchivedCapturesLoaded(true);
+        setArchivedCapturesNextCursor(null);
       } else {
         setCaptures(sortCaptures(active));
         setArchivedCaptures(sortCaptures(archived));
         setArchivedCapturesLoaded(true);
+        setCapturesNextCursor(null);
+        setArchivedCapturesNextCursor(null);
       }
     } catch (error) {
       const text = friendlyError(error, mode === "archived" ? "Could not load archived captures" : "Could not load captures");
@@ -1356,6 +1424,21 @@ export default function App() {
     }
   }, [config, getFreshSession, session]);
 
+  const loadMoreCaptures = useCallback((mode: CaptureListMode = "active") => {
+    const cursor = mode === "archived" ? archivedCapturesNextCursor : capturesNextCursor;
+    const loading = mode === "archived" ? archivedCapturesLoading : capturesLoading;
+    if (!cursor || loading) return;
+    void loadCaptures(mode, { append: true, before: cursor }).catch((error) => {
+      setMessage((current) => current || friendlyError(error, "Could not load more captures"));
+    });
+  }, [
+    archivedCapturesLoading,
+    archivedCapturesNextCursor,
+    capturesLoading,
+    capturesNextCursor,
+    loadCaptures
+  ]);
+
   const loadCollections = useCallback(async (mode: CollectionListMode = "active") => {
     if (!config?.apiUrl || !session?.accessToken) {
       setCollections([]);
@@ -1364,9 +1447,10 @@ export default function App() {
     const activeSession = await getFreshSession();
     if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
     const loadWithToken = (accessToken: string) =>
-      requestJson<{ collections?: Array<Record<string, any>> }>(
+      requestJson<{ collections?: Array<Record<string, any>>; next_cursor?: string | null }>(
         edgeResourceUrl(config.apiUrl, "collections", {
-          archived: mode === "archived" ? "true" : "false"
+          archived: mode === "archived" ? "true" : "false",
+          limit: "50"
         }),
         {
           headers: {
@@ -1376,7 +1460,7 @@ export default function App() {
           }
         }
       );
-    let json: { collections?: Array<Record<string, any>> };
+    let json: { collections?: Array<Record<string, any>>; next_cursor?: string | null };
     try {
       json = await loadWithToken(activeSession.accessToken);
     } catch (error) {
@@ -1385,13 +1469,19 @@ export default function App() {
       if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
       json = await loadWithToken(refreshed.accessToken);
     }
-    setCollections((json.collections ?? []).map(collectionFromRemote));
+    const next = (json.collections ?? []).map(collectionFromRemote);
+    collectionsCacheRef.current[mode] = next;
+    setCollections(next);
   }, [config, getFreshSession, session]);
 
-  const loadCollectionCaptures = useCallback(async (collectionId: string) => {
+  const loadCollectionCaptures = useCallback(async (
+    collectionId: string,
+    options: { append?: boolean; before?: string | null } = {}
+  ) => {
     if (!config?.apiUrl || !session?.accessToken) {
       setCollectionCaptures([]);
       setCollectionCapturesForId(collectionId);
+      setCollectionCapturesNextCursor(null);
       return;
     }
     setCollectionCapturesLoading(true);
@@ -1399,10 +1489,11 @@ export default function App() {
       const activeSession = await getFreshSession();
       if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
       const loadWithToken = (accessToken: string) =>
-        requestJson<{ captures?: Array<Record<string, any>> }>(
+        requestJson<{ captures?: Array<Record<string, any>>; next_cursor?: string | null }>(
           edgeResourceUrl(config.apiUrl, "collection-captures", {
             collectionId,
-            limit: "100"
+            limit: "30",
+            ...(options.before ? { before: options.before } : {})
           }),
           {
             headers: {
@@ -1412,7 +1503,7 @@ export default function App() {
             }
           }
         );
-      let json: { captures?: Array<Record<string, any>> };
+      let json: { captures?: Array<Record<string, any>>; next_cursor?: string | null };
       try {
         json = await loadWithToken(activeSession.accessToken);
       } catch (error) {
@@ -1421,10 +1512,64 @@ export default function App() {
         if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
         json = await loadWithToken(refreshed.accessToken);
       }
-      setCollectionCaptures((json.captures ?? []).map(captureFromRemote));
+      const next = (json.captures ?? []).map(captureFromRemote);
+      const merged = options.append
+        ? uniqueCaptures([...(collectionCapturesCacheRef.current[collectionId] || []), ...next])
+        : next;
+      collectionCapturesCacheRef.current[collectionId] = merged;
+      collectionCapturesCursorCacheRef.current[collectionId] = json.next_cursor || null;
+      setCollectionCaptures(merged);
+      setCollectionCapturesNextCursor(json.next_cursor || null);
       setCollectionCapturesForId(collectionId);
     } finally {
       setCollectionCapturesLoading(false);
+    }
+  }, [config, getFreshSession, session]);
+
+  const loadMoreCollectionCaptures = useCallback(() => {
+    if (!selectedCollectionId || !collectionCapturesNextCursor || collectionCapturesLoading) return;
+    void loadCollectionCaptures(selectedCollectionId, {
+      append: true,
+      before: collectionCapturesNextCursor
+    }).catch((error) => {
+      setMessage((current) => current || friendlyError(error, "Could not load more collection captures"));
+    });
+  }, [
+    collectionCapturesLoading,
+    collectionCapturesNextCursor,
+    loadCollectionCaptures,
+    selectedCollectionId
+  ]);
+
+  const loadCaptureDetail = useCallback(async (capture: Capture) => {
+    const captureRef = capture.remoteId || capture.id;
+    if (!captureRef || !config?.apiUrl || !session?.accessToken) return;
+    if (captureDetailHydrationRef.current.has(captureRef)) return;
+    captureDetailHydrationRef.current.add(captureRef);
+    try {
+      const activeSession = await getFreshSession();
+      if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
+      const loadWithToken = (accessToken: string) =>
+        requestJson<{ capture?: Record<string, any> }>(captureDetailUrl(config.apiUrl, captureRef), {
+          headers: {
+            accept: "application/json",
+            apikey: config.supabaseAnonKey,
+            authorization: `Bearer ${accessToken}`
+          }
+        });
+      let json: { capture?: Record<string, any> };
+      try {
+        json = await loadWithToken(activeSession.accessToken);
+      } catch (error) {
+        if (!isAuthError(error)) throw error;
+        const refreshed = await getFreshSession(true);
+        if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
+        json = await loadWithToken(refreshed.accessToken);
+      }
+      if (!json.capture) return;
+      applyUpdatedCapture(captureFromRemote(json.capture), capture.id);
+    } catch (error) {
+      captureDetailHydrationRef.current.delete(captureRef);
     }
   }, [config, getFreshSession, session]);
 
@@ -1591,7 +1736,10 @@ export default function App() {
     setCollectionsMode(mode);
     setCollectionsOpen(true);
     setSelectedCollectionId(null);
-    setCollectionsLoading(true);
+    const cached = collectionsCacheRef.current[mode];
+    if (cached.length) setCollections(cached);
+    else setCollections([]);
+    setCollectionsLoading(!cached.length);
     setCollectionsError("");
     try {
       await loadCollections(mode);
@@ -1647,6 +1795,17 @@ export default function App() {
       setMessage((current) => current || friendlyError(error, "Could not load captures"));
     });
   }, [loadCaptures]);
+
+  useEffect(() => {
+    if (!config?.apiUrl || !session?.accessToken || collectionsPrefetchStartedRef.current) return;
+    collectionsPrefetchStartedRef.current = true;
+    const task = InteractionManager.runAfterInteractions(() => {
+      void loadCollections("active").catch(() => {
+        collectionsPrefetchStartedRef.current = false;
+      });
+    });
+    return () => task.cancel();
+  }, [config?.apiUrl, loadCollections, session?.accessToken]);
 
   const hasProcessingCapture = useMemo(
     () => captures.some((capture) => displayStatus(capture) === "processing"),
@@ -1853,6 +2012,23 @@ export default function App() {
     () => homeCaptures.filter((capture) => displayStatus(capture) === "needs_review" || displayStatus(capture) === "failed").length,
     [homeCaptures]
   );
+  useEffect(() => {
+    const prefetchUrls = homeCaptures
+      .slice(0, 10)
+      .map((capture) => ({
+        key: capture.imageAssetCacheKey || captureImageUrl(capture),
+        url: captureImageUrl(capture)
+      }))
+      .filter(({ key, url }) => key && url && !prefetchedImageKeysRef.current.has(key));
+    if (!prefetchUrls.length) return;
+    prefetchUrls.forEach(({ key }) => prefetchedImageKeysRef.current.add(key));
+    const task = InteractionManager.runAfterInteractions(() => {
+      void Image.prefetch(prefetchUrls.map(({ url }) => url), "memory-disk").catch(() => {
+        prefetchUrls.forEach(({ key }) => prefetchedImageKeysRef.current.delete(key));
+      });
+    });
+    return () => task.cancel();
+  }, [homeCaptures]);
   const searchPool = useMemo(() => {
     if (searchScope === "archived") return archivedCaptures;
     if (searchScope === "all") return uniqueCaptures([...captures, ...archivedCaptures]);
@@ -1874,6 +2050,11 @@ export default function App() {
     ? collections.find((collection) => collection.id === selectedCollectionId) ?? null
     : null;
   const selectedDraftKey = selected ? captureDraftKey(selected) : "";
+
+  useEffect(() => {
+    if (!selected) return;
+    void loadCaptureDetail(selected);
+  }, [loadCaptureDetail, selected?.id, selected?.remoteId]);
 
   useEffect(() => {
     latestNoteRef.current = draftNote;
@@ -2049,13 +2230,21 @@ export default function App() {
       if (!captureReturnCollectionId) {
         setCollectionCaptures([]);
         setCollectionCapturesForId(null);
+        setCollectionCapturesNextCursor(null);
       }
       return;
     }
     if (selectedCollection?.status === "archived") {
       setCollectionCaptures([]);
       setCollectionCapturesForId(selectedCollectionId);
+      setCollectionCapturesNextCursor(null);
       return;
+    }
+    const cached = collectionCapturesCacheRef.current[selectedCollectionId];
+    if (cached?.length) {
+      setCollectionCaptures(cached);
+      setCollectionCapturesForId(selectedCollectionId);
+      setCollectionCapturesNextCursor(collectionCapturesCursorCacheRef.current[selectedCollectionId] || null);
     }
     void loadCollectionCaptures(selectedCollectionId).catch((error) => {
       setCollectionCaptures([]);
@@ -2076,6 +2265,11 @@ export default function App() {
       item.remoteId === previousId ||
       item.id === updatedCapture.id ||
       Boolean(updatedCapture.remoteId && item.remoteId === updatedCapture.remoteId);
+    for (const [collectionId, rows] of Object.entries(collectionCapturesCacheRef.current)) {
+      collectionCapturesCacheRef.current[collectionId] = rows.map((item) =>
+        matchesCapture(item) ? updatedCapture : item
+      );
+    }
     setCaptures((current) =>
       current.map((item) => (matchesCapture(item) ? updatedCapture : item))
     );
@@ -2500,15 +2694,25 @@ export default function App() {
           method: "PATCH",
           body: { collectionId: selectedCollection.id, title, description }
         });
-        setCollections((current) =>
-          current.map((item) => (item.id === selectedCollection.id ? collectionFromRemote(json.collection) : item))
+        const updated = {
+          ...collectionFromRemote(json.collection),
+          captureCount: selectedCollection.captureCount
+        };
+        collectionsCacheRef.current[updated.status] = collectionsCacheRef.current[updated.status].map((item) =>
+          item.id === updated.id ? updated : item
         );
+        setCollections((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       } else {
         const json = await collectionRequest<{ collection: Record<string, any> }>("collections", {
           method: "POST",
           body: { title, description }
         });
-        setCollections((current) => [collectionFromRemote(json.collection), ...current]);
+        const created = collectionFromRemote(json.collection);
+        collectionsCacheRef.current.active = [
+          created,
+          ...collectionsCacheRef.current.active.filter((item) => item.id !== created.id)
+        ];
+        if (collectionsMode === "active") setCollections((current) => [created, ...current]);
         Keyboard.dismiss();
         setCollectionTitle("");
         setCollectionDescription("");
@@ -2529,8 +2733,9 @@ export default function App() {
         body: { collectionId: collection.id, action: archived ? "archive" : "restore" }
       });
       selectCollection(null);
+      collectionCapturesCacheRef.current[collection.id] = [];
       setMessage(archived ? "Collection archived." : "Collection restored.");
-      await loadCollections();
+      await loadCollections(collectionsMode);
       await loadCaptures();
     } catch (error) {
       setMessage(friendlyError(error, archived ? "Could not archive collection." : "Could not restore collection."));
@@ -2553,7 +2758,16 @@ export default function App() {
         method: "PATCH",
         body: { action: "unlink", collectionId, captureId }
       });
+      collectionCapturesCacheRef.current[collectionId] = (collectionCapturesCacheRef.current[collectionId] || [])
+        .filter((item) => item.id !== capture.id);
       setCollectionCaptures((current) => current.filter((item) => item.id !== capture.id));
+      (["active", "archived"] as const).forEach((mode) => {
+        collectionsCacheRef.current[mode] = collectionsCacheRef.current[mode].map((collection) =>
+          collection.id === collectionId
+            ? { ...collection, captureCount: Math.max(0, collection.captureCount - 1) }
+            : collection
+        );
+      });
       setCollections((current) =>
         current.map((collection) =>
           collection.id === collectionId
@@ -2610,8 +2824,21 @@ export default function App() {
                 : [...(item.linkedCollections || []), collection]
             }
           : item;
+      collectionCapturesCacheRef.current[collectionId] = [
+        addCollection(capture),
+        ...(collectionCapturesCacheRef.current[collectionId] || []).filter((item) => item.id !== capture.id)
+      ];
+      collectionsCacheRef.current.active = collectionsCacheRef.current.active.map((item) =>
+        item.id === collectionId ? { ...item, captureCount: item.captureCount + 1 } : item
+      );
+      setCollections((current) =>
+        current.map((item) => item.id === collectionId ? { ...item, captureCount: item.captureCount + 1 } : item)
+      );
       setCaptures((current) => current.map(addCollection));
-      setCollectionCaptures((current) => current.map(addCollection));
+      setCollectionCaptures((current) => [
+        addCollection(capture),
+        ...current.filter((item) => item.id !== capture.id)
+      ]);
       setSnackbar(null);
       setMessage("Collection restored.");
       await loadCaptures();
@@ -2781,7 +3008,10 @@ export default function App() {
         if (returnCollectionId) selectCollection(returnCollectionId);
         setMessage(archived ? "Archived." : "Restored.");
         setArchivedCapturesLoaded(false);
+        collectionCapturesCacheRef.current = {};
+        collectionCapturesCursorCacheRef.current = {};
         await loadCaptures();
+        if (collectionsOpen || selectedCollectionId) await loadCollections(collectionsMode);
       } catch (error) {
         setMessage(friendlyError(error, archived ? "Could not archive." : "Could not restore."));
       }
@@ -2898,8 +3128,17 @@ export default function App() {
     setCaptures([]);
     setArchivedCaptures([]);
     setArchivedCapturesLoaded(false);
+    setCapturesNextCursor(null);
+    setArchivedCapturesNextCursor(null);
     setCollections([]);
+    collectionsCacheRef.current = { active: [], archived: [] };
+    collectionCapturesCacheRef.current = {};
+    collectionCapturesCursorCacheRef.current = {};
+    captureDetailHydrationRef.current.clear();
+    prefetchedImageKeysRef.current.clear();
+    collectionsPrefetchStartedRef.current = false;
     setCollectionCaptures([]);
+    setCollectionCapturesNextCursor(null);
     setCollectionCapturesForId(null);
     setCaptureReturnCollectionId(null);
     setCollectionsOpen(false);
@@ -3382,9 +3621,12 @@ export default function App() {
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="light-content" />
         <FlatList
+          {...CAPTURE_LIST_PERF_PROPS}
           data={visibleCollectionCaptures}
           keyExtractor={(item) => item.id}
           renderItem={renderCollectionCapture}
+          onEndReached={loadMoreCollectionCaptures}
+          onEndReachedThreshold={0.35}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListHeaderComponent={
             <View style={styles.collectionDetailTop}>
@@ -3512,6 +3754,7 @@ export default function App() {
           </View>
           {collectionsError ? <Text style={styles.errorText}>{collectionsError}</Text> : null}
           <FlatList
+            {...COLLECTION_LIST_PERF_PROPS}
             data={collections}
             keyExtractor={(item) => item.id}
             renderItem={renderCollection}
@@ -3877,7 +4120,13 @@ export default function App() {
             ]}>
               {selectedImageUrl ? (
                 <>
-                  <Image source={{ uri: selectedImageUrl }} style={styles.reviewMediaImage} />
+                  <Image
+                    cachePolicy="memory-disk"
+                    contentFit="cover"
+                    source={{ uri: selectedImageUrl }}
+                    style={styles.reviewMediaImage}
+                    transition={120}
+                  />
                   <View style={styles.reviewMediaOverlay}>
                     <View style={styles.reviewMediaSourcePill}>
                       <Text numberOfLines={1} style={styles.reviewMediaSourceText}>
@@ -4386,9 +4635,14 @@ export default function App() {
               ) : null}
             </View>
             <FlatList
+              {...CAPTURE_LIST_PERF_PROPS}
               data={searchResults}
               keyExtractor={(item) => item.id}
               renderItem={renderSearchResult}
+              onEndReached={() => {
+                if (searchScope === "archived") loadMoreCaptures("archived");
+              }}
+              onEndReachedThreshold={0.35}
               ItemSeparatorComponent={() => <View style={styles.separator} />}
               ListEmptyComponent={
                 searchIsLoading ? (
@@ -4479,9 +4733,12 @@ export default function App() {
           {message ? <Text style={styles.messageInline}>{message}</Text> : null}
         </View>
         <FlatList
+          {...CAPTURE_LIST_PERF_PROPS}
           data={homeRows}
           keyExtractor={(item) => item.id}
           renderItem={renderHomeRow}
+          onEndReached={() => loadMoreCaptures("active")}
+          onEndReachedThreshold={0.35}
           ItemSeparatorComponent={({ leadingItem }) =>
             leadingItem?.type === "section" ? null : <View style={styles.separator} />
           }
