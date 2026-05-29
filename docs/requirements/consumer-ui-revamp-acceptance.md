@@ -57,6 +57,7 @@ New Capture must:
 - Open with one upward sheet motion; keyboard focus must not make the sheet appear to pull down or jump against its entrance.
 - Present exactly one capture mode at a time: `Link`, `Note`, or `Image`.
 - Offer an explicit in-app image upload mode that uses existing image capture processing and opens the platform photo picker, without adding new extraction rules.
+- Route Link captures through public URL evidence and preflight. Route Note, Image, Screenshot, and mixed image captures through modality-specific note/visual evidence so weak URL evidence does not decide whether non-link analysis is useful.
 
 ## Capture Review
 
@@ -73,6 +74,7 @@ Capture Review must:
 - Show an `Open in Maps` action when Capture Analysis has a maps-searchable Visit Target. This action opens Google Maps or Apple Maps search from the persisted query; it must not imply a verified address, coordinates, place ID, or a first-class Map destination.
 - Include an `Add reminder` flow only when the selected reminder can at least persist as a capture-local or otherwise durable value. Do not imply notification delivery until it exists.
 - Keep raw source, destructive archive actions, and detailed rationale visually secondary.
+- Use modality-specific evidence in review copy. Image and note captures without a source URL must not show Link evidence fallback copy or a `Link evidence` module; they should show `Needs review` / `Couldn't tell` language when saved content needs more context.
 
 ## Collection Management
 
