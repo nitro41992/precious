@@ -530,6 +530,57 @@ function withCaptureStates(rows: any[]) {
   return Array.isArray(rows) ? rows.map(withCaptureState) : [];
 }
 
+const CAPTURE_ASSET_SIGNED_URL_TTL_SECONDS = 15 * 60;
+
+async function withSignedCaptureAssets(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  row: Record<string, unknown> | null | undefined,
+) {
+  if (!row) return row;
+  const assets = Array.isArray(row.capture_assets) ? row.capture_assets : [];
+  if (!assets.length) return row;
+  const signedAssets = await Promise.all(
+    assets.map(async (asset) => {
+      if (!asset || typeof asset !== "object") return asset;
+      const record = asset as Record<string, unknown>;
+      const storagePath = typeof record.storage_path === "string"
+        ? record.storage_path
+        : "";
+      const mimeType = typeof record.mime_type === "string"
+        ? record.mime_type
+        : "";
+      if (
+        !storagePath ||
+        !mimeType.startsWith("image/") ||
+        (record.user_id && String(record.user_id) !== userId)
+      ) {
+        return record;
+      }
+      const signed = await supabase.storage.from("captures").createSignedUrl(
+        storagePath,
+        CAPTURE_ASSET_SIGNED_URL_TTL_SECONDS,
+      );
+      return {
+        ...record,
+        signed_url: signed.data?.signedUrl || null,
+        signed_url_expires_in: CAPTURE_ASSET_SIGNED_URL_TTL_SECONDS,
+      };
+    }),
+  );
+  return { ...row, capture_assets: signedAssets };
+}
+
+async function withSignedCaptureAssetRows(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  rows: Array<Record<string, unknown>>,
+) {
+  return await Promise.all(
+    rows.map((row) => withSignedCaptureAssets(supabase, userId, row)),
+  );
+}
+
 function archivedFilter(row: any, archived: boolean) {
   return archived
     ? captureState(row) === "archived"
@@ -4682,7 +4733,12 @@ async function captureResponse(
   const rows = await attachLinkedCollections(supabase, userId, [
     data as Record<string, unknown>,
   ]);
-  return json({ capture: withCaptureState(rows[0] ?? data) });
+  const signed = await withSignedCaptureAssets(
+    supabase,
+    userId,
+    (rows[0] ?? data) as Record<string, unknown>,
+  );
+  return json({ capture: withCaptureState(signed) });
 }
 
 async function applyCollectionChoice(
@@ -5441,8 +5497,9 @@ async function handleCollectionCapturesResource(
     })
     .filter(Boolean) as Array<Record<string, unknown>>;
   const rows = await attachLinkedCollections(supabase, userId, captureRows);
+  const signedRows = await withSignedCaptureAssetRows(supabase, userId, rows);
   return json({
-    captures: withCaptureStates(rows).filter((row) =>
+    captures: withCaptureStates(signedRows).filter((row) =>
       archivedFilter(row, false)
     ),
   });
@@ -5517,11 +5574,16 @@ if (import.meta.main) {
           user.id,
           (data ?? []) as Array<Record<string, unknown>>,
         );
+        const signedRows = await withSignedCaptureAssetRows(
+          supabase,
+          user.id,
+          rows as Array<Record<string, unknown>>,
+        );
         if (clientCaptureKey) {
-          return json({ capture: withCaptureState(rows?.[0] ?? null) });
+          return json({ capture: withCaptureState(signedRows?.[0] ?? null) });
         }
         return json({
-          captures: withCaptureStates(rows).filter((row) =>
+          captures: withCaptureStates(signedRows).filter((row) =>
             archivedFilter(row, archived)
           ),
         });
@@ -5602,7 +5664,11 @@ if (import.meta.main) {
               .single();
           }
           if (result.error) throw result.error;
-          return json({ capture: withCaptureState(result.data) });
+          return await captureResponse(
+            supabase,
+            user.id,
+            String(existingResult.data.id),
+          );
         }
 
         if (body.action === "confirm_review") {
@@ -5678,10 +5744,11 @@ if (import.meta.main) {
               .single();
           }
           if (result.error) throw result.error;
-          const rows = await attachLinkedCollections(supabase, user.id, [
-            result.data as Record<string, unknown>,
-          ]);
-          return json({ capture: withCaptureState(rows[0] ?? result.data) });
+          return await captureResponse(
+            supabase,
+            user.id,
+            String(existingResult.data.id),
+          );
         }
 
         if (body.action === "save_review_decisions") {
@@ -5760,10 +5827,11 @@ if (import.meta.main) {
               .single();
           }
           if (result.error) throw result.error;
-          const rows = await attachLinkedCollections(supabase, user.id, [
-            result.data as Record<string, unknown>,
-          ]);
-          return json({ capture: withCaptureState(rows[0] ?? result.data) });
+          return await captureResponse(
+            supabase,
+            user.id,
+            String(existingResult.data.id),
+          );
         }
 
         if (body.action === "dismiss_reminder") {
@@ -5786,10 +5854,11 @@ if (import.meta.main) {
             .select("*")
             .single();
           if (result.error) throw result.error;
-          const rows = await attachLinkedCollections(supabase, user.id, [
-            result.data as Record<string, unknown>,
-          ]);
-          return json({ capture: withCaptureState(rows[0] ?? result.data) });
+          return await captureResponse(
+            supabase,
+            user.id,
+            String(existingResult.data.id),
+          );
         }
 
         const update: Record<string, unknown> = {};
@@ -5811,7 +5880,11 @@ if (import.meta.main) {
           update.intent_corrected_at = new Date().toISOString();
         }
         if (!Object.keys(update).length) {
-          return json({ capture: withCaptureState(existingResult.data) });
+          return await captureResponse(
+            supabase,
+            user.id,
+            String(existingResult.data.id),
+          );
         }
 
         let result = await supabase
@@ -5838,7 +5911,11 @@ if (import.meta.main) {
             .single();
         }
         if (result.error) throw result.error;
-        return json({ capture: withCaptureState(result.data) });
+        return await captureResponse(
+          supabase,
+          user.id,
+          String(existingResult.data.id),
+        );
       }
 
       if (request.method !== "POST") return json({ error: "Not found" }, 404);

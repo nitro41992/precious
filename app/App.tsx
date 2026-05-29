@@ -3,7 +3,6 @@ import "react-native-url-polyfill/auto";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType } from "react";
 import {
-  Alert,
   Animated,
   AppState,
   BackHandler,
@@ -39,6 +38,7 @@ import {
   Image as ImageIcon,
   Info,
   Link2,
+  LogOut,
   MapPin,
   MoreHorizontal,
   Pencil,
@@ -76,6 +76,7 @@ type UrlEvidence = {
   canonical_url?: string;
   client_resolved_url?: string;
   missing_evidence?: string[];
+  image_url?: string;
 };
 
 type Capture = {
@@ -86,6 +87,9 @@ type Capture = {
   sourceUrl: string | null;
   siteName?: string;
   summary?: string;
+  thumbnailUrl?: string;
+  imageAssetUrl?: string;
+  imageAssetMimeType?: string;
   urlEvidence?: UrlEvidence | null;
   analysisMode?: string;
   analysisProvider?: string;
@@ -349,6 +353,24 @@ function sourceFaviconUrl(host: string) {
   const cleaned = host.replace(/^www\./i, "").trim();
   if (!cleaned || !cleaned.includes(".") || /[\s/]/.test(cleaned)) return "";
   return `https://${cleaned}/favicon.ico`;
+}
+
+function remoteImageAsset(row: Record<string, any>) {
+  const assets = Array.isArray(row.capture_assets) ? row.capture_assets : [];
+  return assets.find((asset) => {
+    const mimeType = String(asset?.mime_type || asset?.mimeType || "");
+    const url = asset?.signed_url || asset?.signedUrl || asset?.public_url || asset?.publicUrl;
+    return mimeType.startsWith("image/") && typeof url === "string" && url.trim();
+  });
+}
+
+function captureImageUrl(capture: Capture) {
+  return (
+    capture.imageAssetUrl ||
+    capture.thumbnailUrl ||
+    capture.urlEvidence?.image_url ||
+    ""
+  );
 }
 
 function isMapSource(capture: Capture) {
@@ -703,6 +725,10 @@ function friendlyError(error: unknown, fallback: string) {
 function captureFromRemote(row: Record<string, any>): Capture {
   const analysis = row.analysis ?? {};
   const defaultIntent = analysis.default_intent ?? {};
+  const imageAsset = remoteImageAsset(row);
+  const assetUrl = imageAsset
+    ? nullableValue(imageAsset.signed_url || imageAsset.signedUrl || imageAsset.public_url || imageAsset.publicUrl)
+    : undefined;
   const archivedAtValue = row.archived_at || analysis.archived_at || null;
   const reviewConfirmedAtValue = row.review_confirmed_at || analysis.review_confirmed_at || null;
   const analysisMode = nullableValue(row.analysis_mode) || (nullableValue(row.analysis_provider) ? "llm" : undefined);
@@ -728,6 +754,9 @@ function captureFromRemote(row: Record<string, any>): Capture {
     sourceUrl: typeof row.source_url === "string" ? row.source_url : null,
     siteName: hostFromUrl(typeof row.source_url === "string" ? row.source_url : null),
     summary: analysis.summary || undefined,
+    thumbnailUrl: nullableValue(row.thumbnail_url || row.thumbnailUrl || analysis.thumbnail_url),
+    imageAssetUrl: assetUrl,
+    imageAssetMimeType: imageAsset ? nullableValue(imageAsset.mime_type || imageAsset.mimeType) : undefined,
     urlEvidence: analysis.url_evidence || row.urlEvidence || null,
     analysisMode,
     analysisProvider: nullableValue(row.analysis_provider),
@@ -945,10 +974,22 @@ function SourceMark({
 }) {
   const host = captureSourceHost(capture).replace(/^www\./i, "");
   const faviconUri = !isMapSource(capture) && !failedFavicons[host] ? sourceFaviconUrl(host) : "";
+  const imageUri = size === "row" ? captureImageUrl(capture) : "";
   const Icon = sourceIconForCapture(capture);
   const itemStatus = displayStatus(capture);
   const markStyle = size === "detail" ? styles.sourceMarkDetail : styles.sourceMark;
   const iconSize = size === "detail" ? 16 : 20;
+  if (imageUri) {
+    return (
+      <View
+        accessibilityLabel={host ? `Image from ${host}` : "Capture image"}
+        accessible
+        style={styles.captureThumbnailFrame}
+      >
+        <Image source={{ uri: imageUri }} style={styles.captureThumbnailImage} />
+      </View>
+    );
+  }
   return (
     <View
       accessibilityLabel={host ? `Source: ${host}` : "Source"}
@@ -1090,6 +1131,10 @@ export default function App() {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [sourceExpanded, setSourceExpanded] = useState(false);
   const [noteExpanded, setNoteExpanded] = useState(false);
+  const [accountSheetOpen, setAccountSheetOpen] = useState(false);
+  const [rationaleSheet, setRationaleSheet] = useState<{ title: string; text: string } | null>(null);
+  const [archiveCaptureConfirmOpen, setArchiveCaptureConfirmOpen] = useState(false);
+  const [archiveCollectionTarget, setArchiveCollectionTarget] = useState<Collection | null>(null);
   const [faviconFailures, setFaviconFailures] = useState<Record<string, boolean>>({});
   const [savingCapture, setSavingCapture] = useState(false);
   const [authEmail, setAuthEmail] = useState("");
@@ -1324,15 +1369,7 @@ export default function App() {
   }
 
   function openAccountActions() {
-    Alert.alert(
-      "Account",
-      "Manage this device session.",
-      [
-        { text: "Collections", onPress: () => void openCollectionsScreen() },
-        { text: "Cancel", style: "cancel" },
-        { text: "Sign out", style: "destructive", onPress: () => void signOut() }
-      ]
-    );
+    setAccountSheetOpen(true);
   }
 
   async function openCollectionsScreen(mode: CollectionListMode = collectionsMode) {
@@ -1438,8 +1475,34 @@ export default function App() {
   }, [collectionDraftDirty, collections, selectedCollectionId]);
 
   useEffect(() => {
-    if (!selectedId && !selectedCollectionId && !searchOpen && !showCaptureComposer && !collectionsOpen) return;
+    if (
+      !selectedId &&
+      !selectedCollectionId &&
+      !searchOpen &&
+      !showCaptureComposer &&
+      !collectionsOpen &&
+      !accountSheetOpen &&
+      !rationaleSheet &&
+      !archiveCaptureConfirmOpen &&
+      !archiveCollectionTarget
+    ) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (archiveCollectionTarget) {
+        setArchiveCollectionTarget(null);
+        return true;
+      }
+      if (archiveCaptureConfirmOpen) {
+        setArchiveCaptureConfirmOpen(false);
+        return true;
+      }
+      if (rationaleSheet) {
+        setRationaleSheet(null);
+        return true;
+      }
+      if (accountSheetOpen) {
+        setAccountSheetOpen(false);
+        return true;
+      }
       if (showCaptureComposer) {
         setShowCaptureComposer(false);
         return true;
@@ -1467,8 +1530,12 @@ export default function App() {
     });
     return () => subscription.remove();
   }, [
+    accountSheetOpen,
+    archiveCaptureConfirmOpen,
+    archiveCollectionTarget,
     captureReturnCollectionId,
     collectionsOpen,
+    rationaleSheet,
     searchOpen,
     selectCapture,
     selectCollection,
@@ -1748,7 +1815,7 @@ export default function App() {
   function showRationale(title: string, rationale: string | null | undefined) {
     const text = cleanSentence(rationale);
     if (!text) return;
-    Alert.alert(title, text, [{ text: "Done" }]);
+    setRationaleSheet({ title, text });
   }
 
   function applyUpdatedCapture(updatedCapture: Capture, previousId: string) {
@@ -2203,6 +2270,7 @@ export default function App() {
 
   async function setCollectionArchiveState(collection: Collection, archived: boolean) {
     try {
+      setArchiveCollectionTarget(null);
       await collectionRequest<{ collection: Record<string, any> }>("collections", {
         method: "PATCH",
         body: { collectionId: collection.id, action: archived ? "archive" : "restore" }
@@ -2221,14 +2289,7 @@ export default function App() {
       void setCollectionArchiveState(collection, false);
       return;
     }
-    Alert.alert(
-      "Archive this collection?",
-      "Current captures will be removed from it. Restoring brings back only this snapshot.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Archive", style: "destructive", onPress: () => void setCollectionArchiveState(collection, true) }
-      ]
-    );
+    setArchiveCollectionTarget(collection);
   }
 
   async function unlinkCaptureFromCollection(collectionId: string, capture: Capture) {
@@ -2425,6 +2486,7 @@ export default function App() {
 
   async function setArchiveState(archived: boolean) {
     if (!selected) return;
+    setArchiveCaptureConfirmOpen(false);
     if (config?.apiUrl && session?.accessToken) {
       try {
         const activeSession = await getFreshSession();
@@ -2479,14 +2541,7 @@ export default function App() {
       void setArchiveState(false);
       return;
     }
-    Alert.alert(
-      "Archive this capture?",
-      "You can restore it from Archived.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Archive", style: "destructive", onPress: () => void setArchiveState(true) }
-      ]
-    );
+    setArchiveCaptureConfirmOpen(true);
   }
 
   async function saveCaptureSource() {
@@ -2735,6 +2790,143 @@ export default function App() {
     );
   }
 
+  function renderAppSheets() {
+    if (accountSheetOpen) {
+      return (
+        <View style={styles.modalLayer} pointerEvents="box-none">
+          <Pressable
+            accessibilityLabel="Close account actions"
+            onPress={() => setAccountSheetOpen(false)}
+            style={styles.modalBackdrop}
+          />
+          <View style={styles.actionSheet}>
+            <View style={styles.sheetGrabber} />
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetHeaderCopy}>
+                <Text style={styles.sheetTitle}>Account</Text>
+                <Text style={styles.sheetSubtitle}>Manage this device session.</Text>
+              </View>
+              <IconButton Icon={X} label="Close account actions" onPress={() => setAccountSheetOpen(false)} />
+            </View>
+            <Pressable
+              onPress={() => {
+                setAccountSheetOpen(false);
+                void openCollectionsScreen();
+              }}
+              style={({ pressed }) => [styles.sheetActionRow, pressed && styles.subtlePressed]}
+            >
+              <Folder color={colors.accent} size={20} strokeWidth={2.3} />
+              <View style={styles.sheetActionCopy}>
+                <Text style={styles.sheetActionTitle}>Collections</Text>
+                <Text style={styles.sheetActionText}>Create, rename, and manage saved groups.</Text>
+              </View>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setAccountSheetOpen(false);
+                void signOut();
+              }}
+              style={({ pressed }) => [styles.sheetActionRow, pressed && styles.subtlePressed]}
+            >
+              <LogOut color={colors.danger} size={20} strokeWidth={2.3} />
+              <View style={styles.sheetActionCopy}>
+                <Text style={[styles.sheetActionTitle, styles.sheetActionDanger]}>Sign out</Text>
+                <Text style={styles.sheetActionText}>Remove this session from the phone.</Text>
+              </View>
+            </Pressable>
+          </View>
+        </View>
+      );
+    }
+
+    if (rationaleSheet) {
+      return (
+        <View style={styles.modalLayer} pointerEvents="box-none">
+          <Pressable
+            accessibilityLabel="Close suggestion detail"
+            onPress={() => setRationaleSheet(null)}
+            style={styles.modalBackdrop}
+          />
+          <View style={styles.actionSheet}>
+            <View style={styles.sheetGrabber} />
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetHeaderCopy}>
+                <Text style={styles.sheetTitle}>{rationaleSheet.title}</Text>
+                <Text style={styles.sheetSubtitle}>{rationaleSheet.text}</Text>
+              </View>
+              <IconButton Icon={X} label="Close suggestion detail" onPress={() => setRationaleSheet(null)} />
+            </View>
+            <Pressable onPress={() => setRationaleSheet(null)} style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>Done</Text>
+            </Pressable>
+          </View>
+        </View>
+      );
+    }
+
+    if (archiveCaptureConfirmOpen && selected) {
+      return (
+        <View style={styles.modalLayer} pointerEvents="box-none">
+          <Pressable
+            accessibilityLabel="Cancel archive"
+            onPress={() => setArchiveCaptureConfirmOpen(false)}
+            style={styles.modalBackdrop}
+          />
+          <View style={styles.actionSheet}>
+            <View style={styles.sheetGrabber} />
+            <View style={styles.destructiveSheetIcon}>
+              <Archive color={colors.danger} size={22} strokeWidth={2.4} />
+            </View>
+            <Text style={styles.sheetTitle}>Archive this capture?</Text>
+            <Text style={styles.sheetSubtitle}>It leaves Recent Captures but stays searchable from Archived.</Text>
+            <Pressable
+              onPress={() => void setArchiveState(true)}
+              style={[styles.primaryButton, styles.destructiveButton]}
+              testID="pc.capture.archive-confirm"
+            >
+              <Text style={styles.destructiveButtonText}>Archive capture</Text>
+            </Pressable>
+            <Pressable onPress={() => setArchiveCaptureConfirmOpen(false)} style={styles.secondaryButton}>
+              <Text style={styles.secondaryButtonText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      );
+    }
+
+    if (archiveCollectionTarget) {
+      return (
+        <View style={styles.modalLayer} pointerEvents="box-none">
+          <Pressable
+            accessibilityLabel="Cancel archive collection"
+            onPress={() => setArchiveCollectionTarget(null)}
+            style={styles.modalBackdrop}
+          />
+          <View style={styles.actionSheet}>
+            <View style={styles.sheetGrabber} />
+            <View style={styles.destructiveSheetIcon}>
+              <Archive color={colors.danger} size={22} strokeWidth={2.4} />
+            </View>
+            <Text style={styles.sheetTitle}>Archive this collection?</Text>
+            <Text style={styles.sheetSubtitle}>Current captures will be removed from it. Restoring brings back only this snapshot.</Text>
+            <Pressable
+              onPress={() => void setCollectionArchiveState(archiveCollectionTarget, true)}
+              style={[styles.primaryButton, styles.destructiveButton]}
+              testID="pc.collection.archive-confirm"
+            >
+              <Text style={styles.destructiveButtonText}>Archive collection</Text>
+            </Pressable>
+            <Pressable onPress={() => setArchiveCollectionTarget(null)} style={styles.secondaryButton}>
+              <Text style={styles.secondaryButtonText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      );
+    }
+
+    return null;
+  }
+
   if (selectedCollection) {
     const saveDisabled = !collectionTitle.trim() || !collectionDescription.trim();
     const activeCollection = selectedCollection.status === "active";
@@ -2743,7 +2935,7 @@ export default function App() {
     const collectionCapturesPending = activeCollection && (!capturesReadyForCollection || collectionCapturesLoading);
     return (
       <SafeAreaView style={styles.safe}>
-        <StatusBar barStyle="dark-content" />
+        <StatusBar barStyle="light-content" />
         <FlatList
           data={visibleCollectionCaptures}
           keyExtractor={(item) => item.id}
@@ -2839,6 +3031,8 @@ export default function App() {
           }
           contentContainerStyle={styles.collectionDetailContent}
         />
+        {renderAppSheets()}
+        {renderSnackbar()}
       </SafeAreaView>
     );
   }
@@ -2847,7 +3041,7 @@ export default function App() {
     const collectionSaveDisabled = !collectionTitle.trim() || !collectionDescription.trim();
     return (
       <SafeAreaView style={styles.safe}>
-        <StatusBar barStyle="dark-content" />
+        <StatusBar barStyle="light-content" />
         <View style={styles.collectionsScreen}>
           <View style={styles.detailHeader}>
             <IconButton Icon={ArrowLeft} label="Back" onPress={() => setCollectionsOpen(false)} />
@@ -2950,6 +3144,7 @@ export default function App() {
           />
           {message ? <Text style={styles.messageInline}>{message}</Text> : null}
         </View>
+        {renderAppSheets()}
         {renderSnackbar()}
       </SafeAreaView>
     );
@@ -2958,6 +3153,7 @@ export default function App() {
   if (selected) {
     const selectedArchived = isArchived(selected);
     const sourceValue = selected.sourceUrl || selected.sourceText;
+    const selectedImageUrl = captureImageUrl(selected);
     const selectedReviewReasons = reviewReasons(selected);
     const aiIntentValue = normalizeIntent(selected.defaultIntent) || selected.defaultIntent || "";
     const quickIntentValue = draftIntent || aiIntentValue;
@@ -3224,7 +3420,7 @@ export default function App() {
     const showStatus = selectedArchived || displayStatus(selected) !== "ready";
     return (
       <SafeAreaView style={styles.safe}>
-        <StatusBar barStyle="dark-content" />
+        <StatusBar barStyle="light-content" />
         <Animated.View
           style={[
             styles.reviewShell,
@@ -3279,6 +3475,40 @@ export default function App() {
                   {captureStatusLabel(selected)}
                 </Text>
               ) : null}
+            </View>
+            <View style={[
+              styles.reviewMediaHeader,
+              selectedImageUrl ? styles.reviewMediaHeaderImage : styles.reviewMediaHeaderFallback
+            ]}>
+              {selectedImageUrl ? (
+                <>
+                  <Image source={{ uri: selectedImageUrl }} style={styles.reviewMediaImage} />
+                  <View style={styles.reviewMediaOverlay}>
+                    <View style={styles.reviewMediaSourcePill}>
+                      <Text numberOfLines={1} style={styles.reviewMediaSourceText}>
+                        {captureSourceLabel(selected)}
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              ) : (
+                <View style={styles.reviewMediaFallbackContent}>
+                  <SourceMark
+                    capture={selected}
+                    failedFavicons={faviconFailures}
+                    onFaviconFailure={markFaviconFailed}
+                    size="detail"
+                  />
+                  <View style={styles.reviewMediaFallbackCopy}>
+                    <Text numberOfLines={1} style={styles.reviewMediaFallbackTitle}>
+                      {captureSourceLabel(selected)}
+                    </Text>
+                    <Text numberOfLines={2} style={styles.reviewMediaFallbackText}>
+                      {captureIntentLabel(selected) || captureStatusLabel(selected)}
+                    </Text>
+                  </View>
+                </View>
+              )}
             </View>
             <View style={styles.quickEditBlock}>
               <View style={styles.reviewSentence}>
@@ -3565,6 +3795,7 @@ export default function App() {
           ) : null}
         </KeyboardAvoidingView>
         </Animated.View>
+        {renderAppSheets()}
         {renderSnackbar()}
       </SafeAreaView>
     );
@@ -3573,7 +3804,7 @@ export default function App() {
   if (config?.apiUrl && !session) {
     return (
       <SafeAreaView style={styles.safe}>
-        <StatusBar barStyle="dark-content" />
+        <StatusBar barStyle="light-content" />
         <ScrollView contentContainerStyle={styles.detail} keyboardShouldPersistTaps="handled">
           <Text style={styles.kicker}>Sign in</Text>
           <Text style={styles.title}>Precious Captures</Text>
@@ -3617,6 +3848,7 @@ export default function App() {
           </Pressable>
           {message ? <Text style={styles.errorText}>{message}</Text> : null}
         </ScrollView>
+        {renderAppSheets()}
       </SafeAreaView>
     );
   }
@@ -3636,7 +3868,7 @@ export default function App() {
         : "Search looks across titles, notes, sources, collections, reminders, and saved details.";
     return (
       <SafeAreaView style={styles.safe}>
-        <StatusBar barStyle="dark-content" />
+        <StatusBar barStyle="light-content" />
         <Animated.View
           style={[
             styles.searchScreen,
@@ -3758,6 +3990,7 @@ export default function App() {
             />
           </KeyboardAvoidingView>
         </Animated.View>
+        {renderAppSheets()}
         {renderSnackbar()}
       </SafeAreaView>
     );
@@ -3773,7 +4006,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="light-content" />
       <View style={styles.container}>
         <View style={styles.header} testID="pc.home.captures">
           <View style={styles.headerRow}>
@@ -3824,7 +4057,7 @@ export default function App() {
               style={({ pressed }) => [styles.fallbackCaptureToggle, pressed && styles.subtlePressed]}
               testID="pc.capture.open"
             >
-              <Plus color={colors.paper} size={25} strokeWidth={2.4} />
+              <Plus color={colors.onAccent} size={25} strokeWidth={2.4} />
             </Pressable>
           </View>
           {message ? <Text style={styles.messageInline}>{message}</Text> : null}
@@ -3954,24 +4187,35 @@ export default function App() {
           </KeyboardAvoidingView>
         </View>
       ) : null}
+      {renderAppSheets()}
       {renderSnackbar()}
     </SafeAreaView>
   );
 }
 
 const colors = {
-  paper: "#f8faf7",
-  surface: "#ffffff",
-  ink: "#1d211f",
-  muted: "#66706a",
-  line: "#dce4de",
-  soft: "#edf4ef",
-  accent: "#1f7a5b",
-  accentSoft: "#dcefe7",
-  processing: "#5d7187",
-  review: "#9a6b1f",
-  reviewSoft: "#f3efe6",
-  danger: "#9f3a2f"
+  paper: "#101411",
+  surface: "#171c18",
+  surfaceContainer: "#1d241f",
+  surfaceContainerHigh: "#252d27",
+  surfaceContainerHighest: "#303933",
+  ink: "#eef5ef",
+  muted: "#a6b3aa",
+  line: "#37413a",
+  soft: "#202821",
+  accent: "#7bd7ad",
+  accentSoft: "#17382b",
+  accentLine: "#2d6b51",
+  secondary: "#c1ccbc",
+  tertiary: "#d7bf7a",
+  onAccent: "#062015",
+  processing: "#9fc6e3",
+  processingSoft: "#172b39",
+  review: "#e2bd76",
+  reviewSoft: "#342713",
+  danger: "#ffb4a8",
+  dangerSoft: "#3a1f1c",
+  scrim: "rgba(3, 7, 5, 0.62)"
 };
 
 const styles = StyleSheet.create({
@@ -4053,8 +4297,8 @@ const styles = StyleSheet.create({
   },
   searchAffordance: {
     alignItems: "center",
-    backgroundColor: colors.soft,
-    borderColor: "transparent",
+    backgroundColor: colors.surfaceContainer,
+    borderColor: colors.line,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     flex: 1,
@@ -4115,7 +4359,7 @@ const styles = StyleSheet.create({
   },
   searchInputWrap: {
     alignItems: "center",
-    backgroundColor: colors.soft,
+    backgroundColor: colors.surfaceContainer,
     borderRadius: 8,
     flex: 1,
     flexDirection: "row",
@@ -4208,8 +4452,36 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0
   },
+  modalLayer: {
+    bottom: 0,
+    justifyContent: "flex-end",
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    zIndex: 40
+  },
+  modalBackdrop: {
+    backgroundColor: colors.scrim,
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0
+  },
+  actionSheet: {
+    backgroundColor: colors.surfaceContainer,
+    borderTopColor: colors.line,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 12,
+    paddingBottom: Platform.OS === "android" ? 20 : 28,
+    paddingHorizontal: 22,
+    paddingTop: 8
+  },
   sheetBackdrop: {
-    backgroundColor: "rgba(29, 33, 31, 0.18)",
+    backgroundColor: colors.scrim,
     bottom: 0,
     left: 0,
     position: "absolute",
@@ -4222,7 +4494,7 @@ const styles = StyleSheet.create({
     width: "100%"
   },
   captureSheet: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceContainer,
     borderTopColor: colors.line,
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 14,
@@ -4255,6 +4527,43 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10
   },
+  sheetActionRow: {
+    alignItems: "center",
+    borderTopColor: colors.line,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 62,
+    paddingVertical: 12
+  },
+  sheetActionCopy: {
+    flex: 1,
+    gap: 3,
+    minWidth: 0
+  },
+  sheetActionTitle: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "800"
+  },
+  sheetActionDanger: {
+    color: colors.danger
+  },
+  sheetActionText: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18
+  },
+  destructiveSheetIcon: {
+    alignItems: "center",
+    backgroundColor: colors.dangerSoft,
+    borderColor: "#704038",
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 46,
+    justifyContent: "center",
+    width: 46
+  },
   listContent: {
     paddingBottom: 96,
     paddingTop: 0
@@ -4285,34 +4594,34 @@ const styles = StyleSheet.create({
     paddingVertical: 14
   },
   captureRowPressed: {
-    backgroundColor: "rgba(31, 122, 91, 0.06)",
+    backgroundColor: colors.surfaceContainer,
     borderRadius: 8,
     transform: [{ scale: 0.995 }]
   },
   subtlePressed: {
-    backgroundColor: colors.soft,
+    backgroundColor: colors.surfaceContainerHigh,
     transform: [{ scale: 0.985 }]
   },
   darkButtonPressed: {
-    backgroundColor: "#2a302d",
+    backgroundColor: colors.surfaceContainerHighest,
     transform: [{ scale: 0.985 }]
   },
   sourceMark: {
     alignItems: "center",
     backgroundColor: colors.accentSoft,
-    borderColor: "#c6dfd4",
+    borderColor: colors.accentLine,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
-    height: 38,
+    height: 52,
     justifyContent: "center",
     marginTop: 2,
     overflow: "hidden",
-    width: 38
+    width: 52
   },
   sourceMarkDetail: {
     alignItems: "center",
     backgroundColor: colors.accentSoft,
-    borderColor: "#c6dfd4",
+    borderColor: colors.accentLine,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     height: 28,
@@ -4321,16 +4630,16 @@ const styles = StyleSheet.create({
     width: 28
   },
   sourceMarkProcessing: {
-    backgroundColor: "#e6edf3",
-    borderColor: "#cbd7e2"
+    backgroundColor: colors.processingSoft,
+    borderColor: "#2b526b"
   },
   sourceMarkReview: {
     backgroundColor: colors.reviewSoft,
-    borderColor: "#e0d3b8"
+    borderColor: "#6c5324"
   },
   sourceMarkFailed: {
-    backgroundColor: "#f5e9e6",
-    borderColor: "#e5c8c1"
+    backgroundColor: colors.dangerSoft,
+    borderColor: "#704038"
   },
   sourceFavicon: {
     height: 22,
@@ -4343,6 +4652,20 @@ const styles = StyleSheet.create({
   sourceFaviconOverlay: {
     position: "absolute"
   },
+  captureThumbnailFrame: {
+    backgroundColor: colors.surfaceContainer,
+    borderColor: colors.line,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 58,
+    marginTop: 1,
+    overflow: "hidden",
+    width: 58
+  },
+  captureThumbnailImage: {
+    height: "100%",
+    width: "100%"
+  },
   statusGlyph: {
     alignItems: "center",
     backgroundColor: colors.soft,
@@ -4353,16 +4676,16 @@ const styles = StyleSheet.create({
     width: 28
   },
   statusGlyphProcessing: {
-    backgroundColor: "#e6edf3"
+    backgroundColor: colors.processingSoft
   },
   statusGlyphReview: {
     backgroundColor: colors.reviewSoft
   },
   statusGlyphFailed: {
-    backgroundColor: "#f5e9e6"
+    backgroundColor: colors.dangerSoft
   },
   statusGlyphArchived: {
-    backgroundColor: "#eef1ee"
+    backgroundColor: colors.surfaceContainerHigh
   },
   rowContent: {
     flex: 1,
@@ -4399,7 +4722,7 @@ const styles = StyleSheet.create({
     color: colors.review
   },
   statusFailed: {
-    color: "#9f3d2e"
+    color: colors.danger
   },
   meta: {
     color: colors.muted,
@@ -4605,7 +4928,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10
   },
   collectionCreatePanel: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceContainer,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
@@ -4657,8 +4980,68 @@ const styles = StyleSheet.create({
     lineHeight: 34,
     paddingVertical: 6
   },
+  reviewMediaHeader: {
+    backgroundColor: colors.surfaceContainer,
+    borderColor: colors.line,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden"
+  },
+  reviewMediaHeaderImage: {
+    aspectRatio: 1.72
+  },
+  reviewMediaHeaderFallback: {
+    minHeight: 94,
+    padding: 16
+  },
+  reviewMediaImage: {
+    height: "100%",
+    width: "100%"
+  },
+  reviewMediaOverlay: {
+    bottom: 10,
+    left: 10,
+    position: "absolute",
+    right: 10
+  },
+  reviewMediaSourcePill: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(3, 7, 5, 0.68)",
+    borderColor: "rgba(238, 245, 239, 0.18)",
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    maxWidth: "100%",
+    minHeight: 34,
+    paddingHorizontal: 10,
+    paddingVertical: 7
+  },
+  reviewMediaSourceText: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "800"
+  },
+  reviewMediaFallbackContent: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12
+  },
+  reviewMediaFallbackCopy: {
+    flex: 1,
+    gap: 4,
+    minWidth: 0
+  },
+  reviewMediaFallbackTitle: {
+    color: colors.ink,
+    fontSize: 17,
+    fontWeight: "800"
+  },
+  reviewMediaFallbackText: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20
+  },
   quickEditBlock: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceContainer,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
@@ -4706,7 +5089,7 @@ const styles = StyleSheet.create({
   },
   sentenceChip: {
     backgroundColor: colors.accentSoft,
-    borderColor: "#c6dfd4",
+    borderColor: colors.accentLine,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     flexShrink: 1,
@@ -4721,7 +5104,7 @@ const styles = StyleSheet.create({
     borderColor: colors.accent
   },
   sentenceChipMuted: {
-    backgroundColor: "#f1f1ee"
+    backgroundColor: colors.surfaceContainerHigh
   },
   sentenceChipText: {
     color: colors.ink,
@@ -4762,7 +5145,7 @@ const styles = StyleSheet.create({
     lineHeight: 27
   },
   quickChip: {
-    backgroundColor: colors.paper,
+    backgroundColor: colors.surfaceContainerHigh,
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 4
@@ -4781,7 +5164,7 @@ const styles = StyleSheet.create({
   },
   addCollectionButton: {
     alignSelf: "flex-start",
-    backgroundColor: colors.paper,
+    backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
@@ -4797,7 +5180,7 @@ const styles = StyleSheet.create({
   },
   changeLine: {
     alignItems: "center",
-    backgroundColor: colors.paper,
+    backgroundColor: colors.surfaceContainerHigh,
     borderRadius: 8,
     flexDirection: "row",
     gap: 8,
@@ -4852,7 +5235,7 @@ const styles = StyleSheet.create({
     gap: 8
   },
   collectionPicker: {
-    backgroundColor: colors.paper,
+    backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
@@ -4916,7 +5299,7 @@ const styles = StyleSheet.create({
   },
   suggestionPill: {
     alignItems: "center",
-    backgroundColor: colors.paper,
+    backgroundColor: colors.surfaceContainerHigh,
     borderRadius: 8,
     flexDirection: "row",
     gap: 8,
@@ -4924,7 +5307,7 @@ const styles = StyleSheet.create({
     paddingVertical: 9
   },
   suggestionPillChanged: {
-    backgroundColor: "#f3efe6"
+    backgroundColor: colors.reviewSoft
   },
   suggestionLabelColumn: {
     gap: 2,
@@ -4988,8 +5371,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8
   },
   intentChipSelected: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink
+    backgroundColor: colors.accent,
+    borderColor: colors.accent
   },
   intentChipText: {
     color: colors.ink,
@@ -4997,7 +5380,7 @@ const styles = StyleSheet.create({
     fontWeight: "700"
   },
   intentChipTextSelected: {
-    color: colors.paper
+    color: colors.onAccent
   },
   noteInput: {
     backgroundColor: colors.soft,
@@ -5026,7 +5409,7 @@ const styles = StyleSheet.create({
   },
   compactActionRow: {
     alignItems: "center",
-    backgroundColor: colors.paper,
+    backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
@@ -5118,7 +5501,7 @@ const styles = StyleSheet.create({
   },
   smallButton: {
     alignSelf: "flex-start",
-    backgroundColor: colors.ink,
+    backgroundColor: colors.accent,
     borderRadius: 8,
     justifyContent: "center",
     minHeight: 44,
@@ -5126,34 +5509,42 @@ const styles = StyleSheet.create({
     paddingVertical: 8
   },
   smallButtonText: {
-    color: colors.paper,
+    color: colors.onAccent,
     fontSize: 13,
     fontWeight: "700"
   },
   errorText: {
-    color: "#9f3d2e",
+    color: colors.danger,
     fontSize: 14,
     lineHeight: 21
   },
   primaryButton: {
     alignItems: "center",
-    backgroundColor: colors.ink,
+    backgroundColor: colors.accent,
     borderRadius: 8,
     justifyContent: "center",
     minHeight: 50,
     paddingVertical: 14
   },
   primaryButtonPressed: {
-    backgroundColor: "#2a302d",
+    backgroundColor: "#9be6c2",
     transform: [{ scale: 0.99 }]
   },
   disabledButton: {
     opacity: 0.45
   },
   primaryButtonText: {
-    color: colors.paper,
+    color: colors.onAccent,
     fontSize: 16,
     fontWeight: "700"
+  },
+  destructiveButton: {
+    backgroundColor: colors.danger
+  },
+  destructiveButtonText: {
+    color: "#2d0b08",
+    fontSize: 16,
+    fontWeight: "800"
   },
   secondaryButton: {
     alignItems: "center",
@@ -5170,7 +5561,7 @@ const styles = StyleSheet.create({
     fontWeight: "700"
   },
   dangerButtonText: {
-    color: "#9f3d2e",
+    color: colors.danger,
     fontSize: 16,
     fontWeight: "700"
   },
@@ -5187,7 +5578,9 @@ const styles = StyleSheet.create({
   },
   snackbar: {
     alignItems: "center",
-    backgroundColor: colors.ink,
+    backgroundColor: colors.surfaceContainerHighest,
+    borderColor: colors.line,
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 8,
     bottom: Platform.OS === "android" ? 16 : 22,
     flexDirection: "row",
@@ -5201,14 +5594,14 @@ const styles = StyleSheet.create({
     right: 22
   },
   snackbarText: {
-    color: colors.paper,
+    color: colors.ink,
     flex: 1,
     fontSize: 14,
     fontWeight: "700",
     lineHeight: 19
   },
   snackbarAction: {
-    color: colors.accentSoft,
+    color: colors.accent,
     fontSize: 14,
     fontWeight: "800"
   }

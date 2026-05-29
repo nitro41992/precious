@@ -9,6 +9,7 @@ Related ADR: `docs/adr/0001-recent-captures-and-full-screen-search.md`.
 ## Product Shape
 
 - The app should feel like a polished consumer memory surface, not a dogfooding, audit, or extraction-review tool.
+- The consumer shell uses a calm dark Material 3-inspired surface hierarchy by default, not the earlier warm paper shell.
 - The default screen is `Recent Captures`: active Captures only, ordered by most recently captured.
 - Search is a primary product function and opens as its own full-screen Retrieval Lens.
 - Settings/account actions stay small and contextual.
@@ -23,7 +24,7 @@ Home must:
 
 - Show a large affordance such as `Search anything you saved` that opens full-screen Search.
 - Show active Captures grouped by recency, such as `Today`, `Yesterday`, `This week`, and `Earlier`.
-- Show each row as rich consumer content: title, source plus date/time, summary when available, `Saved as [intent]` when available, meaningful status when needed, and optional note preview.
+- Show each row as rich consumer content: optional existing thumbnail or shared image preview, title, source plus date/time, summary when available, `Saved as [intent]` when available, meaningful status when needed, and optional note preview.
 - Hide audit-like extraction details from rows, including model/provider names, analysis mode, confidence percentages, generic `Analyzed` labels, and debug state.
 - Keep extraction details persisted and searchable.
 - Provide designed loading, empty, error, long-content, processing, failed, and archived/filter states.
@@ -40,6 +41,7 @@ Search must:
 
 - Open as a full-screen, focused surface with a minimal search input.
 - Use rich result rows consistent with Home.
+- Show existing capture thumbnails or source imagery in result rows when available, with the same fallback rhythm as Home.
 - Search across title, summary, note, source, source URL, Save Intent, entities, collections, reminder suggestions, timestamps, and other persisted extraction details.
 - Use empty and loading states that feel intentionally designed.
 - Avoid chatbot framing unless a future product decision explicitly introduces it.
@@ -57,6 +59,7 @@ New Capture must:
 Capture Review must:
 
 - Feel like editing a saved memory, not inspecting an analysis report.
+- Lead with existing capture imagery or source media when available; otherwise use a richer source/intent header.
 - Lead with an editable sentence, such as `Saved as [try this place] in [Japan trip].`
 - Omit the collection phrase when no Collection is linked or suggested. A Capture may intentionally have no Collection.
 - Show `Add to collection` as a secondary action when relevant.

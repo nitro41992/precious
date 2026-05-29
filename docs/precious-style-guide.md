@@ -23,7 +23,7 @@ Mobbin access was limited during research: the supplied pages exposed title shel
 
 ### Apple Health
 
-- Borrow the quiet grouped-list system: light grouped background, near-white surfaces, dark text, muted metadata, thin dividers, and compact rows.
+- Borrow the quiet grouped-list system: low-glare dark grouped background, tonal surfaces, high-contrast text, muted metadata, thin dividers, and compact rows.
 - Lead with a curated retrieval surface, not an exhaustive database. In Precious, recent active Captures and full-screen Search should appear before archive-heavy browsing.
 - Use color only for meaning. Status, confidence, reminders, and collection suggestions may carry color; decoration should not.
 - Keep detail screens drill-in oriented: title and state first, source and summary next, review decisions in the middle, raw source and destructive actions last.
@@ -55,7 +55,7 @@ Mobbin access was limited during research: the supplied pages exposed title shel
 
 ## Design Principles
 
-- **Native Calm:** Use restrained native mobile patterns, compact hierarchy, warm neutral surfaces, and clear state labels.
+- **Native Calm:** Use restrained native mobile patterns, compact hierarchy, dark neutral tonal surfaces, and clear state labels.
 - **Capture First:** Saving must feel durable and immediate. Analysis and review happen after capture, not before it.
 - **Quiet Confidence:** Persist low-risk, reversible AI decisions quietly; ask before creating reminders, obligations, or new organizational structures.
 - **Guided Review:** Correction should feel like editing meaning with chips and short rationale, not filling out an analysis report.
@@ -71,23 +71,24 @@ Mobbin access was limited during research: the supplied pages exposed title shel
 
 ### Color Roles
 
-Use the existing warm-neutral palette as the base and add state colors sparingly.
+Use the dark neutral palette as the default app base and add state colors sparingly. The prior warm-paper palette is no longer the primary consumer shell direction.
 
 | Role | Token | Use |
 | --- | --- | --- |
-| Paper | `#f8faf7` | App background and sticky footers |
-| Surface | `#ffffff` | Bounded review blocks or grouped surfaces only |
-| Soft | `#edf4ef` | Inputs, segmented controls, inactive chips |
-| Ink | `#1d211f` | Primary text and high-emphasis actions |
-| Muted | `#66706a` | Metadata, helper text, secondary labels |
-| Line | `#dce4de` | Hairline dividers and subtle borders |
-| Accent | `#1f7a5b` | Primary action, ready, selected positive state |
-| Accent Soft | `#dcefe7` | Selected chip or successful quiet state |
-| Processing | `#5d7187` | Analyzing, syncing, queued |
-| Review | `#9a6b1f` | Needs review, maybe, action needed |
-| Review Soft | `#f3efe6` | Review callouts and changed suggestions |
-| Danger | `#9f3a2f` | Failed, destructive, could not save |
-| Archived | `#6d766f` | Archived or inactive state |
+| Paper | `#101411` | App background and sticky footers |
+| Surface | `#171c18` | Bounded review blocks or grouped surfaces only |
+| Surface Container | `#1d241f` | Search bars, sheets, rows with emphasis |
+| Surface Container High | `#252d27` | Pressed states, dense inputs, secondary panels |
+| Ink | `#eef5ef` | Primary text and high-emphasis actions |
+| Muted | `#a6b3aa` | Metadata, helper text, secondary labels |
+| Line | `#37413a` | Hairline dividers and subtle borders |
+| Accent | `#7bd7ad` | Primary action, ready, selected positive state |
+| Accent Soft | `#17382b` | Selected chip or successful quiet state |
+| Processing | `#9fc6e3` | Analyzing, syncing, queued |
+| Review | `#e2bd76` | Needs review, maybe, action needed |
+| Review Soft | `#342713` | Review callouts and changed suggestions |
+| Danger | `#ffb4a8` | Failed, destructive, could not save |
+| Archived | `#a6b3aa` | Archived or inactive state |
 
 Rules:
 
@@ -95,6 +96,7 @@ Rules:
 - Do not use confidence percentages or red/yellow/green scoring.
 - Pair color with text labels such as `Ready`, `Analyzing`, `Needs review`, `Failed`, or `Archived`.
 - Avoid pure black, pure white as the whole page background, purple gradients, glass effects, and decorative blobs.
+- Treat available source imagery, thumbnails, screenshots, and shared image assets as product content. Use them for rows and Capture Review headers when already persisted; do not add decorative imagery or new extraction work only to fill space.
 
 ### Typography
 
