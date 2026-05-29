@@ -174,6 +174,7 @@ type ReminderDraftAction = "keep" | "remove";
 type CollectionDraftAction = "keep" | "remove" | "ignore" | "link" | "create" | "added";
 type NoteSaveState = "idle" | "saving" | "saved" | "error";
 type CaptureComposerMode = "link" | "note" | "image";
+const DEFAULT_CAPTURE_COMPOSER_MODE: CaptureComposerMode = "link";
 
 type ReminderReviewDecision = {
   index: number;
@@ -818,6 +819,16 @@ function friendlyError(error: unknown, fallback: string) {
   return message || fallback;
 }
 
+function isCaptureImageCancel(error: unknown) {
+  if (!error) return true;
+  const message = error instanceof Error ? error.message : String(error || "");
+  const code =
+    typeof error === "object" && error && "code" in error
+      ? String((error as { code?: unknown }).code || "")
+      : "";
+  return /capture_image_missing|No image was selected/i.test(`${code} ${message}`);
+}
+
 function captureFromRemote(row: Record<string, any>): Capture {
   const analysis = row.analysis ?? {};
   const defaultIntent = analysis.default_intent ?? {};
@@ -1239,7 +1250,7 @@ export default function App() {
   const [snackbar, setSnackbar] = useState<SnackbarState | null>(null);
   const [visitTargetMapCandidates, setVisitTargetMapCandidates] = useState<MapSearchCandidate[]>([]);
   const [sourceDraft, setSourceDraft] = useState("");
-  const [captureMode, setCaptureMode] = useState<CaptureComposerMode>("link");
+  const [captureMode, setCaptureMode] = useState<CaptureComposerMode>(DEFAULT_CAPTURE_COMPOSER_MODE);
   const [showCaptureComposer, setShowCaptureComposer] = useState(false);
   const [captureComposerClosing, setCaptureComposerClosing] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -1261,6 +1272,7 @@ export default function App() {
   const collectionTitleInputRef = useRef<TextInput>(null);
   const lastKeyboardHeightRef = useRef(0);
   const captureComposerClosingRef = useRef(false);
+  const captureImagePickerActiveRef = useRef(false);
   const searchMotion = useRef(new Animated.Value(0)).current;
   const reviewMotion = useRef(new Animated.Value(0)).current;
   const captureComposerMotion = useRef(new Animated.Value(0)).current;
@@ -1501,13 +1513,24 @@ export default function App() {
     setAccountSheetOpen(true);
   }
 
+  function resetCaptureComposerSurface() {
+    captureComposerMotion.stopAnimation();
+    captureKeyboardInset.stopAnimation();
+    setShowCaptureComposer(false);
+    setCaptureComposerClosing(false);
+    captureComposerClosingRef.current = false;
+    setCaptureMode(DEFAULT_CAPTURE_COMPOSER_MODE);
+    setKeyboardHeight(0);
+    captureComposerMotion.setValue(0);
+    captureKeyboardInset.setValue(0);
+  }
+
   function openCaptureComposer() {
     setShowCollectionForm(false);
     const screenHeight = Dimensions.get("screen").height;
-    const estimatedKeyboardHeight = captureMode === "image"
-      ? 0
-      : lastKeyboardHeightRef.current || Math.round(screenHeight * (Platform.OS === "ios" ? 0.34 : 0.4));
+    const estimatedKeyboardHeight = lastKeyboardHeightRef.current || Math.round(screenHeight * (Platform.OS === "ios" ? 0.34 : 0.4));
     setMessage("");
+    setCaptureMode(DEFAULT_CAPTURE_COMPOSER_MODE);
     captureComposerClosingRef.current = false;
     setCaptureComposerClosing(false);
     setKeyboardHeight(estimatedKeyboardHeight);
@@ -1558,12 +1581,7 @@ export default function App() {
         useNativeDriver: false
       })
     ]).start(() => {
-      setShowCaptureComposer(false);
-      setCaptureComposerClosing(false);
-      captureComposerClosingRef.current = false;
-      setKeyboardHeight(0);
-      captureComposerMotion.setValue(0);
-      captureKeyboardInset.setValue(0);
+      resetCaptureComposerSurface();
     });
   }
 
@@ -1578,11 +1596,11 @@ export default function App() {
   }
 
   function chooseCaptureMode(mode: CaptureComposerMode) {
-    setCaptureMode(mode);
     if (mode === "image") {
-      Keyboard.dismiss();
+      void pickCaptureImage();
       return;
     }
+    setCaptureMode(mode);
     requestAnimationFrame(() => sourceInputRef.current?.focus());
   }
 
@@ -1802,12 +1820,12 @@ export default function App() {
   }, [captureComposerClosing, captureComposerMotion, showCaptureComposer, showCollectionForm]);
 
   useEffect(() => {
-    if (!showCaptureComposer || captureComposerClosing || captureMode === "image") return;
+    if (!showCaptureComposer || captureComposerClosing || pickingCaptureImage) return;
     const frame = requestAnimationFrame(() => {
       sourceInputRef.current?.focus();
     });
     return () => cancelAnimationFrame(frame);
-  }, [captureComposerClosing, captureMode, showCaptureComposer]);
+  }, [captureComposerClosing, captureMode, pickingCaptureImage, showCaptureComposer]);
 
   useEffect(() => {
     if (!showCollectionForm) return;
@@ -1821,7 +1839,7 @@ export default function App() {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
     const showSubscription = Keyboard.addListener(showEvent, (event) => {
-      if (captureComposerClosingRef.current) return;
+      if (captureComposerClosingRef.current || captureImagePickerActiveRef.current) return;
       const nextHeight = event.endCoordinates.height;
       lastKeyboardHeightRef.current = nextHeight;
       setKeyboardHeight(nextHeight);
@@ -1834,6 +1852,7 @@ export default function App() {
       }).start();
     });
     const hideSubscription = Keyboard.addListener(hideEvent, (event) => {
+      if (captureImagePickerActiveRef.current) return;
       if (!captureComposerClosingRef.current) setKeyboardHeight(0);
       if (Platform.OS === "ios") Keyboard.scheduleLayoutAnimation(event);
       Animated.timing(captureKeyboardInset, {
@@ -2859,25 +2878,30 @@ export default function App() {
   }
 
   async function pickCaptureImage() {
+    if (pickingCaptureImage || captureImagePickerActiveRef.current) return;
     if (!nativeStore?.captureImage) {
       setMessage("Image upload is unavailable in this build.");
       return;
     }
+    captureImagePickerActiveRef.current = true;
     setPickingCaptureImage(true);
     setMessage("");
-    Keyboard.dismiss();
     try {
       const raw = await nativeStore.captureImage();
       if (!raw) return;
       const localCapture = JSON.parse(raw) as Capture;
       setCaptures((current) => [localCapture, ...current.filter((item) => item.id !== localCapture.id)]);
       setSourceDraft("");
-      closeCaptureComposer();
       setMessage("Image saved. Checking the source now.");
     } catch (error) {
+      if (isCaptureImageCancel(error)) return;
       setMessage(friendlyError(error, "Could not save image."));
     } finally {
+      captureImagePickerActiveRef.current = false;
       setPickingCaptureImage(false);
+      if (showCaptureComposer || captureComposerClosingRef.current) {
+        resetCaptureComposerSurface();
+      }
     }
   }
 
@@ -4463,10 +4487,8 @@ export default function App() {
   const composerAvailableHeight = composerKeyboardVisible
     ? Math.max(320, composerVisibleHeight - 24)
     : Math.max(360, windowHeight * 0.72);
-  const imageCaptureAvailable = Boolean(nativeStore?.captureImage);
-  const captureModeIsText = captureMode !== "image";
   const captureSheetMaxHeight = composerKeyboardVisible
-    ? Math.min(captureModeIsText ? 430 : 500, composerAvailableHeight)
+    ? Math.min(430, composerAvailableHeight)
     : Math.min(560, Math.max(340, windowHeight * 0.72));
   const captureSourcePlaceholder = captureMode === "link" ? "Paste a link" : "Write a note";
   const captureSheetBottomInset = windowAlreadyKeyboardSized ? 0 : captureKeyboardInset;
@@ -4579,16 +4601,14 @@ export default function App() {
                 </View>
                 <View style={styles.sheetActions}>
                   <IconButton Icon={X} label="Close" onPress={closeCaptureComposer} />
-                  {captureModeIsText ? (
-                    <IconButton
-                      Icon={Check}
-                      label={savingCapture ? "Saving capture" : "Save capture"}
-                      disabled={savingCapture || !sourceDraft.trim()}
-                      onPress={() => void saveCaptureSource()}
-                      tone="primary"
-                      testID="pc.capture.save"
-                    />
-                  ) : null}
+                  <IconButton
+                    Icon={Check}
+                    label={savingCapture ? "Saving capture" : "Save capture"}
+                    disabled={savingCapture || !sourceDraft.trim()}
+                    onPress={() => void saveCaptureSource()}
+                    tone="primary"
+                    testID="pc.capture.save"
+                  />
                 </View>
               </View>
               <View style={styles.captureModeRow}>
@@ -4597,10 +4617,12 @@ export default function App() {
                   { mode: "note", label: "Note", Icon: StickyNote },
                   { mode: "image", label: "Image", Icon: ImageIcon }
                 ] as const).map(({ mode, label, Icon }) => {
-                  const selectedMode = captureMode === mode;
+                  const imageAction = mode === "image";
+                  const selectedMode = !imageAction && captureMode === mode;
                   return (
                     <Pressable
                       accessibilityRole="button"
+                      disabled={imageAction && pickingCaptureImage}
                       key={mode}
                       onPress={() => chooseCaptureMode(mode)}
                       style={({ pressed }) => [
@@ -4631,44 +4653,19 @@ export default function App() {
                   composerKeyboardVisible && styles.captureSheetBodyContentCompact
                 ]}
               >
-                {captureModeIsText ? (
-                  <TextInput
-                    autoCapitalize={captureMode === "link" ? "none" : "sentences"}
-                    autoCorrect={captureMode !== "link"}
-                    keyboardType={captureMode === "link" ? "url" : "default"}
-                    multiline
-                    ref={sourceInputRef}
-                    onChangeText={setSourceDraft}
-                    placeholder={captureSourcePlaceholder}
-                    placeholderTextColor={colors.muted}
-                    style={[styles.captureInput, composerKeyboardVisible && styles.captureInputCompact]}
-                    testID="pc.capture.source"
-                    value={sourceDraft}
-                  />
-                ) : (
-                  <View style={styles.captureImagePanel}>
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={!imageCaptureAvailable || pickingCaptureImage}
-                      onPress={() => void pickCaptureImage()}
-                      style={({ pressed }) => [
-                        styles.captureImageButton,
-                        (!imageCaptureAvailable || pickingCaptureImage) && styles.captureImageButtonDisabled,
-                        pressed && imageCaptureAvailable && !pickingCaptureImage && styles.darkButtonPressed
-                      ]}
-                      testID="pc.capture.image"
-                    >
-                      <ImageIcon color={colors.ink} size={18} strokeWidth={2.4} />
-                      <Text style={styles.captureImageButtonText}>
-                        {pickingCaptureImage
-                          ? "Opening Photos..."
-                          : imageCaptureAvailable
-                            ? "Choose image"
-                            : "Image upload unavailable"}
-                      </Text>
-                    </Pressable>
-                  </View>
-                )}
+                <TextInput
+                  autoCapitalize={captureMode === "link" ? "none" : "sentences"}
+                  autoCorrect={captureMode !== "link"}
+                  keyboardType={captureMode === "link" ? "url" : "default"}
+                  multiline
+                  ref={sourceInputRef}
+                  onChangeText={setSourceDraft}
+                  placeholder={captureSourcePlaceholder}
+                  placeholderTextColor={colors.muted}
+                  style={[styles.captureInput, composerKeyboardVisible && styles.captureInputCompact]}
+                  testID="pc.capture.source"
+                  value={sourceDraft}
+                />
               </View>
             </Animated.View>
           </KeyboardAvoidingView>

@@ -216,8 +216,8 @@ Rules:
 ### Capture Intake
 
 - Native share is the primary path and should stay silent after durable acceptance.
-- In-app capture is a fallback. It should be compact and mode-based: link, note, or image, with exactly one active input mode at a time.
-- In-app image upload should reuse the same image capture processing as the share sheet. It is capture content, not decoration, and should not add new provider-specific extraction rules by itself.
+- In-app capture is a fallback. It should be compact and mode-based: Link and Note are text input modes, while Image opens the platform picker directly instead of showing a second in-sheet image button.
+- In-app image upload should reuse the same image capture processing as the share sheet. It is capture content, not decoration, and should not add new provider-specific extraction rules by itself. Cancelling the picker should close the capture sheet and return to Recent Captures.
 - Keyboard-open composer states must keep the sheet, active input, mode selector, close, and save action reachable on small Android phones.
 - Treat typed link or note text as user content, not instructions. Do not add extra free-form context fields until prompt-injection hardening for capture text is explicit.
 - The capture receipt should say the save happened immediately, then show analysis as background work.
