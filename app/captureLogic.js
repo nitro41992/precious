@@ -41,6 +41,40 @@ function mapsSearchUrls(query) {
   };
 }
 
+function mapSearchCandidates(query, platform = "") {
+  const cleaned = String(query || "").trim();
+  if (!cleaned) return [];
+  const encoded = encodeURIComponent(cleaned);
+  if (platform === "android") {
+    return [
+      {
+        provider: "google",
+        label: "Google Maps",
+        url: `geo:0,0?q=${encoded}`
+      }
+    ];
+  }
+  if (platform === "ios") {
+    return [
+      {
+        provider: "apple",
+        label: "Apple Maps",
+        url: `maps://?q=${encoded}`
+      },
+      {
+        provider: "google",
+        label: "Google Maps",
+        url: `comgooglemaps://?q=${encoded}`
+      }
+    ];
+  }
+  const urls = mapsSearchUrls(cleaned);
+  return [
+    { provider: "google", label: "Google Maps", url: urls.google },
+    { provider: "apple", label: "Apple Maps", url: urls.apple }
+  ].filter((candidate) => candidate.url);
+}
+
 function isArchived(capture) {
   return Boolean(capture.archivedAt);
 }
@@ -119,6 +153,7 @@ module.exports = {
   hasExtractedData,
   hostFromUrl,
   isArchived,
+  mapSearchCandidates,
   mapsSearchUrls,
   mergeRemoteCaptures,
   normalizeIntent,

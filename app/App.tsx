@@ -54,13 +54,14 @@ import {
 import Svg, { Circle, Path } from "react-native-svg";
 
 import saveIntents from "../supabase/functions/_shared/save-intents.json";
+import type { MapSearchCandidate } from "./captureLogic";
 import {
   confidenceRequiresReview,
   displayStatus,
   extractHttpUrl,
   hostFromUrl,
   isArchived,
-  mapsSearchUrls,
+  mapSearchCandidates,
   mergeRemoteCaptures,
   normalizeIntent as normalizeKnownIntent,
   parseCaptureUrl,
@@ -1236,6 +1237,7 @@ export default function App() {
   const [draftIntentDirty, setDraftIntentDirty] = useState(false);
   const [message, setMessage] = useState("");
   const [snackbar, setSnackbar] = useState<SnackbarState | null>(null);
+  const [visitTargetMapCandidates, setVisitTargetMapCandidates] = useState<MapSearchCandidate[]>([]);
   const [sourceDraft, setSourceDraft] = useState("");
   const [captureMode, setCaptureMode] = useState<CaptureComposerMode>("link");
   const [showCaptureComposer, setShowCaptureComposer] = useState(false);
@@ -1874,10 +1876,38 @@ export default function App() {
     ? collections.find((collection) => collection.id === selectedCollectionId) ?? null
     : null;
   const selectedDraftKey = selected ? captureDraftKey(selected) : "";
+  const selectedVisitTargetQuery = selected?.visitTarget?.query || "";
 
   useEffect(() => {
     latestNoteRef.current = draftNote;
   }, [draftNote]);
+
+  useEffect(() => {
+    const candidates = mapSearchCandidates(selectedVisitTargetQuery, Platform.OS);
+    if (!candidates.length) {
+      setVisitTargetMapCandidates([]);
+      return;
+    }
+    let cancelled = false;
+    setVisitTargetMapCandidates([]);
+    Promise.all(
+      candidates.map(async (candidate) => {
+        try {
+          return await Linking.canOpenURL(candidate.url) ? candidate : null;
+        } catch {
+          return null;
+        }
+      })
+    ).then((availableCandidates) => {
+      if (cancelled) return;
+      setVisitTargetMapCandidates(
+        availableCandidates.filter((candidate): candidate is MapSearchCandidate => Boolean(candidate))
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedVisitTargetQuery]);
 
   useEffect(() => {
     if (!snackbar) return;
@@ -2715,14 +2745,11 @@ export default function App() {
     }
   }
 
-  async function openVisitTargetMaps(target: VisitTarget, provider: "google" | "apple") {
-    const urls = mapsSearchUrls(target.query);
-    const url = provider === "google" ? urls.google : urls.apple;
-    if (!url) return;
+  async function openVisitTargetMaps(candidate: MapSearchCandidate) {
     try {
-      await Linking.openURL(url);
+      await Linking.openURL(candidate.url);
     } catch {
-      setMessage(`Could not open ${provider === "google" ? "Google Maps" : "Apple Maps"}.`);
+      setMessage(`Could not open ${candidate.label}.`);
     }
   }
 
@@ -3612,6 +3639,7 @@ export default function App() {
     const collectionActionPending = Boolean(collectionChoiceSaving);
     const urlEvidenceNotice = urlEvidenceMessage(selected.urlEvidence);
     const selectedVisitTarget = selected.visitTarget;
+    const selectedVisitTargetMapCandidates = selectedVisitTarget ? visitTargetMapCandidates : [];
     const selectedSourceMeta = `${captureSourceLabel(selected)} · ${formatDateTime(selected.createdAt)}`;
     const noteStatusLabel =
       noteSaveState === "saving"
@@ -4072,7 +4100,7 @@ export default function App() {
             ) : null}
               {collectionPickerContent}
             </View>
-            {selectedVisitTarget ? (
+            {selectedVisitTarget && selectedVisitTargetMapCandidates.length ? (
               <View style={styles.sourceBlock}>
                 <Text style={styles.meta}>Open in Maps</Text>
                 <View style={styles.mapTargetRow}>
@@ -4092,18 +4120,15 @@ export default function App() {
                   ) : null}
                 </View>
                 <View style={styles.mapActionRow}>
-                  <Pressable
-                    onPress={() => void openVisitTargetMaps(selectedVisitTarget, "google")}
-                    style={({ pressed }) => [styles.mapActionButton, pressed && styles.subtlePressed]}
-                  >
-                    <Text style={styles.inlineAction}>Google Maps</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => void openVisitTargetMaps(selectedVisitTarget, "apple")}
-                    style={({ pressed }) => [styles.mapActionButton, pressed && styles.subtlePressed]}
-                  >
-                    <Text style={styles.inlineAction}>Apple Maps</Text>
-                  </Pressable>
+                  {selectedVisitTargetMapCandidates.map((candidate) => (
+                    <Pressable
+                      key={`${candidate.provider}:${candidate.url}`}
+                      onPress={() => void openVisitTargetMaps(candidate)}
+                      style={({ pressed }) => [styles.mapActionButton, pressed && styles.subtlePressed]}
+                    >
+                      <Text style={styles.inlineAction}>{candidate.label}</Text>
+                    </Pressable>
+                  ))}
                 </View>
               </View>
             ) : null}

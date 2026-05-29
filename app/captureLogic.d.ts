@@ -1,5 +1,11 @@
 export type CaptureStatus = "processing" | "ready" | "needs_review" | "failed";
 export type ReviewReason = "intent" | "collection" | "analysis";
+export type MapProvider = "google" | "apple";
+export type MapSearchCandidate = {
+  provider: MapProvider;
+  label: string;
+  url: string;
+};
 
 type ReviewableCapture = {
   status: CaptureStatus;
@@ -28,6 +34,7 @@ export function extractHttpUrl(value?: string | null): string;
 export function hasExtractedData(capture: StatusCapture): boolean;
 export function hostFromUrl(value?: string | null): string;
 export function isArchived(capture: { archivedAt?: number | null }): boolean;
+export function mapSearchCandidates(query?: string | null, platform?: string): MapSearchCandidate[];
 export function mapsSearchUrls(query?: string | null): { google: string; apple: string };
 export function mergeRemoteCaptures<T extends SortableCapture>(
   remoteCaptures: T[],

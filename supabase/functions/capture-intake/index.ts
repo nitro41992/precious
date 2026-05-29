@@ -3402,6 +3402,7 @@ function buildPrompt(
     "If URL evidence is weak and web search is available, search for the exact shared URL, canonical URL, exact title, or stable public identifier. Use only evidence that clearly matches that exact URL or identifier. Topic-level search results are not exact evidence.",
     "Extract visit_target_* only when the provided capture evidence references a real-world venue, business, restaurant, shop, park, hotel, event venue, or other place the user could intentionally visit.",
     "For visit_target_name, prefer the venue or business name over a dish, product, creator, neighborhood, or city. For visit_target_query, include disambiguating context from the title, caption, transcript, OCR, source profile, source text, image evidence, or user note when it would help Maps search.",
+    "When service-like or locator-style evidence could describe a generic category, visible brand, product, or storefront text may disambiguate the Visit Target. Use only the provided capture evidence, never a hard-coded brand list; do not create a Visit Target from a brand or product alone.",
     "This is a maps-searchable candidate, not verified place resolution. Never invent or return an address, latitude, longitude, phone number, hours, or place ID. verified_place must always be false.",
     "When there is no real-world visit target, set visit_target_name and visit_target_query to null, visit_target_confidence to none, visit_target_evidence to [], and verified_place to false.",
     "Suggest a reminder only when the evidence has a useful future trigger. Do not invent events, places, or deadlines.",
@@ -5912,6 +5913,7 @@ async function handleCollectionCapturesResource(
 
 export const __urlEvidenceTest = {
   bestEvidence,
+  buildPrompt,
   captureGateMetadata,
   captureGateNeedsReviewAnalysis,
   captureGatePrompt,

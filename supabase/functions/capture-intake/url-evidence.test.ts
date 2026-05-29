@@ -419,6 +419,33 @@ Deno.test("Visit target normalization keeps map candidates unverified", () => {
   assertEqual(empty.visit_target_name, null, "missing query clears name");
 });
 
+Deno.test("Visit target prompt allows brand-plus-service disambiguation from evidence only", () => {
+  const prompt = urlEvidence.buildPrompt(
+    captureFixture({
+      source_text: "Screenshot text: VEJA repair services near SoHo.",
+    }),
+    null,
+    [],
+  );
+  assert(
+    prompt.includes("service-like or locator-style evidence"),
+    "prompt should name service-like map evidence",
+  );
+  assert(
+    prompt.includes("visible brand, product, or storefront text"),
+    "prompt should allow visible brand/product text to disambiguate",
+  );
+  assert(
+    prompt.includes("Screenshot text: VEJA repair services near SoHo."),
+    "prompt should pass the capture evidence through",
+  );
+  const instructionText = prompt.slice(0, prompt.indexOf("\"source_app\""));
+  assert(
+    !instructionText.includes("VEJA"),
+    "prompt instructions should not hard-code a specific brand",
+  );
+});
+
 function captureFixture(overrides: Record<string, unknown> = {}): any {
   return {
     id: "capture-1",

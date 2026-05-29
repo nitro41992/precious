@@ -6,6 +6,7 @@ const {
   displayStatus,
   extractHttpUrl,
   hostFromUrl,
+  mapSearchCandidates,
   mapsSearchUrls,
   mergeRemoteCaptures,
   normalizeIntent,
@@ -54,6 +55,24 @@ test("mapsSearchUrls creates Google and Apple Maps search links from a query", (
     }
   );
   assert.deepEqual(mapsSearchUrls("  "), { google: "", apple: "" });
+});
+
+test("mapSearchCandidates uses native providers and omits unavailable platform providers", () => {
+  assert.deepEqual(
+    mapSearchCandidates("Sanwits Ribeye Caldereta sandwich", "android"),
+    [
+      {
+        provider: "google",
+        label: "Google Maps",
+        url: "geo:0,0?q=Sanwits%20Ribeye%20Caldereta%20sandwich"
+      }
+    ]
+  );
+  assert.deepEqual(mapSearchCandidates("  ", "android"), []);
+  assert.equal(
+    mapSearchCandidates("Sanwits", "android").some((candidate) => candidate.provider === "apple"),
+    false
+  );
 });
 
 test("reviewReasons prioritizes unresolved review causes and confirmed reviews stay ready", () => {

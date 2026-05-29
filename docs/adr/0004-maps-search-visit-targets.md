@@ -4,7 +4,7 @@ Status: accepted
 
 Precious should help users act on place-like captures without paying for canonical place resolution by default. When Capture Analysis can identify a real-world venue, business, restaurant, shop, park, hotel, event venue, or similar visitable place from existing capture evidence, it will persist a Visit Target: name, maps search query, confidence, evidence, and `verified_place: false`.
 
-The mobile app may turn the persisted query into Google Maps and Apple Maps search links. It must not store or imply a verified address, latitude/longitude, phone number, hours, business status, or place ID unless a future resolver explicitly verifies those fields.
+The mobile app may turn the persisted query into native Google Maps and Apple Maps search candidates when the provider is available on the device. It must not store or imply a verified address, latitude/longitude, phone number, hours, business status, or place ID unless a future resolver explicitly verifies those fields.
 
 ## Considered Options
 
@@ -16,6 +16,6 @@ The mobile app may turn the persisted query into Google Maps and Apple Maps sear
 
 - Visit Targets are suggestions, not canonical place records.
 - `verified_place` remains false until a future paid or explicit resolver verifies the place.
-- Capture Review may show `Open in Maps` actions for Google Maps and Apple Maps when a Visit Target exists.
+- Capture Review may show `Open in Maps` actions only for map providers that pass native open checks. Android should not show Apple Maps through a web fallback.
 - Search should include Visit Target names, queries, confidence, and evidence as Searchable Extraction Detail.
 - Future enrichment can run behind a user action or budget gate without changing the capture contract.
