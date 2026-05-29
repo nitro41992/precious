@@ -39,6 +39,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.106.2",
     "expo": "^56.0.4",
+    "expo-image": "^56.0.9",
     "lucide-react-native": "1.17.0",
     "next": "^16.2.6",
     "react": "19.2.3",

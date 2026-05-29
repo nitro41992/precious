@@ -32,6 +32,18 @@ type CaptureAssetRow = {
   mime_type: string | null;
 };
 
+type CaptureImageVariant = "thumb" | "detail";
+
+const CAPTURE_ASSET_SELECT =
+  "id,user_id,capture_id,storage_path,public_url,mime_type,byte_size,created_at";
+const CAPTURE_LIST_SELECT =
+  "id,user_id,client_capture_key,source_url,source_text,source_app,display_title,title,context_note,analysis_state,analysis_error,analysis,analysis_provider,analysis_mode,default_intent,current_save_intent,intent_rationale,thumbnail_url,capture_type,created_at,updated_at,processed_at,archived_at," +
+  `capture_assets(${CAPTURE_ASSET_SELECT})`;
+const CAPTURE_DETAIL_SELECT =
+  "*,capture_assets(*)";
+const COLLECTION_LIST_SELECT =
+  "id,user_id,title,description,status,created_by,archived_at,created_at,updated_at";
+
 type CapturePayload = {
   fields: Record<string, string>;
   asset: {
@@ -594,12 +606,45 @@ function withCaptureStates(rows: any[]) {
   return Array.isArray(rows) ? rows.map(withCaptureState) : [];
 }
 
-const CAPTURE_ASSET_SIGNED_URL_TTL_SECONDS = 15 * 60;
+const CAPTURE_ASSET_SIGNED_URL_TTL_SECONDS = 60 * 60;
+const CAPTURE_IMAGE_TRANSFORMS: Record<
+  CaptureImageVariant,
+  { width: number; height: number; resize: "cover"; quality: number }
+> = {
+  thumb: { width: 160, height: 160, resize: "cover", quality: 70 },
+  detail: { width: 1280, height: 744, resize: "cover", quality: 82 },
+};
+
+function boundedLimit(value: string | null, fallback: number, max: number) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.max(1, Math.min(Math.floor(numeric), max));
+}
+
+async function signedCaptureAssetUrl(
+  supabase: ReturnType<typeof adminClient>,
+  storagePath: string,
+  variant: CaptureImageVariant,
+) {
+  const bucket = supabase.storage.from("captures");
+  const transformed = await bucket.createSignedUrl(
+    storagePath,
+    CAPTURE_ASSET_SIGNED_URL_TTL_SECONDS,
+    { transform: CAPTURE_IMAGE_TRANSFORMS[variant] },
+  );
+  if (transformed.data?.signedUrl) return transformed.data.signedUrl;
+  const fallback = await bucket.createSignedUrl(
+    storagePath,
+    CAPTURE_ASSET_SIGNED_URL_TTL_SECONDS,
+  );
+  return fallback.data?.signedUrl || null;
+}
 
 async function withSignedCaptureAssets(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
   row: Record<string, unknown> | null | undefined,
+  variant: CaptureImageVariant = "thumb",
 ) {
   if (!row) return row;
   const assets = Array.isArray(row.capture_assets) ? row.capture_assets : [];
@@ -621,14 +666,13 @@ async function withSignedCaptureAssets(
       ) {
         return record;
       }
-      const signed = await supabase.storage.from("captures").createSignedUrl(
-        storagePath,
-        CAPTURE_ASSET_SIGNED_URL_TTL_SECONDS,
-      );
+      const signedUrl = await signedCaptureAssetUrl(supabase, storagePath, variant);
       return {
         ...record,
-        signed_url: signed.data?.signedUrl || null,
+        signed_url: signedUrl,
+        signed_url_variant: variant,
         signed_url_expires_in: CAPTURE_ASSET_SIGNED_URL_TTL_SECONDS,
+        signed_url_cache_key: `${storagePath}:${variant}`,
       };
     }),
   );
@@ -639,9 +683,10 @@ async function withSignedCaptureAssetRows(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
   rows: Array<Record<string, unknown>>,
+  variant: CaptureImageVariant = "thumb",
 ) {
   return await Promise.all(
-    rows.map((row) => withSignedCaptureAssets(supabase, userId, row)),
+    rows.map((row) => withSignedCaptureAssets(supabase, userId, row, variant)),
   );
 }
 
@@ -4583,6 +4628,7 @@ async function createOrGetCaptureWithAsset(
     asset.bytes,
     {
       contentType: asset.contentType || "application/octet-stream",
+      cacheControl: "31536000",
       upsert: false,
     },
   );
@@ -4642,6 +4688,21 @@ async function activeCollectionCounts(
 ) {
   const counts = new Map<string, number>();
   if (!collectionIds.length) return counts;
+  const grouped = await supabase.rpc("active_collection_capture_counts", {
+    p_user_id: userId,
+    p_collection_ids: collectionIds,
+  });
+  if (!grouped.error) {
+    for (const row of grouped.data ?? []) {
+      const record = row as Record<string, unknown>;
+      counts.set(
+        String(record.collection_id),
+        Number(record.capture_count || 0),
+      );
+    }
+    return counts;
+  }
+
   const { data, error } = await supabase
     .from("collection_capture_links")
     .select("collection_id")
@@ -4660,7 +4721,9 @@ async function attachLinkedCollections(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
   rows: Array<Record<string, unknown>>,
+  options: { includeRemovedOverrides?: boolean } = {},
 ) {
+  const includeRemovedOverrides = options.includeRemovedOverrides ?? true;
   const captureIds = rows.map((row) => String(row.id)).filter(Boolean);
   if (!captureIds.length) return rows;
   const { data, error } = await supabase
@@ -4698,7 +4761,8 @@ async function attachLinkedCollections(
       ]),
     );
   }
-  const removed = await supabase
+  const removed = includeRemovedOverrides
+    ? await supabase
     .from("collection_capture_links")
     .select(
       "capture_id, collection_id, rationale, confidence, unlinked_at, collections(id,title,description,status)",
@@ -4707,7 +4771,8 @@ async function attachLinkedCollections(
     .eq("created_by", "analysis")
     .in("capture_id", captureIds)
     .not("unlinked_at", "is", null)
-    .order("unlinked_at", { ascending: false });
+    .order("unlinked_at", { ascending: false })
+    : { data: [], error: null };
   const overridesByCapture = new Map<string, Array<Record<string, unknown>>>();
   if (!removed.error) {
     for (const link of removed.data ?? []) {
@@ -5634,14 +5699,20 @@ async function handleCollectionsResource(
 ) {
   if (request.method === "GET") {
     const archived = url.searchParams.get("archived") === "true";
-    const { data, error } = await supabase
+    const limit = boundedLimit(url.searchParams.get("limit"), 50, 100);
+    const before = url.searchParams.get("before");
+    let query = supabase
       .from("collections")
-      .select("*")
+      .select(COLLECTION_LIST_SELECT)
       .eq("user_id", userId)
       .eq("status", archived ? "archived" : "active")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(limit + 1);
+    if (before) query = query.lt("created_at", before);
+    const { data, error } = await query;
     if (error) throw error;
-    const rows = (data ?? []) as Array<Record<string, unknown>>;
+    const fetchedRows = (data ?? []) as Array<Record<string, unknown>>;
+    const rows = fetchedRows.slice(0, limit);
     const counts = await activeCollectionCounts(
       supabase,
       userId,
@@ -5649,6 +5720,9 @@ async function handleCollectionsResource(
     );
     return json({
       collections: rows.map((row) => collectionFromRow(row, counts)),
+      next_cursor: fetchedRows.length > limit
+        ? rows[rows.length - 1]?.created_at || null
+        : null,
     });
   }
 
@@ -5815,7 +5889,7 @@ async function handleCollectionLinksResource(
 
   const collection = await supabase
     .from("collections")
-    .select("id,status")
+    .select("id,title,description,status")
     .eq("user_id", userId)
     .eq("id", collectionId)
     .maybeSingle();
@@ -5881,33 +5955,56 @@ async function handleCollectionCapturesResource(
   if (collection.error) throw collection.error;
   if (!collection.data) return json({ error: "Collection not found" }, 404);
   if (collection.data.status === "archived") return json({ captures: [] });
+  const collectionRow = collection.data as Record<string, unknown>;
 
   const limit = Math.max(
     1,
-    Math.min(Number(url.searchParams.get("limit") || 100), 200),
+    Math.min(Number(url.searchParams.get("limit") || 30), 100),
   );
-  const { data, error } = await supabase
+  const before = url.searchParams.get("before");
+  let query = supabase
     .from("collection_capture_links")
-    .select("linked_at, captures(*, capture_assets(*))")
+    .select(`linked_at, captures(${CAPTURE_LIST_SELECT})`)
     .eq("user_id", userId)
     .eq("collection_id", collectionId)
     .is("unlinked_at", null)
     .order("linked_at", { ascending: false })
-    .limit(limit);
+    .limit(limit + 1);
+  if (before) query = query.lt("linked_at", before);
+  const { data, error } = await query;
   if (error) throw error;
 
-  const captureRows = (data ?? [])
+  const fetchedLinks = (data ?? []) as Array<Record<string, unknown>>;
+  const linkRows = fetchedLinks.slice(0, limit);
+  const captureRows = linkRows
     .map((row) => {
-      const captures = (row as Record<string, unknown>).captures;
-      return Array.isArray(captures) ? captures[0] : captures;
+      const captures = row.captures;
+      const capture = Array.isArray(captures) ? captures[0] : captures;
+      if (!capture || typeof capture !== "object") return null;
+      return {
+        ...(capture as Record<string, unknown>),
+        linked_collections: [
+          {
+            id: collectionId,
+            title: String(collectionRow.title || ""),
+            description: String(collectionRow.description || ""),
+            created_by: "user",
+            rationale: null,
+            confidence: null,
+            linked_at: row.linked_at || null,
+          },
+        ],
+      };
     })
     .filter(Boolean) as Array<Record<string, unknown>>;
-  const rows = await attachLinkedCollections(supabase, userId, captureRows);
-  const signedRows = await withSignedCaptureAssetRows(supabase, userId, rows);
+  const signedRows = await withSignedCaptureAssetRows(supabase, userId, captureRows);
   return json({
     captures: withCaptureStates(signedRows).filter((row) =>
       archivedFilter(row, false)
     ),
+    next_cursor: fetchedLinks.length > limit
+      ? linkRows[linkRows.length - 1]?.linked_at || null
+      : null,
   });
 }
 
@@ -5975,25 +6072,40 @@ if (import.meta.main) {
       if (request.method === "GET") {
         const clientCaptureKey = url.searchParams.get("clientCaptureKey");
         const archived = url.searchParams.get("archived") === "true";
+        const limit = boundedLimit(url.searchParams.get("limit"), 30, 100);
+        const before = url.searchParams.get("before");
         let query = supabase
           .from("captures")
-          .select("*, capture_assets(*)")
+          .select(clientCaptureKey ? CAPTURE_DETAIL_SELECT : CAPTURE_LIST_SELECT)
           .eq("user_id", user.id)
           .order("created_at", { ascending: false });
         if (clientCaptureKey) {
-          query = query.eq("client_capture_key", clientCaptureKey).limit(1);
-        } else query = query.limit(Number(url.searchParams.get("limit") || 50));
+          query = isUuid(clientCaptureKey)
+            ? query.or(`id.eq.${clientCaptureKey},client_capture_key.eq.${clientCaptureKey}`)
+            : query.eq("client_capture_key", clientCaptureKey);
+          query = query.limit(1);
+        } else {
+          query = archived
+            ? query.not("archived_at", "is", null)
+            : query.is("archived_at", null);
+          if (before) query = query.lt("created_at", before);
+          query = query.limit(limit + 1);
+        }
         const { data, error } = await query;
         if (error) throw error;
+        const fetchedRows = (data ?? []) as unknown as Array<Record<string, unknown>>;
+        const pageRows = clientCaptureKey ? fetchedRows : fetchedRows.slice(0, limit);
         const rows = await attachLinkedCollections(
           supabase,
           user.id,
-          (data ?? []) as Array<Record<string, unknown>>,
+          pageRows,
+          { includeRemovedOverrides: Boolean(clientCaptureKey) },
         );
         const signedRows = await withSignedCaptureAssetRows(
           supabase,
           user.id,
           rows as Array<Record<string, unknown>>,
+          clientCaptureKey ? "detail" : "thumb",
         );
         if (clientCaptureKey) {
           return json({ capture: withCaptureState(signedRows?.[0] ?? null) });
@@ -6002,6 +6114,9 @@ if (import.meta.main) {
           captures: withCaptureStates(signedRows).filter((row) =>
             archivedFilter(row, archived)
           ),
+          next_cursor: fetchedRows.length > limit
+            ? pageRows[pageRows.length - 1]?.created_at || null
+            : null,
         });
       }
 
