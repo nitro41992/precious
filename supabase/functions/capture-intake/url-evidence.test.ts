@@ -158,6 +158,69 @@ Deno.test("best URL evidence prefers rich oEmbed over generic shell metadata", (
   );
 });
 
+Deno.test("domain evidence profiles make YouTube oEmbed beat HTML shell metadata", () => {
+  const sourceUrl =
+    "https://youtube.com/watch?v=oTJSHLRYBhE&si=ELKZ-57_rieHQKer";
+  const rich = urlEvidence.oembedMetadata(
+    {
+      type: "video",
+      version: "1.0",
+      provider_name: "YouTube",
+      title: "007 First Light - Before You Buy",
+      author_name: "gameranx",
+      author_url: "https://www.youtube.com/@gameranxTV",
+      thumbnail_url: "https://i.ytimg.com/vi/oTJSHLRYBhE/hqdefault.jpg",
+    },
+    sourceUrl,
+  );
+  assert(rich, "YouTube oEmbed fixture did not produce evidence");
+
+  const genericHtml = {
+    ...rich,
+    status: "success",
+    source: "openlink_html",
+    confidence: 0.75,
+    sourceUrl,
+    finalUrl: "https://www.youtube.com/watch?v=oTJSHLRYBhE&si=ELKZ-57_rieHQKer",
+    canonical: "https://www.youtube.com/undefined",
+    host: "youtube.com",
+    provider: "www.youtube.com",
+    siteName: "www.youtube.com",
+    type: null,
+    title: "- YouTube",
+    description:
+      "Enjoy the videos and music you love, upload original content, and share it all with friends, family, and the world on YouTube.",
+    image: null,
+    video: null,
+    authorName: null,
+    authorUrl: null,
+    text:
+      "- YouTube About Press Copyright Contact us Creators Advertise Developers Terms Privacy Policy & Safety How YouTube works Test new features NFL Sunday Ticket " +
+      "window.ytAtN({});".repeat(20),
+    entities: [],
+    raw: {},
+    error: null,
+  };
+
+  const best = urlEvidence.bestEvidence([genericHtml as any, rich]);
+  assert(best, "best evidence missing");
+  assertEqual(
+    best.title,
+    "007 First Light - Before You Buy",
+    "best evidence should keep the real YouTube title",
+  );
+  assertIncludes(
+    urlEvidence.weaknessReasons(genericHtml as any),
+    "generic_platform_metadata",
+    "YouTube shell evidence should be marked generic",
+  );
+  assertEqual(
+    urlEvidence.normalizedUrlEvidence(genericHtml as any).canonical_url,
+    "",
+    "invalid YouTube canonical should be omitted from normalized evidence",
+  );
+});
+
 Deno.test("known oEmbed endpoint supports canonical TikTok video URLs", () => {
   const endpoint = urlEvidence.oembedEndpoint(
     "https://www.tiktok.com/@scout2015/video/6718335390845095173",
@@ -176,14 +239,28 @@ Deno.test("Tier 1 canonicalization creates provider-ready URL candidates", () =>
       expected: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     },
     {
+      url: "https://youtu.be/oTJSHLRYBhE?si=j_tWfjfBKKBWQp49",
+      expected: "https://www.youtube.com/watch?v=oTJSHLRYBhE",
+    },
+    {
       url:
         "https://www.tiktok.com/@ssjeli/video/7633858537852079390?_r=1&utm_source=x",
       expected: "https://www.tiktok.com/@ssjeli/video/7633858537852079390",
     },
     {
       url:
+        "https://www.tiktok.com/@ssjeli/video/7633858537852079390?_r=1&_t=ZP-96kyNdT9HUk",
+      expected: "https://www.tiktok.com/@ssjeli/video/7633858537852079390",
+    },
+    {
+      url:
         "https://www.instagram.com/reel/C0abcDEF123/?igsh=abc&utm_source=share",
       expected: "https://www.instagram.com/reel/C0abcDEF123/",
+    },
+    {
+      url:
+        "https://www.instagram.com/reel/DY0pJskIjoe/?igsh=MWxlODJmM2cxaHVr",
+      expected: "https://www.instagram.com/reel/DY0pJskIjoe/",
     },
     {
       url: "https://www.threads.net/@precious/post/C1234567890?xmt=AQGz",
@@ -371,6 +448,66 @@ Deno.test("Tier 1 platform detection avoids treating commerce and maps as social
     "spotify",
     "Spotify platform",
   );
+});
+
+Deno.test("domain evidence profiles mark platform shell metadata per domain", () => {
+  const shells = [
+    {
+      name: "TikTok shell",
+      sourceUrl: "https://www.tiktok.com/@ssjeli/video/7633858537852079390",
+      title: "TikTok - Make Your Day",
+      description: "TikTok - trends start here.",
+      text:
+        "Log in to follow creators, like videos, and view comments. Watch videos from creators you love.",
+    },
+    {
+      name: "Instagram shell",
+      sourceUrl: "https://www.instagram.com/reel/DY0pJskIjoe/",
+      title: "Instagram",
+      description:
+        "Create an account or log in to Instagram - Share what you're into with the people who get you.",
+      text:
+        "Create an account or log in to Instagram. Sign up to see photos and videos from friends, family and interests around the world.",
+    },
+  ];
+
+  for (const shell of shells) {
+    const evidence = {
+      status: "success",
+      source: "openlink_html",
+      confidence: 0.75,
+      sourceUrl: shell.sourceUrl,
+      finalUrl: shell.sourceUrl,
+      canonical: shell.sourceUrl,
+      host: new URL(shell.sourceUrl).hostname.replace(/^www\./, ""),
+      provider: new URL(shell.sourceUrl).hostname,
+      siteName: new URL(shell.sourceUrl).hostname,
+      type: null,
+      title: shell.title,
+      description: shell.description,
+      image: null,
+      video: null,
+      favicon: null,
+      authorName: null,
+      authorUrl: null,
+      publishedAt: null,
+      modifiedAt: null,
+      text: shell.text,
+      entities: [],
+      raw: {},
+      error: null,
+    };
+    assertIncludes(
+      urlEvidence.weaknessReasons(evidence as any),
+      "generic_platform_metadata",
+      `${shell.name} should be marked generic`,
+    );
+    assertEqual(
+      urlEvidence.productEvidenceStatus(evidence as any),
+      "partial_evidence",
+      `${shell.name} should not be treated as fully extracted`,
+    );
+  }
 });
 
 Deno.test("Visit target normalization keeps map candidates unverified", () => {

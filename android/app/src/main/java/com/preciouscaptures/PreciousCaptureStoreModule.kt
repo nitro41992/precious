@@ -84,6 +84,31 @@ class PreciousCaptureStoreModule(
   }
 
   @ReactMethod
+  fun getCachedCapturePage(userId: String, mode: String, promise: Promise) {
+    try {
+      promise.resolve(PreciousCaptureStore.cachedCapturePage(reactContext, userId, mode))
+    } catch (error: Exception) {
+      promise.reject("capture_page_cache_read_failed", error)
+    }
+  }
+
+  @ReactMethod
+  fun setCachedCapturePage(
+    userId: String,
+    mode: String,
+    capturesJson: String,
+    nextCursor: String?,
+    promise: Promise
+  ) {
+    try {
+      PreciousCaptureStore.saveCapturePageCache(reactContext, userId, mode, capturesJson, nextCursor)
+      promise.resolve(true)
+    } catch (error: Exception) {
+      promise.reject("capture_page_cache_write_failed", error)
+    }
+  }
+
+  @ReactMethod
   fun captureSource(sourceText: String, promise: Promise) {
     try {
       if (configuredApiUrl().isNotBlank() && readNativeAuthSession(reactContext) == null) {

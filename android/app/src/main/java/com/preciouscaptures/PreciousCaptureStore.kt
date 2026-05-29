@@ -8,6 +8,7 @@ import java.util.UUID
 private const val STORE_PREFS = "precious_capture_store"
 private const val STORE_KEY = "captures"
 private const val REVIEW_DRAFTS_KEY = "capture_review_drafts"
+private const val CAPTURE_PAGE_CACHE_PREFIX = "capture_page_cache"
 
 object PreciousCaptureStore {
   @Synchronized
@@ -17,6 +18,37 @@ object PreciousCaptureStore {
       .getString(STORE_KEY, "[]")
       ?: "[]"
     return runCatching { JSONArray(raw) }.getOrDefault(JSONArray())
+  }
+
+  @Synchronized
+  fun cachedCapturePage(context: Context, userId: String, mode: String): String? {
+    if (userId.isBlank()) return null
+    val safeMode = if (mode == "archived") "archived" else "active"
+    return context
+      .getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE)
+      .getString(capturePageCacheKey(userId, safeMode), null)
+  }
+
+  @Synchronized
+  fun saveCapturePageCache(
+    context: Context,
+    userId: String,
+    mode: String,
+    capturesJson: String,
+    nextCursor: String?
+  ) {
+    if (userId.isBlank()) return
+    val safeMode = if (mode == "archived") "archived" else "active"
+    val captures = runCatching { JSONArray(capturesJson) }.getOrDefault(JSONArray())
+    val page = JSONObject()
+      .put("captures", captures)
+      .put("next_cursor", nextCursor ?: JSONObject.NULL)
+      .put("cached_at", System.currentTimeMillis())
+    context
+      .getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE)
+      .edit()
+      .putString(capturePageCacheKey(userId, safeMode), page.toString())
+      .apply()
   }
 
   @Synchronized
@@ -294,6 +326,10 @@ object PreciousCaptureStore {
       .edit()
       .putString(STORE_KEY, captures.toString())
       .commit()
+  }
+
+  private fun capturePageCacheKey(userId: String, mode: String): String {
+    return "$CAPTURE_PAGE_CACHE_PREFIX:$userId:$mode"
   }
 
   private fun enrichmentRequiresReview(enrichment: JSONObject): Boolean {

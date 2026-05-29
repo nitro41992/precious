@@ -163,6 +163,14 @@ type PreflightDecision = {
   evidence_summary: string;
 };
 
+type DomainEvidenceProfile = {
+  genericTitlePatterns: RegExp[];
+  genericDescriptionPatterns: RegExp[];
+  shellTextPatterns: RegExp[];
+  invalidCanonicalPatterns?: RegExp[];
+  preferredSourcePattern?: RegExp;
+};
+
 type CaptureGateDecision = {
   decision: "analyze" | "needs_review";
   rationale_code:
@@ -2232,6 +2240,141 @@ function contentTypeForPlatform(platform: string | null) {
   }
 }
 
+const domainEvidenceProfiles: Record<string, DomainEvidenceProfile> = {
+  youtube: {
+    genericTitlePatterns: [
+      /^-?\s*youtube\s*$/i,
+      /^youtube\s*-\s*$/i,
+    ],
+    genericDescriptionPatterns: [
+      /^enjoy the videos and music you love, upload original content, and share it all with friends, family, and the world on youtube\.?$/i,
+    ],
+    shellTextPatterns: [
+      /about press copyright contact us creators advertise developers terms privacy policy & safety how youtube works/i,
+      /new features nfl sunday ticket/i,
+      /window\.ytatn|ytcfg\.set|ytInitialData/i,
+    ],
+    invalidCanonicalPatterns: [
+      /\/(?:undefined|null)(?:[?#/]|$)/i,
+    ],
+    preferredSourcePattern: /oembed/i,
+  },
+  tiktok: {
+    genericTitlePatterns: [
+      /^tiktok\s*$/i,
+      /^tiktok\s*-\s*make your day\s*$/i,
+      /^make your day\s*$/i,
+    ],
+    genericDescriptionPatterns: [
+      /^tiktok\s*-\s*trends start here\.?/i,
+      /^watch short videos about/i,
+      /^make your day/i,
+    ],
+    shellTextPatterns: [
+      /log in to follow creators/i,
+      /watch videos from creators you love/i,
+      /download the app to discover new creators/i,
+    ],
+    invalidCanonicalPatterns: [
+      /\/(?:undefined|null)(?:[?#/]|$)/i,
+    ],
+    preferredSourcePattern: /oembed/i,
+  },
+  instagram: {
+    genericTitlePatterns: [
+      /^instagram\s*$/i,
+      /^login\s*•\s*instagram\s*$/i,
+      /^instagram\s*-\s*login\s*$/i,
+    ],
+    genericDescriptionPatterns: [
+      /^create an account or log in to instagram/i,
+      /^share what you're into with the people who get you/i,
+      /^log in to instagram/i,
+    ],
+    shellTextPatterns: [
+      /create an account or log in to instagram/i,
+      /sign up to see photos and videos/i,
+      /from friends, family and interests around the world/i,
+    ],
+    invalidCanonicalPatterns: [
+      /\/(?:undefined|null)(?:[?#/]|$)/i,
+    ],
+    preferredSourcePattern: /oembed/i,
+  },
+};
+
+function evidencePlatform(evidence: UrlEvidence | null) {
+  if (!evidence) return null;
+  return platformForUrl(
+    evidence.sourceUrl || evidence.finalUrl || evidence.canonical,
+  );
+}
+
+function evidenceDomainProfile(evidence: UrlEvidence | null) {
+  const platform = evidencePlatform(evidence);
+  return platform ? domainEvidenceProfiles[platform] || null : null;
+}
+
+function matchesAnyPattern(
+  value: string | null | undefined,
+  patterns: RegExp[] | undefined,
+) {
+  const text = String(value || "").trim();
+  return Boolean(text && patterns?.some((pattern) => pattern.test(text)));
+}
+
+function domainGenericTitle(evidence: UrlEvidence | null) {
+  return matchesAnyPattern(
+    evidence?.title,
+    evidenceDomainProfile(evidence)?.genericTitlePatterns,
+  );
+}
+
+function evidenceTitleIsGeneric(evidence: UrlEvidence | null) {
+  return genericTitle(evidence?.title) || domainGenericTitle(evidence);
+}
+
+function domainGenericDescription(evidence: UrlEvidence | null) {
+  return matchesAnyPattern(
+    evidence?.description,
+    evidenceDomainProfile(evidence)?.genericDescriptionPatterns,
+  );
+}
+
+function domainShellText(evidence: UrlEvidence | null) {
+  return matchesAnyPattern(
+    evidence?.text,
+    evidenceDomainProfile(evidence)?.shellTextPatterns,
+  );
+}
+
+function invalidDomainCanonical(evidence: UrlEvidence | null) {
+  return matchesAnyPattern(
+    evidence?.canonical,
+    evidenceDomainProfile(evidence)?.invalidCanonicalPatterns,
+  );
+}
+
+function canonicalUrlForEvidence(evidence: UrlEvidence | null) {
+  if (!evidence?.canonical || invalidDomainCanonical(evidence)) return null;
+  return evidence.canonical;
+}
+
+function substantiveDescription(evidence: UrlEvidence | null) {
+  return Boolean(evidence?.description && !domainGenericDescription(evidence));
+}
+
+function substantiveText(evidence: UrlEvidence | null) {
+  return Boolean(
+    evidence?.text && evidence.text.length >= 180 && !domainShellText(evidence),
+  );
+}
+
+function preferredDomainSource(evidence: UrlEvidence | null) {
+  const pattern = evidenceDomainProfile(evidence)?.preferredSourcePattern;
+  return Boolean(pattern && evidence?.source && pattern.test(evidence.source));
+}
+
 function contentTypeGuess(evidence: UrlEvidence | null) {
   if (!evidence) return null;
   const type = String(evidence.type || "").toLowerCase();
@@ -2297,11 +2440,18 @@ function weaknessReasons(evidence: UrlEvidence | null) {
   if (!evidence) return ["no_url_evidence"];
   if (evidence.status !== "success") reasons.push(`status_${evidence.status}`);
   if (!evidence.title) reasons.push("missing_title");
-  else if (genericTitle(evidence.title)) reasons.push("generic_title");
+  else if (evidenceTitleIsGeneric(evidence)) reasons.push("generic_title");
   if (!evidence.description && !evidence.text) {
     reasons.push("missing_description_or_text");
   }
-  if (evidence.text && evidence.text.length < 180) reasons.push("short_text");
+  if (domainGenericDescription(evidence)) reasons.push("generic_description");
+  if (domainShellText(evidence)) reasons.push("platform_shell_text");
+  if (invalidDomainCanonical(evidence)) reasons.push("invalid_canonical");
+  if (
+    evidence.text && evidence.text.length < 180 && !domainShellText(evidence)
+  ) {
+    reasons.push("short_text");
+  }
   if (!contentTypeGuess(evidence)) reasons.push("missing_content_type");
   if (
     blockPageText(evidence.title) || blockPageText(evidence.description) ||
@@ -2309,14 +2459,17 @@ function weaknessReasons(evidence: UrlEvidence | null) {
   ) {
     reasons.push("blocked_or_login_page");
   }
-  const lacksSubstantivePlatformEvidence = !evidence.description &&
-    !evidence.text &&
+  const lacksSubstantivePlatformEvidence = !substantiveDescription(evidence) &&
+    !substantiveText(evidence) &&
     !evidence.image &&
     !evidence.video &&
-    !evidence.entities.length;
+    !evidence.entities.length &&
+    !evidence.authorName;
   if (
     platformForUrl(evidence.sourceUrl) !== "generic" &&
-    (genericTitle(evidence.title) || lacksSubstantivePlatformEvidence)
+    (evidenceTitleIsGeneric(evidence) || domainGenericDescription(evidence) ||
+      domainShellText(evidence) || invalidDomainCanonical(evidence) ||
+      lacksSubstantivePlatformEvidence)
   ) {
     reasons.push("generic_platform_metadata");
   }
@@ -2349,8 +2502,8 @@ function evidenceQuality(evidence: UrlEvidence | null): EvidenceQuality {
     evidence.status === "success" &&
     evidence.confidence >= 0.78 &&
     evidence.title &&
-    !genericTitle(evidence.title) &&
-    (evidence.description || (evidence.text && evidence.text.length >= 180) ||
+    !evidenceTitleIsGeneric(evidence) &&
+    (substantiveDescription(evidence) || substantiveText(evidence) ||
       evidence.image || evidence.video)
   ) {
     return reasons.includes("blocked_or_login_page") ||
@@ -2364,7 +2517,10 @@ function evidenceQuality(evidence: UrlEvidence | null): EvidenceQuality {
     (evidence.title || evidence.description || evidence.text ||
       evidence.entities.length)
   ) {
-    return reasons.includes("blocked_or_login_page") ? "low" : "medium";
+    return reasons.includes("blocked_or_login_page") ||
+        reasons.includes("generic_platform_metadata")
+      ? "low"
+      : "medium";
   }
   return evidence.title || evidence.description || evidence.text ||
       evidence.entities.length
@@ -2388,7 +2544,8 @@ function productEvidenceStatus(
 
 function missingEvidence(evidence: UrlEvidence | null) {
   const missing: string[] = [];
-  if (!evidence?.canonical || evidence.canonical === evidence.sourceUrl) {
+  const canonical = canonicalUrlForEvidence(evidence);
+  if (!canonical || canonical === evidence?.sourceUrl) {
     missing.push("canonical_url");
   }
   if (!evidence?.title) missing.push("title");
@@ -2413,6 +2570,7 @@ function normalizedUrlEvidence(
 ) {
   const normalizedUrl = evidence?.sourceUrl ||
     normalizeUrl(options.originalUrl) || "";
+  const canonicalUrl = canonicalUrlForEvidence(evidence) || "";
   const status = productEvidenceStatus(evidence);
   const quality = evidenceQuality(evidence);
   const rawPipeline =
@@ -2428,7 +2586,7 @@ function normalizedUrlEvidence(
     evidence_quality: quality,
     original_url: options.originalUrl || normalizedUrl || "",
     normalized_url: normalizedUrl || "",
-    canonical_url: evidence?.canonical || "",
+    canonical_url: canonicalUrl,
     client_resolved_url: options.clientResolvedUrl ||
       stringValue(evidence?.raw?.client_resolved_url) || "",
     provider: evidence?.provider || "",
@@ -2494,14 +2652,14 @@ function compactUrlEvidence(
   if (!evidence) return null;
   const reasons = weaknessReasons(evidence);
   const itemSpecificUrlSignal = hasItemSpecificUrlSignal(evidence.finalUrl) ||
-    hasItemSpecificUrlSignal(evidence.canonical) ||
+    hasItemSpecificUrlSignal(canonicalUrlForEvidence(evidence)) ||
     hasItemSpecificUrlSignal(evidence.sourceUrl);
   return {
     url: evidence.sourceUrl,
     status: productEvidenceStatus(evidence),
     evidence_quality: evidenceQuality(evidence),
     final_url: evidence.finalUrl,
-    canonical_url: evidence.canonical,
+    canonical_url: canonicalUrlForEvidence(evidence),
     client_resolved_url: stringValue(evidence.raw?.client_resolved_url),
     source_domain: evidence.host,
     content_type_guess: contentTypeGuess(evidence),
@@ -2642,7 +2800,7 @@ async function persistUrlEvidence(
         original_url_hash: originalUrlHash,
         original_url: originalUrl,
         final_url: evidence.finalUrl,
-        canonical_url: evidence.canonical,
+        canonical_url: canonicalUrlForEvidence(evidence),
         client_resolved_url: options.clientResolvedUrl ||
           stringValue(evidence.raw?.client_resolved_url),
         host: evidence.host,
@@ -2727,11 +2885,11 @@ function isOpaqueOrAppShareUrl(value: string | null | undefined) {
 function hasSubstantiveUrlEvidence(evidence: UrlEvidence | null) {
   if (!evidence) return false;
   return Boolean(
-    (evidence.title && !genericTitle(evidence.title)) ||
-      evidence.description ||
+    (evidence.title && !evidenceTitleIsGeneric(evidence)) ||
+      substantiveDescription(evidence) ||
       evidence.image ||
       evidence.video ||
-      (evidence.text && evidence.text.length >= 180) ||
+      substantiveText(evidence) ||
       evidence.entities.length,
   );
 }
@@ -2802,18 +2960,22 @@ function evidenceQualityScore(evidence: UrlEvidence | null) {
   if (evidence.status === "failed" || evidence.status === "blocked") {
     score -= 100;
   }
-  if (evidence.title && !genericTitle(evidence.title)) score += 30;
-  if (evidence.description) score += 25;
-  if (evidence.text && evidence.text.length >= 180) score += 20;
+  if (evidence.title && !evidenceTitleIsGeneric(evidence)) score += 30;
+  if (substantiveDescription(evidence)) score += 25;
+  if (substantiveText(evidence)) score += 20;
   if (evidence.image || evidence.video) score += 12;
   if (evidence.entities.length) {
     score += Math.min(20, evidence.entities.length * 5);
   }
-  if (evidence.canonical && evidence.canonical !== evidence.sourceUrl) {
+  const canonical = canonicalUrlForEvidence(evidence);
+  if (canonical && canonical !== evidence.sourceUrl) {
     score += 8;
   }
   for (const reason of weaknessReasons(evidence)) score -= 10;
   if (/json|oembed/i.test(evidence.source)) score += 10;
+  if (preferredDomainSource(evidence) && hasSubstantiveUrlEvidence(evidence)) {
+    score += 25;
+  }
   return score;
 }
 
@@ -2856,7 +3018,7 @@ async function extractOembedEvidenceForUrl(
         ...extracted,
         source,
         finalUrl: targetUrl,
-        canonical: extracted.canonical || targetUrl,
+        canonical: targetUrl || extracted.canonical,
         host: hostFromUrl(targetUrl),
       },
       { phase: source, target_url: targetUrl },
@@ -2874,7 +3036,7 @@ async function extractOembedEvidenceForUrl(
       ...evidence,
       source,
       finalUrl: targetUrl,
-      canonical: evidence.canonical || targetUrl,
+      canonical: targetUrl || evidence.canonical,
       host: hostFromUrl(targetUrl),
     },
     { phase: source, target_url: targetUrl },
@@ -3823,14 +3985,14 @@ function isGenericPlatformShell(
   if (!evidence) return false;
   const reasons = weaknessReasons(evidence);
   const hasSubstantiveEvidence = Boolean(
-    evidence.description ||
+    substantiveDescription(evidence) ||
       evidence.image ||
       evidence.video ||
       evidence.entities.length ||
-      (evidence.text && evidence.text.length >= 180),
+      substantiveText(evidence),
   );
   const hasItemSignal = hasItemSpecificUrlSignal(evidence.finalUrl) ||
-    hasItemSpecificUrlSignal(evidence.canonical) ||
+    hasItemSpecificUrlSignal(canonicalUrlForEvidence(evidence)) ||
     hasItemSpecificUrlSignal(evidence.sourceUrl) ||
     hasUsefulSharedText(capture);
   return !hasSubstantiveEvidence && (
@@ -3847,7 +4009,7 @@ function shouldAttemptExtractionFromUrlSignal(
 ) {
   return Boolean(
     hasItemSpecificUrlSignal(evidence?.finalUrl) ||
-      hasItemSpecificUrlSignal(evidence?.canonical) ||
+      hasItemSpecificUrlSignal(canonicalUrlForEvidence(evidence || null)) ||
       hasItemSpecificUrlSignal(evidence?.sourceUrl) ||
       hasItemSpecificUrlSignal(capture.source_url) ||
       hasUsefulSharedText(capture),
@@ -3887,7 +4049,7 @@ function applyPreflightPolicy(
       evidence_summary: [
         "Weak metadata was not enough by itself, but the URL or shared text is item-specific.",
         `source_url=${JSON.stringify(capture.source_url || null)}`,
-        `canonical=${JSON.stringify(urlEvidence?.canonical || null)}`,
+        `canonical=${JSON.stringify(canonicalUrlForEvidence(urlEvidence))}`,
         `final_url=${JSON.stringify(urlEvidence?.finalUrl || null)}`,
         `weakness_reasons=${weaknessReasons(urlEvidence).join(",")}`,
       ].join(" "),

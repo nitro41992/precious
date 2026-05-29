@@ -56,6 +56,7 @@ import Svg, { Circle, Path } from "react-native-svg";
 import saveIntents from "../supabase/functions/_shared/save-intents.json";
 import type { MapSearchCandidate } from "./captureLogic";
 import {
+  LOCAL_PROCESSING_GRACE_MS,
   confidenceRequiresReview,
   displayStatus,
   extractHttpUrl,
@@ -217,6 +218,13 @@ type CaptureStore = {
   captureImage?: () => Promise<string | null>;
   submitExpandedUrl?: (id: string, expandedUrl: string) => Promise<string>;
   getCaptures: () => Promise<string>;
+  getCachedCapturePage?: (userId: string, mode: "active" | "archived") => Promise<string | null>;
+  setCachedCapturePage?: (
+    userId: string,
+    mode: "active" | "archived",
+    capturesJson: string,
+    nextCursor: string | null
+  ) => Promise<boolean>;
   updateCapture: (id: string, title: string, note: string, currentSaveIntent: string | null) => Promise<string>;
   confirmCaptureReview?: (id: string, title: string, note: string, currentSaveIntent: string | null) => Promise<string>;
   getReviewDrafts?: () => Promise<string | null>;
@@ -295,6 +303,8 @@ type SnackbarState = {
 };
 
 const PROCESSING_REFRESH_MS = 3000;
+const CAPTURE_PAGE_SIZE = 18;
+const COLLECTION_CAPTURE_PAGE_SIZE = 18;
 const CAPTURE_LIST_PERF_PROPS = {
   initialNumToRender: 8,
   maxToRenderPerBatch: 8,
@@ -967,7 +977,7 @@ function isEdgeCaptureApi(apiUrl: string) {
 function captureListUrl(apiUrl: string, archived = false, params: { limit?: number; before?: string | null } = {}) {
   const url = new URL(isEdgeCaptureApi(apiUrl) ? apiUrl : `${apiUrl}/api/captures`);
   if (!isEdgeCaptureApi(apiUrl)) url.searchParams.set("view", "summary");
-  url.searchParams.set("limit", String(params.limit || 30));
+  url.searchParams.set("limit", String(params.limit || CAPTURE_PAGE_SIZE));
   url.searchParams.set("archived", archived ? "true" : "false");
   if (params.before) url.searchParams.set("before", params.before);
   return url.toString();
@@ -1038,6 +1048,56 @@ function collectionChoiceOverrideFromRemote(row: Record<string, any>): Collectio
     source: nullableValue(row.source),
     restoredDecisions
   };
+}
+
+function cachedCapturePageFromRaw(raw: string | null | undefined) {
+  if (!raw) return { captures: [] as Capture[], nextCursor: null as string | null };
+  try {
+    const parsed = JSON.parse(raw) as { captures?: unknown; next_cursor?: unknown; nextCursor?: unknown };
+    const captures = Array.isArray(parsed.captures)
+      ? parsed.captures
+          .filter((item): item is Capture => {
+            if (!item || typeof item !== "object") return false;
+            const capture = item as Partial<Capture>;
+            return typeof capture.id === "string" && Number.isFinite(Number(capture.createdAt));
+          })
+          .map((capture) => ({
+            ...capture,
+            createdAt: Number(capture.createdAt),
+            updatedAt: Number(capture.updatedAt || capture.createdAt),
+            processedAt: capture.processedAt ? Number(capture.processedAt) : null
+          }))
+      : [];
+    return {
+      captures,
+      nextCursor: nullableValue(parsed.next_cursor || parsed.nextCursor) || null
+    };
+  } catch {
+    return { captures: [] as Capture[], nextCursor: null as string | null };
+  }
+}
+
+function freshLocalProcessingCaptures(raw: string | null | undefined) {
+  if (!raw) return [] as Capture[];
+  try {
+    const now = Date.now();
+    const captures = JSON.parse(raw || "[]") as Capture[];
+    return sortCaptures(captures.filter((capture) => isFreshLocalProcessingCapture(capture, now)));
+  } catch {
+    return [];
+  }
+}
+
+function isFreshLocalProcessingCapture(capture: Capture, now = Date.now()) {
+  return (
+    !isArchived(capture) &&
+    displayStatus(capture) === "processing" &&
+    now - capture.createdAt < LOCAL_PROCESSING_GRACE_MS
+  );
+}
+
+function captureBelongsToCollection(capture: Capture, collectionId: string) {
+  return (capture.linkedCollections || []).some((collection) => collection.id === collectionId);
 }
 
 async function requestJson<T>(
@@ -1301,6 +1361,9 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState<"signin" | "signup" | null>(null);
   const latestNoteRef = useRef("");
   const autoAppliedCollectionKeysRef = useRef<Set<string>>(new Set());
+  const capturesRef = useRef<Capture[]>([]);
+  const archivedCapturesRef = useRef<Capture[]>([]);
+  const capturePageCacheHydratedRef = useRef<Record<CaptureListMode, string | null>>({ active: null, archived: null });
   const collectionsCacheRef = useRef<Record<CollectionListMode, Collection[]>>({ active: [], archived: [] });
   const collectionCapturesCacheRef = useRef<Record<string, Capture[]>>({});
   const collectionCapturesCursorCacheRef = useRef<Record<string, string | null>>({});
@@ -1310,6 +1373,7 @@ export default function App() {
   const sourceInputRef = useRef<TextInput>(null);
   const noteInputRef = useRef<TextInput>(null);
   const collectionTitleInputRef = useRef<TextInput>(null);
+  const collectionDetailListRef = useRef<FlatList<Capture>>(null);
   const lastKeyboardHeightRef = useRef(0);
   const captureComposerClosingRef = useRef(false);
   const captureImagePickerActiveRef = useRef(false);
@@ -1317,6 +1381,92 @@ export default function App() {
   const reviewMotion = useRef(new Animated.Value(0)).current;
   const captureComposerMotion = useRef(new Animated.Value(0)).current;
   const captureKeyboardInset = useRef(new Animated.Value(0)).current;
+
+  function commitCaptureRows(
+    mode: CaptureListMode,
+    updater: (current: Capture[]) => Capture[]
+  ) {
+    if (mode === "archived") {
+      const next = updater(archivedCapturesRef.current);
+      archivedCapturesRef.current = next;
+      setArchivedCaptures(next);
+      return next;
+    }
+    const next = updater(capturesRef.current);
+    capturesRef.current = next;
+    setCaptures(next);
+    return next;
+  }
+
+  function writeCachedCapturePage(mode: CaptureListMode, rows: Capture[], nextCursor: string | null) {
+    if (!session?.userId || !nativeStore?.setCachedCapturePage) return;
+    void nativeStore.setCachedCapturePage(
+      session.userId,
+      mode,
+      JSON.stringify(rows.slice(0, CAPTURE_PAGE_SIZE + 4)),
+      nextCursor
+    ).catch(() => {
+      // The cache is only a startup speed aid; live network data remains authoritative.
+    });
+  }
+
+  async function hydrateCachedCapturePage(mode: CaptureListMode) {
+    if (!session?.userId || !nativeStore?.getCachedCapturePage) return false;
+    if (capturePageCacheHydratedRef.current[mode] === session.userId) return false;
+    capturePageCacheHydratedRef.current[mode] = session.userId;
+    const raw = await nativeStore.getCachedCapturePage(session.userId, mode).catch(() => null);
+    const page = cachedCapturePageFromRaw(raw);
+    if (!page.captures.length) return false;
+    const rows = sortCaptures(
+      page.captures.filter((capture) => mode === "archived" ? isArchived(capture) : !isArchived(capture))
+    );
+    if (!rows.length) return false;
+    if (mode === "archived") {
+      if (!archivedCapturesRef.current.length) {
+        commitCaptureRows("archived", () => rows);
+        setArchivedCapturesLoaded(true);
+        setArchivedCapturesNextCursor(page.nextCursor);
+        return true;
+      }
+      return false;
+    }
+    const currentActiveRows = capturesRef.current;
+    const canSeedActiveRows =
+      !currentActiveRows.length || currentActiveRows.every((capture) => isFreshLocalProcessingCapture(capture));
+    if (canSeedActiveRows) {
+      commitCaptureRows("active", (current) => sortCaptures(uniqueCaptures([...current, ...rows])));
+      setCapturesNextCursor(page.nextCursor);
+      return true;
+    }
+    return false;
+  }
+
+  async function hydrateLocalProcessingCaptures() {
+    if (!nativeStore?.getCaptures) return;
+    const raw = await nativeStore.getCaptures().catch(() => null);
+    const localProcessing = freshLocalProcessingCaptures(raw);
+    if (!localProcessing.length) return;
+    commitCaptureRows("active", (current) => sortCaptures(uniqueCaptures([...localProcessing, ...current])));
+  }
+
+  function knownCapturesForCollection(collectionId: string) {
+    return sortCaptures(
+      uniqueCaptures([
+        ...(collectionCapturesCacheRef.current[collectionId] || []),
+        ...capturesRef.current.filter((capture) => captureBelongsToCollection(capture, collectionId)),
+        ...archivedCapturesRef.current.filter((capture) => captureBelongsToCollection(capture, collectionId))
+      ])
+    );
+  }
+
+  function scrollCollectionSettingsIntoView() {
+    requestAnimationFrame(() => {
+      collectionDetailListRef.current?.scrollToEnd({ animated: true });
+    });
+    setTimeout(() => {
+      collectionDetailListRef.current?.scrollToEnd({ animated: true });
+    }, 260);
+  }
 
   const getFreshSession = useCallback(async (force = false) => {
     if (!session) return null;
@@ -1331,6 +1481,9 @@ export default function App() {
       setArchivedCapturesLoaded(false);
       setCapturesNextCursor(null);
       setArchivedCapturesNextCursor(null);
+      capturesRef.current = [];
+      archivedCapturesRef.current = [];
+      capturePageCacheHydratedRef.current = { active: null, archived: null };
       setCollections([]);
       collectionsCacheRef.current = { active: [], archived: [] };
       collectionCapturesCacheRef.current = {};
@@ -1355,6 +1508,10 @@ export default function App() {
   ) => {
     const loadingSetter = mode === "archived" ? setArchivedCapturesLoading : setCapturesLoading;
     const errorSetter = mode === "archived" ? setArchivedCapturesError : setCapturesError;
+    if (!options.append) {
+      await hydrateCachedCapturePage(mode);
+      if (mode === "active") await hydrateLocalProcessingCaptures();
+    }
     loadingSetter(true);
     errorSetter("");
     if (config?.apiUrl && session?.accessToken) {
@@ -1382,18 +1539,20 @@ export default function App() {
         }
         const next = ((json.captures ?? []) as Array<Record<string, any>>).map(captureFromRemote);
         if (mode === "archived") {
-          setArchivedCaptures((current) =>
+          const rows = commitCaptureRows("archived", (current) =>
             options.append ? sortCaptures(uniqueCaptures([...current, ...next])) : sortCaptures(next)
           );
           setArchivedCapturesLoaded(true);
           setArchivedCapturesNextCursor(json.next_cursor || null);
+          if (!options.append) writeCachedCapturePage("archived", rows, json.next_cursor || null);
         } else {
-          setCaptures((current) =>
+          const rows = commitCaptureRows("active", (current) =>
             options.append
               ? sortCaptures(uniqueCaptures([...current, ...next]))
               : mergeRemoteCaptures(next, current, "active")
           );
           setCapturesNextCursor(json.next_cursor || null);
+          if (!options.append) writeCachedCapturePage("active", rows, json.next_cursor || null);
         }
       } catch (error) {
         errorSetter(friendlyError(error, mode === "archived" ? "Could not load archived captures" : "Could not load captures"));
@@ -1413,12 +1572,12 @@ export default function App() {
       const active = next.filter((capture) => !isArchived(capture));
       const archived = next.filter(isArchived);
       if (mode === "archived") {
-        setArchivedCaptures(sortCaptures(archived));
+        commitCaptureRows("archived", () => sortCaptures(archived));
         setArchivedCapturesLoaded(true);
         setArchivedCapturesNextCursor(null);
       } else {
-        setCaptures(sortCaptures(active));
-        setArchivedCaptures(sortCaptures(archived));
+        commitCaptureRows("active", () => sortCaptures(active));
+        commitCaptureRows("archived", () => sortCaptures(archived));
         setArchivedCapturesLoaded(true);
         setCapturesNextCursor(null);
         setArchivedCapturesNextCursor(null);
@@ -1501,7 +1660,7 @@ export default function App() {
         requestJson<{ captures?: Array<Record<string, any>>; next_cursor?: string | null }>(
           edgeResourceUrl(config.apiUrl, "collection-captures", {
             collectionId,
-            limit: "30",
+            limit: String(COLLECTION_CAPTURE_PAGE_SIZE),
             ...(options.before ? { before: options.before } : {})
           }),
           {
@@ -1825,6 +1984,14 @@ export default function App() {
       if (captureId) selectCapture(captureId);
     });
   }, [selectCapture]);
+
+  useEffect(() => {
+    capturesRef.current = captures;
+  }, [captures]);
+
+  useEffect(() => {
+    archivedCapturesRef.current = archivedCaptures;
+  }, [archivedCaptures]);
 
   useEffect(() => {
     const linkSubscription = Linking.addEventListener("url", ({ url }) => {
@@ -2325,8 +2492,9 @@ export default function App() {
       setCollectionCapturesNextCursor(null);
       return;
     }
-    const cached = collectionCapturesCacheRef.current[selectedCollectionId];
-    if (cached?.length) {
+    const cached = knownCapturesForCollection(selectedCollectionId);
+    if (cached.length) {
+      collectionCapturesCacheRef.current[selectedCollectionId] = cached;
       setCollectionCaptures(cached);
       setCollectionCapturesForId(selectedCollectionId);
       setCollectionCapturesNextCursor(collectionCapturesCursorCacheRef.current[selectedCollectionId] || null);
@@ -3217,6 +3385,9 @@ export default function App() {
     setArchivedCapturesLoaded(false);
     setCapturesNextCursor(null);
     setArchivedCapturesNextCursor(null);
+    capturesRef.current = [];
+    archivedCapturesRef.current = [];
+    capturePageCacheHydratedRef.current = { active: null, archived: null };
     setCollections([]);
     collectionsCacheRef.current = { active: [], archived: [] };
     collectionCapturesCacheRef.current = {};
@@ -3382,6 +3553,14 @@ export default function App() {
             <View style={styles.loadingLineShort} />
           </View>
         ))}
+      </View>
+    );
+  }
+
+  function renderListLoadingFooter(label = "Loading more captures...") {
+    return (
+      <View style={styles.listLoadingFooter}>
+        <Text style={styles.meta}>{label}</Text>
       </View>
     );
   }
@@ -3703,108 +3882,127 @@ export default function App() {
     const activeCollection = selectedCollection.status === "active";
     const capturesReadyForCollection = collectionCapturesForId === selectedCollection.id;
     const visibleCollectionCaptures = activeCollection && capturesReadyForCollection ? collectionCaptures : [];
-    const collectionCapturesPending = activeCollection && (!capturesReadyForCollection || collectionCapturesLoading);
+    const collectionCapturesPending = activeCollection && (!capturesReadyForCollection || (collectionCapturesLoading && !visibleCollectionCaptures.length));
+    const collectionDetailBottomPadding = keyboardHeight > 0
+      ? Math.min(Math.max(keyboardHeight + 72, 180), 380)
+      : 40;
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="light-content" />
-        <FlatList
-          {...CAPTURE_LIST_PERF_PROPS}
-          data={visibleCollectionCaptures}
-          keyExtractor={(item) => item.id}
-          renderItem={renderCollectionCapture}
-          onEndReached={loadMoreCollectionCaptures}
-          onEndReachedThreshold={0.35}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          ListHeaderComponent={
-            <View style={styles.collectionDetailTop}>
-              <View style={styles.detailHeader}>
-                <IconButton Icon={ArrowLeft} label="Back" onPress={() => selectCollection(null)} />
-                <Text style={styles.status}>
-                  {selectedCollection.status === "archived" ? "Archived" : `${selectedCollection.captureCount} captures`}
-                </Text>
-              </View>
-              <Text style={styles.kicker}>Collection</Text>
-              <Text style={styles.title}>{selectedCollection.title}</Text>
-              <Text style={styles.sourceText}>{selectedCollection.description}</Text>
-              {activeCollection ? (
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.meta}>Captures</Text>
-                  {collectionCapturesPending ? <Text style={styles.meta}>Loading...</Text> : null}
-                </View>
-              ) : (
-                <View style={styles.sourceBlock}>
-                  <Text style={styles.meta}>Archived collection</Text>
-                  <Text style={styles.supportingText}>
-                    Restore this collection to bring back its archive-time capture links.
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0}
+          style={styles.keyboardScreen}
+        >
+          <FlatList
+            {...CAPTURE_LIST_PERF_PROPS}
+            data={visibleCollectionCaptures}
+            keyExtractor={(item) => item.id}
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+            keyboardShouldPersistTaps="handled"
+            ref={collectionDetailListRef}
+            renderItem={renderCollectionCapture}
+            onEndReached={loadMoreCollectionCaptures}
+            onEndReachedThreshold={0.35}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            ListHeaderComponent={
+              <View style={styles.collectionDetailTop}>
+                <View style={styles.detailHeader}>
+                  <IconButton Icon={ArrowLeft} label="Back" onPress={() => selectCollection(null)} />
+                  <Text style={styles.status}>
+                    {selectedCollection.status === "archived" ? "Archived" : `${selectedCollection.captureCount} captures`}
                   </Text>
                 </View>
-              )}
-            </View>
-          }
-          ListEmptyComponent={
-            activeCollection ? (
-              <View style={styles.collectionEmpty}>
-                <Text style={styles.emptyTitle}>
-                  {collectionCapturesPending ? "Loading captures..." : "No captures in this collection."}
-                </Text>
-                {!collectionCapturesPending ? (
-                  <Text style={styles.emptyText}>Linked captures will appear here.</Text>
-                ) : null}
+                <Text style={styles.kicker}>Collection</Text>
+                <Text style={styles.title}>{selectedCollection.title}</Text>
+                <Text style={styles.sourceText}>{selectedCollection.description}</Text>
+                {activeCollection ? (
+                  <View style={styles.sectionHeader}>
+                    <Text style={styles.meta}>Captures</Text>
+                    {collectionCapturesPending ? <Text style={styles.meta}>Loading...</Text> : null}
+                  </View>
+                ) : (
+                  <View style={styles.sourceBlock}>
+                    <Text style={styles.meta}>Archived collection</Text>
+                    <Text style={styles.supportingText}>
+                      Restore this collection to bring back its archive-time capture links.
+                    </Text>
+                  </View>
+                )}
               </View>
-            ) : null
-          }
-          ListFooterComponent={
-            <View style={styles.collectionSettings}>
-              {activeCollection ? (
-                <>
-                  <Text style={styles.meta}>Collection settings</Text>
-                  <TextInput
-                    onChangeText={(value) => {
-                      setCollectionDraftDirty(true);
-                      setCollectionTitle(value);
-                    }}
-                    placeholder="Title"
-                    placeholderTextColor={colors.muted}
-                    style={styles.search}
-                    testID="pc.collection.detail.title"
-                    value={collectionTitle}
-                  />
-                  <TextInput
-                    multiline
-                    onChangeText={(value) => {
-                      setCollectionDraftDirty(true);
-                      setCollectionDescription(value);
-                    }}
-                    placeholder="What belongs in this collection"
-                    placeholderTextColor={colors.muted}
-                    style={styles.noteInput}
-                    testID="pc.collection.detail.description"
-                    value={collectionDescription}
-                  />
+            }
+            ListEmptyComponent={
+              activeCollection ? (
+                <View style={styles.collectionEmpty}>
+                  <Text style={styles.emptyTitle}>
+                    {collectionCapturesPending ? "Loading captures..." : "No captures in this collection."}
+                  </Text>
+                  {!collectionCapturesPending ? (
+                    <Text style={styles.emptyText}>Linked captures will appear here.</Text>
+                  ) : null}
+                </View>
+              ) : null
+            }
+            ListFooterComponent={
+              <>
+                {visibleCollectionCaptures.length && collectionCapturesLoading
+                  ? renderListLoadingFooter(collectionCapturesNextCursor ? "Loading more captures..." : "Updating captures...")
+                  : null}
+                <View style={styles.collectionSettings}>
+                  {activeCollection ? (
+                    <>
+                      <Text style={styles.meta}>Collection settings</Text>
+                      <TextInput
+                        onChangeText={(value) => {
+                          setCollectionDraftDirty(true);
+                          setCollectionTitle(value);
+                        }}
+                        onFocus={scrollCollectionSettingsIntoView}
+                        placeholder="Title"
+                        placeholderTextColor={colors.muted}
+                        style={styles.search}
+                        testID="pc.collection.detail.title"
+                        value={collectionTitle}
+                      />
+                      <TextInput
+                        multiline
+                        onChangeText={(value) => {
+                          setCollectionDraftDirty(true);
+                          setCollectionDescription(value);
+                        }}
+                        onFocus={scrollCollectionSettingsIntoView}
+                        placeholder="What belongs in this collection"
+                        placeholderTextColor={colors.muted}
+                        style={styles.noteInput}
+                        testID="pc.collection.detail.description"
+                        value={collectionDescription}
+                      />
+                      <Pressable
+                        disabled={saveDisabled}
+                        onPress={() => void saveCollection()}
+                        style={[styles.primaryButton, saveDisabled && styles.disabledButton]}
+                        testID="pc.collection.detail.save"
+                      >
+                        <Text style={styles.primaryButtonText}>Save collection</Text>
+                      </Pressable>
+                    </>
+                  ) : null}
                   <Pressable
-                    disabled={saveDisabled}
-                    onPress={() => void saveCollection()}
-                    style={[styles.primaryButton, saveDisabled && styles.disabledButton]}
-                    testID="pc.collection.detail.save"
+                    onPress={() => confirmArchiveCollection(selectedCollection)}
+                    style={styles.secondaryButton}
+                    testID="pc.collection.archive-toggle"
                   >
-                    <Text style={styles.primaryButtonText}>Save collection</Text>
+                    <Text style={selectedCollection.status === "archived" ? styles.secondaryButtonText : styles.dangerButtonText}>
+                      {selectedCollection.status === "archived" ? "Restore collection" : "Archive collection"}
+                    </Text>
                   </Pressable>
-                </>
-              ) : null}
-              <Pressable
-                onPress={() => confirmArchiveCollection(selectedCollection)}
-                style={styles.secondaryButton}
-                testID="pc.collection.archive-toggle"
-              >
-                <Text style={selectedCollection.status === "archived" ? styles.secondaryButtonText : styles.dangerButtonText}>
-                  {selectedCollection.status === "archived" ? "Restore collection" : "Archive collection"}
-                </Text>
-              </Pressable>
-              {message ? <Text style={styles.message}>{message}</Text> : null}
-            </View>
-          }
-          contentContainerStyle={styles.collectionDetailContent}
-        />
+                  {message ? <Text style={styles.message}>{message}</Text> : null}
+                </View>
+              </>
+            }
+            contentContainerStyle={[styles.collectionDetailContent, { paddingBottom: collectionDetailBottomPadding }]}
+          />
+        </KeyboardAvoidingView>
         {renderAppSheets()}
         {renderSnackbar()}
       </SafeAreaView>
@@ -4880,6 +5078,11 @@ export default function App() {
               </View>
             )
           }
+          ListFooterComponent={
+            homeRows.length && capturesLoading && capturesNextCursor
+              ? renderListLoadingFooter()
+              : null
+          }
           contentContainerStyle={homeRows.length ? styles.listContent : styles.emptyContent}
           keyboardShouldPersistTaps="handled"
         />
@@ -5033,6 +5236,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 22,
     paddingTop: 16
+  },
+  keyboardScreen: {
+    flex: 1
   },
   header: {
     gap: 4,
@@ -5733,6 +5939,11 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     height: 13,
     width: "58%"
+  },
+  listLoadingFooter: {
+    alignItems: "center",
+    paddingBottom: 12,
+    paddingTop: 12
   },
   collectionDetailContent: {
     paddingBottom: 40,
