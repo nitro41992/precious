@@ -1,0 +1,71 @@
+[
+  {
+    "name": "article-open-graph-jsonld",
+    "kind": "html",
+    "sourceUrl": "https://example.com/guides/kyoto-weekend",
+    "finalUrl": "https://example.com/guides/kyoto-weekend?ref=share",
+    "html": "<!doctype html><html><head><title>Fallback page title</title><link rel=\"canonical\" href=\"/guides/kyoto-weekend\"><link rel=\"apple-touch-icon\" href=\"/apple-touch.png\"><meta property=\"og:title\" content=\"A quiet weekend in Kyoto\"><meta property=\"og:description\" content=\"A practical two-day guide to temples, coffee, and an easy dinner reservation.\"><meta property=\"og:image\" content=\"/images/kyoto.jpg\"><meta property=\"og:type\" content=\"article\"><meta name=\"author\" content=\"Mina Park\"><meta property=\"article:published_time\" content=\"2026-05-12T09:00:00Z\"><script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@type\":\"Article\",\"headline\":\"A quiet weekend in Kyoto\",\"author\":{\"@type\":\"Person\",\"name\":\"Mina Park\"},\"datePublished\":\"2026-05-12T09:00:00Z\"}</script></head><body><article><p>This guide covers a quiet weekend in Kyoto with a temple walk, a tiny coffee shop, and a dinner booking worth saving for a future trip.</p><p>It includes enough public text to support search and intent extraction without exposing parser details.</p></article></body></html>",
+    "expected": {
+      "title": "A quiet weekend in Kyoto",
+      "canonical": "https://example.com/guides/kyoto-weekend",
+      "image": "https://example.com/images/kyoto.jpg",
+      "status": "extracted",
+      "quality": "medium"
+    }
+  },
+  {
+    "name": "product-jsonld",
+    "kind": "html",
+    "sourceUrl": "https://shop.example.com/products/travel-mug",
+    "finalUrl": "https://shop.example.com/products/travel-mug",
+    "html": "<!doctype html><html><head><meta property=\"og:title\" content=\"Trail Mug 12oz\"><meta name=\"description\" content=\"A ceramic-coated travel mug with a leak-resistant lid.\"><meta property=\"og:image\" content=\"https://cdn.example.com/mug.jpg\"><script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@type\":\"Product\",\"name\":\"Trail Mug 12oz\",\"brand\":{\"@type\":\"Brand\",\"name\":\"Field House\"},\"offers\":{\"@type\":\"Offer\",\"priceCurrency\":\"USD\",\"price\":\"34\"}}</script></head><body><main><h1>Trail Mug 12oz</h1><p>Save this compact travel mug for a later purchase comparison.</p></main></body></html>",
+    "expected": {
+      "title": "Trail Mug 12oz",
+      "entityTypes": ["Product", "brand", "price"],
+      "status": "extracted",
+      "quality": "medium"
+    }
+  },
+  {
+    "name": "oembed-video",
+    "kind": "oembed",
+    "sourceUrl": "https://www.youtube.com/watch?v=x2bqscVkGxk",
+    "data": {
+      "type": "video",
+      "version": "1.0",
+      "provider_name": "YouTube",
+      "title": "Street food tour in Osaka",
+      "author_name": "Travel Notes",
+      "author_url": "https://www.youtube.com/@travelnotes",
+      "thumbnail_url": "https://i.ytimg.com/vi/x2bqscVkGxk/hqdefault.jpg"
+    },
+    "expected": {
+      "title": "Street food tour in Osaka",
+      "provider": "YouTube",
+      "type": "video",
+      "status": "extracted",
+      "quality": "high"
+    }
+  },
+  {
+    "name": "tiktok-oembed-video",
+    "kind": "oembed",
+    "sourceUrl": "https://www.tiktok.com/@scout2015/video/6718335390845095173",
+    "data": {
+      "type": "video",
+      "version": "1.0",
+      "provider_name": "TikTok",
+      "title": "Scramble up ur name & I'll try to guess it #foryoupage #petsoftiktok #aesthetic",
+      "author_name": "Scout, Suki & Stella",
+      "author_url": "https://www.tiktok.com/@scout2015",
+      "thumbnail_url": "https://p16.muscdn.com/obj/tos-maliva-p-0068/example"
+    },
+    "expected": {
+      "title": "Scramble up ur name & I'll try to guess it #foryoupage #petsoftiktok #aesthetic",
+      "provider": "TikTok",
+      "type": "video",
+      "status": "extracted",
+      "quality": "high"
+    }
+  }
+]

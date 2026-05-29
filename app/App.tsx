@@ -4256,7 +4256,7 @@ const styles = StyleSheet.create({
     gap: 10
   },
   listContent: {
-    paddingBottom: 40,
+    paddingBottom: 96,
     paddingTop: 0
   },
   searchResultsContent: {

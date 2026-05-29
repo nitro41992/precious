@@ -1,4 +1,6 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { extract as extractProviderOembed } from "@extractus/oembed-extractor";
+import { createClient } from "@supabase/supabase-js";
+import { extract as extractOpenLink, parse as parseOpenLink } from "openlink";
 import saveIntents from "../_shared/save-intents.json" with { type: "json" };
 
 declare const EdgeRuntime: {
@@ -69,7 +71,12 @@ type UrlEvidence = {
 
 type LlMUrlEvidence = {
   url: string;
-  status: "extracted" | "partial_evidence" | "needs_client_resolution" | "insufficient_url_evidence" | "failed";
+  status:
+    | "extracted"
+    | "partial_evidence"
+    | "needs_client_resolution"
+    | "insufficient_url_evidence"
+    | "failed";
   evidence_quality: "high" | "medium" | "low" | "none";
   final_url: string | null;
   canonical_url: string | null;
@@ -152,7 +159,7 @@ const clientEventPhases = new Set([
   "poll_capture",
   "trigger_analyze",
   "refresh_auth_session",
-  "unknown"
+  "unknown",
 ]);
 const clientEventReasonCodes = new Set([
   "dns_resolution_failed",
@@ -162,7 +169,7 @@ const clientEventReasonCodes = new Set([
   "connection_reset",
   "connection_aborted",
   "unexpected_end_of_stream",
-  "unknown_network_error"
+  "unknown_network_error",
 ]);
 const clientDiagnosticStringFields = new Set([
   "exception_class",
@@ -172,16 +179,19 @@ const clientDiagnosticStringFields = new Set([
   "request_path",
   "api_host",
   "remote_capture_id",
-  "app_version"
+  "app_version",
 ]);
 const clientDiagnosticNumberFields = new Set([
   "connect_timeout_ms",
   "read_timeout_ms",
   "elapsed_ms",
-  "app_version_code"
+  "app_version_code",
 ]);
-const COLLECTION_AUTO_LINK_CONFIDENCE = Number(Deno.env.get("COLLECTION_AUTO_LINK_CONFIDENCE") || "0.82");
-const USER_AGENT = "Mozilla/5.0 (compatible; PreciousCaptures/0.1; +https://sharebook.local)";
+const COLLECTION_AUTO_LINK_CONFIDENCE = Number(
+  Deno.env.get("COLLECTION_AUTO_LINK_CONFIDENCE") || "0.82",
+);
+const USER_AGENT =
+  "Mozilla/5.0 (compatible; PreciousCaptures/0.1; +https://sharebook.local)";
 const METADATA_TIMEOUT_MS = 8000;
 const METADATA_MAX_BYTES = 700_000;
 const CACHE_STRONG_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -200,7 +210,9 @@ const activeSaveIntents = (saveIntents as Array<{
 const activeSaveIntentKeys = activeSaveIntents.map((intent) => intent.key);
 const activeSaveIntentKeySet = new Set(activeSaveIntentKeys);
 const saveIntentPrompt = activeSaveIntents
-  .map((intent) => `- ${intent.key} (${intent.label}): ${intent.llm_description}`)
+  .map((intent) =>
+    `- ${intent.key} (${intent.label}): ${intent.llm_description}`
+  )
   .join("\n");
 const dbCaptureTypes = new Set([
   "link",
@@ -210,13 +222,13 @@ const dbCaptureTypes = new Set([
   "text_note",
   "mixed",
   "unknown",
-  "voice_note"
+  "voice_note",
 ]);
 
 const corsHeaders = {
   "access-control-allow-origin": "*",
   "access-control-allow-headers": "authorization, apikey, content-type",
-  "access-control-allow-methods": "GET, POST, PATCH, OPTIONS"
+  "access-control-allow-methods": "GET, POST, PATCH, OPTIONS",
 };
 
 const analysisSchema = {
@@ -231,7 +243,7 @@ const analysisSchema = {
     "collection_decisions",
     "search_phrases",
     "confidence_label",
-    "needs_review"
+    "needs_review",
   ],
   properties: {
     display_title: { type: "string" },
@@ -243,11 +255,11 @@ const analysisSchema = {
       properties: {
         category: {
           type: "string",
-          enum: activeSaveIntentKeys
+          enum: activeSaveIntentKeys,
         },
         confidence: { type: "number" },
-        rationale: { type: "string" }
-      }
+        rationale: { type: "string" },
+      },
     },
     entities: {
       type: "array",
@@ -259,9 +271,9 @@ const analysisSchema = {
           type: { type: "string" },
           name: { type: "string" },
           evidence: { type: "string" },
-          confidence: { type: "number" }
-        }
-      }
+          confidence: { type: "number" },
+        },
+      },
     },
     suggested_reminders: {
       type: "array",
@@ -273,39 +285,52 @@ const analysisSchema = {
           trigger_type: { type: "string", enum: ["time", "place", "none"] },
           trigger_value: { type: "string" },
           rationale: { type: "string" },
-          confidence: { type: "number" }
-        }
-      }
+          confidence: { type: "number" },
+        },
+      },
     },
     collection_decisions: {
       type: "array",
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["type", "collection_id", "title", "description", "rationale", "confidence"],
+        required: [
+          "type",
+          "collection_id",
+          "title",
+          "description",
+          "rationale",
+          "confidence",
+        ],
         properties: {
           type: { type: "string", enum: ["existing", "new"] },
           collection_id: { type: ["string", "null"] },
           title: { type: "string" },
           description: { type: ["string", "null"] },
           rationale: { type: "string" },
-          confidence: { type: "number" }
-        }
-      }
+          confidence: { type: "number" },
+        },
+      },
     },
     search_phrases: { type: "array", items: { type: "string" } },
     confidence_label: {
       type: "string",
-      enum: ["Looks right", "Maybe", "Not sure", "Couldn't tell"]
+      enum: ["Looks right", "Maybe", "Not sure", "Couldn't tell"],
     },
-    needs_review: { type: "boolean" }
-  }
+    needs_review: { type: "boolean" },
+  },
 };
 
 const preflightSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["decision", "rationale_code", "confidence", "user_message", "evidence_summary"],
+  required: [
+    "decision",
+    "rationale_code",
+    "confidence",
+    "user_message",
+    "evidence_summary",
+  ],
   properties: {
     decision: { type: "string", enum: ["valid", "invalid"] },
     rationale_code: {
@@ -320,19 +345,22 @@ const preflightSchema = {
         "not_found_or_unreachable",
         "map_unparseable",
         "unsupported_file_or_url",
-        "ambiguous_insufficient_evidence"
-      ]
+        "ambiguous_insufficient_evidence",
+      ],
     },
     confidence: { type: "number" },
     user_message: { type: "string" },
-    evidence_summary: { type: "string" }
-  }
+    evidence_summary: { type: "string" },
+  },
 };
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "content-type": "application/json; charset=utf-8" }
+    headers: {
+      ...corsHeaders,
+      "content-type": "application/json; charset=utf-8",
+    },
   });
 }
 
@@ -340,7 +368,9 @@ function errorMessage(error: unknown, fallback = "Unexpected error") {
   if (error instanceof Error) return error.message;
   if (error && typeof error === "object") {
     const value = error as Record<string, unknown>;
-    return String(value.message || value.details || value.hint || value.code || fallback);
+    return String(
+      value.message || value.details || value.hint || value.code || fallback,
+    );
   }
   return fallback;
 }
@@ -352,7 +382,8 @@ function env(name: string) {
 }
 
 function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    .test(value);
 }
 
 function truncateText(value: unknown, limit: number) {
@@ -378,26 +409,36 @@ function boundedClientDiagnostics(value: unknown) {
   return diagnostics;
 }
 
-function scheduleClientEventRetention(supabase: ReturnType<typeof adminClient>, userId: string) {
-  const cutoff = new Date(Date.now() - CLIENT_EVENT_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+function scheduleClientEventRetention(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+) {
+  const cutoff = new Date(
+    Date.now() - CLIENT_EVENT_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
   EdgeRuntime.waitUntil((async () => {
     const { error } = await supabase
       .from("capture_client_events")
       .delete()
       .eq("user_id", userId)
       .lt("created_at", cutoff);
-    if (error) console.warn("capture_client_events retention failed", error.message);
+    if (error) {
+      console.warn("capture_client_events retention failed", error.message);
+    }
   })());
 }
 
 function adminClient() {
   return createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), {
-    auth: { persistSession: false }
+    auth: { persistSession: false },
   });
 }
 
 async function currentUser(request: Request) {
-  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  const token = request.headers.get("authorization")?.replace(
+    /^Bearer\s+/i,
+    "",
+  );
   if (!token) return null;
   const { data, error } = await adminClient().auth.getUser(token);
   if (error) return null;
@@ -426,7 +467,11 @@ function safeFilename(value: string) {
     .slice(0, 120) || "shared-file";
 }
 
-function normalizeCaptureType(value: unknown, sourceUrl: string | null, sourceText: string | null) {
+function normalizeCaptureType(
+  value: unknown,
+  sourceUrl: string | null,
+  sourceText: string | null,
+) {
   const captureType = typeof value === "string" ? value.trim() : "";
   if (dbCaptureTypes.has(captureType)) return captureType;
   if (sourceUrl) return "link";
@@ -437,8 +482,13 @@ function normalizeCaptureType(value: unknown, sourceUrl: string | null, sourceTe
 function inferCaptureType(sourceUrl: string | null, sourceText: string | null) {
   let inferred = "unknown";
   if (sourceUrl) {
-    if (/\.(aac|aif|aiff|flac|m4a|mp3|oga|opus|wav)(?:[?#].*)?$/i.test(sourceUrl)) inferred = "voice_note";
-    else if (/instagram\.com|tiktok\.com|reddit\.com|youtube\.com|youtu\.be|x\.com|twitter\.com/i.test(sourceUrl)) {
+    if (
+      /\.(aac|aif|aiff|flac|m4a|mp3|oga|opus|wav)(?:[?#].*)?$/i.test(sourceUrl)
+    ) inferred = "voice_note";
+    else if (
+      /instagram\.com|tiktok\.com|reddit\.com|youtube\.com|youtu\.be|x\.com|twitter\.com/i
+        .test(sourceUrl)
+    ) {
       inferred = "social_post";
     } else {
       inferred = "link";
@@ -455,14 +505,20 @@ function inferSourceApp(sourceUrl: string | null) {
   if (/tiktok\.com/i.test(sourceUrl)) return "TikTok";
   if (/reddit\.com/i.test(sourceUrl)) return "Reddit";
   if (/youtube\.com|youtu\.be/i.test(sourceUrl)) return "YouTube";
-  if (/maps\.app\.goo\.gl|google\.[^/]+\/maps|maps\.google\./i.test(sourceUrl)) return "Maps";
+  if (
+    /maps\.app\.goo\.gl|google\.[^/]+\/maps|maps\.google\./i.test(sourceUrl)
+  ) return "Maps";
   if (/x\.com|twitter\.com/i.test(sourceUrl)) return "X";
   return hostFromUrl(sourceUrl) || "Browser";
 }
 
 function captureState(row: any) {
-  const analysis = row?.analysis && typeof row.analysis === "object" ? row.analysis : {};
-  if (row?.archived_at || analysis.capture_state === "archived") return "archived";
+  const analysis = row?.analysis && typeof row.analysis === "object"
+    ? row.analysis
+    : {};
+  if (row?.archived_at || analysis.capture_state === "archived") {
+    return "archived";
+  }
   return "active";
 }
 
@@ -475,11 +531,15 @@ function withCaptureStates(rows: any[]) {
 }
 
 function archivedFilter(row: any, archived: boolean) {
-  return archived ? captureState(row) === "archived" : captureState(row) !== "archived";
+  return archived
+    ? captureState(row) === "archived"
+    : captureState(row) !== "archived";
 }
 
 function mergeAnalysisPatch(row: any, patch: Record<string, unknown>) {
-  const current = row?.analysis && typeof row.analysis === "object" ? row.analysis : {};
+  const current = row?.analysis && typeof row.analysis === "object"
+    ? row.analysis
+    : {};
   return { ...current, ...patch };
 }
 
@@ -488,19 +548,26 @@ function confidenceRequiresReview(value: unknown) {
 }
 
 function hasCollectionDecisions(analysis: Record<string, unknown>) {
-  return Array.isArray(analysis.collection_decisions) && analysis.collection_decisions.length > 0;
+  return Array.isArray(analysis.collection_decisions) &&
+    analysis.collection_decisions.length > 0;
 }
 
-function analysisRequiresReview(analysis: Record<string, unknown>, reviewConfirmedAt?: unknown) {
+function analysisRequiresReview(
+  analysis: Record<string, unknown>,
+  reviewConfirmedAt?: unknown,
+) {
   if (reviewConfirmedAt) return false;
   return Boolean(
     analysis.needs_review ||
       confidenceRequiresReview(analysis.confidence_label) ||
-      hasCollectionDecisions(analysis)
+      hasCollectionDecisions(analysis),
   );
 }
 
-function normalizedReviewAnalysis(analysis: Record<string, unknown>, reviewConfirmedAt?: unknown): AnalysisOutput {
+function normalizedReviewAnalysis(
+  analysis: Record<string, unknown>,
+  reviewConfirmedAt?: unknown,
+): AnalysisOutput {
   const needsReview = analysisRequiresReview(analysis, reviewConfirmedAt);
   return { ...analysis, needs_review: needsReview };
 }
@@ -521,7 +588,7 @@ async function readCapturePayload(request: Request): Promise<CapturePayload> {
           filename: value.name || "shared-file",
           contentType: value.type || "application/octet-stream",
           bytes: await value.arrayBuffer(),
-          size: value.size
+          size: value.size,
         };
       }
     } else {
@@ -534,7 +601,9 @@ async function readCapturePayload(request: Request): Promise<CapturePayload> {
 async function ensureCaptureBucket(supabase: ReturnType<typeof adminClient>) {
   const { error } = await supabase.storage.getBucket("captures");
   if (!error) return;
-  await supabase.storage.createBucket("captures", { public: false }).catch(() => {});
+  await supabase.storage.createBucket("captures", { public: false }).catch(
+    () => {},
+  );
 }
 
 function hostFromUrl(value: string | null | undefined) {
@@ -559,34 +628,99 @@ function normalizeUrl(value: string | null | undefined) {
   }
 }
 
-function cleanedString(value: unknown, limit = 2000) {
-  return typeof value === "string" && value.trim() ? value.trim().slice(0, limit) : null;
+function normalizedHost(value: URL | string | null | undefined) {
+  try {
+    const url = typeof value === "string" ? new URL(value) : value;
+    return url?.hostname.replace(/^www\./, "").toLowerCase() || null;
+  } catch {
+    return null;
+  }
 }
 
-function clientResolutionInput(fields: Record<string, unknown>): ClientResolutionInput {
-  const attemptCount = Number(fields.client_resolution_attempt_count || fields.clientResolutionAttemptCount);
+const TRACKING_PARAMS = [
+  "fbclid",
+  "gclid",
+  "dclid",
+  "gbraid",
+  "wbraid",
+  "igsh",
+  "igshid",
+  "mc_cid",
+  "mc_eid",
+  "mibextid",
+  "msclkid",
+  "ref",
+  "ref_",
+  "ref_src",
+  "si",
+  "spm",
+  "src",
+  "tag",
+  "utm",
+  "utm_campaign",
+  "utm_content",
+  "utm_medium",
+  "utm_source",
+  "utm_term",
+];
+
+function trackingCleanUrl(value: string | null | undefined) {
+  const normalized = normalizeUrl(value);
+  if (!normalized) return null;
+  try {
+    const url = new URL(normalized);
+    for (const key of Array.from(url.searchParams.keys())) {
+      const lower = key.toLowerCase();
+      if (
+        lower.startsWith("utm_") ||
+        TRACKING_PARAMS.includes(lower) ||
+        lower.startsWith("amp_")
+      ) {
+        url.searchParams.delete(key);
+      }
+    }
+    return url.toString();
+  } catch {
+    return normalized;
+  }
+}
+
+function cleanedString(value: unknown, limit = 2000) {
+  return typeof value === "string" && value.trim()
+    ? value.trim().slice(0, limit)
+    : null;
+}
+
+function clientResolutionInput(
+  fields: Record<string, unknown>,
+): ClientResolutionInput {
+  const attemptCount = Number(
+    fields.client_resolution_attempt_count ||
+      fields.clientResolutionAttemptCount,
+  );
   return {
     originalUrl: normalizeUrl(
       cleanedString(fields.original_url) ||
         cleanedString(fields.originalUrl) ||
         cleanedString(fields.sourceUrl) ||
-        cleanedString(fields.source_url)
+        cleanedString(fields.source_url),
     ),
     clientResolvedUrl: normalizeUrl(
       cleanedString(fields.client_resolved_url) ||
-        cleanedString(fields.clientResolvedUrl)
+        cleanedString(fields.clientResolvedUrl),
     ),
     clientResolutionSource: cleanedString(
       fields.client_resolution_source || fields.clientResolutionSource,
-      80
+      80,
     ),
     clientResolutionTimestamp: cleanedString(
       fields.client_resolution_timestamp || fields.clientResolutionTimestamp,
-      80
+      80,
     ),
-    clientResolutionAttemptCount: Number.isFinite(attemptCount) && attemptCount >= 0
-      ? Math.min(Math.floor(attemptCount), 10)
-      : null
+    clientResolutionAttemptCount:
+      Number.isFinite(attemptCount) && attemptCount >= 0
+        ? Math.min(Math.floor(attemptCount), 10)
+        : null,
   };
 }
 
@@ -598,7 +732,10 @@ async function sha256Hex(value: string) {
     .join("");
 }
 
-function absoluteUrl(value: string | null | undefined, baseUrl: string | null | undefined) {
+function absoluteUrl(
+  value: string | null | undefined,
+  baseUrl: string | null | undefined,
+) {
   if (!value) return null;
   try {
     return new URL(value, baseUrl || undefined).toString();
@@ -621,8 +758,14 @@ function decodeHtml(value: string | null | undefined) {
 
 function parseAttrs(value: string) {
   const attrs: Record<string, string> = {};
-  for (const match of value.matchAll(/([a-zA-Z_:.-]+)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g)) {
-    attrs[match[1].toLowerCase()] = decodeHtml(match[3] ?? match[4] ?? match[5] ?? "");
+  for (
+    const match of value.matchAll(
+      /([a-zA-Z_:.-]+)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g,
+    )
+  ) {
+    attrs[match[1].toLowerCase()] = decodeHtml(
+      match[3] ?? match[4] ?? match[5] ?? "",
+    );
   }
   return attrs;
 }
@@ -631,7 +774,8 @@ function firstMeta(html: string, keys: string[]) {
   const wanted = new Set(keys.map((key) => key.toLowerCase()));
   for (const match of html.matchAll(/<meta\b([^>]+)>/gi)) {
     const attrs = parseAttrs(match[1]);
-    const name = String(attrs.property || attrs.name || attrs.itemprop || "").toLowerCase();
+    const name = String(attrs.property || attrs.name || attrs.itemprop || "")
+      .toLowerCase();
     if (wanted.has(name) && attrs.content) return attrs.content;
   }
   return null;
@@ -642,19 +786,29 @@ function allMeta(html: string, keys: string[]) {
   const values: string[] = [];
   for (const match of html.matchAll(/<meta\b([^>]+)>/gi)) {
     const attrs = parseAttrs(match[1]);
-    const name = String(attrs.property || attrs.name || attrs.itemprop || "").toLowerCase();
+    const name = String(attrs.property || attrs.name || attrs.itemprop || "")
+      .toLowerCase();
     if (wanted.has(name) && attrs.content) values.push(attrs.content);
   }
   return values;
 }
 
-function firstLink(html: string, rels: string[], baseUrl: string, typePredicate?: (type: string) => boolean) {
+function firstLink(
+  html: string,
+  rels: string[],
+  baseUrl: string,
+  typePredicate?: (type: string) => boolean,
+) {
   const wanted = rels.map((rel) => rel.toLowerCase());
   for (const match of html.matchAll(/<link\b([^>]+)>/gi)) {
     const attrs = parseAttrs(match[1]);
     const rel = String(attrs.rel || "").toLowerCase();
-    if (!attrs.href || !wanted.some((item) => rel.split(/\s+/).includes(item))) continue;
-    if (typePredicate && !typePredicate(String(attrs.type || "").toLowerCase())) continue;
+    if (
+      !attrs.href || !wanted.some((item) => rel.split(/\s+/).includes(item))
+    ) continue;
+    if (
+      typePredicate && !typePredicate(String(attrs.type || "").toLowerCase())
+    ) continue;
     return absoluteUrl(attrs.href, baseUrl);
   }
   return null;
@@ -672,7 +826,7 @@ function stripHtmlForText(html: string) {
       .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
       .replace(/<noscript\b[\s\S]*?<\/noscript>/gi, " ")
       .replace(/<svg\b[\s\S]*?<\/svg>/gi, " ")
-      .replace(/<[^>]+>/g, " ")
+      .replace(/<[^>]+>/g, " "),
   ).slice(0, 2400);
 }
 
@@ -688,7 +842,9 @@ function jsonLdCandidates(html: string): Array<Record<string, unknown>> {
     if (Array.isArray(record["@graph"])) record["@graph"].forEach(add);
     candidates.push(record);
   };
-  for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
+  for (
+    const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)
+  ) {
     const attrs = parseAttrs(match[1]);
     if (!String(attrs.type || "").toLowerCase().includes("ld+json")) continue;
     try {
@@ -748,13 +904,23 @@ function jsonLdEntities(candidates: Array<Record<string, unknown>>) {
     if (offers && typeof offers === "object") {
       const offer = Array.isArray(offers) ? offers[0] : offers;
       const record = offer as Record<string, unknown>;
-      const price = [record.priceCurrency, record.price].filter(Boolean).join(" ");
-      if (price.trim()) entities.push({ type: "price", name: price.trim(), value: price.trim() });
+      const price = [record.priceCurrency, record.price].filter(Boolean).join(
+        " ",
+      );
+      if (price.trim()) {
+        entities.push({
+          type: "price",
+          name: price.trim(),
+          value: price.trim(),
+        });
+      }
     }
     const location = firstJsonLdValue(item.location, ["name", "address"]);
     if (location) entities.push({ type: "place", name: location });
     const startDate = stringValue(item.startDate);
-    if (startDate) entities.push({ type: "date", name: startDate, value: startDate });
+    if (startDate) {
+      entities.push({ type: "date", name: startDate, value: startDate });
+    }
   }
   const seen = new Set<string>();
   return entities.filter((entity) => {
@@ -765,7 +931,12 @@ function jsonLdEntities(candidates: Array<Record<string, unknown>>) {
   }).slice(0, 12);
 }
 
-function emptyUrlEvidence(sourceUrl: string, status: UrlEvidence["status"], source: string, error: string | null = null): UrlEvidence {
+function emptyUrlEvidence(
+  sourceUrl: string,
+  status: UrlEvidence["status"],
+  source: string,
+  error: string | null = null,
+): UrlEvidence {
   return {
     status,
     source,
@@ -789,13 +960,16 @@ function emptyUrlEvidence(sourceUrl: string, status: UrlEvidence["status"], sour
     text: null,
     entities: [],
     raw: {},
-    error
+    error,
   };
 }
 
 function isPrivateHostname(hostname: string) {
   const host = hostname.toLowerCase();
-  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) return true;
+  if (
+    host === "localhost" || host.endsWith(".localhost") ||
+    host.endsWith(".local")
+  ) return true;
   return isPrivateAddress(host);
 }
 
@@ -815,7 +989,9 @@ function isPrivateAddress(value: string) {
   const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (!ipv4) return false;
   const parts = ipv4.slice(1).map(Number);
-  if (parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true;
+  if (parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return true;
+  }
   return (
     parts[0] === 10 ||
     parts[0] === 127 ||
@@ -828,13 +1004,22 @@ function isPrivateAddress(value: string) {
 
 async function assertFetchableUrl(value: string) {
   const url = new URL(value);
-  if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("Only http/https URLs are supported");
-  if (url.username || url.password) throw new Error("Credentialed URLs are not supported");
-  if (isPrivateHostname(url.hostname)) throw new Error("Private URLs are not supported");
-  if (!/^\[?[0-9a-f:.]+\]?$/i.test(url.hostname) && typeof Deno.resolveDns === "function") {
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("Only http/https URLs are supported");
+  }
+  if (url.username || url.password) {
+    throw new Error("Credentialed URLs are not supported");
+  }
+  if (isPrivateHostname(url.hostname)) {
+    throw new Error("Private URLs are not supported");
+  }
+  if (
+    !/^\[?[0-9a-f:.]+\]?$/i.test(url.hostname) &&
+    typeof Deno.resolveDns === "function"
+  ) {
     const records = await Promise.all([
       Deno.resolveDns(url.hostname, "A").catch(() => [] as string[]),
-      Deno.resolveDns(url.hostname, "AAAA").catch(() => [] as string[])
+      Deno.resolveDns(url.hostname, "AAAA").catch(() => [] as string[]),
     ]);
     if (records.flat().some((address) => isPrivateAddress(address))) {
       throw new Error("Private URLs are not supported");
@@ -866,10 +1051,11 @@ async function fetchTextLimited(sourceUrl: string, options: {
     const response: Response = await fetch(current, {
       redirect: "manual",
       headers: {
-        accept: options.accept || "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "user-agent": USER_AGENT
+        accept: options.accept ||
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "user-agent": USER_AGENT,
       },
-      signal: AbortSignal.timeout(options.timeoutMs || METADATA_TIMEOUT_MS)
+      signal: AbortSignal.timeout(options.timeoutMs || METADATA_TIMEOUT_MS),
     });
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       const location: string | null = response.headers.get("location");
@@ -877,13 +1063,22 @@ async function fetchTextLimited(sourceUrl: string, options: {
       current = new URL(location, current).toString();
       continue;
     }
-    if (!response.ok) throw new Error(`Metadata fetch failed with ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`Metadata fetch failed with ${response.status}`);
+    }
     const contentType = response.headers.get("content-type") || "";
-    if (options.htmlOnly !== false && !/text\/html|application\/xhtml\+xml/i.test(contentType)) {
-      throw new Error(`Unsupported metadata content-type: ${contentType || "unknown"}`);
+    if (
+      options.htmlOnly !== false &&
+      !/text\/html|application\/xhtml\+xml/i.test(contentType)
+    ) {
+      throw new Error(
+        `Unsupported metadata content-type: ${contentType || "unknown"}`,
+      );
     }
     const reader = response.body?.getReader();
-    if (!reader) return { text: await response.text(), finalUrl: current, contentType };
+    if (!reader) {
+      return { text: await response.text(), finalUrl: current, contentType };
+    }
     const chunks: Uint8Array[] = [];
     let size = 0;
     while (true) {
@@ -900,7 +1095,7 @@ async function fetchTextLimited(sourceUrl: string, options: {
     return {
       text: new TextDecoder().decode(concatChunks(chunks)),
       finalUrl: current,
-      contentType
+      contentType,
     };
   }
   throw new Error("Too many redirects");
@@ -914,10 +1109,11 @@ async function resolveUrlLimited(sourceUrl: string) {
     const response: Response = await fetch(current, {
       redirect: "manual",
       headers: {
-        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "user-agent": USER_AGENT
+        accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "user-agent": USER_AGENT,
       },
-      signal: AbortSignal.timeout(METADATA_TIMEOUT_MS)
+      signal: AbortSignal.timeout(METADATA_TIMEOUT_MS),
     });
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       const location: string | null = response.headers.get("location");
@@ -928,7 +1124,7 @@ async function resolveUrlLimited(sourceUrl: string) {
     return {
       finalUrl: current,
       status: response.status,
-      contentType: response.headers.get("content-type") || ""
+      contentType: response.headers.get("content-type") || "",
     };
   }
   throw new Error("Too many redirects");
@@ -940,7 +1136,9 @@ function mapsProviderForUrl(value: string | null | undefined) {
     const url = new URL(value);
     const host = url.hostname.replace(/^www\./, "");
     if (/maps\.app\.goo\.gl$|maps\.google\./i.test(host)) return "google_maps";
-    if (/^google\.[^/]+$/i.test(host) && /^\/maps(?:\/|$)/i.test(url.pathname)) return "google_maps";
+    if (
+      /^google\.[^/]+$/i.test(host) && /^\/maps(?:\/|$)/i.test(url.pathname)
+    ) return "google_maps";
     if (/maps\.apple\.com$|(^|\.)maps\.apple$/i.test(host)) return "apple_maps";
   } catch {
     return null;
@@ -949,11 +1147,16 @@ function mapsProviderForUrl(value: string | null | undefined) {
 }
 
 function coordinateFromText(value: string | null | undefined) {
-  const match = String(value || "").match(/(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/);
+  const match = String(value || "").match(
+    /(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/,
+  );
   if (!match) return null;
   const lat = Number(match[1]);
   const lng = Number(match[2]);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  if (
+    !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 ||
+    Math.abs(lng) > 180
+  ) return null;
   return `${lat},${lng}`;
 }
 
@@ -968,21 +1171,44 @@ function decodedParam(url: URL, keys: string[]) {
 function googleMapsEntities(finalUrl: string) {
   const url = new URL(finalUrl);
   const entities: UrlEvidence["entities"] = [];
-  const placeMatch = decodeURIComponent(url.pathname).match(/\/maps\/place\/([^/]+)/i);
+  const placeMatch = decodeURIComponent(url.pathname).match(
+    /\/maps\/place\/([^/]+)/i,
+  );
   const placeName = placeMatch?.[1]?.replace(/\+/g, " ").trim();
   if (placeName) entities.push({ type: "place", name: placeName });
 
   const query = decodedParam(url, ["q", "query", "destination", "daddr"]);
-  if (query && !coordinateFromText(query)) entities.push({ type: "map_query", name: query });
+  if (query && !coordinateFromText(query)) {
+    entities.push({ type: "map_query", name: query });
+  }
 
-  const coordinates =
-    coordinateFromText(url.pathname.match(/@(-?\d{1,3}\.\d+,-?\d{1,3}\.\d+)/)?.[1]) ||
-    coordinateFromText(url.pathname.match(/!3d(-?\d{1,3}\.\d+)!4d(-?\d{1,3}\.\d+)/)?.slice(1).join(",")) ||
-    coordinateFromText(decodedParam(url, ["ll", "center", "q", "query", "destination", "daddr"]));
-  if (coordinates) entities.push({ type: "coordinates", name: coordinates, value: coordinates });
+  const coordinates = coordinateFromText(
+    url.pathname.match(/@(-?\d{1,3}\.\d+,-?\d{1,3}\.\d+)/)?.[1],
+  ) ||
+    coordinateFromText(
+      url.pathname.match(/!3d(-?\d{1,3}\.\d+)!4d(-?\d{1,3}\.\d+)/)?.slice(1)
+        .join(","),
+    ) ||
+    coordinateFromText(
+      decodedParam(url, ["ll", "center", "q", "query", "destination", "daddr"]),
+    );
+  if (coordinates) {
+    entities.push({
+      type: "coordinates",
+      name: coordinates,
+      value: coordinates,
+    });
+  }
 
-  const placeId = decodedParam(url, ["query_place_id", "destination_place_id", "place_id", "ftid"]);
-  if (placeId) entities.push({ type: "place_id", name: placeId, value: placeId });
+  const placeId = decodedParam(url, [
+    "query_place_id",
+    "destination_place_id",
+    "place_id",
+    "ftid",
+  ]);
+  if (placeId) {
+    entities.push({ type: "place_id", name: placeId, value: placeId });
+  }
 
   const cid = decodedParam(url, ["cid", "ludocid"]);
   if (cid) entities.push({ type: "place_cid", name: cid, value: cid });
@@ -993,11 +1219,21 @@ function appleMapsEntities(finalUrl: string) {
   const url = new URL(finalUrl);
   const entities: UrlEvidence["entities"] = [];
   const query = decodedParam(url, ["q", "daddr", "saddr"]);
-  if (query && !coordinateFromText(query)) entities.push({ type: "place", name: query });
+  if (query && !coordinateFromText(query)) {
+    entities.push({ type: "place", name: query });
+  }
   const address = decodedParam(url, ["address"]);
   if (address) entities.push({ type: "address", name: address });
-  const coordinates = coordinateFromText(decodedParam(url, ["ll", "center", "coordinate", "q", "daddr", "saddr"]));
-  if (coordinates) entities.push({ type: "coordinates", name: coordinates, value: coordinates });
+  const coordinates = coordinateFromText(
+    decodedParam(url, ["ll", "center", "coordinate", "q", "daddr", "saddr"]),
+  );
+  if (coordinates) {
+    entities.push({
+      type: "coordinates",
+      name: coordinates,
+      value: coordinates,
+    });
+  }
   return dedupeEntities(entities);
 }
 
@@ -1012,10 +1248,20 @@ function dedupeEntities(entities: UrlEvidence["entities"]) {
 }
 
 function mapEvidenceTitle(provider: string, entities: UrlEvidence["entities"]) {
-  const place = entities.find((entity) => ["place", "map_query", "address"].includes(entity.type));
-  if (place) return `${provider === "apple_maps" ? "Apple Maps" : "Google Maps"} - ${place.name}`;
+  const place = entities.find((entity) =>
+    ["place", "map_query", "address"].includes(entity.type)
+  );
+  if (place) {
+    return `${
+      provider === "apple_maps" ? "Apple Maps" : "Google Maps"
+    } - ${place.name}`;
+  }
   const coordinates = entities.find((entity) => entity.type === "coordinates");
-  if (coordinates) return `${provider === "apple_maps" ? "Apple Maps" : "Google Maps"} - ${coordinates.name}`;
+  if (coordinates) {
+    return `${
+      provider === "apple_maps" ? "Apple Maps" : "Google Maps"
+    } - ${coordinates.name}`;
+  }
   return null;
 }
 
@@ -1025,11 +1271,26 @@ async function fetchMapsEvidence(sourceUrl: string) {
   try {
     const resolved = await resolveUrlLimited(sourceUrl);
     const finalUrl = resolved.finalUrl;
-    const entities = provider === "apple_maps" ? appleMapsEntities(finalUrl) : googleMapsEntities(finalUrl);
+    const entities = provider === "apple_maps"
+      ? appleMapsEntities(finalUrl)
+      : googleMapsEntities(finalUrl);
     const title = mapEvidenceTitle(provider, entities);
     return {
-      ...emptyUrlEvidence(sourceUrl, entities.length ? "success" : "empty", "maps_url", entities.length ? null : "No parseable map place, query, or coordinates found"),
-      confidence: entities.some((entity) => entity.type === "place" || entity.type === "place_id") ? 0.82 : entities.length ? 0.62 : 0,
+      ...emptyUrlEvidence(
+        sourceUrl,
+        entities.length ? "success" : "empty",
+        "maps_url",
+        entities.length
+          ? null
+          : "No parseable map place, query, or coordinates found",
+      ),
+      confidence: entities.some((entity) =>
+          entity.type === "place" || entity.type === "place_id"
+        )
+        ? 0.82
+        : entities.length
+        ? 0.62
+        : 0,
       finalUrl,
       canonical: finalUrl,
       host: hostFromUrl(finalUrl),
@@ -1037,28 +1298,346 @@ async function fetchMapsEvidence(sourceUrl: string) {
       siteName: provider === "apple_maps" ? "Apple Maps" : "Google Maps",
       type: "place",
       title,
-      description: title ? `Resolved ${provider === "apple_maps" ? "Apple Maps" : "Google Maps"} link.` : null,
+      description: title
+        ? `Resolved ${
+          provider === "apple_maps" ? "Apple Maps" : "Google Maps"
+        } link.`
+        : null,
       entities,
       raw: {
         resolved_status: resolved.status,
         resolved_content_type: resolved.contentType,
-        parser: provider
-      }
+        parser: provider,
+      },
     } satisfies UrlEvidence;
   } catch (error) {
-    return emptyUrlEvidence(sourceUrl, "failed", "maps_url", errorMessage(error, "Map URL resolution failed"));
+    return emptyUrlEvidence(
+      sourceUrl,
+      "failed",
+      "maps_url",
+      errorMessage(error, "Map URL resolution failed"),
+    );
   }
+}
+
+function pathSegment(value: string | undefined) {
+  return value ? decodeURIComponent(value).trim() : "";
+}
+
+function youtubeVideoIdFromUrl(url: URL) {
+  const host = normalizedHost(url);
+  const segments = url.pathname.split("/").filter(Boolean);
+  if (host === "youtu.be") return pathSegment(segments[0]);
+  if (
+    host === "youtube.com" || host === "m.youtube.com" ||
+    host === "music.youtube.com"
+  ) {
+    if (url.searchParams.get("v")) return url.searchParams.get("v")?.trim();
+    if (["shorts", "embed", "live"].includes(segments[0])) {
+      return pathSegment(segments[1]);
+    }
+  }
+  return null;
+}
+
+function youtubeCanonicalCandidate(url: URL) {
+  const videoId = youtubeVideoIdFromUrl(url);
+  if (videoId && /^[a-zA-Z0-9_-]{6,}$/.test(videoId)) {
+    return `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+  }
+  const listId = url.searchParams.get("list")?.trim();
+  if (listId && /^[a-zA-Z0-9_-]{6,}$/.test(listId)) {
+    return `https://www.youtube.com/playlist?list=${
+      encodeURIComponent(listId)
+    }`;
+  }
+  return null;
+}
+
+function tiktokCanonicalCandidate(url: URL) {
+  const host = normalizedHost(url);
+  if (host !== "tiktok.com" && !host?.endsWith(".tiktok.com")) return null;
+  const segments = url.pathname.split("/").filter(Boolean);
+  const videoIndex = segments.findIndex((segment) => segment === "video");
+  const videoId = videoIndex >= 0 ? pathSegment(segments[videoIndex + 1]) : "";
+  const handle = segments.find((segment) => segment.startsWith("@"));
+  if (
+    handle && /^@[a-zA-Z0-9._-]+$/.test(handle) && /^[0-9]{8,}$/.test(videoId)
+  ) {
+    return `https://www.tiktok.com/@${
+      encodeURIComponent(handle.slice(1))
+    }/video/${encodeURIComponent(videoId)}`;
+  }
+  return trackingCleanUrl(url.toString());
+}
+
+function instagramCanonicalCandidate(url: URL) {
+  const host = normalizedHost(url);
+  if (host !== "instagram.com" && !host?.endsWith(".instagram.com")) {
+    return null;
+  }
+  const segments = url.pathname.split("/").filter(Boolean);
+  const kind = segments[0];
+  const code = pathSegment(segments[1]);
+  if (["p", "reel", "tv"].includes(kind) && /^[a-zA-Z0-9_-]{5,}$/.test(code)) {
+    return `https://www.instagram.com/${kind}/${encodeURIComponent(code)}/`;
+  }
+  return trackingCleanUrl(url.toString());
+}
+
+function threadsCanonicalCandidate(url: URL) {
+  const host = normalizedHost(url);
+  if (host !== "threads.net" && !host?.endsWith(".threads.net")) return null;
+  const segments = url.pathname.split("/").filter(Boolean);
+  const postIndex = segments.findIndex((segment) => segment === "post");
+  const handle = segments.find((segment) => segment.startsWith("@"));
+  const code = postIndex >= 0 ? pathSegment(segments[postIndex + 1]) : "";
+  if (
+    handle && /^@[a-zA-Z0-9._-]+$/.test(handle) &&
+    /^[a-zA-Z0-9_-]{5,}$/.test(code)
+  ) {
+    return `https://www.threads.net/@${
+      encodeURIComponent(handle.slice(1))
+    }/post/${encodeURIComponent(code)}`;
+  }
+  return trackingCleanUrl(url.toString());
+}
+
+function facebookCanonicalCandidate(url: URL) {
+  const host = normalizedHost(url);
+  if (
+    host !== "facebook.com" && host !== "fb.watch" && host !== "fb.com" &&
+    !host?.endsWith(".facebook.com")
+  ) return null;
+  return trackingCleanUrl(url.toString());
+}
+
+function redditCanonicalCandidate(url: URL) {
+  const host = normalizedHost(url);
+  if (host !== "reddit.com" && !host?.endsWith(".reddit.com")) return null;
+  const segments = url.pathname.split("/").filter(Boolean).map(pathSegment);
+  const commentsIndex = segments.findIndex((segment) => segment === "comments");
+  if (commentsIndex >= 0 && segments[commentsIndex + 1]) {
+    const postId = segments[commentsIndex + 1];
+    const subredditIndex = commentsIndex >= 2 && segments[commentsIndex - 2] ===
+        "r"
+      ? commentsIndex - 1
+      : -1;
+    const subreddit = subredditIndex >= 0 ? segments[subredditIndex] : "";
+    const slug = segments[commentsIndex + 2];
+    if (subreddit) {
+      return `https://www.reddit.com/r/${
+        encodeURIComponent(subreddit)
+      }/comments/${encodeURIComponent(postId)}/${
+        slug ? `${encodeURIComponent(slug)}/` : ""
+      }`;
+    }
+    return `https://www.reddit.com/comments/${encodeURIComponent(postId)}/`;
+  }
+  return trackingCleanUrl(url.toString())?.replace(
+    /^https:\/\/(?:old|new|m)\.reddit\.com/i,
+    "https://www.reddit.com",
+  ) || null;
+}
+
+function xCanonicalCandidate(url: URL) {
+  const host = normalizedHost(url);
+  if (
+    host !== "x.com" && host !== "twitter.com" && host !== "mobile.twitter.com"
+  ) {
+    return null;
+  }
+  const segments = url.pathname.split("/").filter(Boolean).map(pathSegment);
+  const statusIndex = segments.findIndex((segment) =>
+    ["status", "statuses"].includes(segment)
+  );
+  const id = statusIndex >= 0 ? segments[statusIndex + 1] : "";
+  if (/^[0-9]{6,}$/.test(id)) {
+    const user = statusIndex > 0 && !["i", "intent"].includes(segments[0])
+      ? segments[0]
+      : "i";
+    return user === "i"
+      ? `https://x.com/i/web/status/${encodeURIComponent(id)}`
+      : `https://x.com/${encodeURIComponent(user)}/status/${
+        encodeURIComponent(id)
+      }`;
+  }
+  return trackingCleanUrl(url.toString())?.replace(
+    /^https:\/\/(?:mobile\.)?twitter\.com/i,
+    "https://x.com",
+  ) || null;
+}
+
+function vimeoCanonicalCandidate(url: URL) {
+  const host = normalizedHost(url);
+  if (host !== "vimeo.com" && host !== "player.vimeo.com") return null;
+  const segments = url.pathname.split("/").filter(Boolean);
+  const videoIndex = segments.findIndex((segment) => segment === "video");
+  const videoId = host === "player.vimeo.com"
+    ? pathSegment(segments[videoIndex + 1])
+    : pathSegment(segments.find((segment) => /^[0-9]+$/.test(segment)));
+  if (/^[0-9]{5,}$/.test(videoId)) {
+    return `https://vimeo.com/${encodeURIComponent(videoId)}`;
+  }
+  return trackingCleanUrl(url.toString());
+}
+
+function spotifyCanonicalCandidate(url: URL) {
+  const host = normalizedHost(url);
+  if (host !== "open.spotify.com") return null;
+  const segments = url.pathname.split("/").filter(Boolean).map(pathSegment);
+  const offset = /^intl-[a-z]{2,}$/i.test(segments[0]) ? 1 : 0;
+  const kind = segments[offset];
+  const id = segments[offset + 1];
+  if (
+    ["track", "album", "artist", "playlist", "episode", "show"].includes(
+      kind,
+    ) &&
+    /^[a-zA-Z0-9]{8,}$/.test(id)
+  ) {
+    return `https://open.spotify.com/${kind}/${encodeURIComponent(id)}`;
+  }
+  return trackingCleanUrl(url.toString());
+}
+
+function soundCloudCanonicalCandidate(url: URL) {
+  const host = normalizedHost(url);
+  if (host !== "soundcloud.com" && !host?.endsWith(".soundcloud.com")) {
+    return null;
+  }
+  return trackingCleanUrl(url.toString());
+}
+
+function pinterestCanonicalCandidate(url: URL) {
+  const host = normalizedHost(url);
+  if (host !== "pinterest.com" && !host?.endsWith(".pinterest.com")) {
+    return null;
+  }
+  const segments = url.pathname.split("/").filter(Boolean).map(pathSegment);
+  const pinIndex = segments.findIndex((segment) => segment === "pin");
+  const pinId = pinIndex >= 0 ? segments[pinIndex + 1] : "";
+  if (/^[0-9]{6,}$/.test(pinId)) {
+    return `https://www.pinterest.com/pin/${encodeURIComponent(pinId)}/`;
+  }
+  return trackingCleanUrl(url.toString());
+}
+
+function amazonCanonicalCandidate(url: URL) {
+  const host = normalizedHost(url);
+  if (!host || !/(^|\.)amazon\./i.test(host)) return null;
+  const asinMatch = decodeURIComponent(url.pathname).match(
+    /\/(?:dp|gp\/product|product)\/([A-Z0-9]{10})(?:[/?]|$)/i,
+  );
+  const asin = asinMatch?.[1]?.toUpperCase();
+  if (!asin) return trackingCleanUrl(url.toString());
+  const regionalHost = host.replace(/^smile\./, "").replace(/^www\./, "");
+  return `https://www.${regionalHost}/dp/${encodeURIComponent(asin)}`;
+}
+
+function appleMusicCanonicalCandidate(url: URL) {
+  const host = normalizedHost(url);
+  if (host !== "music.apple.com") return null;
+  const cleaned = new URL(url.toString());
+  const trackId = cleaned.searchParams.get("i");
+  for (const key of Array.from(cleaned.searchParams.keys())) {
+    if (key !== "i") cleaned.searchParams.delete(key);
+  }
+  if (trackId) cleaned.searchParams.set("i", trackId);
+  cleaned.hash = "";
+  return cleaned.toString();
+}
+
+function tier1CanonicalCandidates(value: string | null | undefined) {
+  const normalized = normalizeUrl(value);
+  if (!normalized) return [];
+  const candidates: Array<string | null> = [trackingCleanUrl(normalized)];
+  try {
+    const url = new URL(normalized);
+    const host = normalizedHost(url);
+    if (
+      host === "youtu.be" || host === "youtube.com" ||
+      host?.endsWith(".youtube.com")
+    ) {
+      candidates.push(youtubeCanonicalCandidate(url));
+    } else if (host === "tiktok.com" || host?.endsWith(".tiktok.com")) {
+      candidates.push(tiktokCanonicalCandidate(url));
+    } else if (host === "instagram.com" || host?.endsWith(".instagram.com")) {
+      candidates.push(instagramCanonicalCandidate(url));
+    } else if (host === "threads.net" || host?.endsWith(".threads.net")) {
+      candidates.push(threadsCanonicalCandidate(url));
+    } else if (
+      host === "facebook.com" || host === "fb.watch" || host === "fb.com" ||
+      host?.endsWith(".facebook.com")
+    ) {
+      candidates.push(facebookCanonicalCandidate(url));
+    } else if (host === "reddit.com" || host?.endsWith(".reddit.com")) {
+      candidates.push(redditCanonicalCandidate(url));
+    } else if (
+      host === "x.com" || host === "twitter.com" ||
+      host === "mobile.twitter.com"
+    ) {
+      candidates.push(xCanonicalCandidate(url));
+    } else if (host === "vimeo.com" || host === "player.vimeo.com") {
+      candidates.push(vimeoCanonicalCandidate(url));
+    } else if (host === "open.spotify.com") {
+      candidates.push(spotifyCanonicalCandidate(url));
+    } else if (host === "soundcloud.com" || host?.endsWith(".soundcloud.com")) {
+      candidates.push(soundCloudCanonicalCandidate(url));
+    } else if (
+      host === "pinterest.com" || host?.endsWith(".pinterest.com")
+    ) {
+      candidates.push(pinterestCanonicalCandidate(url));
+    } else if (/(^|\.)amazon\./i.test(host || "")) {
+      candidates.push(amazonCanonicalCandidate(url));
+    } else if (host === "music.apple.com") {
+      candidates.push(appleMusicCanonicalCandidate(url));
+    }
+  } catch {
+    // Ignore malformed candidates; the original URL remains in the pipeline.
+  }
+  return uniqueUrls(candidates).filter((candidate) => candidate !== normalized);
 }
 
 function oembedEndpoint(value: string) {
   try {
     const url = new URL(value);
-    const host = url.hostname.replace(/^www\./, "");
-    if (host === "youtube.com" || host === "m.youtube.com" || host === "youtu.be" || host === "music.youtube.com") {
-      return `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(value)}`;
+    const host = normalizedHost(url);
+    if (
+      host === "youtube.com" || host === "m.youtube.com" ||
+      host === "youtu.be" || host === "music.youtube.com"
+    ) {
+      return `https://www.youtube.com/oembed?format=json&url=${
+        encodeURIComponent(value)
+      }`;
     }
-    if (host === "reddit.com" || host.endsWith(".reddit.com")) {
-      return `https://www.reddit.com/oembed?format=json&url=${encodeURIComponent(value)}`;
+    if (host === "reddit.com" || host?.endsWith(".reddit.com")) {
+      return `https://www.reddit.com/oembed?format=json&url=${
+        encodeURIComponent(value)
+      }`;
+    }
+    if (host === "tiktok.com" || host?.endsWith(".tiktok.com")) {
+      return `https://www.tiktok.com/oembed?url=${encodeURIComponent(value)}`;
+    }
+    if (
+      host === "x.com" || host === "twitter.com" ||
+      host === "mobile.twitter.com"
+    ) {
+      return `https://publish.x.com/oembed?omit_script=true&url=${
+        encodeURIComponent(value)
+      }`;
+    }
+    if (host === "vimeo.com" || host === "player.vimeo.com") {
+      return `https://vimeo.com/api/oembed.json?url=${
+        encodeURIComponent(value)
+      }`;
+    }
+    if (host === "open.spotify.com" || host === "spotify.link") {
+      return `https://open.spotify.com/oembed?url=${encodeURIComponent(value)}`;
+    }
+    if (host === "soundcloud.com" || host?.endsWith(".soundcloud.com")) {
+      return `https://soundcloud.com/oembed?format=json&url=${
+        encodeURIComponent(value)
+      }`;
     }
   } catch {
     return null;
@@ -1086,40 +1665,53 @@ function redditJsonEndpoint(value: string | null | undefined) {
 
 function numberEntity(type: string, value: unknown) {
   const numberValue = Number(value);
-  return Number.isFinite(numberValue) ? { type, name: String(numberValue), value: String(numberValue) } : null;
+  return Number.isFinite(numberValue)
+    ? { type, name: String(numberValue), value: String(numberValue) }
+    : null;
 }
 
-function redditJsonMetadata(data: unknown, sourceUrl: string, finalUrl: string | null): UrlEvidence | null {
+function redditJsonMetadata(
+  data: unknown,
+  sourceUrl: string,
+  finalUrl: string | null,
+): UrlEvidence | null {
   if (!Array.isArray(data)) return null;
   const post = data[0]?.data?.children?.[0]?.data;
   if (!post || typeof post !== "object") return null;
   const title = stringValue(post.title);
   if (!title) return null;
-  const permalink = absoluteUrl(stringValue(post.permalink), "https://www.reddit.com") || finalUrl || sourceUrl;
-  const subreddit = stringValue(post.subreddit_name_prefixed) || (stringValue(post.subreddit) ? `r/${post.subreddit}` : null);
+  const permalink =
+    absoluteUrl(stringValue(post.permalink), "https://www.reddit.com") ||
+    finalUrl || sourceUrl;
+  const subreddit = stringValue(post.subreddit_name_prefixed) ||
+    (stringValue(post.subreddit) ? `r/${post.subreddit}` : null);
   const author = stringValue(post.author);
   const selftext = stringValue(post.selftext);
-  const externalUrl = stringValue(post.url_overridden_by_dest) || stringValue(post.url);
-  const image =
-    absoluteUrl(stringValue(post.thumbnail), permalink) ||
+  const externalUrl = stringValue(post.url_overridden_by_dest) ||
+    stringValue(post.url);
+  const image = absoluteUrl(stringValue(post.thumbnail), permalink) ||
     absoluteUrl(stringValue(post.preview?.images?.[0]?.source?.url), permalink);
   const entities = [
     subreddit ? { type: "community", name: subreddit } : null,
     author ? { type: "author", name: `u/${author}` } : null,
     numberEntity("score", post.ups),
-    numberEntity("comments", post.num_comments)
+    numberEntity("comments", post.num_comments),
   ].filter(Boolean) as UrlEvidence["entities"];
   const description = [
     selftext,
-    externalUrl && externalUrl !== permalink ? `Linked URL: ${externalUrl}` : null
+    externalUrl && externalUrl !== permalink
+      ? `Linked URL: ${externalUrl}`
+      : null,
   ].filter(Boolean).join("\n").slice(0, 1200) || null;
   const text = [
     title,
     selftext,
     subreddit ? `Community: ${subreddit}` : null,
     author ? `Author: u/${author}` : null,
-    Number.isFinite(Number(post.num_comments)) ? `Comments: ${post.num_comments}` : null,
-    Number.isFinite(Number(post.ups)) ? `Score: ${post.ups}` : null
+    Number.isFinite(Number(post.num_comments))
+      ? `Comments: ${post.num_comments}`
+      : null,
+    Number.isFinite(Number(post.ups)) ? `Score: ${post.ups}` : null,
   ].filter(Boolean).join("\n").slice(0, 2400) || null;
   return {
     ...emptyUrlEvidence(sourceUrl, "success", "reddit_json"),
@@ -1135,7 +1727,9 @@ function redditJsonMetadata(data: unknown, sourceUrl: string, finalUrl: string |
     image,
     authorName: author ? `u/${author}` : null,
     authorUrl: author ? `https://www.reddit.com/user/${author}/` : null,
-    publishedAt: Number.isFinite(Number(post.created_utc)) ? new Date(Number(post.created_utc) * 1000).toISOString() : null,
+    publishedAt: Number.isFinite(Number(post.created_utc))
+      ? new Date(Number(post.created_utc) * 1000).toISOString()
+      : null,
     text,
     entities: dedupeEntities(entities),
     raw: {
@@ -1144,36 +1738,49 @@ function redditJsonMetadata(data: unknown, sourceUrl: string, finalUrl: string |
       name: stringValue(post.name),
       permalink,
       ups: Number.isFinite(Number(post.ups)) ? Number(post.ups) : null,
-      num_comments: Number.isFinite(Number(post.num_comments)) ? Number(post.num_comments) : null,
-      upvote_ratio: Number.isFinite(Number(post.upvote_ratio)) ? Number(post.upvote_ratio) : null,
+      num_comments: Number.isFinite(Number(post.num_comments))
+        ? Number(post.num_comments)
+        : null,
+      upvote_ratio: Number.isFinite(Number(post.upvote_ratio))
+        ? Number(post.upvote_ratio)
+        : null,
       over_18: Boolean(post.over_18),
-      external_url: externalUrl || null
-    }
+      external_url: externalUrl || null,
+    },
   };
 }
 
-async function fetchRedditJsonEvidence(sourceUrl: string, finalUrl: string | null) {
-  const endpoint = redditJsonEndpoint(finalUrl) || redditJsonEndpoint(sourceUrl);
+async function fetchRedditJsonEvidence(
+  sourceUrl: string,
+  finalUrl: string | null,
+) {
+  const endpoint = redditJsonEndpoint(finalUrl) ||
+    redditJsonEndpoint(sourceUrl);
   if (!endpoint) return null;
   const { text } = await fetchTextLimited(endpoint, {
     accept: "application/json",
     htmlOnly: false,
-    maxBytes: 180_000
+    maxBytes: 180_000,
   });
   return redditJsonMetadata(JSON.parse(text), sourceUrl, finalUrl);
 }
 
 function metaOembedEndpoint(value: string) {
-  const token = Deno.env.get("META_OEMBED_ACCESS_TOKEN") || Deno.env.get("INSTAGRAM_OEMBED_ACCESS_TOKEN");
+  const token = Deno.env.get("META_OEMBED_ACCESS_TOKEN") ||
+    Deno.env.get("INSTAGRAM_OEMBED_ACCESS_TOKEN");
   if (!token) return null;
   try {
     const url = new URL(value);
     const host = url.hostname.replace(/^www\./, "");
     if (host === "instagram.com" || host.endsWith(".instagram.com")) {
-      return `https://graph.facebook.com/v23.0/instagram_oembed?url=${encodeURIComponent(value)}&access_token=${encodeURIComponent(token)}`;
+      return `https://graph.facebook.com/v23.0/instagram_oembed?url=${
+        encodeURIComponent(value)
+      }&access_token=${encodeURIComponent(token)}`;
     }
     if (host === "facebook.com" || host.endsWith(".facebook.com")) {
-      return `https://graph.facebook.com/v23.0/oembed_post?url=${encodeURIComponent(value)}&access_token=${encodeURIComponent(token)}`;
+      return `https://graph.facebook.com/v23.0/oembed_post?url=${
+        encodeURIComponent(value)
+      }&access_token=${encodeURIComponent(token)}`;
     }
   } catch {
     return null;
@@ -1181,26 +1788,50 @@ function metaOembedEndpoint(value: string) {
   return null;
 }
 
-function oembedMetadata(data: Record<string, unknown>, sourceUrl: string): UrlEvidence | null {
-  const title = stringValue(data.title);
-  if (!title) return null;
+function oembedMetadata(
+  data: Record<string, unknown>,
+  sourceUrl: string,
+): UrlEvidence | null {
+  const provider = stringValue(data.provider_name) || "oembed";
+  const authorName = stringValue(data.author_name);
+  const htmlText = stripHtmlForText(stringValue(data.html) || "");
+  const title = stringValue(data.title) ||
+    (htmlText ? htmlText.slice(0, 180) : null) ||
+    (authorName ? `${provider} by ${authorName}` : null);
+  const description = stringValue(data.description)?.slice(0, 1200) ||
+    (htmlText && htmlText !== title ? htmlText.slice(0, 1200) : null);
+  const image = absoluteUrl(stringValue(data.thumbnail_url), sourceUrl);
+  if (!title && !description && !image) return null;
+  const text = [
+    title,
+    description && description !== title ? description : null,
+    authorName ? `Author: ${authorName}` : null,
+    provider,
+  ].filter(Boolean).join("\n").slice(0, 2400) || null;
+  const entities = [
+    authorName ? { type: "author", name: authorName } : null,
+  ].filter(Boolean) as UrlEvidence["entities"];
   return {
     ...emptyUrlEvidence(sourceUrl, "success", "oembed"),
     confidence: 0.9,
-    provider: stringValue(data.provider_name) || "oembed",
+    provider,
     siteName: stringValue(data.provider_name),
     type: stringValue(data.type),
-    title: title.slice(0, 300),
-    description: stringValue(data.description)?.slice(0, 1200) || null,
-    image: stringValue(data.thumbnail_url),
-    authorName: stringValue(data.author_name),
+    title: title ? title.slice(0, 300) : null,
+    description,
+    image,
+    authorName,
     authorUrl: stringValue(data.author_url),
+    text,
+    entities: dedupeEntities(entities),
     raw: {
       provider_name: data.provider_name || null,
+      provider_url: data.provider_url || null,
       type: data.type || null,
       version: data.version || null,
-      thumbnail_url: data.thumbnail_url || null
-    }
+      thumbnail_url: data.thumbnail_url || null,
+      html_text: htmlText ? htmlText.slice(0, 1200) : null,
+    },
   };
 }
 
@@ -1209,44 +1840,135 @@ async function fetchOembedEvidence(sourceUrl: string, endpoint: string | null) {
   const { text } = await fetchTextLimited(endpoint, {
     accept: "application/json",
     htmlOnly: false,
-    maxBytes: 80_000
+    maxBytes: 80_000,
   });
   return oembedMetadata(JSON.parse(text), sourceUrl);
 }
 
-function parseHtmlEvidence(html: string, sourceUrl: string, finalUrl: string): UrlEvidence | null {
+async function fetchExtractusOembedEvidence(
+  sourceUrl: string,
+  targetUrl: string,
+) {
+  const data = await extractProviderOembed(
+    targetUrl,
+    {},
+    {
+      headers: { "user-agent": USER_AGENT },
+      signal: AbortSignal.timeout(METADATA_TIMEOUT_MS),
+    },
+  );
+  if (!data || typeof data !== "object") return null;
+  const evidence = oembedMetadata(
+    data as unknown as Record<string, unknown>,
+    sourceUrl,
+  );
+  return evidence
+    ? {
+      ...evidence,
+      raw: {
+        ...evidence.raw,
+        extractor: "@extractus/oembed-extractor",
+      },
+    }
+    : null;
+}
+
+function openLinkMetadata(html: string, finalUrl: string) {
+  try {
+    const parsed = parseOpenLink(html);
+    const preview = extractOpenLink(parsed, finalUrl);
+    return { parsed, preview };
+  } catch (error) {
+    console.warn(
+      "openlink_parse_failed",
+      JSON.stringify({ final_url: finalUrl, error: errorMessage(error) }),
+    );
+    return null;
+  }
+}
+
+function parseHtmlEvidence(
+  html: string,
+  sourceUrl: string,
+  finalUrl: string,
+): UrlEvidence | null {
+  const openLink = openLinkMetadata(html, finalUrl);
+  const openLinkPreview = openLink?.preview;
   const jsonLd = jsonLdCandidates(html);
   const primaryJsonLd =
-    jsonLd.find((item) => item && (item.name || item.headline || item.description)) || null;
-  const canonical = firstLink(html, ["canonical"], finalUrl) || finalUrl;
-  const title =
+    jsonLd.find((item) =>
+      item && (item.name || item.headline || item.description)
+    ) || null;
+  const canonical = absoluteUrl(stringValue(openLinkPreview?.url), finalUrl) ||
+    firstLink(html, ["canonical"], finalUrl) || finalUrl;
+  const title = stringValue(openLinkPreview?.title) ||
     firstMeta(html, ["og:title", "twitter:title"]) ||
     stringValue(primaryJsonLd?.headline) ||
     stringValue(primaryJsonLd?.name) ||
     firstTitle(html);
-  const description =
+  const description = stringValue(openLinkPreview?.description) ||
     firstMeta(html, ["og:description", "twitter:description", "description"]) ||
     stringValue(primaryJsonLd?.description);
-  const image =
-    absoluteUrl(firstMeta(html, ["og:image", "og:image:url", "twitter:image", "twitter:image:src"]), finalUrl) ||
+  const image = absoluteUrl(
+    stringValue(openLinkPreview?.image),
+    finalUrl,
+  ) ||
+    absoluteUrl(
+      firstMeta(html, [
+        "og:image",
+        "og:image:url",
+        "twitter:image",
+        "twitter:image:src",
+      ]),
+      finalUrl,
+    ) ||
     imageFromJsonLd(primaryJsonLd?.image, finalUrl);
-  const video =
-    absoluteUrl(firstMeta(html, ["og:video", "og:video:url", "og:video:secure_url", "twitter:player"]), finalUrl) ||
+  const video = absoluteUrl(
+    stringValue(openLinkPreview?.video),
+    finalUrl,
+  ) ||
+    absoluteUrl(
+      firstMeta(html, [
+        "og:video",
+        "og:video:url",
+        "og:video:secure_url",
+        "twitter:player",
+      ]),
+      finalUrl,
+    ) ||
     null;
-  const siteName = firstMeta(html, ["og:site_name", "application-name"]) || hostFromUrl(finalUrl);
-  const authorName =
+  const siteName = stringValue(openLinkPreview?.siteName) ||
+    firstMeta(html, ["og:site_name", "application-name"]) ||
+    hostFromUrl(finalUrl);
+  const authorName = stringValue(openLinkPreview?.author) ||
     firstMeta(html, ["article:author", "author", "twitter:creator"]) ||
-    firstJsonLdValue(primaryJsonLd?.author || primaryJsonLd?.creator, ["name", "author", "creator"]);
+    firstJsonLdValue(primaryJsonLd?.author || primaryJsonLd?.creator, [
+      "name",
+      "author",
+      "creator",
+    ]);
   const favicon =
+    absoluteUrl(stringValue(openLinkPreview?.favicon), finalUrl) ||
     firstLink(html, ["icon"], finalUrl) ||
     firstLink(html, ["shortcut", "apple-touch-icon"], finalUrl) ||
     absoluteUrl("/favicon.ico", finalUrl);
   const text = stripHtmlForText(html);
   const entities = jsonLdEntities(jsonLd);
-  if (!title && !description && !image && !video && !text && !entities.length) return null;
+  if (!title && !description && !image && !video && !text && !entities.length) {
+    return null;
+  }
+  const openLinkHasMetadata = Boolean(
+    openLinkPreview?.title || openLinkPreview?.description ||
+      openLinkPreview?.image || openLinkPreview?.video ||
+      openLinkPreview?.favicon,
+  );
   return {
     status: "success",
-    source: title || description ? "open_graph" : "html_metadata",
+    source: openLinkHasMetadata
+      ? "openlink_html"
+      : title || description
+      ? "open_graph"
+      : "html_metadata",
     confidence: title || description ? 0.75 : 0.45,
     sourceUrl,
     finalUrl,
@@ -1262,25 +1984,36 @@ function parseHtmlEvidence(html: string, sourceUrl: string, finalUrl: string): U
     favicon,
     authorName: authorName ? String(authorName).slice(0, 240) : null,
     authorUrl: null,
-    publishedAt:
+    publishedAt: stringValue(openLinkPreview?.publishedTime) ||
       firstMeta(html, ["article:published_time", "date", "datePublished"]) ||
       stringValue(primaryJsonLd?.datePublished),
-    modifiedAt:
-      firstMeta(html, ["article:modified_time", "dateModified"]) ||
+    modifiedAt: firstMeta(html, ["article:modified_time", "dateModified"]) ||
       stringValue(primaryJsonLd?.dateModified),
     text: text || null,
     entities,
     raw: {
+      openlink: openLinkPreview
+        ? {
+          url: stringValue(openLinkPreview.url),
+          title: stringValue(openLinkPreview.title),
+          description: stringValue(openLinkPreview.description),
+          image: stringValue(openLinkPreview.image),
+          favicon: stringValue(openLinkPreview.favicon),
+          site_name: stringValue(openLinkPreview.siteName),
+          type: stringValue(openLinkPreview.type),
+          content_type: stringValue(openLinkPreview.contentType),
+        }
+        : null,
       metaImages: allMeta(html, ["og:image", "twitter:image"]).slice(0, 4),
       jsonLd: jsonLd.slice(0, 4).map((item) => ({
         type: jsonLdType(item),
         name: stringValue(item.name),
         headline: stringValue(item.headline),
         datePublished: stringValue(item.datePublished),
-        dateModified: stringValue(item.dateModified)
-      }))
+        dateModified: stringValue(item.dateModified),
+      })),
     },
-    error: null
+    error: null,
   };
 }
 
@@ -1289,26 +2022,81 @@ function platformForUrl(value: string | null) {
   if (!host) return null;
   if (/instagram\.com$/i.test(host)) return "instagram";
   if (/facebook\.com$|fb\.com$/i.test(host)) return "facebook";
+  if (/threads\.net$/i.test(host)) return "threads";
   if (/tiktok\.com$/i.test(host)) return "tiktok";
   if (/reddit\.com$/i.test(host)) return "reddit";
   if (/youtube\.com$|youtu\.be$/i.test(host)) return "youtube";
   if (/x\.com$|twitter\.com$/i.test(host)) return "x";
-  if (/maps\.app\.goo\.gl$|maps\.google\./i.test(host)) return "maps";
+  if (/vimeo\.com$/i.test(host)) return "vimeo";
+  if (/soundcloud\.com$/i.test(host)) return "soundcloud";
+  if (/open\.spotify\.com$|spotify\.link$/i.test(host)) return "spotify";
+  if (/music\.apple\.com$/i.test(host)) return "apple_music";
+  if (/pinterest\.com$|pin\.it$/i.test(host)) return "pinterest";
+  if (/(^|\.)amazon\./i.test(host) || /^a\.co$|^amzn\.to$/i.test(host)) {
+    return "amazon";
+  }
+  if (/maps\.app\.goo\.gl$|maps\.google\./i.test(host)) return "google_maps";
+  if (/maps\.apple\.com$/i.test(host)) return "apple_maps";
   return "generic";
+}
+
+function contentTypeForPlatform(platform: string | null) {
+  switch (platform) {
+    case "amazon":
+      return "product";
+    case "apple_maps":
+    case "google_maps":
+      return "place";
+    case "apple_music":
+    case "soundcloud":
+    case "spotify":
+      return "media";
+    case "pinterest":
+      return "image";
+    case "tiktok":
+    case "vimeo":
+    case "youtube":
+      return "video";
+    case "facebook":
+    case "instagram":
+    case "reddit":
+    case "threads":
+    case "x":
+      return "social_post";
+    default:
+      return null;
+  }
 }
 
 function contentTypeGuess(evidence: UrlEvidence | null) {
   if (!evidence) return null;
   const type = String(evidence.type || "").toLowerCase();
   const url = evidence.finalUrl || evidence.sourceUrl;
-  if (/video|movie|reel|short/i.test(type) || evidence.video || /\.(mp4|m4v|mov|webm)(?:[?#].*)?$/i.test(url)) return "video";
-  if (/product|offer/i.test(type) || evidence.entities.some((entity) => entity.type === "price" || entity.type === "brand")) return "product";
+  if (
+    /video|movie|reel|short/i.test(type) || evidence.video ||
+    /\.(mp4|m4v|mov|webm)(?:[?#].*)?$/i.test(url)
+  ) return "video";
+  if (
+    /product|offer/i.test(type) ||
+    evidence.entities.some((entity) =>
+      entity.type === "price" || entity.type === "brand"
+    )
+  ) return "product";
   if (/recipe/i.test(type)) return "recipe";
-  if (/event/i.test(type) || evidence.entities.some((entity) => entity.type === "date")) return "event";
-  if (/place|localbusiness|restaurant|store/i.test(type) || evidence.entities.some((entity) => entity.type === "place")) return "place";
+  if (
+    /event/i.test(type) ||
+    evidence.entities.some((entity) => entity.type === "date")
+  ) return "event";
+  if (
+    /place|localbusiness|restaurant|store/i.test(type) ||
+    evidence.entities.some((entity) => entity.type === "place")
+  ) return "place";
   if (/article|news|blog|posting/i.test(type)) return "article";
-  if (platformForUrl(url) && platformForUrl(url) !== "generic") return "social_post";
-  return evidence.title || evidence.description || evidence.text ? "web_page" : null;
+  const platformType = contentTypeForPlatform(platformForUrl(url));
+  if (platformType) return platformType;
+  return evidence.title || evidence.description || evidence.text
+    ? "web_page"
+    : null;
 }
 
 function genericTitle(value: string | null | undefined) {
@@ -1330,13 +2118,14 @@ function genericTitle(value: string | null | undefined) {
     "forbidden",
     "not found",
     "error",
-    "enable javascript"
+    "enable javascript",
   ].includes(normalized);
 }
 
 function blockPageText(value: string | null | undefined) {
   const text = String(value || "").toLowerCase();
-  return /captcha|cloudflare|enable javascript|access denied|temporarily blocked|sign in to continue|log in to continue|please wait while we check/i.test(text);
+  return /captcha|cloudflare|enable javascript|access denied|temporarily blocked|sign in to continue|log in to continue|please wait while we check/i
+    .test(text);
 }
 
 function weaknessReasons(evidence: UrlEvidence | null) {
@@ -1345,15 +2134,25 @@ function weaknessReasons(evidence: UrlEvidence | null) {
   if (evidence.status !== "success") reasons.push(`status_${evidence.status}`);
   if (!evidence.title) reasons.push("missing_title");
   else if (genericTitle(evidence.title)) reasons.push("generic_title");
-  if (!evidence.description && !evidence.text) reasons.push("missing_description_or_text");
+  if (!evidence.description && !evidence.text) {
+    reasons.push("missing_description_or_text");
+  }
   if (evidence.text && evidence.text.length < 180) reasons.push("short_text");
   if (!contentTypeGuess(evidence)) reasons.push("missing_content_type");
-  if (blockPageText(evidence.title) || blockPageText(evidence.description) || blockPageText(evidence.text)) {
+  if (
+    blockPageText(evidence.title) || blockPageText(evidence.description) ||
+    blockPageText(evidence.text)
+  ) {
     reasons.push("blocked_or_login_page");
   }
+  const lacksSubstantivePlatformEvidence = !evidence.description &&
+    !evidence.text &&
+    !evidence.image &&
+    !evidence.video &&
+    !evidence.entities.length;
   if (
     platformForUrl(evidence.sourceUrl) !== "generic" &&
-    (genericTitle(evidence.title) || (!evidence.description && !evidence.text))
+    (genericTitle(evidence.title) || lacksSubstantivePlatformEvidence)
   ) {
     reasons.push("generic_platform_metadata");
   }
@@ -1372,8 +2171,14 @@ function evidenceSources(evidence: UrlEvidence | null) {
 
 function evidenceQuality(evidence: UrlEvidence | null): EvidenceQuality {
   if (!evidence) return "none";
-  if (evidence.status === "blocked" || evidence.status === "failed" || evidence.status === "empty") {
-    return evidence.title || evidence.description || evidence.text || evidence.entities.length ? "low" : "none";
+  if (
+    evidence.status === "blocked" || evidence.status === "failed" ||
+    evidence.status === "empty"
+  ) {
+    return evidence.title || evidence.description || evidence.text ||
+        evidence.entities.length
+      ? "low"
+      : "none";
   }
   const reasons = weaknessReasons(evidence);
   if (
@@ -1381,33 +2186,47 @@ function evidenceQuality(evidence: UrlEvidence | null): EvidenceQuality {
     evidence.confidence >= 0.78 &&
     evidence.title &&
     !genericTitle(evidence.title) &&
-    (evidence.description || (evidence.text && evidence.text.length >= 180) || evidence.image || evidence.video)
+    (evidence.description || (evidence.text && evidence.text.length >= 180) ||
+      evidence.image || evidence.video)
   ) {
-    return reasons.includes("blocked_or_login_page") || reasons.includes("generic_platform_metadata") ? "low" : "high";
+    return reasons.includes("blocked_or_login_page") ||
+        reasons.includes("generic_platform_metadata")
+      ? "low"
+      : "high";
   }
   if (
     evidence.status === "success" &&
     evidence.confidence >= 0.45 &&
-    (evidence.title || evidence.description || evidence.text || evidence.entities.length)
+    (evidence.title || evidence.description || evidence.text ||
+      evidence.entities.length)
   ) {
     return reasons.includes("blocked_or_login_page") ? "low" : "medium";
   }
-  return evidence.title || evidence.description || evidence.text || evidence.entities.length ? "low" : "none";
+  return evidence.title || evidence.description || evidence.text ||
+      evidence.entities.length
+    ? "low"
+    : "none";
 }
 
-function productEvidenceStatus(evidence: UrlEvidence | null): ProductUrlEvidenceStatus {
+function productEvidenceStatus(
+  evidence: UrlEvidence | null,
+): ProductUrlEvidenceStatus {
   const quality = evidenceQuality(evidence);
   if (!evidence) return "insufficient_url_evidence";
   if (evidence.raw?.client_resolution_needed) return "needs_client_resolution";
   if (quality === "high" || quality === "medium") return "extracted";
   if (quality === "low") return "partial_evidence";
-  if (evidence.status === "failed" || evidence.status === "blocked") return "failed";
+  if (evidence.status === "failed" || evidence.status === "blocked") {
+    return "failed";
+  }
   return "insufficient_url_evidence";
 }
 
 function missingEvidence(evidence: UrlEvidence | null) {
   const missing: string[] = [];
-  if (!evidence?.canonical || evidence.canonical === evidence.sourceUrl) missing.push("canonical_url");
+  if (!evidence?.canonical || evidence.canonical === evidence.sourceUrl) {
+    missing.push("canonical_url");
+  }
   if (!evidence?.title) missing.push("title");
   if (!evidence?.description) missing.push("description");
   if (!evidence?.text) missing.push("body_or_text_excerpt");
@@ -1425,28 +2244,34 @@ function pathFromUrl(value: string | null | undefined) {
 
 function normalizedUrlEvidence(
   evidence: UrlEvidence | null,
-  options: { originalUrl?: string | null; clientResolvedUrl?: string | null } = {}
+  options: { originalUrl?: string | null; clientResolvedUrl?: string | null } =
+    {},
 ) {
-  const normalizedUrl = evidence?.sourceUrl || normalizeUrl(options.originalUrl) || "";
+  const normalizedUrl = evidence?.sourceUrl ||
+    normalizeUrl(options.originalUrl) || "";
   const status = productEvidenceStatus(evidence);
   const quality = evidenceQuality(evidence);
-  const rawPipeline = evidence?.raw?.pipeline && typeof evidence.raw.pipeline === "object"
-    ? evidence.raw.pipeline as Record<string, unknown>
-    : {};
-  const failureReason =
-    status === "needs_client_resolution"
-      ? "opaque_or_blocked_url_unresolved"
-      : evidence?.error || (quality === "none" ? "insufficient_url_evidence" : "");
+  const rawPipeline =
+    evidence?.raw?.pipeline && typeof evidence.raw.pipeline === "object"
+      ? evidence.raw.pipeline as Record<string, unknown>
+      : {};
+  const failureReason = status === "needs_client_resolution"
+    ? "opaque_or_blocked_url_unresolved"
+    : evidence?.error ||
+      (quality === "none" ? "insufficient_url_evidence" : "");
   return {
     status,
     evidence_quality: quality,
     original_url: options.originalUrl || normalizedUrl || "",
     normalized_url: normalizedUrl || "",
     canonical_url: evidence?.canonical || "",
-    client_resolved_url: options.clientResolvedUrl || stringValue(evidence?.raw?.client_resolved_url) || "",
+    client_resolved_url: options.clientResolvedUrl ||
+      stringValue(evidence?.raw?.client_resolved_url) || "",
     provider: evidence?.provider || "",
     domain: evidence?.host || hostFromUrl(normalizedUrl) || "",
-    path: pathFromUrl(evidence?.finalUrl || evidence?.canonical || normalizedUrl),
+    path: pathFromUrl(
+      evidence?.finalUrl || evidence?.canonical || normalizedUrl,
+    ),
     detected_content_type: contentTypeGuess(evidence) || "",
     title: evidence?.title || "",
     description: evidence?.description || "",
@@ -1458,46 +2283,53 @@ function normalizedUrlEvidence(
     extraction_sources: evidenceSources(evidence),
     failure_reason: failureReason || "",
     missing_evidence: missingEvidence(evidence),
-    user_facing_message:
-      status === "needs_client_resolution"
-        ? CLIENT_RESOLUTION_MESSAGE
-        : status === "insufficient_url_evidence"
-          ? INSUFFICIENT_URL_MESSAGE
-          : "",
+    user_facing_message: status === "needs_client_resolution"
+      ? CLIENT_RESOLUTION_MESSAGE
+      : status === "insufficient_url_evidence"
+      ? INSUFFICIENT_URL_MESSAGE
+      : "",
     raw_debug_summary: {
       redirect_status: rawPipeline.resolved_status ?? null,
       final_url: evidence?.finalUrl || null,
       source: evidence?.source || null,
       error: evidence?.error || null,
       weakness_reasons: weaknessReasons(evidence),
-      extraction_sources_attempted: rawPipeline.extraction_sources_attempted || [],
-      extraction_sources_successful: evidenceSources(evidence)
-    }
+      extraction_sources_attempted: rawPipeline.extraction_sources_attempted ||
+        [],
+      extraction_sources_successful: evidenceSources(evidence),
+    },
   };
 }
 
-function logUrlIngest(urlEvidence: UrlEvidence | null, confidence: number | null = null) {
+function logUrlIngest(
+  urlEvidence: UrlEvidence | null,
+  confidence: number | null = null,
+) {
   const normalized = normalizedUrlEvidence(urlEvidence);
   const debug = normalized.raw_debug_summary as Record<string, unknown>;
-  console.info("url_ingest", JSON.stringify({
-    normalized_url: normalized.normalized_url,
-    provider: normalized.provider,
-    redirect_status: debug.redirect_status ?? "",
-    final_url: debug.final_url ?? "",
-    client_resolved_url_present: Boolean(normalized.client_resolved_url),
-    extraction_sources_attempted: debug.extraction_sources_attempted || [],
-    extraction_sources_successful: normalized.extraction_sources,
-    evidence_quality: normalized.evidence_quality,
-    failure_reason: normalized.failure_reason,
-    categorization_confidence: confidence ?? ""
-  }));
+  console.info(
+    "url_ingest",
+    JSON.stringify({
+      normalized_url: normalized.normalized_url,
+      provider: normalized.provider,
+      redirect_status: debug.redirect_status ?? "",
+      final_url: debug.final_url ?? "",
+      client_resolved_url_present: Boolean(normalized.client_resolved_url),
+      extraction_sources_attempted: debug.extraction_sources_attempted || [],
+      extraction_sources_successful: normalized.extraction_sources,
+      evidence_quality: normalized.evidence_quality,
+      failure_reason: normalized.failure_reason,
+      categorization_confidence: confidence ?? "",
+    }),
+  );
 }
 
-function compactUrlEvidence(evidence: UrlEvidence | null): LlMUrlEvidence | null {
+function compactUrlEvidence(
+  evidence: UrlEvidence | null,
+): LlMUrlEvidence | null {
   if (!evidence) return null;
   const reasons = weaknessReasons(evidence);
-  const itemSpecificUrlSignal =
-    hasItemSpecificUrlSignal(evidence.finalUrl) ||
+  const itemSpecificUrlSignal = hasItemSpecificUrlSignal(evidence.finalUrl) ||
     hasItemSpecificUrlSignal(evidence.canonical) ||
     hasItemSpecificUrlSignal(evidence.sourceUrl);
   return {
@@ -1526,7 +2358,7 @@ function compactUrlEvidence(evidence: UrlEvidence | null): LlMUrlEvidence | null
     weakness_reasons: reasons,
     item_specific_url_signal: itemSpecificUrlSignal,
     should_web_search: shouldUseWebSearch(evidence),
-    error: evidence.error
+    error: evidence.error,
   };
 }
 
@@ -1534,10 +2366,16 @@ function cacheTtlMs(evidence: UrlEvidence) {
   if (evidence.raw?.client_resolution_needed) return CACHE_ERROR_TTL_MS;
   if (evidence.status === "blocked") return 0;
   if (evidence.status !== "success") return CACHE_ERROR_TTL_MS;
-  if (evidence.raw?.client_resolved_url || (evidence.raw?.pipeline && typeof evidence.raw.pipeline === "object" && (evidence.raw.pipeline as Record<string, unknown>).client_resolved_url)) {
+  if (
+    evidence.raw?.client_resolved_url ||
+    (evidence.raw?.pipeline && typeof evidence.raw.pipeline === "object" &&
+      (evidence.raw.pipeline as Record<string, unknown>).client_resolved_url)
+  ) {
     return CACHE_STRONG_TTL_MS;
   }
-  return weaknessReasons(evidence).length ? CACHE_WEAK_TTL_MS : CACHE_STRONG_TTL_MS;
+  return weaknessReasons(evidence).length
+    ? CACHE_WEAK_TTL_MS
+    : CACHE_STRONG_TTL_MS;
 }
 
 function cacheExpiry(evidence: UrlEvidence) {
@@ -1545,19 +2383,24 @@ function cacheExpiry(evidence: UrlEvidence) {
   return ttl > 0 ? new Date(Date.now() + ttl).toISOString() : null;
 }
 
-function cachedEvidence(row: Record<string, unknown>, sourceUrl: string): UrlEvidence | null {
-  const evidence = row.evidence && typeof row.evidence === "object" ? row.evidence as Record<string, unknown> : null;
+function cachedEvidence(
+  row: Record<string, unknown>,
+  sourceUrl: string,
+): UrlEvidence | null {
+  const evidence = row.evidence && typeof row.evidence === "object"
+    ? row.evidence as Record<string, unknown>
+    : null;
   if (!evidence) return null;
   return {
     ...emptyUrlEvidence(sourceUrl, "empty", "cache"),
     ...evidence,
-    sourceUrl
+    sourceUrl,
   } as UrlEvidence;
 }
 
 async function loadCachedUrlEvidence(
   supabase: ReturnType<typeof adminClient>,
-  normalizedUrl: string
+  normalizedUrl: string,
 ): Promise<UrlEvidence | null> {
   const { data, error } = await supabase
     .from("url_evidence_cache")
@@ -1571,7 +2414,7 @@ async function loadCachedUrlEvidence(
 
 async function loadCachedCanonicalUrl(
   supabase: ReturnType<typeof adminClient>,
-  originalUrl: string
+  originalUrl: string,
 ): Promise<string | null> {
   const originalHash = await sha256Hex(originalUrl);
   const { data, error } = await supabase
@@ -1584,14 +2427,25 @@ async function loadCachedCanonicalUrl(
     .limit(1)
     .maybeSingle();
   if (error || !data) return null;
-  const canonical = normalizeUrl((data as Record<string, unknown>).canonical_url as string);
+  const canonical = normalizeUrl(
+    (data as Record<string, unknown>).canonical_url as string,
+  );
   return canonical && canonical !== originalUrl ? canonical : null;
 }
 
-function shouldUseCachedEvidence(evidence: UrlEvidence | null, normalizedUrl: string) {
+function shouldUseCachedEvidence(
+  evidence: UrlEvidence | null,
+  normalizedUrl: string,
+) {
   if (!evidence) return false;
-  if (evidence.status !== "success" && hasItemSpecificUrlSignal(normalizedUrl)) return false;
-  if (evidence.status === "success" && weaknessReasons(evidence).includes("generic_platform_metadata") && hasItemSpecificUrlSignal(normalizedUrl)) {
+  if (
+    evidence.status !== "success" && hasItemSpecificUrlSignal(normalizedUrl)
+  ) return false;
+  if (
+    evidence.status === "success" &&
+    weaknessReasons(evidence).includes("generic_platform_metadata") &&
+    hasItemSpecificUrlSignal(normalizedUrl)
+  ) {
     return false;
   }
   return true;
@@ -1604,8 +2458,13 @@ async function persistUrlEvidence(
   options: {
     originalUrl?: string | null;
     clientResolvedUrl?: string | null;
-    resolvedBy?: "server_redirect" | "client_resolution" | "provider_adapter" | "manual_user_input" | null;
-  } = {}
+    resolvedBy?:
+      | "server_redirect"
+      | "client_resolution"
+      | "provider_adapter"
+      | "manual_user_input"
+      | null;
+  } = {},
 ) {
   const expiresAt = cacheExpiry(evidence);
   if (!expiresAt) return;
@@ -1620,12 +2479,17 @@ async function persistUrlEvidence(
         original_url: originalUrl,
         final_url: evidence.finalUrl,
         canonical_url: evidence.canonical,
-        client_resolved_url: options.clientResolvedUrl || stringValue(evidence.raw?.client_resolved_url),
+        client_resolved_url: options.clientResolvedUrl ||
+          stringValue(evidence.raw?.client_resolved_url),
         host: evidence.host,
         provider: evidence.provider,
-        resolved_by: options.resolvedBy || (evidence.finalUrl && evidence.finalUrl !== normalizedUrl ? "server_redirect" : null),
+        resolved_by: options.resolvedBy ||
+          (evidence.finalUrl && evidence.finalUrl !== normalizedUrl
+            ? "server_redirect"
+            : null),
         evidence_quality: evidenceQuality(evidence),
-        failure_reason: normalizedUrlEvidence(evidence, options).failure_reason || null,
+        failure_reason:
+          normalizedUrlEvidence(evidence, options).failure_reason || null,
         source: evidence.source,
         status: evidence.status,
         confidence: evidence.confidence,
@@ -1634,7 +2498,7 @@ async function persistUrlEvidence(
         error: evidence.error,
         fetched_at: new Date().toISOString(),
         last_verified_at: new Date().toISOString(),
-        expires_at: expiresAt
+        expires_at: expiresAt,
       });
   } catch {
     // Cache writes should never make capture analysis fail.
@@ -1645,7 +2509,11 @@ function shouldUseWebSearch(evidence: UrlEvidence | null) {
   if (!evidence?.sourceUrl) return false;
   const status = productEvidenceStatus(evidence);
   const quality = evidenceQuality(evidence);
-  if (status === "needs_client_resolution" || status === "insufficient_url_evidence" || quality === "low" || quality === "none") {
+  if (
+    status === "needs_client_resolution" ||
+    status === "insufficient_url_evidence" || quality === "low" ||
+    quality === "none"
+  ) {
     return false;
   }
   const reasons = weaknessReasons(evidence);
@@ -1682,8 +2550,11 @@ function isOpaqueOrAppShareUrl(value: string | null | undefined) {
       return /^\/r\/[^/]+\/s\/[a-z0-9_-]+\/?$/i.test(url.pathname);
     }
     const last = segments[segments.length - 1] || "";
-    const hasShareMarker = segments.some((segment) => /^(s|share|shared|short|l)$/i.test(segment));
-    return platformForUrl(value) !== "generic" && hasShareMarker && /^[a-z0-9_-]{6,}$/i.test(last);
+    const hasShareMarker = segments.some((segment) =>
+      /^(s|share|shared|short|l)$/i.test(segment)
+    );
+    return platformForUrl(value) !== "generic" && hasShareMarker &&
+      /^[a-z0-9_-]{6,}$/i.test(last);
   } catch {
     return false;
   }
@@ -1697,7 +2568,7 @@ function hasSubstantiveUrlEvidence(evidence: UrlEvidence | null) {
       evidence.image ||
       evidence.video ||
       (evidence.text && evidence.text.length >= 180) ||
-      evidence.entities.length
+      evidence.entities.length,
   );
 }
 
@@ -1705,7 +2576,7 @@ function needsClientResolutionForEvidence(
   originalUrl: string,
   evidence: UrlEvidence | null,
   candidates: UrlEvidence[],
-  clientResolvedUrl: string | null
+  clientResolvedUrl: string | null,
 ) {
   if (clientResolvedUrl) return false;
   if (!isOpaqueOrAppShareUrl(originalUrl)) return false;
@@ -1713,14 +2584,25 @@ function needsClientResolutionForEvidence(
   return candidates.some((candidate) =>
     candidate.status === "blocked" ||
     candidate.status === "failed" ||
-    /403|401|429|blocked|forbidden|access denied|captcha|too many/i.test(candidate.error || "")
+    /403|401|429|blocked|forbidden|access denied|captcha|too many/i.test(
+      candidate.error || "",
+    )
   ) || !candidates.length;
 }
 
-function clientResolutionNeededEvidence(sourceUrl: string, candidates: UrlEvidence[], resolvedStatus: number | null) {
+function clientResolutionNeededEvidence(
+  sourceUrl: string,
+  candidates: UrlEvidence[],
+  resolvedStatus: number | null,
+) {
   return withPipelineRaw(
     {
-      ...emptyUrlEvidence(sourceUrl, "blocked", "client_resolution", "opaque_or_blocked_url_unresolved"),
+      ...emptyUrlEvidence(
+        sourceUrl,
+        "blocked",
+        "client_resolution",
+        "opaque_or_blocked_url_unresolved",
+      ),
       canonical: null,
       provider: platformForUrl(sourceUrl) || hostFromUrl(sourceUrl),
       raw: {
@@ -1730,9 +2612,9 @@ function clientResolutionNeededEvidence(sourceUrl: string, candidates: UrlEviden
           "title",
           "description",
           "body_or_text_excerpt",
-          "media"
-        ]
-      }
+          "media",
+        ],
+      },
     },
     {
       input_url: sourceUrl,
@@ -1742,9 +2624,9 @@ function clientResolutionNeededEvidence(sourceUrl: string, candidates: UrlEviden
         source: candidate.source,
         status: candidate.status,
         error: candidate.error,
-        score: evidenceQualityScore(candidate)
-      }))
-    }
+        score: evidenceQualityScore(candidate),
+      })),
+    },
   );
 }
 
@@ -1753,13 +2635,19 @@ function evidenceQualityScore(evidence: UrlEvidence | null) {
   let score = evidence.confidence * 100;
   if (evidence.status === "success") score += 100;
   if (evidence.status === "partial") score += 50;
-  if (evidence.status === "failed" || evidence.status === "blocked") score -= 100;
+  if (evidence.status === "failed" || evidence.status === "blocked") {
+    score -= 100;
+  }
   if (evidence.title && !genericTitle(evidence.title)) score += 30;
   if (evidence.description) score += 25;
   if (evidence.text && evidence.text.length >= 180) score += 20;
   if (evidence.image || evidence.video) score += 12;
-  if (evidence.entities.length) score += Math.min(20, evidence.entities.length * 5);
-  if (evidence.canonical && evidence.canonical !== evidence.sourceUrl) score += 8;
+  if (evidence.entities.length) {
+    score += Math.min(20, evidence.entities.length * 5);
+  }
+  if (evidence.canonical && evidence.canonical !== evidence.sourceUrl) {
+    score += 8;
+  }
   for (const reason of weaknessReasons(evidence)) score -= 10;
   if (/json|oembed/i.test(evidence.source)) score += 10;
   return score;
@@ -1768,74 +2656,140 @@ function evidenceQualityScore(evidence: UrlEvidence | null) {
 function bestEvidence(candidates: UrlEvidence[]) {
   return candidates
     .filter(Boolean)
-    .sort((a, b) => evidenceQualityScore(b) - evidenceQualityScore(a))[0] || null;
+    .sort((a, b) => evidenceQualityScore(b) - evidenceQualityScore(a))[0] ||
+    null;
 }
 
 function withPipelineRaw(
   evidence: UrlEvidence,
-  fields: Record<string, unknown>
+  fields: Record<string, unknown>,
 ): UrlEvidence {
   return {
     ...evidence,
     raw: {
       ...evidence.raw,
       pipeline: {
-        ...(evidence.raw?.pipeline && typeof evidence.raw.pipeline === "object" ? evidence.raw.pipeline as Record<string, unknown> : {}),
-        ...fields
-      }
-    }
+        ...(evidence.raw?.pipeline && typeof evidence.raw.pipeline === "object"
+          ? evidence.raw.pipeline as Record<string, unknown>
+          : {}),
+        ...fields,
+      },
+    },
   };
 }
 
-async function extractOembedEvidenceForUrl(sourceUrl: string, targetUrl: string, phase: string) {
+async function extractOembedEvidenceForUrl(
+  sourceUrl: string,
+  targetUrl: string,
+  phase: string,
+) {
+  const extracted = await fetchExtractusOembedEvidence(sourceUrl, targetUrl)
+    .catch(() => null);
+  if (extracted) {
+    const source = `${phase}_extractus_oembed`;
+    return withPipelineRaw(
+      {
+        ...extracted,
+        source,
+        finalUrl: targetUrl,
+        canonical: extracted.canonical || targetUrl,
+        host: hostFromUrl(targetUrl),
+      },
+      { phase: source, target_url: targetUrl },
+    );
+  }
+
   const endpoint = oembedEndpoint(targetUrl) || metaOembedEndpoint(targetUrl);
-  const evidence = await fetchOembedEvidence(sourceUrl, endpoint).catch(() => null);
+  const evidence = await fetchOembedEvidence(sourceUrl, endpoint).catch(() =>
+    null
+  );
   if (!evidence) return null;
+  const source = `${phase}_known_oembed`;
   return withPipelineRaw(
     {
       ...evidence,
-      source: phase,
+      source,
       finalUrl: targetUrl,
       canonical: evidence.canonical || targetUrl,
-      host: hostFromUrl(targetUrl)
+      host: hostFromUrl(targetUrl),
     },
-    { phase, target_url: targetUrl }
+    { phase: source, target_url: targetUrl },
   );
 }
 
-async function extractHtmlEvidenceForUrl(sourceUrl: string, targetUrl: string, phase: string) {
-  const { text: html, finalUrl, contentType } = await fetchTextLimited(targetUrl);
+async function extractHtmlEvidenceForUrl(
+  sourceUrl: string,
+  targetUrl: string,
+  phase: string,
+) {
+  const { text: html, finalUrl, contentType } = await fetchTextLimited(
+    targetUrl,
+  );
   const discoveredOembed = firstLink(
     html,
     ["alternate"],
     finalUrl,
-    (type) => type.includes("json+oembed") || type.includes("xml+oembed")
+    (type) => type.includes("json+oembed") || type.includes("xml+oembed"),
   );
-  const discovered = await fetchOembedEvidence(sourceUrl, discoveredOembed).catch(() => null);
+  const discovered = await fetchOembedEvidence(sourceUrl, discoveredOembed)
+    .catch(() => null);
   if (discovered) {
     return withPipelineRaw(
-      { ...discovered, source: `${phase}_discovered_oembed`, finalUrl, canonical: discovered.canonical || finalUrl },
-      { phase, target_url: targetUrl, final_url: finalUrl, content_type: contentType }
+      {
+        ...discovered,
+        source: `${phase}_discovered_oembed`,
+        finalUrl,
+        canonical: discovered.canonical || finalUrl,
+      },
+      {
+        phase,
+        target_url: targetUrl,
+        final_url: finalUrl,
+        content_type: contentType,
+      },
     );
   }
 
   const parsed = parseHtmlEvidence(html, sourceUrl, finalUrl);
   if (parsed) {
-    return withPipelineRaw(parsed, { phase, target_url: targetUrl, final_url: finalUrl, content_type: contentType });
+    return withPipelineRaw(parsed, {
+      phase,
+      target_url: targetUrl,
+      final_url: finalUrl,
+      content_type: contentType,
+    });
   }
   return withPipelineRaw(
     {
-      ...emptyUrlEvidence(sourceUrl, "empty", phase, "No preview metadata found"),
+      ...emptyUrlEvidence(
+        sourceUrl,
+        "empty",
+        phase,
+        "No preview metadata found",
+      ),
       finalUrl,
-      raw: { contentType }
+      raw: { contentType },
     },
-    { phase, target_url: targetUrl, final_url: finalUrl, content_type: contentType }
+    {
+      phase,
+      target_url: targetUrl,
+      final_url: finalUrl,
+      content_type: contentType,
+    },
   );
 }
 
-async function extractAdapterEvidenceForUrl(sourceUrl: string, targetUrl: string, phase: string) {
-  const redditJson = await fetchRedditJsonEvidence(sourceUrl, targetUrl).catch(() => null);
-  return redditJson ? withPipelineRaw(redditJson, { phase, target_url: targetUrl }) : null;
+async function extractAdapterEvidenceForUrl(
+  sourceUrl: string,
+  targetUrl: string,
+  phase: string,
+) {
+  const redditJson = await fetchRedditJsonEvidence(sourceUrl, targetUrl).catch(
+    () => null,
+  );
+  return redditJson
+    ? withPipelineRaw(redditJson, { phase, target_url: targetUrl })
+    : null;
 }
 
 async function buildUrlEvidence(
@@ -1846,8 +2800,8 @@ async function buildUrlEvidence(
     clientResolvedUrl: null,
     clientResolutionSource: null,
     clientResolutionTimestamp: null,
-    clientResolutionAttemptCount: null
-  }
+    clientResolutionAttemptCount: null,
+  },
 ): Promise<UrlEvidence | null> {
   const normalized = normalizeUrl(options.originalUrl || sourceUrl);
   if (!normalized) return null;
@@ -1859,16 +2813,23 @@ async function buildUrlEvidence(
     } catch (error) {
       return withPipelineRaw(
         {
-          ...emptyUrlEvidence(normalized, "blocked", "client_resolution_validation", errorMessage(error, "Client-resolved URL blocked")),
+          ...emptyUrlEvidence(
+            normalized,
+            "blocked",
+            "client_resolution_validation",
+            errorMessage(error, "Client-resolved URL blocked"),
+          ),
           canonical: null,
-          raw: { client_resolved_url: clientResolvedUrl }
+          raw: { client_resolved_url: clientResolvedUrl },
         },
-        { input_url: normalized, client_resolved_url: clientResolvedUrl }
+        { input_url: normalized, client_resolved_url: clientResolvedUrl },
       );
     }
   }
 
-  const cached = await loadCachedUrlEvidence(supabase, normalized).catch(() => null);
+  const cached = await loadCachedUrlEvidence(supabase, normalized).catch(() =>
+    null
+  );
   if (cached && shouldUseCachedEvidence(cached, normalized)) {
     return { ...cached, source: `${cached.source}:cache` };
   }
@@ -1876,55 +2837,112 @@ async function buildUrlEvidence(
   try {
     await assertFetchableUrl(normalized);
   } catch (error) {
-    return emptyUrlEvidence(normalized, "blocked", "safe_fetch", errorMessage(error, "URL blocked"));
+    return emptyUrlEvidence(
+      normalized,
+      "blocked",
+      "safe_fetch",
+      errorMessage(error, "URL blocked"),
+    );
   }
 
-  const cachedCanonical = clientResolvedUrl ? null : await loadCachedCanonicalUrl(supabase, normalized).catch(() => null);
+  const cachedCanonical = clientResolvedUrl
+    ? null
+    : await loadCachedCanonicalUrl(supabase, normalized).catch(() => null);
 
   const mapsEvidence = await fetchMapsEvidence(normalized);
   if (mapsEvidence) {
-    await persistUrlEvidence(supabase, normalized, mapsEvidence, { originalUrl: normalized, resolvedBy: "provider_adapter" });
+    await persistUrlEvidence(supabase, normalized, mapsEvidence, {
+      originalUrl: normalized,
+      resolvedBy: "provider_adapter",
+    });
     return mapsEvidence;
   }
 
   const candidates: UrlEvidence[] = [];
   let resolvedError: string | null = null;
-  const resolved = await resolveUrlLimited(clientResolvedUrl || cachedCanonical || normalized).catch((error) => {
+  const resolved = await resolveUrlLimited(
+    clientResolvedUrl || cachedCanonical || normalized,
+  ).catch((error) => {
     resolvedError = errorMessage(error, "URL redirect resolution failed");
     return null;
   });
-  const resolvedUrl = resolved?.finalUrl && resolved.finalUrl !== normalized ? resolved.finalUrl : null;
-  const targetUrls = uniqueUrls([clientResolvedUrl, cachedCanonical, resolvedUrl, normalized]);
+  const resolvedUrl = resolved?.finalUrl && resolved.finalUrl !== normalized
+    ? resolved.finalUrl
+    : null;
+  const baseTargetUrls = uniqueUrls([
+    clientResolvedUrl,
+    cachedCanonical,
+    resolvedUrl,
+    normalized,
+  ]);
+  const tier1CanonicalUrls = uniqueUrls(
+    baseTargetUrls.flatMap((targetUrl) => tier1CanonicalCandidates(targetUrl)),
+  );
+  const targetUrls = uniqueUrls([...baseTargetUrls, ...tier1CanonicalUrls]);
+  const phaseForTargetUrl = (targetUrl: string) =>
+    targetUrl === clientResolvedUrl
+      ? "client_resolved"
+      : targetUrl === cachedCanonical
+      ? "cached_canonical"
+      : targetUrl === resolvedUrl
+      ? "resolved"
+      : tier1CanonicalUrls.includes(targetUrl)
+      ? "tier1_canonical"
+      : "original";
 
   for (const targetUrl of targetUrls) {
-    const phase =
-      targetUrl === clientResolvedUrl
-        ? "client_resolved"
-        : targetUrl === cachedCanonical
-          ? "cached_canonical"
-          : targetUrl === resolvedUrl
-            ? "resolved"
-            : "original";
-    const adapter = await extractAdapterEvidenceForUrl(normalized, targetUrl, `${phase}_adapter`);
+    const phase = phaseForTargetUrl(targetUrl);
+    const adapter = await extractAdapterEvidenceForUrl(
+      normalized,
+      targetUrl,
+      `${phase}_adapter`,
+    );
     if (adapter) candidates.push(adapter);
 
-    const oembed = await extractOembedEvidenceForUrl(normalized, targetUrl, `${phase}_oembed`);
+    const oembed = await extractOembedEvidenceForUrl(
+      normalized,
+      targetUrl,
+      phase,
+    );
     if (oembed) candidates.push(oembed);
 
-    const html = await extractHtmlEvidenceForUrl(normalized, targetUrl, `${phase}_html`).catch((error) =>
+    const html = await extractHtmlEvidenceForUrl(
+      normalized,
+      targetUrl,
+      `${phase}_html`,
+    ).catch((error) =>
       withPipelineRaw(
-        emptyUrlEvidence(normalized, "failed", `${phase}_html`, errorMessage(error, "Metadata fetch failed")),
-        { phase: `${phase}_html`, target_url: targetUrl }
+        emptyUrlEvidence(
+          normalized,
+          "failed",
+          `${phase}_html`,
+          errorMessage(error, "Metadata fetch failed"),
+        ),
+        { phase: `${phase}_html`, target_url: targetUrl },
       )
     );
     if (html) candidates.push(html);
   }
 
   const best = bestEvidence(candidates);
-  const evidence = needsClientResolutionForEvidence(normalized, best, candidates, clientResolvedUrl)
-    ? clientResolutionNeededEvidence(normalized, candidates, resolved?.status ?? null)
+  const evidence = needsClientResolutionForEvidence(
+      normalized,
+      best,
+      candidates,
+      clientResolvedUrl,
+    )
+    ? clientResolutionNeededEvidence(
+      normalized,
+      candidates,
+      resolved?.status ?? null,
+    )
     : best ||
-    emptyUrlEvidence(normalized, "failed", "metadata_pipeline", "No URL evidence extractor produced a result");
+      emptyUrlEvidence(
+        normalized,
+        "failed",
+        "metadata_pipeline",
+        "No URL evidence extractor produced a result",
+      );
   const withPipeline = withPipelineRaw(evidence, {
     input_url: normalized,
     cached_canonical_url: cachedCanonical,
@@ -1936,30 +2954,44 @@ async function buildUrlEvidence(
     resolved_status: resolved?.status ?? null,
     resolved_error: resolvedError,
     resolved_content_type: resolved?.contentType ?? null,
+    tier1_canonical_urls: tier1CanonicalUrls,
     extraction_sources_attempted: targetUrls.flatMap((targetUrl) => [
-      `${targetUrl === clientResolvedUrl ? "client_resolved" : targetUrl === cachedCanonical ? "cached_canonical" : targetUrl === resolvedUrl ? "resolved" : "original"}_adapter`,
-      `${targetUrl === clientResolvedUrl ? "client_resolved" : targetUrl === cachedCanonical ? "cached_canonical" : targetUrl === resolvedUrl ? "resolved" : "original"}_oembed`,
-      `${targetUrl === clientResolvedUrl ? "client_resolved" : targetUrl === cachedCanonical ? "cached_canonical" : targetUrl === resolvedUrl ? "resolved" : "original"}_html`
+      `${phaseForTargetUrl(targetUrl)}_adapter`,
+      `${phaseForTargetUrl(targetUrl)}_extractus_oembed`,
+      `${phaseForTargetUrl(targetUrl)}_known_oembed`,
+      `${phaseForTargetUrl(targetUrl)}_html`,
     ]),
     candidate_sources: candidates.map((candidate) => ({
       source: candidate.source,
       status: candidate.status,
       title: candidate.title,
-      score: evidenceQualityScore(candidate)
-    }))
+      score: evidenceQualityScore(candidate),
+    })),
   });
   if (clientResolvedUrl) {
     withPipeline.raw.client_resolved_url = clientResolvedUrl;
   }
-  await persistUrlEvidence(supabase, clientResolvedUrl || cachedCanonical || normalized, withPipeline, {
-    originalUrl: normalized,
-    clientResolvedUrl,
-    resolvedBy: clientResolvedUrl ? "client_resolution" : cachedCanonical ? "server_redirect" : null
-  });
+  await persistUrlEvidence(
+    supabase,
+    clientResolvedUrl || cachedCanonical || normalized,
+    withPipeline,
+    {
+      originalUrl: normalized,
+      clientResolvedUrl,
+      resolvedBy: clientResolvedUrl
+        ? "client_resolution"
+        : cachedCanonical
+        ? "server_redirect"
+        : null,
+    },
+  );
   return withPipeline;
 }
 
-function compactText(parts: Array<string | null | undefined>, maxLength = 3500) {
+function compactText(
+  parts: Array<string | null | undefined>,
+  maxLength = 3500,
+) {
   return parts
     .map((part) => String(part || "").trim())
     .filter(Boolean)
@@ -1973,7 +3005,10 @@ function collectionEmbeddingContent(title: string, description: string) {
   return compactText([title, description], 1600);
 }
 
-function retrievalQueryForCapture(capture: CaptureRow, urlEvidence: UrlEvidence | null) {
+function retrievalQueryForCapture(
+  capture: CaptureRow,
+  urlEvidence: UrlEvidence | null,
+) {
   return compactText([
     capture.source_text,
     capture.source_url,
@@ -1982,7 +3017,7 @@ function retrievalQueryForCapture(capture: CaptureRow, urlEvidence: UrlEvidence 
     urlEvidence?.text?.slice(0, 1400),
     typeof (capture as Record<string, unknown>).context_note === "string"
       ? String((capture as Record<string, unknown>).context_note)
-      : null
+      : null,
   ]);
 }
 
@@ -1995,17 +3030,23 @@ async function createEmbedding(input: string) {
     method: "POST",
     headers: {
       authorization: `Bearer ${env("OPENAI_API_KEY")}`,
-      "content-type": "application/json"
+      "content-type": "application/json",
     },
     body: JSON.stringify({
       model: "text-embedding-3-small",
-      input: input || "untitled collection"
-    })
+      input: input || "untitled collection",
+    }),
   });
   const raw = await response.json();
-  if (!response.ok) throw new Error(raw.error?.message || `OpenAI embeddings failed with ${response.status}`);
+  if (!response.ok) {
+    throw new Error(
+      raw.error?.message || `OpenAI embeddings failed with ${response.status}`,
+    );
+  }
   const embedding = raw.data?.[0]?.embedding;
-  if (!Array.isArray(embedding)) throw new Error("OpenAI embedding response did not include an embedding");
+  if (!Array.isArray(embedding)) {
+    throw new Error("OpenAI embedding response did not include an embedding");
+  }
   return embedding.map(Number);
 }
 
@@ -2014,7 +3055,7 @@ async function upsertCollectionEmbedding(
   userId: string,
   collectionId: string,
   title: string,
-  description: string
+  description: string,
 ) {
   const content = collectionEmbeddingContent(title, description);
   const embedding = await createEmbedding(content);
@@ -2022,7 +3063,7 @@ async function upsertCollectionEmbedding(
     user_id: userId,
     collection_id: collectionId,
     content,
-    embedding: embeddingLiteral(embedding)
+    embedding: embeddingLiteral(embedding),
   }, { onConflict: "collection_id" });
   if (error) throw error;
 }
@@ -2031,7 +3072,7 @@ async function retrieveCollectionsForCapture(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
   capture: CaptureRow,
-  urlEvidence: UrlEvidence | null
+  urlEvidence: UrlEvidence | null,
 ): Promise<RetrievedCollection[]> {
   const queryText = retrievalQueryForCapture(capture, urlEvidence);
   if (!queryText) return [];
@@ -2040,33 +3081,50 @@ async function retrieveCollectionsForCapture(
     p_user_id: userId,
     p_query_text: queryText,
     p_query_embedding: embeddingLiteral(embedding),
-    p_match_count: 3
+    p_match_count: 3,
   });
   if (error) throw error;
   return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
     id: String(row.id),
     title: String(row.title || ""),
     description: String(row.description || ""),
-    keyword_rank: typeof row.keyword_rank === "number" ? row.keyword_rank : null,
-    semantic_rank: typeof row.semantic_rank === "number" ? row.semantic_rank : null,
-    keyword_score: typeof row.keyword_score === "number" ? row.keyword_score : null,
-    semantic_score: typeof row.semantic_score === "number" ? row.semantic_score : null,
-    rrf_score: typeof row.rrf_score === "number" ? row.rrf_score : null
+    keyword_rank: typeof row.keyword_rank === "number"
+      ? row.keyword_rank
+      : null,
+    semantic_rank: typeof row.semantic_rank === "number"
+      ? row.semantic_rank
+      : null,
+    keyword_score: typeof row.keyword_score === "number"
+      ? row.keyword_score
+      : null,
+    semantic_score: typeof row.semantic_score === "number"
+      ? row.semantic_score
+      : null,
+    rrf_score: typeof row.rrf_score === "number" ? row.rrf_score : null,
   })).slice(0, 3);
 }
 
 function normalizeCollectionDecision(decision: Record<string, unknown>) {
-  const type = decision.type === "existing" ? "existing" : decision.type === "new" ? "new" : "";
+  const type = decision.type === "existing"
+    ? "existing"
+    : decision.type === "new"
+    ? "new"
+    : "";
   const confidence = Number(decision.confidence);
   return {
     type,
-    collection_id: typeof decision.collection_id === "string" && decision.collection_id.trim()
+    collection_id: typeof decision.collection_id === "string" &&
+        decision.collection_id.trim()
       ? decision.collection_id.trim()
       : null,
     title: typeof decision.title === "string" ? decision.title.trim() : "",
-    description: typeof decision.description === "string" ? decision.description.trim() : null,
-    rationale: typeof decision.rationale === "string" ? decision.rationale.trim() : "",
-    confidence: Number.isFinite(confidence) ? confidence : 0
+    description: typeof decision.description === "string"
+      ? decision.description.trim()
+      : null,
+    rationale: typeof decision.rationale === "string"
+      ? decision.rationale.trim()
+      : "",
+    confidence: Number.isFinite(confidence) ? confidence : 0,
   };
 }
 
@@ -2075,7 +3133,11 @@ async function linkCaptureToCollection(
   userId: string,
   collectionId: string,
   captureId: string,
-  fields: { createdBy?: string; rationale?: string | null; confidence?: number | null } = {}
+  fields: {
+    createdBy?: string;
+    rationale?: string | null;
+    confidence?: number | null;
+  } = {},
 ) {
   const replacedAt = new Date().toISOString();
   const replaced = await supabase
@@ -2106,7 +3168,7 @@ async function linkCaptureToCollection(
       capture_id: captureId,
       created_by: fields.createdBy || "user",
       rationale: fields.rationale || null,
-      confidence: fields.confidence ?? null
+      confidence: fields.confidence ?? null,
     })
     .select("id")
     .single();
@@ -2119,11 +3181,15 @@ async function autoLinkCollectionDecisions(
   userId: string,
   captureId: string,
   analysis: AnalysisOutput,
-  retrievedCollections: RetrievedCollection[]
+  retrievedCollections: RetrievedCollection[],
 ): Promise<AnalysisOutput> {
-  const retrievedIds = new Set(retrievedCollections.map((collection) => collection.id));
+  const retrievedIds = new Set(
+    retrievedCollections.map((collection) => collection.id),
+  );
   const decisions = Array.isArray(analysis.collection_decisions)
-    ? analysis.collection_decisions.map((item) => normalizeCollectionDecision(item as Record<string, unknown>))
+    ? analysis.collection_decisions.map((item) =>
+      normalizeCollectionDecision(item as Record<string, unknown>)
+    )
     : [];
   const linked: Array<Record<string, unknown>> = [];
   const review: Array<Record<string, unknown>> = [];
@@ -2134,11 +3200,17 @@ async function autoLinkCollectionDecisions(
       retrievedIds.has(decision.collection_id) &&
       decision.confidence >= COLLECTION_AUTO_LINK_CONFIDENCE
     ) {
-      await linkCaptureToCollection(supabase, userId, decision.collection_id, captureId, {
-        createdBy: "analysis",
-        rationale: decision.rationale,
-        confidence: decision.confidence
-      });
+      await linkCaptureToCollection(
+        supabase,
+        userId,
+        decision.collection_id,
+        captureId,
+        {
+          createdBy: "analysis",
+          rationale: decision.rationale,
+          confidence: decision.confidence,
+        },
+      );
       linked.push(decision);
     } else if (
       decision.type === "existing" ||
@@ -2147,10 +3219,18 @@ async function autoLinkCollectionDecisions(
       review.push(decision);
     }
   }
-  return { ...analysis, collection_decisions: review, linked_collections: linked };
+  return {
+    ...analysis,
+    collection_decisions: review,
+    linked_collections: linked,
+  };
 }
 
-function buildPrompt(capture: CaptureRow, urlEvidence: UrlEvidence | null, retrievedCollections: RetrievedCollection[]) {
+function buildPrompt(
+  capture: CaptureRow,
+  urlEvidence: UrlEvidence | null,
+  retrievedCollections: RetrievedCollection[],
+) {
   const llmUrlEvidence = compactUrlEvidence(urlEvidence);
   return [
     "Infer why the user saved this item. Focus on intent, medium-term usefulness, reminders, and collection fit.",
@@ -2176,14 +3256,15 @@ function buildPrompt(capture: CaptureRow, urlEvidence: UrlEvidence | null, retri
         source_text: capture.source_text,
         asset: capture.asset_url
           ? {
-              mime_type: capture.asset_mime_type || null,
-              purpose: "Optional shared image evidence from the Android share sheet."
-            }
+            mime_type: capture.asset_mime_type || null,
+            purpose:
+              "Optional shared image evidence from the Android share sheet.",
+          }
           : null,
-        url_evidence: llmUrlEvidence
+        url_evidence: llmUrlEvidence,
       },
       null,
-      2
+      2,
     ),
     "",
     "Retrieved active collections:",
@@ -2195,12 +3276,12 @@ function buildPrompt(capture: CaptureRow, urlEvidence: UrlEvidence | null, retri
         retrieval: {
           keyword_rank: collection.keyword_rank ?? null,
           semantic_rank: collection.semantic_rank ?? null,
-          rrf_score: collection.rrf_score ?? null
-        }
+          rrf_score: collection.rrf_score ?? null,
+        },
       })),
       null,
-      2
-    )
+      2,
+    ),
   ].join("\n");
 }
 
@@ -2234,19 +3315,23 @@ function preflightPrompt(capture: CaptureRow, urlEvidence: UrlEvidence | null) {
         source_url: capture.source_url,
         source_text: capture.source_text,
         capture_type: capture.capture_type,
-        url_evidence: compactUrlEvidence(urlEvidence)
+        url_evidence: compactUrlEvidence(urlEvidence),
       },
       null,
-      2
-    )
+      2,
+    ),
   ].join("\n");
 }
 
 function preflightModel() {
-  return Deno.env.get("OPENAI_PREFLIGHT_MODEL") || Deno.env.get("OPENAI_MODEL") || "gpt-5-mini";
+  return Deno.env.get("OPENAI_PREFLIGHT_MODEL") ||
+    Deno.env.get("OPENAI_MODEL") || "gpt-5-mini";
 }
 
-async function runPreflight(capture: CaptureRow, urlEvidence: UrlEvidence | null) {
+async function runPreflight(
+  capture: CaptureRow,
+  urlEvidence: UrlEvidence | null,
+) {
   const started = Date.now();
   const model = preflightModel();
   const requestBody: Record<string, unknown> = {
@@ -2256,48 +3341,63 @@ async function runPreflight(capture: CaptureRow, urlEvidence: UrlEvidence | null
     input: [
       {
         role: "system",
-        content: "You are Sharebook's public-link preflight gate. Decide whether enough public evidence exists before expensive extraction."
+        content:
+          "You are Sharebook's public-link preflight gate. Decide whether enough public evidence exists before expensive extraction.",
       },
       {
         role: "user",
-        content: [{ type: "input_text", text: preflightPrompt(capture, urlEvidence) }]
-      }
+        content: [{
+          type: "input_text",
+          text: preflightPrompt(capture, urlEvidence),
+        }],
+      },
     ],
     text: {
       format: {
         type: "json_schema",
         name: "capture_preflight",
         strict: true,
-        schema: preflightSchema
-      }
-    }
+        schema: preflightSchema,
+      },
+    },
   };
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
       authorization: `Bearer ${env("OPENAI_API_KEY")}`,
-      "content-type": "application/json"
+      "content-type": "application/json",
     },
-    body: JSON.stringify(requestBody)
+    body: JSON.stringify(requestBody),
   });
   const raw = await response.json();
-  if (!response.ok) throw new Error(raw.error?.message || `OpenAI preflight failed with ${response.status}`);
+  if (!response.ok) {
+    throw new Error(
+      raw.error?.message || `OpenAI preflight failed with ${response.status}`,
+    );
+  }
   const text = responseText(raw);
-  if (!text) throw new Error("OpenAI preflight response did not include output text");
+  if (!text) {
+    throw new Error("OpenAI preflight response did not include output text");
+  }
   return {
     preflight: JSON.parse(text) as PreflightDecision,
     model,
     raw,
     requestBody,
     latencyMs: Date.now() - started,
-    usage: raw.usage ?? {}
+    usage: raw.usage ?? {},
   };
 }
 
-function shouldRunPreflight(capture: CaptureRow, asset: { storage_path: string; mime_type: string | null } | null) {
+function shouldRunPreflight(
+  capture: CaptureRow,
+  asset: { storage_path: string; mime_type: string | null } | null,
+) {
   if (!capture.source_url) return false;
   if (asset?.storage_path) return false;
-  return ["link", "social_post", "unknown", null, undefined].includes(capture.capture_type);
+  return ["link", "social_post", "unknown", null, undefined].includes(
+    capture.capture_type,
+  );
 }
 
 function hasItemSpecificUrlSignal(value: string | null | undefined) {
@@ -2309,11 +3409,17 @@ function hasItemSpecificUrlSignal(value: string | null | undefined) {
       .map((segment) => decodeURIComponent(segment).trim())
       .filter(Boolean);
     const hasSpecificPath = pathSegments.length >= 2 ||
-      pathSegments.some((segment) => /[a-z0-9]{6,}/i.test(segment) || /\d{4,}/.test(segment));
-    const hasSpecificQuery = Array.from(url.searchParams.entries()).some(([key, val]) => {
-      const combined = `${key}=${val}`.trim();
-      return val.trim().length >= 6 || /(?:^|[_-])(id|url|uri|u|v|p|q)(?:$|[_-])/i.test(key) && combined.length >= 4;
-    });
+      pathSegments.some((segment) =>
+        /[a-z0-9]{6,}/i.test(segment) || /\d{4,}/.test(segment)
+      );
+    const hasSpecificQuery = Array.from(url.searchParams.entries()).some(
+      ([key, val]) => {
+        const combined = `${key}=${val}`.trim();
+        return val.trim().length >= 6 ||
+          /(?:^|[_-])(id|url|uri|u|v|p|q)(?:$|[_-])/i.test(key) &&
+            combined.length >= 4;
+      },
+    );
     return hasSpecificPath || hasSpecificQuery;
   } catch {
     return false;
@@ -2327,7 +3433,10 @@ function hasUsefulSharedText(capture: CaptureRow) {
   return !urlOnly && text.length >= 12;
 }
 
-function isGenericPlatformShell(capture: CaptureRow, evidence: UrlEvidence | null) {
+function isGenericPlatformShell(
+  capture: CaptureRow,
+  evidence: UrlEvidence | null,
+) {
   if (!evidence) return false;
   const reasons = weaknessReasons(evidence);
   const hasSubstantiveEvidence = Boolean(
@@ -2335,10 +3444,9 @@ function isGenericPlatformShell(capture: CaptureRow, evidence: UrlEvidence | nul
       evidence.image ||
       evidence.video ||
       evidence.entities.length ||
-      (evidence.text && evidence.text.length >= 180)
+      (evidence.text && evidence.text.length >= 180),
   );
-  const hasItemSignal =
-    hasItemSpecificUrlSignal(evidence.finalUrl) ||
+  const hasItemSignal = hasItemSpecificUrlSignal(evidence.finalUrl) ||
     hasItemSpecificUrlSignal(evidence.canonical) ||
     hasItemSpecificUrlSignal(evidence.sourceUrl) ||
     hasUsefulSharedText(capture);
@@ -2350,50 +3458,56 @@ function isGenericPlatformShell(capture: CaptureRow, evidence: UrlEvidence | nul
   ) && !hasItemSignal;
 }
 
-function shouldAttemptExtractionFromUrlSignal(capture: CaptureRow, evidence: UrlEvidence | null) {
+function shouldAttemptExtractionFromUrlSignal(
+  capture: CaptureRow,
+  evidence: UrlEvidence | null,
+) {
   return Boolean(
     hasItemSpecificUrlSignal(evidence?.finalUrl) ||
       hasItemSpecificUrlSignal(evidence?.canonical) ||
       hasItemSpecificUrlSignal(evidence?.sourceUrl) ||
       hasItemSpecificUrlSignal(capture.source_url) ||
-      hasUsefulSharedText(capture)
+      hasUsefulSharedText(capture),
   );
 }
 
 function applyPreflightPolicy(
   capture: CaptureRow,
   preflight: PreflightDecision,
-  urlEvidence: UrlEvidence | null
+  urlEvidence: UrlEvidence | null,
 ): PreflightDecision {
   const validRationales = new Set([
     "public_metadata_sufficient",
     "url_identifier_sufficient",
     "map_place_parseable",
-    "non_url_capture"
+    "non_url_capture",
   ]);
-  const normalized = preflight.decision === "invalid" && validRationales.has(preflight.rationale_code)
+  const normalized = preflight.decision === "invalid" &&
+      validRationales.has(preflight.rationale_code)
     ? {
-        ...preflight,
-        rationale_code: "ambiguous_insufficient_evidence" as const
-      }
+      ...preflight,
+      rationale_code: "ambiguous_insufficient_evidence" as const,
+    }
     : preflight;
   if (
     normalized.decision === "invalid" &&
     shouldAttemptExtractionFromUrlSignal(capture, urlEvidence) &&
-    !["private_or_login_gated", "unsupported_file_or_url", "map_unparseable"].includes(normalized.rationale_code)
+    !["private_or_login_gated", "unsupported_file_or_url", "map_unparseable"]
+      .includes(normalized.rationale_code)
   ) {
     return {
       decision: "valid",
       rationale_code: "url_identifier_sufficient",
       confidence: Math.max(normalized.confidence || 0, 0.55),
-      user_message: "The URL has an item-specific signal, so full extraction should attempt exact-URL evidence before deciding it is insufficient.",
+      user_message:
+        "The URL has an item-specific signal, so full extraction should attempt exact-URL evidence before deciding it is insufficient.",
       evidence_summary: [
         "Weak metadata was not enough by itself, but the URL or shared text is item-specific.",
         `source_url=${JSON.stringify(capture.source_url || null)}`,
         `canonical=${JSON.stringify(urlEvidence?.canonical || null)}`,
         `final_url=${JSON.stringify(urlEvidence?.finalUrl || null)}`,
-        `weakness_reasons=${weaknessReasons(urlEvidence).join(",")}`
-      ].join(" ")
+        `weakness_reasons=${weaknessReasons(urlEvidence).join(",")}`,
+      ].join(" "),
     };
   }
   if (!isGenericPlatformShell(capture, urlEvidence)) return normalized;
@@ -2401,25 +3515,30 @@ function applyPreflightPolicy(
     decision: "invalid",
     rationale_code: "generic_platform_shell",
     confidence: Math.max(normalized.confidence || 0, 0.9),
-    user_message: "This link is not publicly extractable: the public evidence only contains a generic site shell, not item-specific content.",
+    user_message:
+      "This link is not publicly extractable: the public evidence only contains a generic site shell, not item-specific content.",
     evidence_summary: [
       "The URL returned generic evidence only, with no item-specific URL signal or useful shared text.",
       `title=${JSON.stringify(urlEvidence?.title || null)}`,
       `description=${JSON.stringify(urlEvidence?.description || null)}`,
       `text=${JSON.stringify(urlEvidence?.text?.slice(0, 120) || null)}`,
-      `weakness_reasons=${weaknessReasons(urlEvidence).join(",")}`
-    ].join(" ")
+      `weakness_reasons=${weaknessReasons(urlEvidence).join(",")}`,
+    ].join(" "),
   };
 }
 
-function rejectedAnalysis(capture: CaptureRow, preflight: PreflightDecision, urlEvidence: UrlEvidence | null): AnalysisOutput {
+function rejectedAnalysis(
+  capture: CaptureRow,
+  preflight: PreflightDecision,
+  urlEvidence: UrlEvidence | null,
+): AnalysisOutput {
   return {
     display_title: titleFallback(capture.source_text, capture.source_url),
     summary: preflight.evidence_summary,
     default_intent: {
       category: "remember",
       confidence: 0,
-      rationale: preflight.user_message
+      rationale: preflight.user_message,
     },
     entities: compactUrlEvidence(urlEvidence)?.entities || [],
     suggested_reminders: [],
@@ -2429,38 +3548,53 @@ function rejectedAnalysis(capture: CaptureRow, preflight: PreflightDecision, url
     needs_review: true,
     url_evidence: normalizedUrlEvidence(urlEvidence, {
       originalUrl: capture.original_url || capture.source_url,
-      clientResolvedUrl: capture.client_resolved_url
+      clientResolvedUrl: capture.client_resolved_url,
     }),
-    preflight
+    preflight,
   };
 }
 
-function broadLowEvidenceAnalysis(capture: CaptureRow, urlEvidence: UrlEvidence | null): AnalysisOutput {
+function broadLowEvidenceAnalysis(
+  capture: CaptureRow,
+  urlEvidence: UrlEvidence | null,
+): AnalysisOutput {
   const normalized = normalizedUrlEvidence(urlEvidence, {
     originalUrl: capture.original_url || capture.source_url,
-    clientResolvedUrl: capture.client_resolved_url
+    clientResolvedUrl: capture.client_resolved_url,
   });
-  const host = normalized.domain || hostFromUrl(capture.source_url) || "this site";
+  const host = normalized.domain || hostFromUrl(capture.source_url) ||
+    "this site";
   const platform = platformForUrl(capture.source_url) || host;
   const isReddit = platform === "reddit";
-  const subreddit = String(capture.source_url || "").match(/\/r\/([^/]+)/i)?.[1];
+  const subreddit = String(capture.source_url || "").match(/\/r\/([^/]+)/i)
+    ?.[1];
   const basis = [
     `Domain is ${host}`,
-    subreddit ? `Path includes subreddit r/${subreddit}` : normalized.path ? `Path is ${normalized.path}` : ""
+    subreddit
+      ? `Path includes subreddit r/${subreddit}`
+      : normalized.path
+      ? `Path is ${normalized.path}`
+      : "",
   ].filter(Boolean);
   return {
-    display_title: isReddit && subreddit ? `Reddit link from r/${subreddit}` : titleFallback(capture.source_text, capture.source_url),
-    summary:
-      normalized.status === "needs_client_resolution"
-        ? CLIENT_RESOLUTION_MESSAGE
-        : INSUFFICIENT_URL_MESSAGE,
+    display_title: isReddit && subreddit
+      ? `Reddit link from r/${subreddit}`
+      : titleFallback(capture.source_text, capture.source_url),
+    summary: normalized.status === "needs_client_resolution"
+      ? CLIENT_RESOLUTION_MESSAGE
+      : INSUFFICIENT_URL_MESSAGE,
     default_intent: {
       category: isReddit ? "read" : "remember",
       confidence: isReddit ? 0.35 : 0.2,
-      rationale: basis.join("; ") || "Only broad URL evidence is available."
+      rationale: basis.join("; ") || "Only broad URL evidence is available.",
     },
     entities: subreddit
-      ? [{ type: "community", name: `r/${subreddit}`, evidence: "URL path", confidence: 0.45 }]
+      ? [{
+        type: "community",
+        name: `r/${subreddit}`,
+        evidence: "URL path",
+        confidence: 0.45,
+      }]
       : [],
     suggested_reminders: [],
     collection_decisions: [],
@@ -2469,7 +3603,9 @@ function broadLowEvidenceAnalysis(capture: CaptureRow, urlEvidence: UrlEvidence 
     needs_review: true,
     url_evidence: normalized,
     categorization: {
-      category: isReddit && /game|gaming|007firstlight/i.test(subreddit || "") ? "gaming" : platform,
+      category: isReddit && /game|gaming|007firstlight/i.test(subreddit || "")
+        ? "gaming"
+        : platform,
       subcategory: isReddit ? "reddit_community_link" : "broad_domain_link",
       confidence: isReddit ? 0.35 : 0.2,
       evidence_quality: normalized.evidence_quality,
@@ -2478,9 +3614,9 @@ function broadLowEvidenceAnalysis(capture: CaptureRow, urlEvidence: UrlEvidence 
         "Exact post title",
         "Exact post topic",
         "Author",
-        "Media type"
-      ]
-    }
+        "Media type",
+      ],
+    },
   };
 }
 
@@ -2489,7 +3625,7 @@ async function persistDeterministicAnalysis(
   userId: string,
   capture: CaptureRow,
   analysis: AnalysisOutput,
-  mode: string
+  mode: string,
 ) {
   await supabase.from("analysis_runs").insert({
     user_id: userId,
@@ -2500,13 +3636,15 @@ async function persistDeterministicAnalysis(
     prompt_version: "url-evidence-policy-v1",
     schema_version: "url-evidence-policy-v1",
     raw_output: analysis,
-    raw_model_output: JSON.stringify({ url_evidence: analysis.url_evidence })
+    raw_model_output: JSON.stringify({ url_evidence: analysis.url_evidence }),
   });
   await supabase
     .from("captures")
     .update({
       analysis_state: "needs_review",
-      analysis_error: typeof analysis.summary === "string" ? analysis.summary : null,
+      analysis_error: typeof analysis.summary === "string"
+        ? analysis.summary
+        : null,
       analysis,
       analysis_provider: "system",
       analysis_model: "url-evidence-policy",
@@ -2517,7 +3655,7 @@ async function persistDeterministicAnalysis(
       default_intent_confidence: analysis.default_intent.confidence,
       current_save_intent: analysis.default_intent.category,
       intent_rationale: analysis.default_intent.rationale,
-      processed_at: new Date().toISOString()
+      processed_at: new Date().toISOString(),
     })
     .eq("id", capture.id)
     .eq("user_id", userId);
@@ -2528,7 +3666,7 @@ async function rejectCapturePreflight(
   userId: string,
   capture: CaptureRow,
   urlEvidence: UrlEvidence | null,
-  result: Awaited<ReturnType<typeof runPreflight>>
+  result: Awaited<ReturnType<typeof runPreflight>>,
 ) {
   const analysis = rejectedAnalysis(capture, result.preflight, urlEvidence);
   await supabase.from("analysis_runs").insert({
@@ -2545,9 +3683,9 @@ async function rejectCapturePreflight(
     raw_model_output: JSON.stringify({
       preflight_request: result.requestBody,
       preflight_response: result.raw,
-      url_evidence: urlEvidence
+      url_evidence: urlEvidence,
     }),
-    error_message: result.preflight.user_message
+    error_message: result.preflight.user_message,
   });
   await supabase
     .from("captures")
@@ -2560,19 +3698,29 @@ async function rejectCapturePreflight(
       analysis_mode: "preflight_rejected",
       display_title: analysis.display_title,
       title: capture.title || analysis.display_title,
-      processed_at: new Date().toISOString()
+      processed_at: new Date().toISOString(),
     })
     .eq("id", capture.id)
     .eq("user_id", userId);
 }
 
-async function runOpenAi(capture: CaptureRow, urlEvidence: UrlEvidence | null, retrievedCollections: RetrievedCollection[]) {
+async function runOpenAi(
+  capture: CaptureRow,
+  urlEvidence: UrlEvidence | null,
+  retrievedCollections: RetrievedCollection[],
+) {
   const started = Date.now();
   const model = Deno.env.get("OPENAI_MODEL") || "gpt-5-mini";
   const userContent: Array<Record<string, unknown>> = [
-    { type: "input_text", text: buildPrompt(capture, urlEvidence, retrievedCollections) }
+    {
+      type: "input_text",
+      text: buildPrompt(capture, urlEvidence, retrievedCollections),
+    },
   ];
-  if (capture.asset_url && String(capture.asset_mime_type || "").startsWith("image/")) {
+  if (
+    capture.asset_url &&
+    String(capture.asset_mime_type || "").startsWith("image/")
+  ) {
     userContent.push({ type: "input_image", image_url: capture.asset_url });
   }
   const requestBody: Record<string, unknown> = {
@@ -2582,18 +3730,19 @@ async function runOpenAi(capture: CaptureRow, urlEvidence: UrlEvidence | null, r
     input: [
       {
         role: "system",
-        content: "You are Sharebook's capture analysis worker. Produce only schema-valid extraction output."
+        content:
+          "You are Sharebook's capture analysis worker. Produce only schema-valid extraction output.",
       },
-      { role: "user", content: userContent }
+      { role: "user", content: userContent },
     ],
     text: {
       format: {
         type: "json_schema",
         name: "capture_analysis",
         strict: true,
-        schema: analysisSchema
-      }
-    }
+        schema: analysisSchema,
+      },
+    },
   };
   if (shouldUseWebSearch(urlEvidence)) {
     requestBody.tools = [{ type: "web_search", search_context_size: "low" }];
@@ -2604,12 +3753,16 @@ async function runOpenAi(capture: CaptureRow, urlEvidence: UrlEvidence | null, r
     method: "POST",
     headers: {
       authorization: `Bearer ${env("OPENAI_API_KEY")}`,
-      "content-type": "application/json"
+      "content-type": "application/json",
     },
-    body: JSON.stringify(requestBody)
+    body: JSON.stringify(requestBody),
   });
   const raw = await response.json();
-  if (!response.ok) throw new Error(raw.error?.message || `OpenAI failed with ${response.status}`);
+  if (!response.ok) {
+    throw new Error(
+      raw.error?.message || `OpenAI failed with ${response.status}`,
+    );
+  }
   const text = responseText(raw);
   if (!text) throw new Error("OpenAI response did not include output text");
   return {
@@ -2620,7 +3773,7 @@ async function runOpenAi(capture: CaptureRow, urlEvidence: UrlEvidence | null, r
     latencyMs: Date.now() - started,
     usage: raw.usage ?? {},
     urlEvidence,
-    retrievedCollections
+    retrievedCollections,
   };
 }
 
@@ -2646,57 +3799,93 @@ async function processCapture(captureId: string, userId: string) {
       clientResolvedUrl: capture.client_resolved_url || null,
       clientResolutionSource: capture.client_resolution_source || null,
       clientResolutionTimestamp: capture.client_resolution_timestamp || null,
-      clientResolutionAttemptCount: typeof capture.client_resolution_attempt_count === "number"
-        ? capture.client_resolution_attempt_count
-        : null
+      clientResolutionAttemptCount:
+        typeof capture.client_resolution_attempt_count === "number"
+          ? capture.client_resolution_attempt_count
+          : null,
     });
     const urlEvidenceStatus = productEvidenceStatus(urlEvidence);
-    if (urlEvidenceStatus === "needs_client_resolution" || urlEvidenceStatus === "insufficient_url_evidence") {
-      logUrlIngest(urlEvidence, urlEvidenceStatus === "needs_client_resolution" ? 0.35 : 0.2);
+    if (
+      urlEvidenceStatus === "needs_client_resolution" ||
+      urlEvidenceStatus === "insufficient_url_evidence"
+    ) {
+      logUrlIngest(
+        urlEvidence,
+        urlEvidenceStatus === "needs_client_resolution" ? 0.35 : 0.2,
+      );
       await persistDeterministicAnalysis(
         supabase,
         userId,
         capture,
         broadLowEvidenceAnalysis(capture, urlEvidence),
-        urlEvidenceStatus
+        urlEvidenceStatus,
       );
       return;
     }
-    const asset = Array.isArray(capture.capture_assets) ? capture.capture_assets[0] : null;
+    const asset = Array.isArray(capture.capture_assets)
+      ? capture.capture_assets[0]
+      : null;
     let preflightResult: Awaited<ReturnType<typeof runPreflight>> | null = null;
     if (shouldRunPreflight(capture, asset)) {
       preflightResult = await runPreflight(capture, urlEvidence);
-      preflightResult.preflight = applyPreflightPolicy(capture, preflightResult.preflight, urlEvidence);
+      preflightResult.preflight = applyPreflightPolicy(
+        capture,
+        preflightResult.preflight,
+        urlEvidence,
+      );
       if (preflightResult.preflight.decision === "invalid") {
         logUrlIngest(urlEvidence, 0);
-        await rejectCapturePreflight(supabase, userId, capture, urlEvidence, preflightResult);
+        await rejectCapturePreflight(
+          supabase,
+          userId,
+          capture,
+          urlEvidence,
+          preflightResult,
+        );
         return;
       }
     }
     const signedAsset =
       asset?.storage_path && String(asset.mime_type || "").startsWith("image/")
-        ? await supabase.storage.from("captures").createSignedUrl(asset.storage_path, 60 * 10)
+        ? await supabase.storage.from("captures").createSignedUrl(
+          asset.storage_path,
+          60 * 10,
+        )
         : null;
-    const captureForAnalysis =
-      signedAsset?.data?.signedUrl
-        ? { ...capture, asset_url: signedAsset.data.signedUrl, asset_mime_type: asset.mime_type }
-        : capture;
-    const retrievedCollections = await retrieveCollectionsForCapture(supabase, userId, captureForAnalysis, urlEvidence)
-      .catch(() => []);
-    const result = await runOpenAi(captureForAnalysis, urlEvidence, retrievedCollections);
-    const analysis = normalizedReviewAnalysis(await autoLinkCollectionDecisions(
+    const captureForAnalysis = signedAsset?.data?.signedUrl
+      ? {
+        ...capture,
+        asset_url: signedAsset.data.signedUrl,
+        asset_mime_type: asset.mime_type,
+      }
+      : capture;
+    const retrievedCollections = await retrieveCollectionsForCapture(
       supabase,
       userId,
-      captureId,
-      {
-        ...result.analysis,
-        url_evidence: normalizedUrlEvidence(urlEvidence, {
-          originalUrl: capture.original_url || capture.source_url,
-          clientResolvedUrl: capture.client_resolved_url
-        })
-      },
-      retrievedCollections
-    ));
+      captureForAnalysis,
+      urlEvidence,
+    )
+      .catch(() => []);
+    const result = await runOpenAi(
+      captureForAnalysis,
+      urlEvidence,
+      retrievedCollections,
+    );
+    const analysis = normalizedReviewAnalysis(
+      await autoLinkCollectionDecisions(
+        supabase,
+        userId,
+        captureId,
+        {
+          ...result.analysis,
+          url_evidence: normalizedUrlEvidence(urlEvidence, {
+            originalUrl: capture.original_url || capture.source_url,
+            clientResolvedUrl: capture.client_resolved_url,
+          }),
+        },
+        retrievedCollections,
+      ),
+    );
     const { data: run, error: runError } = await supabase
       .from("analysis_runs")
       .insert({
@@ -2717,8 +3906,8 @@ async function processCapture(captureId: string, userId: string) {
           extraction_request: result.requestBody,
           response: result.raw,
           url_evidence: result.urlEvidence,
-          retrieved_collections: result.retrievedCollections
-        })
+          retrieved_collections: result.retrievedCollections,
+        }),
       })
       .select("id")
       .single();
@@ -2728,7 +3917,9 @@ async function processCapture(captureId: string, userId: string) {
     await supabase
       .from("captures")
       .update({
-        analysis_state: analysisRequiresReview(analysis) ? "needs_review" : "ready",
+        analysis_state: analysisRequiresReview(analysis)
+          ? "needs_review"
+          : "ready",
         analysis_error: null,
         analysis,
         analysis_provider: "openai",
@@ -2740,12 +3931,14 @@ async function processCapture(captureId: string, userId: string) {
         default_intent_confidence: analysis.default_intent.confidence,
         current_save_intent: analysis.default_intent.category,
         intent_rationale: analysis.default_intent.rationale,
-        processed_at: new Date().toISOString()
+        processed_at: new Date().toISOString(),
       })
       .eq("id", captureId)
       .eq("user_id", userId);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Capture analysis failed";
+    const message = error instanceof Error
+      ? error.message
+      : "Capture analysis failed";
     await supabase.from("analysis_runs").insert({
       user_id: userId,
       capture_id: captureId,
@@ -2755,7 +3948,7 @@ async function processCapture(captureId: string, userId: string) {
       prompt_version: PROMPT_VERSION,
       schema_version: SCHEMA_VERSION,
       raw_output: {},
-      error_message: message
+      error_message: message,
     });
     await supabase
       .from("captures")
@@ -2765,7 +3958,7 @@ async function processCapture(captureId: string, userId: string) {
         analysis_mode: "llm_failed",
         analysis_provider: "openai",
         analysis_model: Deno.env.get("OPENAI_MODEL") || "gpt-5-mini",
-        processed_at: new Date().toISOString()
+        processed_at: new Date().toISOString(),
       })
       .eq("id", captureId)
       .eq("user_id", userId);
@@ -2775,34 +3968,46 @@ async function processCapture(captureId: string, userId: string) {
 async function createOrGetCaptureFromFields(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
-  fields: Record<string, unknown>
+  fields: Record<string, unknown>,
 ) {
-  const sourceText = typeof fields.sourceText === "string" ? fields.sourceText.trim() : "";
+  const sourceText = typeof fields.sourceText === "string"
+    ? fields.sourceText.trim()
+    : "";
   const clientResolution = clientResolutionInput(fields);
-  const explicitSourceUrl = cleanedString(fields.sourceUrl || fields.source_url);
+  const explicitSourceUrl = cleanedString(
+    fields.sourceUrl || fields.source_url,
+  );
   if (explicitSourceUrl && !normalizeUrl(explicitSourceUrl)) {
     throw new Error("sourceUrl must be a valid http/https URL");
   }
-  const sourceUrl =
-    explicitSourceUrl
-      ? normalizeUrl(explicitSourceUrl)
-      : clientResolution.originalUrl
-        ? clientResolution.originalUrl
-      : extractUrl(sourceText);
-  if ((fields.client_resolved_url || fields.clientResolvedUrl) && !clientResolution.clientResolvedUrl) {
+  const sourceUrl = explicitSourceUrl
+    ? normalizeUrl(explicitSourceUrl)
+    : clientResolution.originalUrl
+    ? clientResolution.originalUrl
+    : extractUrl(sourceText);
+  if (
+    (fields.client_resolved_url || fields.clientResolvedUrl) &&
+    !clientResolution.clientResolvedUrl
+  ) {
     throw new Error("client_resolved_url must be a valid http/https URL");
   }
-  if ((fields.original_url || fields.originalUrl) && !clientResolution.originalUrl) {
+  if (
+    (fields.original_url || fields.originalUrl) && !clientResolution.originalUrl
+  ) {
     throw new Error("original_url must be a valid http/https URL");
   }
   if (sourceUrl) await assertFetchableUrl(sourceUrl);
-  if (clientResolution.clientResolvedUrl) await assertFetchableUrl(clientResolution.clientResolvedUrl);
-  if (!sourceText && !sourceUrl) throw new Error("sourceText or sourceUrl is required");
+  if (clientResolution.clientResolvedUrl) {
+    await assertFetchableUrl(clientResolution.clientResolvedUrl);
+  }
+  if (!sourceText && !sourceUrl) {
+    throw new Error("sourceText or sourceUrl is required");
+  }
 
-  const clientCaptureKey =
-    typeof fields.clientCaptureKey === "string" && fields.clientCaptureKey.trim()
-      ? fields.clientCaptureKey.trim()
-      : crypto.randomUUID();
+  const clientCaptureKey = typeof fields.clientCaptureKey === "string" &&
+      fields.clientCaptureKey.trim()
+    ? fields.clientCaptureKey.trim()
+    : crypto.randomUUID();
 
   const existing = await supabase
     .from("captures")
@@ -2813,19 +4018,26 @@ async function createOrGetCaptureFromFields(
   if (existing.data) {
     if (clientResolution.clientResolvedUrl) {
       const update: Record<string, unknown> = {
-        original_url: clientResolution.originalUrl || existing.data.original_url || existing.data.source_url || sourceUrl,
+        original_url: clientResolution.originalUrl ||
+          existing.data.original_url || existing.data.source_url || sourceUrl,
         client_resolved_url: clientResolution.clientResolvedUrl,
         client_resolution_source: clientResolution.clientResolutionSource,
-        client_resolution_timestamp: clientResolution.clientResolutionTimestamp || new Date().toISOString(),
-        client_resolution_attempt_count: clientResolution.clientResolutionAttemptCount ??
-          Math.min(Number(existing.data.client_resolution_attempt_count || 0) + 1, 10),
+        client_resolution_timestamp:
+          clientResolution.clientResolutionTimestamp ||
+          new Date().toISOString(),
+        client_resolution_attempt_count:
+          clientResolution.clientResolutionAttemptCount ??
+            Math.min(
+              Number(existing.data.client_resolution_attempt_count || 0) + 1,
+              10,
+            ),
         analysis_state: "queued",
         analysis_error: null,
         analysis: null,
         analysis_mode: null,
         analysis_provider: null,
         analysis_model: null,
-        processed_at: null
+        processed_at: null,
       };
       const { data, error } = await supabase
         .from("captures")
@@ -2852,14 +4064,15 @@ async function createOrGetCaptureFromFields(
       client_resolved_url: clientResolution.clientResolvedUrl,
       client_resolution_source: clientResolution.clientResolutionSource,
       client_resolution_timestamp: clientResolution.clientResolutionTimestamp,
-      client_resolution_attempt_count: clientResolution.clientResolutionAttemptCount || 0,
+      client_resolution_attempt_count:
+        clientResolution.clientResolutionAttemptCount || 0,
       source_text: sourceText,
       source_app:
         typeof fields.sourceApp === "string" && fields.sourceApp.trim()
           ? fields.sourceApp
           : inferSourceApp(sourceUrl) || "Android Share",
       display_title: titleFallback(sourceText, sourceUrl),
-      analysis_state: "queued"
+      analysis_state: "queued",
     })
     .select("*")
     .single();
@@ -2871,22 +4084,25 @@ async function createOrGetCaptureWithAsset(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
   fields: Record<string, unknown>,
-  asset: CapturePayload["asset"]
+  asset: CapturePayload["asset"],
 ) {
   const sourceText =
     typeof fields.sourceText === "string" && fields.sourceText.trim()
       ? fields.sourceText.trim()
       : asset
-        ? `Shared ${asset.contentType.split("/")[0] || "file"}: ${asset.filename || "attachment"}`
-        : "";
+      ? `Shared ${asset.contentType.split("/")[0] || "file"}: ${
+        asset.filename || "attachment"
+      }`
+      : "";
   const capture = await createOrGetCaptureFromFields(supabase, userId, {
     ...fields,
     sourceText,
-    sourceUrl:
-      typeof fields.sourceUrl === "string" && fields.sourceUrl.trim()
-        ? fields.sourceUrl
-        : extractUrl(sourceText),
-    sourceApp: typeof fields.sourceApp === "string" ? fields.sourceApp : "Android Share"
+    sourceUrl: typeof fields.sourceUrl === "string" && fields.sourceUrl.trim()
+      ? fields.sourceUrl
+      : extractUrl(sourceText),
+    sourceApp: typeof fields.sourceApp === "string"
+      ? fields.sourceApp
+      : "Android Share",
   });
   if (!asset || !asset.size) return capture;
 
@@ -2896,16 +4112,23 @@ async function createOrGetCaptureWithAsset(
     .eq("user_id", userId)
     .eq("capture_id", capture.id)
     .maybeSingle();
-  if (existing.error && existing.error.code !== "PGRST116") throw existing.error;
+  if (existing.error && existing.error.code !== "PGRST116") {
+    throw existing.error;
+  }
   if (existing?.data) return capture;
 
   const extension = safeFilename(asset.filename).split(".").pop() || "bin";
-  const storagePath = `${userId}/${capture.id}/${crypto.randomUUID()}.${extension}`;
+  const storagePath =
+    `${userId}/${capture.id}/${crypto.randomUUID()}.${extension}`;
   await ensureCaptureBucket(supabase);
-  const upload = await supabase.storage.from("captures").upload(storagePath, asset.bytes, {
-    contentType: asset.contentType || "application/octet-stream",
-    upsert: false
-  });
+  const upload = await supabase.storage.from("captures").upload(
+    storagePath,
+    asset.bytes,
+    {
+      contentType: asset.contentType || "application/octet-stream",
+      upsert: false,
+    },
+  );
   if (upload.error) throw upload.error;
 
   const { error: assetError } = await supabase.from("capture_assets").insert({
@@ -2914,14 +4137,16 @@ async function createOrGetCaptureWithAsset(
     storage_path: storagePath,
     public_url: null,
     mime_type: asset.contentType || "application/octet-stream",
-    byte_size: asset.size
+    byte_size: asset.size,
   });
   if (assetError) throw assetError;
 
   const { data: updated, error: updateError } = await supabase
     .from("captures")
     .update({
-      capture_type: asset.contentType.startsWith("image/") ? "image" : capture.capture_type
+      capture_type: asset.contentType.startsWith("image/")
+        ? "image"
+        : capture.capture_type,
     })
     .eq("id", capture.id)
     .eq("user_id", userId)
@@ -2935,7 +4160,10 @@ function cleanRequiredText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function collectionFromRow(row: Record<string, unknown>, captureCounts = new Map<string, number>()) {
+function collectionFromRow(
+  row: Record<string, unknown>,
+  captureCounts = new Map<string, number>(),
+) {
   const id = String(row.id);
   return {
     id,
@@ -2946,11 +4174,15 @@ function collectionFromRow(row: Record<string, unknown>, captureCounts = new Map
     archived_at: row.archived_at || null,
     created_at: row.created_at || null,
     updated_at: row.updated_at || null,
-    capture_count: captureCounts.get(id) || 0
+    capture_count: captureCounts.get(id) || 0,
   };
 }
 
-async function activeCollectionCounts(supabase: ReturnType<typeof adminClient>, userId: string, collectionIds: string[]) {
+async function activeCollectionCounts(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  collectionIds: string[],
+) {
   const counts = new Map<string, number>();
   if (!collectionIds.length) return counts;
   const { data, error } = await supabase
@@ -2970,13 +4202,15 @@ async function activeCollectionCounts(supabase: ReturnType<typeof adminClient>, 
 async function attachLinkedCollections(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
-  rows: Array<Record<string, unknown>>
+  rows: Array<Record<string, unknown>>,
 ) {
   const captureIds = rows.map((row) => String(row.id)).filter(Boolean);
   if (!captureIds.length) return rows;
   const { data, error } = await supabase
     .from("collection_capture_links")
-    .select("capture_id, collection_id, created_by, rationale, confidence, linked_at, collections(id,title,description,status)")
+    .select(
+      "capture_id, collection_id, created_by, rationale, confidence, linked_at, collections(id,title,description,status)",
+    )
     .eq("user_id", userId)
     .in("capture_id", captureIds)
     .is("unlinked_at", null);
@@ -2996,14 +4230,22 @@ async function attachLinkedCollections(
       created_by: String(record.created_by || "user"),
       rationale: record.rationale || null,
       confidence: record.confidence ?? null,
-      linked_at: record.linked_at || null
+      linked_at: record.linked_at || null,
     };
     byCapture.set(captureId, [...(byCapture.get(captureId) || []), item]);
-    activeCollectionIdsByCapture.set(captureId, new Set([...(activeCollectionIdsByCapture.get(captureId) || []), collectionId]));
+    activeCollectionIdsByCapture.set(
+      captureId,
+      new Set([
+        ...(activeCollectionIdsByCapture.get(captureId) || []),
+        collectionId,
+      ]),
+    );
   }
   const removed = await supabase
     .from("collection_capture_links")
-    .select("capture_id, collection_id, rationale, confidence, unlinked_at, collections(id,title,description,status)")
+    .select(
+      "capture_id, collection_id, rationale, confidence, unlinked_at, collections(id,title,description,status)",
+    )
     .eq("user_id", userId)
     .eq("created_by", "analysis")
     .in("capture_id", captureIds)
@@ -3015,8 +4257,15 @@ async function attachLinkedCollections(
       const record = link as Record<string, unknown>;
       const captureId = String(record.capture_id || "");
       const collectionId = String(record.collection_id || "");
-      if (!captureId || !collectionId || activeCollectionIdsByCapture.get(captureId)?.has(collectionId)) continue;
-      if (overridesByCapture.get(captureId)?.some((override) => override.collection_id === collectionId)) continue;
+      if (
+        !captureId || !collectionId ||
+        activeCollectionIdsByCapture.get(captureId)?.has(collectionId)
+      ) continue;
+      if (
+        overridesByCapture.get(captureId)?.some((override) =>
+          override.collection_id === collectionId
+        )
+      ) continue;
       const collection = record.collections as Record<string, unknown> | null;
       if (!collection || collection.status === "archived") continue;
       overridesByCapture.set(captureId, [
@@ -3029,39 +4278,63 @@ async function attachLinkedCollections(
               type: "existing",
               collection_id: collectionId,
               title: String(collection.title || ""),
-              description: typeof collection.description === "string" ? collection.description : null,
-              rationale: typeof record.rationale === "string" ? record.rationale : "",
-              confidence: Number.isFinite(Number(record.confidence)) ? Number(record.confidence) : 0
-            }
+              description: typeof collection.description === "string"
+                ? collection.description
+                : null,
+              rationale: typeof record.rationale === "string"
+                ? record.rationale
+                : "",
+              confidence: Number.isFinite(Number(record.confidence))
+                ? Number(record.confidence)
+                : 0,
+            },
           ],
-          applied_at: record.unlinked_at || null
-        }
+          applied_at: record.unlinked_at || null,
+        },
       ]);
     }
   }
   return rows.map((row) => {
     const captureId = String(row.id);
-    const analysis = row.analysis && typeof row.analysis === "object" ? row.analysis as Record<string, unknown> : {};
+    const analysis = row.analysis && typeof row.analysis === "object"
+      ? row.analysis as Record<string, unknown>
+      : {};
     const existingOverrides = collectionChoiceOverrides(analysis);
-    const existingOverrideIds = new Set(existingOverrides.map((override) => String(override.collection_id || "")));
+    const existingOverrideIds = new Set(
+      existingOverrides.map((override) => String(override.collection_id || "")),
+    );
     const recoveredOverrides = (overridesByCapture.get(captureId) || [])
-      .filter((override) => !existingOverrideIds.has(String(override.collection_id || "")));
+      .filter((override) =>
+        !existingOverrideIds.has(String(override.collection_id || ""))
+      );
     return {
       ...row,
       analysis: recoveredOverrides.length
-        ? { ...analysis, collection_choice_overrides: [...existingOverrides, ...recoveredOverrides] }
+        ? {
+          ...analysis,
+          collection_choice_overrides: [
+            ...existingOverrides,
+            ...recoveredOverrides,
+          ],
+        }
         : row.analysis,
-      linked_collections: byCapture.get(captureId) || []
+      linked_collections: byCapture.get(captureId) || [],
     };
   });
 }
 
-function sameCollectionDecision(decision: Record<string, unknown>, accepted: Record<string, unknown>) {
+function sameCollectionDecision(
+  decision: Record<string, unknown>,
+  accepted: Record<string, unknown>,
+) {
   const normalized = normalizeCollectionDecision(decision);
-  if (accepted.collectionId && normalized.collection_id === accepted.collectionId) return true;
+  if (
+    accepted.collectionId && normalized.collection_id === accepted.collectionId
+  ) return true;
   return (
     normalized.type === accepted.type &&
-    normalized.title.toLowerCase() === String(accepted.title || "").trim().toLowerCase()
+    normalized.title.toLowerCase() ===
+      String(accepted.title || "").trim().toLowerCase()
   );
 }
 
@@ -3069,7 +4342,7 @@ async function markCollectionDecisionAccepted(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
   captureId: string,
-  accepted: Record<string, unknown>
+  accepted: Record<string, unknown>,
 ) {
   const { data, error } = await supabase
     .from("captures")
@@ -3081,73 +4354,112 @@ async function markCollectionDecisionAccepted(
   const analysis = data.analysis && typeof data.analysis === "object"
     ? data.analysis as Record<string, unknown>
     : {};
-  const decisions = Array.isArray(analysis.collection_decisions) ? analysis.collection_decisions : [];
+  const decisions = Array.isArray(analysis.collection_decisions)
+    ? analysis.collection_decisions
+    : [];
   const nextDecisions = decisions.filter(
-    (decision) => !sameCollectionDecision(decision as Record<string, unknown>, accepted)
+    (decision) =>
+      !sameCollectionDecision(decision as Record<string, unknown>, accepted),
   );
   const nextAnalysis = normalizedReviewAnalysis(
     { ...analysis, needs_review: false, collection_decisions: nextDecisions },
-    data.review_confirmed_at
+    data.review_confirmed_at,
   );
   await supabase
     .from("captures")
     .update({
       analysis: nextAnalysis,
-      analysis_state: analysisRequiresReview(nextAnalysis, data.review_confirmed_at) ? "needs_review" : "ready"
+      analysis_state:
+        analysisRequiresReview(nextAnalysis, data.review_confirmed_at)
+          ? "needs_review"
+          : "ready",
     })
     .eq("user_id", userId)
     .eq("id", data.id);
 }
 
 function confirmedReminderSuggestions(analysis: Record<string, unknown>) {
-  const reminders = Array.isArray(analysis.suggested_reminders) ? analysis.suggested_reminders : [];
+  const reminders = Array.isArray(analysis.suggested_reminders)
+    ? analysis.suggested_reminders
+    : [];
   return reminders.map((reminder) => {
-    if (!reminder || typeof reminder !== "object" || Array.isArray(reminder)) return reminder;
+    if (!reminder || typeof reminder !== "object" || Array.isArray(reminder)) {
+      return reminder;
+    }
     return { ...(reminder as Record<string, unknown>), status: "confirmed" };
   });
 }
 
-function dismissReminderSuggestion(analysis: Record<string, unknown>, reminderIndex: unknown) {
+function dismissReminderSuggestion(
+  analysis: Record<string, unknown>,
+  reminderIndex: unknown,
+) {
   const index = Number(reminderIndex);
-  const reminders = Array.isArray(analysis.suggested_reminders) ? analysis.suggested_reminders : [];
-  if (!Number.isInteger(index) || index < 0 || index >= reminders.length) return reminders;
+  const reminders = Array.isArray(analysis.suggested_reminders)
+    ? analysis.suggested_reminders
+    : [];
+  if (!Number.isInteger(index) || index < 0 || index >= reminders.length) {
+    return reminders;
+  }
   return reminders.filter((_, itemIndex) => itemIndex !== index);
 }
 
-function reviewReminderSuggestions(analysis: Record<string, unknown>, decisions: unknown) {
+function reviewReminderSuggestions(
+  analysis: Record<string, unknown>,
+  decisions: unknown,
+) {
   const removeIndices = new Set(
     (Array.isArray(decisions) ? decisions : [])
       .filter((decision) => {
-        return decision && typeof decision === "object" && (decision as Record<string, unknown>).action === "remove";
+        return decision && typeof decision === "object" &&
+          (decision as Record<string, unknown>).action === "remove";
       })
       .map((decision) => Number((decision as Record<string, unknown>).index))
-      .filter(Number.isInteger)
+      .filter(Number.isInteger),
   );
-  const reminders = Array.isArray(analysis.suggested_reminders) ? analysis.suggested_reminders : [];
+  const reminders = Array.isArray(analysis.suggested_reminders)
+    ? analysis.suggested_reminders
+    : [];
   return reminders.filter((_, index) => !removeIndices.has(index));
 }
 
-function collectionDecisionKey(decision: Record<string, unknown>, index: number) {
-  return `${index}:${decision.type || ""}:${decision.collectionId || decision.collection_id || decision.title || ""}`;
+function collectionDecisionKey(
+  decision: Record<string, unknown>,
+  index: number,
+) {
+  return `${index}:${decision.type || ""}:${
+    decision.collectionId || decision.collection_id || decision.title || ""
+  }`;
 }
 
-function reviewCollectionDecisions(analysis: Record<string, unknown>, decisions: unknown) {
+function reviewCollectionDecisions(
+  analysis: Record<string, unknown>,
+  decisions: unknown,
+) {
   const acceptedKeys = new Set(
     (Array.isArray(decisions) ? decisions : [])
       .filter((decision) => {
         if (!decision || typeof decision !== "object") return false;
         const record = decision as Record<string, unknown>;
-        return record.kind === "suggested" && (record.action === "link" || record.action === "create");
+        return record.kind === "suggested" &&
+          (record.action === "link" || record.action === "create");
       })
-      .map((decision) => collectionDecisionKey(decision as Record<string, unknown>, Number((decision as Record<string, unknown>).index)))
+      .map((decision) =>
+        collectionDecisionKey(
+          decision as Record<string, unknown>,
+          Number((decision as Record<string, unknown>).index),
+        )
+      ),
   );
   const current = Array.isArray(analysis.collection_decisions)
     ? analysis.collection_decisions
     : Array.isArray(analysis.suggested_collections)
-      ? analysis.suggested_collections
-      : [];
+    ? analysis.suggested_collections
+    : [];
   return current.filter((decision, index) => {
-    return !acceptedKeys.has(collectionDecisionKey(decision as Record<string, unknown>, index));
+    return !acceptedKeys.has(
+      collectionDecisionKey(decision as Record<string, unknown>, index),
+    );
   });
 }
 
@@ -3155,15 +4467,21 @@ async function applyCollectionReviewDecisions(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
   captureId: string,
-  decisions: unknown
+  decisions: unknown,
 ) {
   for (const item of Array.isArray(decisions) ? decisions : []) {
     if (!item || typeof item !== "object") continue;
     const decision = item as Record<string, unknown>;
-    if (decision.kind === "linked" && decision.action === "remove" && typeof decision.collectionId === "string") {
+    if (
+      decision.kind === "linked" && decision.action === "remove" &&
+      typeof decision.collectionId === "string"
+    ) {
       const { error } = await supabase
         .from("collection_capture_links")
-        .update({ unlinked_at: new Date().toISOString(), unlink_reason: "user_removed" })
+        .update({
+          unlinked_at: new Date().toISOString(),
+          unlink_reason: "user_removed",
+        })
         .eq("user_id", userId)
         .eq("collection_id", decision.collectionId)
         .eq("capture_id", captureId)
@@ -3172,11 +4490,22 @@ async function applyCollectionReviewDecisions(
       continue;
     }
 
-    if (decision.kind !== "suggested" || (decision.action !== "link" && decision.action !== "create")) continue;
-    let collectionId = typeof decision.collectionId === "string" ? decision.collectionId : "";
-    const title = typeof decision.title === "string" ? decision.title.trim() : "";
-    const description = typeof decision.description === "string" ? decision.description.trim() : "";
-    const rationale = typeof decision.rationale === "string" ? decision.rationale : null;
+    if (
+      decision.kind !== "suggested" ||
+      (decision.action !== "link" && decision.action !== "create")
+    ) continue;
+    let collectionId = typeof decision.collectionId === "string"
+      ? decision.collectionId
+      : "";
+    const title = typeof decision.title === "string"
+      ? decision.title.trim()
+      : "";
+    const description = typeof decision.description === "string"
+      ? decision.description.trim()
+      : "";
+    const rationale = typeof decision.rationale === "string"
+      ? decision.rationale
+      : null;
     const confidence = Number(decision.confidence);
     if (!collectionId && decision.action === "create" && title && description) {
       const existing = await supabase
@@ -3195,20 +4524,26 @@ async function applyCollectionReviewDecisions(
             user_id: userId,
             title,
             description,
-            created_by: "analysis"
+            created_by: "analysis",
           })
           .select("id")
           .single();
         if (created.error) throw created.error;
         collectionId = String(created.data.id);
-        await upsertCollectionEmbedding(supabase, userId, collectionId, title, description);
+        await upsertCollectionEmbedding(
+          supabase,
+          userId,
+          collectionId,
+          title,
+          description,
+        );
       }
     }
     if (!collectionId) continue;
     await linkCaptureToCollection(supabase, userId, collectionId, captureId, {
       createdBy: "analysis",
       rationale,
-      confidence: Number.isFinite(confidence) ? confidence : null
+      confidence: Number.isFinite(confidence) ? confidence : null,
     });
   }
 }
@@ -3217,13 +4552,13 @@ async function acceptPendingCollectionDecisions(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
   captureId: string,
-  analysis: Record<string, unknown>
+  analysis: Record<string, unknown>,
 ) {
   const rawDecisions = Array.isArray(analysis.collection_decisions)
     ? analysis.collection_decisions
     : Array.isArray(analysis.suggested_collections)
-      ? analysis.suggested_collections
-      : [];
+    ? analysis.suggested_collections
+    : [];
   const decisions = rawDecisions
     .map((item) => normalizeCollectionDecision(item as Record<string, unknown>))
     .filter((decision) =>
@@ -3241,11 +4576,17 @@ async function acceptPendingCollectionDecisions(
         .maybeSingle();
       if (collection.error) throw collection.error;
       if (!collection.data || collection.data.status === "archived") continue;
-      await linkCaptureToCollection(supabase, userId, decision.collection_id, captureId, {
-        createdBy: "analysis",
-        rationale: decision.rationale,
-        confidence: decision.confidence
-      });
+      await linkCaptureToCollection(
+        supabase,
+        userId,
+        decision.collection_id,
+        captureId,
+        {
+          createdBy: "analysis",
+          rationale: decision.rationale,
+          confidence: decision.confidence,
+        },
+      );
       continue;
     }
 
@@ -3264,20 +4605,26 @@ async function acceptPendingCollectionDecisions(
           user_id: userId,
           title: decision.title,
           description: decision.description,
-          created_by: "analysis"
+          created_by: "analysis",
         })
         .select("id")
         .single();
       if (created.error) throw created.error;
       collectionId = String(created.data.id);
-      await upsertCollectionEmbedding(supabase, userId, collectionId, decision.title, decision.description || "");
+      await upsertCollectionEmbedding(
+        supabase,
+        userId,
+        collectionId,
+        decision.title,
+        decision.description || "",
+      );
     } else if (existing.data?.status === "archived") {
       continue;
     }
     await linkCaptureToCollection(supabase, userId, collectionId, captureId, {
       createdBy: "analysis",
       rationale: decision.rationale,
-      confidence: decision.confidence
+      confidence: decision.confidence,
     });
   }
 }
@@ -3286,26 +4633,35 @@ function activeCollectionDecisionRows(analysis: Record<string, unknown>) {
   return Array.isArray(analysis.collection_decisions)
     ? analysis.collection_decisions as Array<Record<string, unknown>>
     : Array.isArray(analysis.suggested_collections)
-      ? analysis.suggested_collections as Array<Record<string, unknown>>
-      : [];
+    ? analysis.suggested_collections as Array<Record<string, unknown>>
+    : [];
 }
 
 function collectionChoiceOverrides(analysis: Record<string, unknown>) {
   return Array.isArray(analysis.collection_choice_overrides)
-    ? analysis.collection_choice_overrides.filter((item) => item && typeof item === "object") as Array<Record<string, unknown>>
+    ? analysis.collection_choice_overrides.filter((item) =>
+      item && typeof item === "object"
+    ) as Array<Record<string, unknown>>
     : [];
 }
 
 function choiceRestoredDecisions(override: Record<string, unknown>) {
   return Array.isArray(override.restored_decisions)
-    ? override.restored_decisions.filter((item) => item && typeof item === "object") as Array<Record<string, unknown>>
+    ? override.restored_decisions.filter((item) =>
+      item && typeof item === "object"
+    ) as Array<Record<string, unknown>>
     : [];
 }
 
-function collectionChoiceOverrideId(decision: Record<string, unknown>, index: number) {
-  const collectionId = typeof decision.collection_id === "string" && decision.collection_id.trim()
-    ? decision.collection_id.trim()
-    : typeof decision.collectionId === "string" && decision.collectionId.trim()
+function collectionChoiceOverrideId(
+  decision: Record<string, unknown>,
+  index: number,
+) {
+  const collectionId =
+    typeof decision.collection_id === "string" && decision.collection_id.trim()
+      ? decision.collection_id.trim()
+      : typeof decision.collectionId === "string" &&
+          decision.collectionId.trim()
       ? decision.collectionId.trim()
       : "";
   return collectionId || `suggestion:${collectionDecisionKey(decision, index)}`;
@@ -3314,7 +4670,7 @@ function collectionChoiceOverrideId(decision: Record<string, unknown>, index: nu
 async function captureResponse(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
-  captureId: string
+  captureId: string,
 ) {
   const { data, error } = await supabase
     .from("captures")
@@ -3323,7 +4679,9 @@ async function captureResponse(
     .eq("id", captureId)
     .single();
   if (error) throw error;
-  const rows = await attachLinkedCollections(supabase, userId, [data as Record<string, unknown>]);
+  const rows = await attachLinkedCollections(supabase, userId, [
+    data as Record<string, unknown>,
+  ]);
   return json({ capture: withCaptureState(rows[0] ?? data) });
 }
 
@@ -3331,39 +4689,47 @@ async function applyCollectionChoice(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
   capture: Record<string, unknown>,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
 ) {
-  const choice = body.choice && typeof body.choice === "object" ? body.choice as Record<string, unknown> : {};
-  const currentAnalysis = capture.analysis && typeof capture.analysis === "object"
-    ? capture.analysis as Record<string, unknown>
+  const choice = body.choice && typeof body.choice === "object"
+    ? body.choice as Record<string, unknown>
     : {};
+  const currentAnalysis =
+    capture.analysis && typeof capture.analysis === "object"
+      ? capture.analysis as Record<string, unknown>
+      : {};
   const currentDecisions = activeCollectionDecisionRows(currentAnalysis);
   const suggestionIndex = Number(body.suggestionIndex);
   const source = body.source === "analysis" ? "analysis" : "manual";
   const dismissSuggestions = Boolean(body.dismissCurrentCollectionSuggestions);
   const dismissedDecisions = dismissSuggestions
     ? currentDecisions
-    : Number.isInteger(suggestionIndex) && suggestionIndex >= 0 && suggestionIndex < currentDecisions.length
-      ? [currentDecisions[suggestionIndex]]
-      : [];
+    : Number.isInteger(suggestionIndex) && suggestionIndex >= 0 &&
+        suggestionIndex < currentDecisions.length
+    ? [currentDecisions[suggestionIndex]]
+    : [];
   const rationale = typeof body.rationale === "string"
     ? body.rationale
     : typeof dismissedDecisions[0]?.rationale === "string"
-      ? String(dismissedDecisions[0].rationale)
-      : null;
+    ? String(dismissedDecisions[0].rationale)
+    : null;
   const confidence = Number.isFinite(Number(body.confidence))
     ? Number(body.confidence)
     : Number.isFinite(Number(dismissedDecisions[0]?.confidence))
-      ? Number(dismissedDecisions[0]?.confidence)
-      : null;
+    ? Number(dismissedDecisions[0]?.confidence)
+    : null;
 
-  let collectionId = typeof choice.collectionId === "string" ? choice.collectionId : "";
+  let collectionId = typeof choice.collectionId === "string"
+    ? choice.collectionId
+    : "";
   let choiceTitle = "";
   let choiceDescription = "";
   if (choice.type === "new") {
     const title = cleanRequiredText(choice.title);
     const description = cleanRequiredText(choice.description);
-    if (!title || !description) return json({ error: "title and description are required" }, 400);
+    if (!title || !description) {
+      return json({ error: "title and description are required" }, 400);
+    }
     choiceTitle = title;
     choiceDescription = description;
     const created = await supabase
@@ -3372,13 +4738,19 @@ async function applyCollectionChoice(
         user_id: userId,
         title,
         description,
-        created_by: source === "analysis" ? "analysis" : "user"
+        created_by: source === "analysis" ? "analysis" : "user",
       })
       .select("*")
       .single();
     if (created.error) throw created.error;
     collectionId = String(created.data.id);
-    await upsertCollectionEmbedding(supabase, userId, collectionId, title, description);
+    await upsertCollectionEmbedding(
+      supabase,
+      userId,
+      collectionId,
+      title,
+      description,
+    );
   } else if (choice.type === "existing") {
     if (!collectionId) return json({ error: "collectionId is required" }, 400);
     const collection = await supabase
@@ -3389,7 +4761,9 @@ async function applyCollectionChoice(
       .maybeSingle();
     if (collection.error) throw collection.error;
     if (!collection.data) return json({ error: "Collection not found" }, 404);
-    if (collection.data.status === "archived") return json({ error: "Archived collections cannot be linked" }, 400);
+    if (collection.data.status === "archived") {
+      return json({ error: "Archived collections cannot be linked" }, 400);
+    }
   } else {
     return json({ error: "choice.type must be existing or new" }, 400);
   }
@@ -3398,23 +4772,27 @@ async function applyCollectionChoice(
   await linkCaptureToCollection(supabase, userId, collectionId, captureId, {
     createdBy: source === "analysis" ? "analysis" : "user",
     rationale,
-    confidence
+    confidence,
   });
 
   const dismissedKeys = new Set(
-    dismissedDecisions.map((decision) => collectionDecisionKey(decision, currentDecisions.indexOf(decision)))
+    dismissedDecisions.map((decision) =>
+      collectionDecisionKey(decision, currentDecisions.indexOf(decision))
+    ),
   );
   const nextDecisions = currentDecisions.filter((decision, index) => {
     return !dismissedKeys.has(collectionDecisionKey(decision, index));
   });
   const overrides = collectionChoiceOverrides(currentAnalysis)
-    .filter((override) => String(override.collection_id || "") !== collectionId);
+    .filter((override) =>
+      String(override.collection_id || "") !== collectionId
+    );
   if (source !== "analysis" && dismissedDecisions.length) {
     overrides.push({
       collection_id: collectionId,
       source,
       restored_decisions: dismissedDecisions,
-      applied_at: new Date().toISOString()
+      applied_at: new Date().toISOString(),
     });
   } else if (source === "analysis" && dismissedDecisions.length > 1) {
     const acceptedDecision = {
@@ -3422,17 +4800,17 @@ async function applyCollectionChoice(
       collectionId,
       collection_id: collectionId,
       title: choiceTitle,
-      description: choiceDescription
+      description: choiceDescription,
     };
     const alternatives = dismissedDecisions.filter(
-      (decision) => !sameCollectionDecision(decision, acceptedDecision)
+      (decision) => !sameCollectionDecision(decision, acceptedDecision),
     );
     if (alternatives.length) {
       overrides.push({
         collection_id: collectionId,
         source: "analysis",
         restored_decisions: alternatives,
-        applied_at: new Date().toISOString()
+        applied_at: new Date().toISOString(),
       });
     }
   }
@@ -3443,15 +4821,18 @@ async function applyCollectionChoice(
       needs_review: false,
       collection_decisions: nextDecisions,
       suggested_collections: [],
-      collection_choice_overrides: overrides
+      collection_choice_overrides: overrides,
     },
-    capture.review_confirmed_at
+    capture.review_confirmed_at,
   );
   const update = await supabase
     .from("captures")
     .update({
       analysis: nextAnalysis,
-      analysis_state: analysisRequiresReview(nextAnalysis, capture.review_confirmed_at) ? "needs_review" : "ready"
+      analysis_state:
+        analysisRequiresReview(nextAnalysis, capture.review_confirmed_at)
+          ? "needs_review"
+          : "ready",
     })
     .eq("user_id", userId)
     .eq("id", captureId);
@@ -3463,32 +4844,46 @@ async function clearCollectionSuggestion(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
   capture: Record<string, unknown>,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
 ) {
-  const currentAnalysis = capture.analysis && typeof capture.analysis === "object"
-    ? capture.analysis as Record<string, unknown>
-    : {};
+  const currentAnalysis =
+    capture.analysis && typeof capture.analysis === "object"
+      ? capture.analysis as Record<string, unknown>
+      : {};
   const currentDecisions = activeCollectionDecisionRows(currentAnalysis);
   const suggestionIndex = Number(body.suggestionIndex);
-  const dismissedEntries = Number.isInteger(suggestionIndex) && suggestionIndex >= 0 && suggestionIndex < currentDecisions.length
-    ? [{ decision: currentDecisions[suggestionIndex], index: suggestionIndex }]
-    : currentDecisions.map((decision, index) => ({ decision, index }));
-  if (!dismissedEntries.length) return await captureResponse(supabase, userId, String(capture.id));
+  const dismissedEntries =
+    Number.isInteger(suggestionIndex) && suggestionIndex >= 0 &&
+      suggestionIndex < currentDecisions.length
+      ? [{
+        decision: currentDecisions[suggestionIndex],
+        index: suggestionIndex,
+      }]
+      : currentDecisions.map((decision, index) => ({ decision, index }));
+  if (!dismissedEntries.length) {
+    return await captureResponse(supabase, userId, String(capture.id));
+  }
 
   const dismissedKeys = new Set(
-    dismissedEntries.map(({ decision, index }) => collectionDecisionKey(decision, index))
+    dismissedEntries.map(({ decision, index }) =>
+      collectionDecisionKey(decision, index)
+    ),
   );
   const dismissedOverrideIds = new Set(
-    dismissedEntries.map(({ decision, index }) => collectionChoiceOverrideId(decision, index))
+    dismissedEntries.map(({ decision, index }) =>
+      collectionChoiceOverrideId(decision, index)
+    ),
   );
   const overrides = collectionChoiceOverrides(currentAnalysis)
-    .filter((override) => !dismissedOverrideIds.has(String(override.collection_id || "")));
+    .filter((override) =>
+      !dismissedOverrideIds.has(String(override.collection_id || ""))
+    );
   for (const { decision, index } of dismissedEntries) {
     overrides.push({
       collection_id: collectionChoiceOverrideId(decision, index),
       source: "clear",
       restored_decisions: [decision],
-      applied_at: new Date().toISOString()
+      applied_at: new Date().toISOString(),
     });
   }
 
@@ -3501,15 +4896,18 @@ async function clearCollectionSuggestion(
       needs_review: false,
       collection_decisions: nextDecisions,
       suggested_collections: [],
-      collection_choice_overrides: overrides
+      collection_choice_overrides: overrides,
     },
-    capture.review_confirmed_at
+    capture.review_confirmed_at,
   );
   const update = await supabase
     .from("captures")
     .update({
       analysis: nextAnalysis,
-      analysis_state: analysisRequiresReview(nextAnalysis, capture.review_confirmed_at) ? "needs_review" : "ready"
+      analysis_state:
+        analysisRequiresReview(nextAnalysis, capture.review_confirmed_at)
+          ? "needs_review"
+          : "ready",
     })
     .eq("user_id", userId)
     .eq("id", String(capture.id));
@@ -3521,16 +4919,21 @@ async function undoCollectionChoice(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
   capture: Record<string, unknown>,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
 ) {
-  const collectionId = typeof body.collectionId === "string" ? body.collectionId : "";
+  const collectionId = typeof body.collectionId === "string"
+    ? body.collectionId
+    : "";
   if (!collectionId) return json({ error: "collectionId is required" }, 400);
   const captureId = String(capture.id);
-  const currentAnalysis = capture.analysis && typeof capture.analysis === "object"
-    ? capture.analysis as Record<string, unknown>
-    : {};
+  const currentAnalysis =
+    capture.analysis && typeof capture.analysis === "object"
+      ? capture.analysis as Record<string, unknown>
+      : {};
   const overrides = collectionChoiceOverrides(currentAnalysis);
-  const override = overrides.find((item) => String(item.collection_id || "") === collectionId);
+  const override = overrides.find((item) =>
+    String(item.collection_id || "") === collectionId
+  );
   let restoredDecisions = override ? choiceRestoredDecisions(override) : [];
   if (!restoredDecisions.length) {
     const removed = await supabase
@@ -3554,10 +4957,16 @@ async function undoCollectionChoice(
           type: "existing",
           collection_id: collectionId,
           title: String(collection.title || ""),
-          description: typeof collection.description === "string" ? collection.description : null,
-          rationale: typeof removed.data?.rationale === "string" ? removed.data.rationale : "",
-          confidence: Number.isFinite(Number(removed.data?.confidence)) ? Number(removed.data?.confidence) : 0
-        }
+          description: typeof collection.description === "string"
+            ? collection.description
+            : null,
+          rationale: typeof removed.data?.rationale === "string"
+            ? removed.data.rationale
+            : "",
+          confidence: Number.isFinite(Number(removed.data?.confidence))
+            ? Number(removed.data?.confidence)
+            : 0,
+        },
       ];
     }
   }
@@ -3567,7 +4976,7 @@ async function undoCollectionChoice(
     .from("collection_capture_links")
     .update({
       unlinked_at: unlinkAt,
-      unlink_reason: restoredDecisions.length ? "user_restore_ai" : "user_undo"
+      unlink_reason: restoredDecisions.length ? "user_restore_ai" : "user_undo",
     })
     .eq("user_id", userId)
     .eq("capture_id", captureId)
@@ -3579,7 +4988,11 @@ async function undoCollectionChoice(
 
   const nextDecisions = [...activeCollectionDecisionRows(currentAnalysis)];
   for (const restored of restoredDecisions) {
-    if (!nextDecisions.some((decision) => sameCollectionDecision(decision, restored))) {
+    if (
+      !nextDecisions.some((decision) =>
+        sameCollectionDecision(decision, restored)
+      )
+    ) {
       nextDecisions.push(restored);
     }
   }
@@ -3589,15 +5002,20 @@ async function undoCollectionChoice(
       needs_review: false,
       collection_decisions: nextDecisions,
       suggested_collections: [],
-      collection_choice_overrides: overrides.filter((item) => String(item.collection_id || "") !== collectionId)
+      collection_choice_overrides: overrides.filter((item) =>
+        String(item.collection_id || "") !== collectionId
+      ),
     },
-    capture.review_confirmed_at
+    capture.review_confirmed_at,
   );
   const update = await supabase
     .from("captures")
     .update({
       analysis: nextAnalysis,
-      analysis_state: analysisRequiresReview(nextAnalysis, capture.review_confirmed_at) ? "needs_review" : "ready"
+      analysis_state:
+        analysisRequiresReview(nextAnalysis, capture.review_confirmed_at)
+          ? "needs_review"
+          : "ready",
     })
     .eq("user_id", userId)
     .eq("id", captureId);
@@ -3609,11 +5027,13 @@ async function preserveAiCollectionSuggestionForUnlink(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
   captureId: string,
-  collectionId: string
+  collectionId: string,
 ) {
   const link = await supabase
     .from("collection_capture_links")
-    .select("created_by, rationale, confidence, collections(id,title,description)")
+    .select(
+      "created_by, rationale, confidence, collections(id,title,description)",
+    )
     .eq("user_id", userId)
     .eq("collection_id", collectionId)
     .eq("capture_id", captureId)
@@ -3636,38 +5056,50 @@ async function preserveAiCollectionSuggestionForUnlink(
     : link.data.collections as Record<string, unknown> | undefined;
   if (!collection) return;
 
-  const currentAnalysis = capture.data.analysis && typeof capture.data.analysis === "object"
-    ? capture.data.analysis as Record<string, unknown>
-    : {};
+  const currentAnalysis =
+    capture.data.analysis && typeof capture.data.analysis === "object"
+      ? capture.data.analysis as Record<string, unknown>
+      : {};
   const restoredDecision = {
     type: "existing",
     collection_id: collectionId,
     title: String(collection.title || ""),
-    description: typeof collection.description === "string" ? collection.description : null,
-    rationale: typeof link.data.rationale === "string" ? link.data.rationale : "",
-    confidence: Number.isFinite(Number(link.data.confidence)) ? Number(link.data.confidence) : 0
+    description: typeof collection.description === "string"
+      ? collection.description
+      : null,
+    rationale: typeof link.data.rationale === "string"
+      ? link.data.rationale
+      : "",
+    confidence: Number.isFinite(Number(link.data.confidence))
+      ? Number(link.data.confidence)
+      : 0,
   };
   const overrides = collectionChoiceOverrides(currentAnalysis)
-    .filter((override) => String(override.collection_id || "") !== collectionId);
+    .filter((override) =>
+      String(override.collection_id || "") !== collectionId
+    );
   overrides.push({
     collection_id: collectionId,
     source: "analysis",
     restored_decisions: [restoredDecision],
-    applied_at: new Date().toISOString()
+    applied_at: new Date().toISOString(),
   });
   const nextAnalysis = normalizedReviewAnalysis(
     {
       ...currentAnalysis,
       needs_review: false,
-      collection_choice_overrides: overrides
+      collection_choice_overrides: overrides,
     },
-    capture.data.review_confirmed_at
+    capture.data.review_confirmed_at,
   );
   const update = await supabase
     .from("captures")
     .update({
       analysis: nextAnalysis,
-      analysis_state: analysisRequiresReview(nextAnalysis, capture.data.review_confirmed_at) ? "needs_review" : "ready"
+      analysis_state:
+        analysisRequiresReview(nextAnalysis, capture.data.review_confirmed_at)
+          ? "needs_review"
+          : "ready",
     })
     .eq("user_id", userId)
     .eq("id", captureId);
@@ -3677,7 +5109,7 @@ async function preserveAiCollectionSuggestionForUnlink(
 async function handleClientEventsResource(
   request: Request,
   supabase: ReturnType<typeof adminClient>,
-  userId: string
+  userId: string,
 ) {
   if (request.method !== "POST") return json({ error: "Not found" }, 404);
   const body = await request.json().catch(() => ({}));
@@ -3687,12 +5119,16 @@ async function handleClientEventsResource(
   const rawPhase = truncateText(body.phase, 80);
   const rawReasonCode = truncateText(body.reasonCode, 80);
   const phase = clientEventPhases.has(rawPhase) ? rawPhase : "unknown";
-  const reasonCode = clientEventReasonCodes.has(rawReasonCode) ? rawReasonCode : "unknown_network_error";
+  const reasonCode = clientEventReasonCodes.has(rawReasonCode)
+    ? rawReasonCode
+    : "unknown_network_error";
   const message = truncateText(body.message, 500);
   if (!eventType || !rawReasonCode) {
     return json({ error: "eventType and reasonCode are required" }, 400);
   }
-  if (!clientEventTypes.has(eventType)) return json({ error: "eventType is not supported" }, 400);
+  if (!clientEventTypes.has(eventType)) {
+    return json({ error: "eventType is not supported" }, 400);
+  }
 
   let captureId: string | null = null;
   if (captureRef) {
@@ -3701,7 +5137,9 @@ async function handleClientEventsResource(
       .select("id")
       .eq("user_id", userId)
       .limit(1);
-    query = isUuid(captureRef) ? query.eq("id", captureRef) : query.eq("client_capture_key", captureRef);
+    query = isUuid(captureRef)
+      ? query.eq("id", captureRef)
+      : query.eq("client_capture_key", captureRef);
     const existing = await query.maybeSingle();
     if (existing.error) throw existing.error;
     captureId = existing.data?.id ?? null;
@@ -3717,7 +5155,7 @@ async function handleClientEventsResource(
       phase: phase || null,
       reason_code: reasonCode,
       message: message || null,
-      diagnostics: boundedClientDiagnostics(body.diagnostics)
+      diagnostics: boundedClientDiagnostics(body.diagnostics),
     })
     .select("*")
     .single();
@@ -3730,7 +5168,7 @@ async function handleCollectionsResource(
   request: Request,
   supabase: ReturnType<typeof adminClient>,
   userId: string,
-  url: URL
+  url: URL,
 ) {
   if (request.method === "GET") {
     const archived = url.searchParams.get("archived") === "true";
@@ -3742,42 +5180,62 @@ async function handleCollectionsResource(
       .order("created_at", { ascending: false });
     if (error) throw error;
     const rows = (data ?? []) as Array<Record<string, unknown>>;
-    const counts = await activeCollectionCounts(supabase, userId, rows.map((row) => String(row.id)));
-    return json({ collections: rows.map((row) => collectionFromRow(row, counts)) });
+    const counts = await activeCollectionCounts(
+      supabase,
+      userId,
+      rows.map((row) => String(row.id)),
+    );
+    return json({
+      collections: rows.map((row) => collectionFromRow(row, counts)),
+    });
   }
 
   const body = await request.json().catch(() => ({}));
-  const collectionId = typeof body.collectionId === "string" ? body.collectionId : "";
+  const collectionId = typeof body.collectionId === "string"
+    ? body.collectionId
+    : "";
 
   if (request.method === "POST") {
     const title = cleanRequiredText(body.title);
     const description = cleanRequiredText(body.description);
-    if (!title || !description) return json({ error: "title and description are required" }, 400);
+    if (!title || !description) {
+      return json({ error: "title and description are required" }, 400);
+    }
     const { data, error } = await supabase
       .from("collections")
       .insert({
         user_id: userId,
         title,
         description,
-        created_by: body.createdBy === "analysis" ? "analysis" : "user"
+        created_by: body.createdBy === "analysis" ? "analysis" : "user",
       })
       .select("*")
       .single();
     if (error) throw error;
-    await upsertCollectionEmbedding(supabase, userId, data.id, title, description);
+    await upsertCollectionEmbedding(
+      supabase,
+      userId,
+      data.id,
+      title,
+      description,
+    );
     if (typeof body.captureId === "string" && body.captureId) {
       await linkCaptureToCollection(supabase, userId, data.id, body.captureId, {
         createdBy: body.createdBy === "analysis" ? "analysis" : "user",
         rationale: typeof body.rationale === "string" ? body.rationale : null,
-        confidence: Number.isFinite(Number(body.confidence)) ? Number(body.confidence) : null
+        confidence: Number.isFinite(Number(body.confidence))
+          ? Number(body.confidence)
+          : null,
       });
       await markCollectionDecisionAccepted(supabase, userId, body.captureId, {
         type: "new",
         title,
-        collectionId: data.id
+        collectionId: data.id,
       });
     }
-    return json({ collection: collectionFromRow(data as Record<string, unknown>) }, 201);
+    return json({
+      collection: collectionFromRow(data as Record<string, unknown>),
+    }, 201);
   }
 
   if (request.method !== "PATCH") return json({ error: "Not found" }, 404);
@@ -3800,7 +5258,9 @@ async function handleCollectionsResource(
       .eq("collection_id", collectionId)
       .is("unlinked_at", null);
     if (activeLinks.error) throw activeLinks.error;
-    const snapshot = (activeLinks.data ?? []).map((row) => String((row as Record<string, unknown>).capture_id));
+    const snapshot = (activeLinks.data ?? []).map((row) =>
+      String((row as Record<string, unknown>).capture_id)
+    );
     const archivedAt = new Date().toISOString();
     const unlink = await supabase
       .from("collection_capture_links")
@@ -3814,14 +5274,16 @@ async function handleCollectionsResource(
       .update({
         status: "archived",
         archived_at: archivedAt,
-        archive_link_snapshot: snapshot
+        archive_link_snapshot: snapshot,
       })
       .eq("user_id", userId)
       .eq("id", collectionId)
       .select("*")
       .single();
     if (error) throw error;
-    return json({ collection: collectionFromRow(data as Record<string, unknown>) });
+    return json({
+      collection: collectionFromRow(data as Record<string, unknown>),
+    });
   }
 
   if (body.action === "restore") {
@@ -3837,15 +5299,24 @@ async function handleCollectionsResource(
       .single();
     if (error) throw error;
     for (const captureId of snapshot) {
-      await linkCaptureToCollection(supabase, userId, collectionId, captureId, { createdBy: "restore" });
+      await linkCaptureToCollection(supabase, userId, collectionId, captureId, {
+        createdBy: "restore",
+      });
     }
-    return json({ collection: collectionFromRow(data as Record<string, unknown>) });
+    return json({
+      collection: collectionFromRow(data as Record<string, unknown>),
+    });
   }
 
-  const title = body.title === undefined ? String(existing.data.title || "") : cleanRequiredText(body.title);
-  const description =
-    body.description === undefined ? String(existing.data.description || "") : cleanRequiredText(body.description);
-  if (!title || !description) return json({ error: "title and description are required" }, 400);
+  const title = body.title === undefined
+    ? String(existing.data.title || "")
+    : cleanRequiredText(body.title);
+  const description = body.description === undefined
+    ? String(existing.data.description || "")
+    : cleanRequiredText(body.description);
+  if (!title || !description) {
+    return json({ error: "title and description are required" }, 400);
+  }
   const { data, error } = await supabase
     .from("collections")
     .update({ title, description })
@@ -3854,19 +5325,31 @@ async function handleCollectionsResource(
     .select("*")
     .single();
   if (error) throw error;
-  await upsertCollectionEmbedding(supabase, userId, collectionId, title, description);
-  return json({ collection: collectionFromRow(data as Record<string, unknown>) });
+  await upsertCollectionEmbedding(
+    supabase,
+    userId,
+    collectionId,
+    title,
+    description,
+  );
+  return json({
+    collection: collectionFromRow(data as Record<string, unknown>),
+  });
 }
 
 async function handleCollectionLinksResource(
   request: Request,
   supabase: ReturnType<typeof adminClient>,
-  userId: string
+  userId: string,
 ) {
   const body = await request.json().catch(() => ({}));
-  const collectionId = typeof body.collectionId === "string" ? body.collectionId : "";
+  const collectionId = typeof body.collectionId === "string"
+    ? body.collectionId
+    : "";
   const captureId = typeof body.captureId === "string" ? body.captureId : "";
-  if (!collectionId || !captureId) return json({ error: "collectionId and captureId are required" }, 400);
+  if (!collectionId || !captureId) {
+    return json({ error: "collectionId and captureId are required" }, 400);
+  }
 
   const collection = await supabase
     .from("collections")
@@ -3878,22 +5361,31 @@ async function handleCollectionLinksResource(
   if (!collection.data) return json({ error: "Collection not found" }, 404);
 
   if (request.method === "POST") {
-    if (collection.data.status === "archived") return json({ error: "Archived collections cannot be linked" }, 400);
+    if (collection.data.status === "archived") {
+      return json({ error: "Archived collections cannot be linked" }, 400);
+    }
     await linkCaptureToCollection(supabase, userId, collectionId, captureId, {
       createdBy: body.createdBy === "analysis" ? "analysis" : "user",
       rationale: typeof body.rationale === "string" ? body.rationale : null,
-      confidence: Number.isFinite(Number(body.confidence)) ? Number(body.confidence) : null
+      confidence: Number.isFinite(Number(body.confidence))
+        ? Number(body.confidence)
+        : null,
     });
     await markCollectionDecisionAccepted(supabase, userId, captureId, {
       type: "existing",
       title: typeof body.title === "string" ? body.title : "",
-      collectionId
+      collectionId,
     });
     return json({ ok: true });
   }
 
   if (request.method === "PATCH" && body.action === "unlink") {
-    await preserveAiCollectionSuggestionForUnlink(supabase, userId, captureId, collectionId);
+    await preserveAiCollectionSuggestionForUnlink(
+      supabase,
+      userId,
+      captureId,
+      collectionId,
+    );
     const { error } = await supabase
       .from("collection_capture_links")
       .update({ unlinked_at: new Date().toISOString(), unlink_reason: "user" })
@@ -3912,7 +5404,7 @@ async function handleCollectionCapturesResource(
   request: Request,
   supabase: ReturnType<typeof adminClient>,
   userId: string,
-  url: URL
+  url: URL,
 ) {
   if (request.method !== "GET") return json({ error: "Not found" }, 404);
   const collectionId = url.searchParams.get("collectionId") || "";
@@ -3928,7 +5420,10 @@ async function handleCollectionCapturesResource(
   if (!collection.data) return json({ error: "Collection not found" }, 404);
   if (collection.data.status === "archived") return json({ captures: [] });
 
-  const limit = Math.max(1, Math.min(Number(url.searchParams.get("limit") || 100), 200));
+  const limit = Math.max(
+    1,
+    Math.min(Number(url.searchParams.get("limit") || 100), 200),
+  );
   const { data, error } = await supabase
     .from("collection_capture_links")
     .select("linked_at, captures(*, capture_assets(*))")
@@ -3946,138 +5441,379 @@ async function handleCollectionCapturesResource(
     })
     .filter(Boolean) as Array<Record<string, unknown>>;
   const rows = await attachLinkedCollections(supabase, userId, captureRows);
-  return json({ captures: withCaptureStates(rows).filter((row) => archivedFilter(row, false)) });
+  return json({
+    captures: withCaptureStates(rows).filter((row) =>
+      archivedFilter(row, false)
+    ),
+  });
 }
 
-Deno.serve(async (request) => {
-  if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  const user = await currentUser(request);
-  if (!user) return json({ error: "Unauthorized" }, 401);
+export const __urlEvidenceTest = {
+  bestEvidence,
+  compactUrlEvidence,
+  evidenceQuality,
+  evidenceSources,
+  fetchExtractusOembedEvidence,
+  metaOembedEndpoint,
+  normalizedUrlEvidence,
+  oembedEndpoint,
+  oembedMetadata,
+  parseHtmlEvidence,
+  platformForUrl,
+  productEvidenceStatus,
+  tier1CanonicalCandidates,
+  weaknessReasons,
+};
 
-  try {
-    const url = new URL(request.url);
-    const supabase = adminClient();
-    const resource = url.searchParams.get("resource") || "";
-
-    if (resource === "client-events") {
-      return await handleClientEventsResource(request, supabase, user.id);
+if (import.meta.main) {
+  Deno.serve(async (request) => {
+    if (request.method === "OPTIONS") {
+      return new Response("ok", { headers: corsHeaders });
     }
+    const user = await currentUser(request);
+    if (!user) return json({ error: "Unauthorized" }, 401);
 
-    if (resource === "collections") {
-      return await handleCollectionsResource(request, supabase, user.id, url);
-    }
+    try {
+      const url = new URL(request.url);
+      const supabase = adminClient();
+      const resource = url.searchParams.get("resource") || "";
 
-    if (resource === "collection-links") {
-      return await handleCollectionLinksResource(request, supabase, user.id);
-    }
-
-    if (resource === "collection-captures") {
-      return await handleCollectionCapturesResource(request, supabase, user.id, url);
-    }
-
-    if (request.method === "GET") {
-      const clientCaptureKey = url.searchParams.get("clientCaptureKey");
-      const archived = url.searchParams.get("archived") === "true";
-      let query = supabase
-        .from("captures")
-        .select("*, capture_assets(*)")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-      if (clientCaptureKey) query = query.eq("client_capture_key", clientCaptureKey).limit(1);
-      else query = query.limit(Number(url.searchParams.get("limit") || 50));
-      const { data, error } = await query;
-      if (error) throw error;
-      const rows = await attachLinkedCollections(
-        supabase,
-        user.id,
-        ((data ?? []) as Array<Record<string, unknown>>)
-      );
-      if (clientCaptureKey) return json({ capture: withCaptureState(rows?.[0] ?? null) });
-      return json({ captures: withCaptureStates(rows).filter((row) => archivedFilter(row, archived)) });
-    }
-
-    if (request.method === "PATCH") {
-      const body = await request.json().catch(() => ({}));
-      const captureId = typeof body.captureId === "string" ? body.captureId : "";
-      if (!captureId) return json({ error: "captureId is required" }, 400);
-
-      const existingResult = await supabase
-        .from("captures")
-        .select("*")
-        .eq("user_id", user.id)
-        .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
-        .maybeSingle();
-      if (existingResult.error) throw existingResult.error;
-      if (!existingResult.data) return json({ error: "Capture not found" }, 404);
-
-      if (body.action === "apply_collection_choice") {
-        return await applyCollectionChoice(supabase, user.id, existingResult.data as Record<string, unknown>, body);
+      if (resource === "client-events") {
+        return await handleClientEventsResource(request, supabase, user.id);
       }
 
-      if (body.action === "clear_collection_suggestion") {
-        return await clearCollectionSuggestion(supabase, user.id, existingResult.data as Record<string, unknown>, body);
+      if (resource === "collections") {
+        return await handleCollectionsResource(request, supabase, user.id, url);
       }
 
-      if (body.action === "undo_collection_choice") {
-        return await undoCollectionChoice(supabase, user.id, existingResult.data as Record<string, unknown>, body);
+      if (resource === "collection-links") {
+        return await handleCollectionLinksResource(request, supabase, user.id);
       }
 
-      if (body.action === "archive" || body.action === "restore") {
-        const archivedAt = body.action === "archive" ? new Date().toISOString() : null;
-        const analysis = mergeAnalysisPatch(existingResult.data, {
-          capture_state: body.action === "archive" ? "archived" : "active",
-          archived_at: archivedAt
-        });
-        let result = await supabase
+      if (resource === "collection-captures") {
+        return await handleCollectionCapturesResource(
+          request,
+          supabase,
+          user.id,
+          url,
+        );
+      }
+
+      if (request.method === "GET") {
+        const clientCaptureKey = url.searchParams.get("clientCaptureKey");
+        const archived = url.searchParams.get("archived") === "true";
+        let query = supabase
           .from("captures")
-          .update({ analysis, archived_at: archivedAt })
+          .select("*, capture_assets(*)")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false });
+        if (clientCaptureKey) {
+          query = query.eq("client_capture_key", clientCaptureKey).limit(1);
+        } else query = query.limit(Number(url.searchParams.get("limit") || 50));
+        const { data, error } = await query;
+        if (error) throw error;
+        const rows = await attachLinkedCollections(
+          supabase,
+          user.id,
+          (data ?? []) as Array<Record<string, unknown>>,
+        );
+        if (clientCaptureKey) {
+          return json({ capture: withCaptureState(rows?.[0] ?? null) });
+        }
+        return json({
+          captures: withCaptureStates(rows).filter((row) =>
+            archivedFilter(row, archived)
+          ),
+        });
+      }
+
+      if (request.method === "PATCH") {
+        const body = await request.json().catch(() => ({}));
+        const captureId = typeof body.captureId === "string"
+          ? body.captureId
+          : "";
+        if (!captureId) return json({ error: "captureId is required" }, 400);
+
+        const existingResult = await supabase
+          .from("captures")
+          .select("*")
           .eq("user_id", user.id)
           .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
-          .select("*")
-          .single();
-        if (result.error && /archived_at|schema cache|column/i.test(String(result.error.message || result.error.details || ""))) {
-          result = await supabase
+          .maybeSingle();
+        if (existingResult.error) throw existingResult.error;
+        if (!existingResult.data) {
+          return json({ error: "Capture not found" }, 404);
+        }
+
+        if (body.action === "apply_collection_choice") {
+          return await applyCollectionChoice(
+            supabase,
+            user.id,
+            existingResult.data as Record<string, unknown>,
+            body,
+          );
+        }
+
+        if (body.action === "clear_collection_suggestion") {
+          return await clearCollectionSuggestion(
+            supabase,
+            user.id,
+            existingResult.data as Record<string, unknown>,
+            body,
+          );
+        }
+
+        if (body.action === "undo_collection_choice") {
+          return await undoCollectionChoice(
+            supabase,
+            user.id,
+            existingResult.data as Record<string, unknown>,
+            body,
+          );
+        }
+
+        if (body.action === "archive" || body.action === "restore") {
+          const archivedAt = body.action === "archive"
+            ? new Date().toISOString()
+            : null;
+          const analysis = mergeAnalysisPatch(existingResult.data, {
+            capture_state: body.action === "archive" ? "archived" : "active",
+            archived_at: archivedAt,
+          });
+          let result = await supabase
             .from("captures")
-            .update({ analysis })
+            .update({ analysis, archived_at: archivedAt })
             .eq("user_id", user.id)
             .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
             .select("*")
             .single();
+          if (
+            result.error &&
+            /archived_at|schema cache|column/i.test(
+              String(result.error.message || result.error.details || ""),
+            )
+          ) {
+            result = await supabase
+              .from("captures")
+              .update({ analysis })
+              .eq("user_id", user.id)
+              .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
+              .select("*")
+              .single();
+          }
+          if (result.error) throw result.error;
+          return json({ capture: withCaptureState(result.data) });
         }
-        if (result.error) throw result.error;
-        return json({ capture: withCaptureState(result.data) });
-      }
 
-      if (body.action === "confirm_review") {
-        const currentAnalysis = existingResult.data.analysis && typeof existingResult.data.analysis === "object"
-          ? existingResult.data.analysis as Record<string, unknown>
-          : {};
-        await acceptPendingCollectionDecisions(supabase, user.id, String(existingResult.data.id), currentAnalysis);
-        const confirmedAt = new Date().toISOString();
-        const update: Record<string, unknown> = {
-          analysis: {
+        if (body.action === "confirm_review") {
+          const currentAnalysis = existingResult.data.analysis &&
+              typeof existingResult.data.analysis === "object"
+            ? existingResult.data.analysis as Record<string, unknown>
+            : {};
+          await acceptPendingCollectionDecisions(
+            supabase,
+            user.id,
+            String(existingResult.data.id),
+            currentAnalysis,
+          );
+          const confirmedAt = new Date().toISOString();
+          const update: Record<string, unknown> = {
+            analysis: {
+              ...currentAnalysis,
+              needs_review: false,
+              collection_decisions: [],
+              suggested_collections: [],
+              suggested_reminders: confirmedReminderSuggestions(
+                currentAnalysis,
+              ),
+            },
+            analysis_state: "ready",
+            review_confirmed_at: confirmedAt,
+          };
+          if (typeof body.title === "string") {
+            const title = body.title.trim() || null;
+            update.title = title;
+            update.display_title = title;
+          }
+          if (typeof body.note === "string") {
+            update.context_note = body.note.trim() || null;
+          }
+          if (typeof body.currentSaveIntent === "string") {
+            if (!activeSaveIntentKeySet.has(body.currentSaveIntent)) {
+              return json({
+                error: "currentSaveIntent is not an active save intent",
+              }, 400);
+            }
+            update.current_save_intent = body.currentSaveIntent;
+            update.intent_corrected_at = confirmedAt;
+          }
+          let result = await supabase
+            .from("captures")
+            .update(update)
+            .eq("user_id", user.id)
+            .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
+            .select("*")
+            .single();
+          if (
+            result.error &&
+            /review_confirmed_at|intent_corrected_at|schema cache|column/i.test(
+              String(result.error.message || result.error.details || ""),
+            )
+          ) {
+            const fallbackUpdate = { ...update };
+            delete fallbackUpdate.review_confirmed_at;
+            if (
+              /intent_corrected_at/i.test(
+                String(result.error.message || result.error.details || ""),
+              )
+            ) {
+              delete fallbackUpdate.intent_corrected_at;
+            }
+            result = await supabase
+              .from("captures")
+              .update(fallbackUpdate)
+              .eq("user_id", user.id)
+              .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
+              .select("*")
+              .single();
+          }
+          if (result.error) throw result.error;
+          const rows = await attachLinkedCollections(supabase, user.id, [
+            result.data as Record<string, unknown>,
+          ]);
+          return json({ capture: withCaptureState(rows[0] ?? result.data) });
+        }
+
+        if (body.action === "save_review_decisions") {
+          const currentAnalysis = existingResult.data.analysis &&
+              typeof existingResult.data.analysis === "object"
+            ? existingResult.data.analysis as Record<string, unknown>
+            : {};
+          await applyCollectionReviewDecisions(
+            supabase,
+            user.id,
+            String(existingResult.data.id),
+            body.collectionDecisions,
+          );
+          const nextAnalysis = normalizedReviewAnalysis(
+            {
+              ...currentAnalysis,
+              needs_review: false,
+              collection_decisions: reviewCollectionDecisions(
+                currentAnalysis,
+                body.collectionDecisions,
+              ),
+              suggested_collections: [],
+              suggested_reminders: reviewReminderSuggestions(
+                currentAnalysis,
+                body.reminderDecisions,
+              ),
+            },
+            existingResult.data.review_confirmed_at,
+          );
+          const update: Record<string, unknown> = {
+            analysis: nextAnalysis,
+            analysis_state: analysisRequiresReview(
+                nextAnalysis,
+                existingResult.data.review_confirmed_at,
+              )
+              ? "needs_review"
+              : "ready",
+          };
+          if (typeof body.title === "string") {
+            const title = body.title.trim() || null;
+            update.title = title;
+            update.display_title = title;
+          }
+          if (typeof body.note === "string") {
+            update.context_note = body.note.trim() || null;
+          }
+          if (typeof body.currentSaveIntent === "string") {
+            if (!activeSaveIntentKeySet.has(body.currentSaveIntent)) {
+              return json({
+                error: "currentSaveIntent is not an active save intent",
+              }, 400);
+            }
+            update.current_save_intent = body.currentSaveIntent;
+            update.intent_corrected_at = new Date().toISOString();
+          }
+          let result = await supabase
+            .from("captures")
+            .update(update)
+            .eq("user_id", user.id)
+            .eq("id", existingResult.data.id)
+            .select("*")
+            .single();
+          if (
+            result.error && update.intent_corrected_at &&
+            /intent_corrected_at|schema cache|column/i.test(
+              String(result.error.message || result.error.details || ""),
+            )
+          ) {
+            delete update.intent_corrected_at;
+            result = await supabase
+              .from("captures")
+              .update(update)
+              .eq("user_id", user.id)
+              .eq("id", existingResult.data.id)
+              .select("*")
+              .single();
+          }
+          if (result.error) throw result.error;
+          const rows = await attachLinkedCollections(supabase, user.id, [
+            result.data as Record<string, unknown>,
+          ]);
+          return json({ capture: withCaptureState(rows[0] ?? result.data) });
+        }
+
+        if (body.action === "dismiss_reminder") {
+          const currentAnalysis = existingResult.data.analysis &&
+              typeof existingResult.data.analysis === "object"
+            ? existingResult.data.analysis as Record<string, unknown>
+            : {};
+          const nextAnalysis = {
             ...currentAnalysis,
-            needs_review: false,
-            collection_decisions: [],
-            suggested_collections: [],
-            suggested_reminders: confirmedReminderSuggestions(currentAnalysis)
-          },
-          analysis_state: "ready",
-          review_confirmed_at: confirmedAt
-        };
+            suggested_reminders: dismissReminderSuggestion(
+              currentAnalysis,
+              body.reminderIndex,
+            ),
+          };
+          const result = await supabase
+            .from("captures")
+            .update({ analysis: nextAnalysis })
+            .eq("user_id", user.id)
+            .eq("id", existingResult.data.id)
+            .select("*")
+            .single();
+          if (result.error) throw result.error;
+          const rows = await attachLinkedCollections(supabase, user.id, [
+            result.data as Record<string, unknown>,
+          ]);
+          return json({ capture: withCaptureState(rows[0] ?? result.data) });
+        }
+
+        const update: Record<string, unknown> = {};
         if (typeof body.title === "string") {
           const title = body.title.trim() || null;
           update.title = title;
           update.display_title = title;
         }
-        if (typeof body.note === "string") update.context_note = body.note.trim() || null;
+        if (typeof body.note === "string") {
+          update.context_note = body.note.trim() || null;
+        }
         if (typeof body.currentSaveIntent === "string") {
           if (!activeSaveIntentKeySet.has(body.currentSaveIntent)) {
-            return json({ error: "currentSaveIntent is not an active save intent" }, 400);
+            return json({
+              error: "currentSaveIntent is not an active save intent",
+            }, 400);
           }
           update.current_save_intent = body.currentSaveIntent;
-          update.intent_corrected_at = confirmedAt;
+          update.intent_corrected_at = new Date().toISOString();
         }
+        if (!Object.keys(update).length) {
+          return json({ capture: withCaptureState(existingResult.data) });
+        }
+
         let result = await supabase
           .from("captures")
           .update(update)
@@ -4085,12 +5821,14 @@ Deno.serve(async (request) => {
           .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
           .select("*")
           .single();
-        if (result.error && /review_confirmed_at|intent_corrected_at|schema cache|column/i.test(String(result.error.message || result.error.details || ""))) {
+        if (
+          result.error &&
+          /intent_corrected_at|schema cache|column/i.test(
+            String(result.error.message || result.error.details || ""),
+          )
+        ) {
           const fallbackUpdate = { ...update };
-          delete fallbackUpdate.review_confirmed_at;
-          if (/intent_corrected_at/i.test(String(result.error.message || result.error.details || ""))) {
-            delete fallbackUpdate.intent_corrected_at;
-          }
+          delete fallbackUpdate.intent_corrected_at;
           result = await supabase
             .from("captures")
             .update(fallbackUpdate)
@@ -4100,137 +5838,35 @@ Deno.serve(async (request) => {
             .single();
         }
         if (result.error) throw result.error;
-        const rows = await attachLinkedCollections(supabase, user.id, [result.data as Record<string, unknown>]);
-        return json({ capture: withCaptureState(rows[0] ?? result.data) });
+        return json({ capture: withCaptureState(result.data) });
       }
 
-      if (body.action === "save_review_decisions") {
-        const currentAnalysis = existingResult.data.analysis && typeof existingResult.data.analysis === "object"
-          ? existingResult.data.analysis as Record<string, unknown>
-          : {};
-        await applyCollectionReviewDecisions(supabase, user.id, String(existingResult.data.id), body.collectionDecisions);
-        const nextAnalysis = normalizedReviewAnalysis(
-          {
-            ...currentAnalysis,
-            needs_review: false,
-            collection_decisions: reviewCollectionDecisions(currentAnalysis, body.collectionDecisions),
-            suggested_collections: [],
-            suggested_reminders: reviewReminderSuggestions(currentAnalysis, body.reminderDecisions)
-          },
-          existingResult.data.review_confirmed_at
-        );
-        const update: Record<string, unknown> = {
-          analysis: nextAnalysis,
-          analysis_state: analysisRequiresReview(nextAnalysis, existingResult.data.review_confirmed_at) ? "needs_review" : "ready"
-        };
-        if (typeof body.title === "string") {
-          const title = body.title.trim() || null;
-          update.title = title;
-          update.display_title = title;
-        }
-        if (typeof body.note === "string") update.context_note = body.note.trim() || null;
-        if (typeof body.currentSaveIntent === "string") {
-          if (!activeSaveIntentKeySet.has(body.currentSaveIntent)) {
-            return json({ error: "currentSaveIntent is not an active save intent" }, 400);
-          }
-          update.current_save_intent = body.currentSaveIntent;
-          update.intent_corrected_at = new Date().toISOString();
-        }
-        let result = await supabase
-          .from("captures")
-          .update(update)
-          .eq("user_id", user.id)
-          .eq("id", existingResult.data.id)
-          .select("*")
-          .single();
-        if (result.error && update.intent_corrected_at && /intent_corrected_at|schema cache|column/i.test(String(result.error.message || result.error.details || ""))) {
-          delete update.intent_corrected_at;
-          result = await supabase
-            .from("captures")
-            .update(update)
-            .eq("user_id", user.id)
-            .eq("id", existingResult.data.id)
-            .select("*")
-            .single();
-        }
-        if (result.error) throw result.error;
-        const rows = await attachLinkedCollections(supabase, user.id, [result.data as Record<string, unknown>]);
-        return json({ capture: withCaptureState(rows[0] ?? result.data) });
-      }
+      if (request.method !== "POST") return json({ error: "Not found" }, 404);
 
-      if (body.action === "dismiss_reminder") {
-        const currentAnalysis = existingResult.data.analysis && typeof existingResult.data.analysis === "object"
-          ? existingResult.data.analysis as Record<string, unknown>
-          : {};
-        const nextAnalysis = {
-          ...currentAnalysis,
-          suggested_reminders: dismissReminderSuggestion(currentAnalysis, body.reminderIndex)
-        };
-        const result = await supabase
-          .from("captures")
-          .update({ analysis: nextAnalysis })
-          .eq("user_id", user.id)
-          .eq("id", existingResult.data.id)
-          .select("*")
-          .single();
-        if (result.error) throw result.error;
-        const rows = await attachLinkedCollections(supabase, user.id, [result.data as Record<string, unknown>]);
-        return json({ capture: withCaptureState(rows[0] ?? result.data) });
+      const payload = await readCapturePayload(request);
+      const capture = payload.asset
+        ? await createOrGetCaptureWithAsset(
+          supabase,
+          user.id,
+          payload.fields,
+          payload.asset,
+        )
+        : await createOrGetCaptureFromFields(supabase, user.id, payload.fields);
+      if (
+        capture.analysis_state === "queued" ||
+        capture.analysis_state === "failed"
+      ) {
+        EdgeRuntime.waitUntil(processCapture(capture.id, user.id));
       }
-
-      const update: Record<string, unknown> = {};
-      if (typeof body.title === "string") {
-        const title = body.title.trim() || null;
-        update.title = title;
-        update.display_title = title;
-      }
-      if (typeof body.note === "string") update.context_note = body.note.trim() || null;
-      if (typeof body.currentSaveIntent === "string") {
-        if (!activeSaveIntentKeySet.has(body.currentSaveIntent)) {
-          return json({ error: "currentSaveIntent is not an active save intent" }, 400);
-        }
-        update.current_save_intent = body.currentSaveIntent;
-        update.intent_corrected_at = new Date().toISOString();
-      }
-      if (!Object.keys(update).length) {
-        return json({ capture: withCaptureState(existingResult.data) });
-      }
-
-      let result = await supabase
-        .from("captures")
-        .update(update)
-        .eq("user_id", user.id)
-        .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
-        .select("*")
-        .single();
-      if (result.error && /intent_corrected_at|schema cache|column/i.test(String(result.error.message || result.error.details || ""))) {
-        const fallbackUpdate = { ...update };
-        delete fallbackUpdate.intent_corrected_at;
-        result = await supabase
-          .from("captures")
-          .update(fallbackUpdate)
-          .eq("user_id", user.id)
-          .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
-          .select("*")
-          .single();
-      }
-      if (result.error) throw result.error;
-      return json({ capture: withCaptureState(result.data) });
+      return json({ capture }, 202);
+    } catch (error) {
+      const message = errorMessage(error);
+      const status =
+        /URL|sourceText or sourceUrl|required|Private URLs|Only http\/https|Credentialed/i
+            .test(message)
+          ? 400
+          : 500;
+      return json({ error: message }, status);
     }
-
-    if (request.method !== "POST") return json({ error: "Not found" }, 404);
-
-    const payload = await readCapturePayload(request);
-    const capture = payload.asset
-      ? await createOrGetCaptureWithAsset(supabase, user.id, payload.fields, payload.asset)
-      : await createOrGetCaptureFromFields(supabase, user.id, payload.fields);
-    if (capture.analysis_state === "queued" || capture.analysis_state === "failed") {
-      EdgeRuntime.waitUntil(processCapture(capture.id, user.id));
-    }
-    return json({ capture }, 202);
-  } catch (error) {
-    const message = errorMessage(error);
-    const status = /URL|sourceText or sourceUrl|required|Private URLs|Only http\/https|Credentialed/i.test(message) ? 400 : 500;
-    return json({ error: message }, status);
-  }
-});
+  });
+}
