@@ -64,8 +64,9 @@ New Capture must:
 Capture Review must:
 
 - Feel like editing a saved memory, not inspecting an analysis report.
-- Lead with existing capture imagery or source media when available; otherwise use a richer source/intent header.
-- Lead with an editable sentence, such as `Saved as [try this place] in [Japan trip].`
+- Lead with existing capture imagery or source media when available; tapping it opens the source URL when one is available.
+- Make the editable title the primary text under the media/source header.
+- Show Save Intent, Collection, and Reminder as quiet editable rows below the title rather than stacking prominent cards or pill-heavy controls.
 - Omit the collection phrase when no Collection is linked or suggested. A Capture may intentionally have no Collection.
 - Show `Add to collection` as a secondary action when relevant.
 - Show prior AI Collection suggestions as `Use suggestion` when useful, without reattaching automatically after user removal.

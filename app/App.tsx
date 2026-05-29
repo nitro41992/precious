@@ -42,7 +42,6 @@ import {
   Link2,
   LogOut,
   MapPin,
-  MoreHorizontal,
   Pencil,
   Plus,
   Search,
@@ -459,6 +458,10 @@ function captureImageUrl(capture: Capture) {
   );
 }
 
+function captureOpenUrl(capture: Capture) {
+  return capture.sourceUrl || extractHttpUrl(capture.sourceText) || "";
+}
+
 function isMapSource(capture: Capture) {
   const host = captureSourceHost(capture).toLowerCase();
   const url = String(capture.sourceUrl || "").toLowerCase();
@@ -569,14 +572,6 @@ function reviewStatusCue(capture: Capture, pendingAutoCollection: boolean, hasRe
   if (displayStatus(capture) === "failed") return "Needs a quick look";
   if (hasReviewReasons) return "Needs a quick look";
   return "Ready";
-}
-
-function shortTrustCue(value: string | null | undefined) {
-  const cleaned = cleanSentence(value);
-  if (!cleaned) return "";
-  if (auditLikeText(cleaned)) return "";
-  if (/^suggestion based on saved content\.?$/i.test(cleaned)) return "";
-  return "Suggestion detail";
 }
 
 function recencyGroupLabel(value: number, now = Date.now()) {
@@ -1254,8 +1249,7 @@ export default function App() {
   const [showCaptureComposer, setShowCaptureComposer] = useState(false);
   const [captureComposerClosing, setCaptureComposerClosing] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [sourceExpanded, setSourceExpanded] = useState(false);
-  const [noteExpanded, setNoteExpanded] = useState(false);
+  const [noteSheetOpen, setNoteSheetOpen] = useState(false);
   const [accountSheetOpen, setAccountSheetOpen] = useState(false);
   const [rationaleSheet, setRationaleSheet] = useState<{ title: string; text: string } | null>(null);
   const [archiveCaptureConfirmOpen, setArchiveCaptureConfirmOpen] = useState(false);
@@ -1269,6 +1263,7 @@ export default function App() {
   const latestNoteRef = useRef("");
   const autoAppliedCollectionKeysRef = useRef<Set<string>>(new Set());
   const sourceInputRef = useRef<TextInput>(null);
+  const noteInputRef = useRef<TextInput>(null);
   const collectionTitleInputRef = useRef<TextInput>(null);
   const lastKeyboardHeightRef = useRef(0);
   const captureComposerClosingRef = useRef(false);
@@ -1449,6 +1444,7 @@ export default function App() {
     setQuickIntentOpen(false);
     setReminderDrafts({});
     setCollectionDrafts({});
+    setNoteSheetOpen(false);
     setSelectedId(captureId);
   }, []);
 
@@ -1490,6 +1486,15 @@ export default function App() {
     setDraftNote(capture.note);
     setDraftIntent(normalizeIntent(capture.defaultIntent));
   }, [selectCapture]);
+
+  async function openCaptureUrl(url: string) {
+    if (!url) return;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      setMessage("Could not open source.");
+    }
+  }
 
   function openSearch() {
     selectCapture(null);
@@ -1560,6 +1565,26 @@ export default function App() {
     captureComposerMotion.setValue(0);
     captureKeyboardInset.setValue(estimatedKeyboardHeight);
     setShowCollectionForm(true);
+  }
+
+  function openNoteSheet() {
+    const screenHeight = Dimensions.get("screen").height;
+    const estimatedKeyboardHeight = lastKeyboardHeightRef.current || Math.round(screenHeight * (Platform.OS === "ios" ? 0.34 : 0.4));
+    setQuickIntentOpen(false);
+    setMessage("");
+    captureComposerMotion.stopAnimation();
+    captureKeyboardInset.stopAnimation();
+    captureComposerMotion.setValue(0);
+    captureKeyboardInset.setValue(estimatedKeyboardHeight);
+    setKeyboardHeight(estimatedKeyboardHeight);
+    setNoteSheetOpen(true);
+  }
+
+  function closeNoteSheet() {
+    Keyboard.dismiss();
+    setNoteSheetOpen(false);
+    setKeyboardHeight(0);
+    captureKeyboardInset.setValue(0);
   }
 
   function closeCaptureComposer() {
@@ -1714,6 +1739,7 @@ export default function App() {
       !searchOpen &&
       !showCaptureComposer &&
       !showCollectionForm &&
+      !noteSheetOpen &&
       !collectionsOpen &&
       !accountSheetOpen &&
       !rationaleSheet &&
@@ -1743,6 +1769,10 @@ export default function App() {
       }
       if (showCollectionForm) {
         closeCollectionComposer();
+        return true;
+      }
+      if (noteSheetOpen) {
+        closeNoteSheet();
         return true;
       }
       if (searchOpen) {
@@ -1780,7 +1810,8 @@ export default function App() {
     selectedCollectionId,
     selectedId,
     showCaptureComposer,
-    showCollectionForm
+    showCollectionForm,
+    noteSheetOpen
   ]);
 
   useEffect(() => {
@@ -1808,7 +1839,7 @@ export default function App() {
   }, [reviewMotion, selectedId]);
 
   useEffect(() => {
-    if ((!showCaptureComposer && !showCollectionForm) || captureComposerClosing) return;
+    if ((!showCaptureComposer && !showCollectionForm && !noteSheetOpen) || captureComposerClosing) return;
     captureComposerMotion.setValue(0);
     Animated.spring(captureComposerMotion, {
       damping: 24,
@@ -1817,7 +1848,7 @@ export default function App() {
       toValue: 1,
       useNativeDriver: false
     }).start();
-  }, [captureComposerClosing, captureComposerMotion, showCaptureComposer, showCollectionForm]);
+  }, [captureComposerClosing, captureComposerMotion, noteSheetOpen, showCaptureComposer, showCollectionForm]);
 
   useEffect(() => {
     if (!showCaptureComposer || captureComposerClosing || pickingCaptureImage) return;
@@ -1834,6 +1865,14 @@ export default function App() {
     });
     return () => cancelAnimationFrame(frame);
   }, [showCollectionForm]);
+
+  useEffect(() => {
+    if (!noteSheetOpen) return;
+    const frame = requestAnimationFrame(() => {
+      noteInputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [noteSheetOpen]);
 
   useEffect(() => {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
@@ -2036,8 +2075,7 @@ export default function App() {
       setCollectionPickerQuery("");
       setCollectionCreateTitle("");
       setCollectionCreateDescription("");
-      setSourceExpanded(false);
-      setNoteExpanded(false);
+      setNoteSheetOpen(false);
       return;
     }
     const savedDraft = reviewDraftsByCapture[captureDraftKey(selected)] || {};
@@ -2059,8 +2097,6 @@ export default function App() {
     setCollectionPickerQuery("");
     setCollectionCreateTitle("");
     setCollectionCreateDescription("");
-    setSourceExpanded(false);
-    setNoteExpanded(false);
   }, [reviewDraftsByCapture, selectedDraftKey]);
 
   useEffect(() => {
@@ -3598,6 +3634,7 @@ export default function App() {
   if (selected) {
     const selectedArchived = isArchived(selected);
     const sourceValue = selected.sourceUrl || selected.sourceText;
+    const selectedOpenUrl = captureOpenUrl(selected);
     const selectedImageUrl = captureImageUrl(selected);
     const selectedReviewReasons = reviewReasons(selected);
     const aiIntentValue = normalizeIntent(selected.defaultIntent) || selected.defaultIntent || "";
@@ -3644,8 +3681,6 @@ export default function App() {
     const primaryCollectionTitle = primaryLinkedCollection?.title || primaryCollectionDecision?.title || "";
     const primaryCollectionConfidence = primaryLinkedCollection?.confidence ?? primaryCollectionDecision?.confidence ?? null;
     const primaryCollectionRationale = primaryLinkedCollection?.rationale || primaryCollectionDecision?.rationale;
-    const primaryRationale = (!primaryReminderRemoved ? primaryReminder?.rationale : "") || primaryCollectionRationale || selected.intentRationale;
-    const quickBecause = shortTrustCue(primaryRationale);
     const selectedCollectionState = primaryCollectionTitle ? collectionConfidenceLabel(primaryCollectionConfidence) : "No collection";
     const reminderSentenceValue = primaryReminder && !primaryReminderRemoved
       ? reminderLabel(primaryReminder)
@@ -3676,7 +3711,6 @@ export default function App() {
               ? "Autosaves"
               : "";
     const noteHasText = Boolean(draftNote.trim());
-    const showNoteEditor = noteExpanded;
     const reviewHasPendingChanges = Boolean(
       draftTitleDirty ||
         draftNoteDirty ||
@@ -3686,10 +3720,17 @@ export default function App() {
     );
     const reviewSupportText = draftIntentDirty
       ? `Changed from ${humanize(aiIntentValue) || "the original suggestion"}`
-      : !primaryCollectionTitle
-        ? "A capture can stay without a collection."
-        : "";
+      : "";
     const showReviewFooter = !collectionPickerOpen && (reviewHasPendingChanges || collectionActionPending);
+    const noteSheetKeyboardVisible = noteSheetOpen && keyboardHeight > 0;
+    const noteWindowAlreadyKeyboardSized = noteSheetKeyboardVisible && Math.abs(windowHeight + keyboardHeight - Dimensions.get("screen").height) < 96;
+    const noteVisibleHeight = noteSheetKeyboardVisible && !noteWindowAlreadyKeyboardSized
+      ? windowHeight - keyboardHeight
+      : windowHeight;
+    const noteSheetMaxHeight = noteSheetKeyboardVisible
+      ? Math.min(440, Math.max(320, noteVisibleHeight - 24))
+      : Math.min(500, Math.max(340, windowHeight * 0.64));
+    const noteSheetBottomInset = noteWindowAlreadyKeyboardSized ? 0 : captureKeyboardInset;
     const collectionPickerContent = collectionPickerOpen ? (
       <View style={styles.collectionPicker}>
         <View style={styles.sheetHeader}>
@@ -3923,10 +3964,19 @@ export default function App() {
                 </Text>
               ) : null}
             </View>
-            <View style={[
-              styles.reviewMediaHeader,
-              selectedImageUrl ? styles.reviewMediaHeaderImage : styles.reviewMediaHeaderFallback
-            ]}>
+            <Pressable
+              accessibilityHint={selectedOpenUrl ? "Opens the saved source" : undefined}
+              accessibilityLabel={selectedOpenUrl ? "Open saved source" : undefined}
+              accessibilityRole={selectedOpenUrl ? "button" : undefined}
+              disabled={!selectedOpenUrl}
+              onPress={() => void openCaptureUrl(selectedOpenUrl)}
+              style={({ pressed }) => [
+                styles.reviewMediaHeader,
+                selectedImageUrl ? styles.reviewMediaHeaderImage : styles.reviewMediaHeaderFallback,
+                pressed && Boolean(selectedOpenUrl) && styles.subtlePressed
+              ]}
+              testID="pc.review.media"
+            >
               {selectedImageUrl ? (
                 <>
                   <Image source={{ uri: selectedImageUrl }} style={styles.reviewMediaImage} />
@@ -3956,69 +4006,8 @@ export default function App() {
                   </View>
                 </View>
               )}
-            </View>
-            <View style={styles.quickEditBlock}>
-              <View style={styles.reviewSentence}>
-                <View style={styles.reviewPhrase}>
-                  <Text style={styles.reviewSentenceText}>Saved as</Text>
-                  <Pressable
-                    android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
-                    onLongPress={() => showRationale("Why this intent?", selected.intentRationale)}
-                    onPress={() => setQuickIntentOpen((current) => !current)}
-                    style={({ pressed }) => [
-                      styles.sentenceChip,
-                      quickIntentOpen && styles.sentenceChipActive,
-                      pressed && styles.subtlePressed
-                    ]}
-                  >
-                    <Text numberOfLines={2} style={styles.sentenceChipText}>{quickIntentLabel}</Text>
-                  </Pressable>
-                </View>
-                {primaryCollectionTitle || pendingAutoCollection ? (
-                  <View style={styles.reviewPhrase}>
-                    <Text style={styles.reviewSentenceText}>in</Text>
-                    <Pressable
-                      android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
-                      onLongPress={() => showRationale("Why this collection?", primaryCollectionRationale)}
-                      onPress={() => void openCollectionPicker()}
-                      style={({ pressed }) => [
-                        styles.sentenceChip,
-                        collectionPickerOpen && styles.sentenceChipActive,
-                        pressed && styles.subtlePressed
-                      ]}
-                    >
-                      <Text numberOfLines={2} style={styles.sentenceChipText}>
-                        {pendingAutoCollection ? "choosing..." : primaryCollectionTitle}
-                      </Text>
-                    </Pressable>
-                  </View>
-                ) : null}
-                {primaryReminder ? (
-                  <View style={styles.reviewPhrase}>
-                    <Text style={styles.reviewSentenceText}>Reminder idea:</Text>
-                    <Pressable
-                      android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
-                      onLongPress={() => showRationale("Why this reminder?", primaryReminder.rationale)}
-                      onPress={() => {
-                        const next = { ...reminderDrafts };
-                        if (primaryReminderRemoved) delete next[primaryReminderKey];
-                        else next[primaryReminderKey] = "remove";
-                        setReminderDrafts(next);
-                        updateSelectedReviewDraft({ reminders: next });
-                      }}
-                      style={({ pressed }) => [
-                        styles.sentenceChip,
-                        primaryReminderRemoved && styles.sentenceChipMuted,
-                        pressed && styles.subtlePressed
-                      ]}
-                    >
-                      <Text numberOfLines={2} style={[styles.sentenceChipText, primaryReminderRemoved && styles.suggestionTextMuted]}>
-                        {reminderSentenceValue}
-                      </Text>
-                    </Pressable>
-                  </View>
-                ) : null}
-              </View>
+            </Pressable>
+            <View style={styles.reviewPrimaryBlock}>
               <TextInput
                 multiline
                 onChangeText={(value) => {
@@ -4044,84 +4033,121 @@ export default function App() {
               {showReviewStateText ? (
                 <Text style={styles.reviewSentenceSubtext}>{selectedReviewState}</Text>
               ) : null}
+            </View>
+            <View style={styles.quickEditBlock}>
+              <View style={styles.reviewEditRows}>
+                <View style={styles.reviewEditRow}>
+                  <Text style={styles.editRowLabel}>Intent</Text>
+                  <Pressable
+                    android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
+                    onLongPress={() => showRationale("Why this intent?", selected.intentRationale)}
+                    onPress={() => setQuickIntentOpen((current) => !current)}
+                    style={({ pressed }) => [
+                      styles.editRowValue,
+                      quickIntentOpen && styles.sentenceChipActive,
+                      pressed && styles.subtlePressed
+                    ]}
+                  >
+                    <Text numberOfLines={1} style={styles.editRowValueText}>{quickIntentLabel}</Text>
+                  </Pressable>
+                </View>
+                {primaryCollectionTitle || pendingAutoCollection ? (
+                  <View style={styles.reviewEditRow}>
+                    <Text style={styles.editRowLabel}>Collection</Text>
+                    <Pressable
+                      android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
+                      onLongPress={() => showRationale("Why this collection?", primaryCollectionRationale)}
+                      onPress={() => void openCollectionPicker()}
+                      style={({ pressed }) => [
+                        styles.editRowValue,
+                        collectionPickerOpen && styles.sentenceChipActive,
+                        pressed && styles.subtlePressed
+                      ]}
+                    >
+                      <Text numberOfLines={1} style={styles.editRowValueText}>
+                        {pendingAutoCollection ? "choosing..." : primaryCollectionTitle}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => void openCollectionPicker()}
+                    style={({ pressed }) => [styles.reviewEditRow, pressed && styles.subtlePressed]}
+                  >
+                    <Text style={styles.editRowLabel}>Collection</Text>
+                    <Text style={styles.editRowAction}>Add collection</Text>
+                  </Pressable>
+                )}
+                {primaryReminder ? (
+                  <View style={styles.reviewEditRow}>
+                    <Text style={styles.editRowLabel}>Reminder idea</Text>
+                    <Pressable
+                      android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
+                      onLongPress={() => showRationale("Why this reminder?", primaryReminder.rationale)}
+                      onPress={() => {
+                        const next = { ...reminderDrafts };
+                        if (primaryReminderRemoved) delete next[primaryReminderKey];
+                        else next[primaryReminderKey] = "remove";
+                        setReminderDrafts(next);
+                        updateSelectedReviewDraft({ reminders: next });
+                      }}
+                      style={({ pressed }) => [
+                        styles.editRowValue,
+                        primaryReminderRemoved && styles.sentenceChipMuted,
+                        pressed && styles.subtlePressed
+                      ]}
+                    >
+                      <Text numberOfLines={1} style={[styles.editRowValueText, primaryReminderRemoved && styles.suggestionTextMuted]}>
+                        {reminderSentenceValue}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
               {reviewSupportText ? (
                 <Text style={styles.reviewSentenceSubtext}>{reviewSupportText}</Text>
               ) : null}
-              {primaryCollectionTitle || pendingAutoCollection ? (
-                <View style={styles.collectionInlineActions}>
-                  <Pressable
-                    onPress={() => void openCollectionPicker()}
-                    style={({ pressed }) => [styles.addCollectionButton, pressed && styles.subtlePressed]}
-                  >
-                    <Text style={styles.inlineAction}>
-                      {pendingAutoCollection ? "Choose collection" : "Change collection"}
-                    </Text>
-                  </Pressable>
-                  {primaryLinkedCollection ? (
-                    <Pressable
-                      onPress={() => void openCollectionSettings(primaryLinkedCollection.id)}
-                      style={({ pressed }) => [styles.addCollectionButton, pressed && styles.subtlePressed]}
-                    >
-                      <Text style={styles.inlineAction}>Manage collection</Text>
-                    </Pressable>
-                  ) : null}
+              {quickIntentOpen ? (
+                <View style={styles.quickOptions}>
+                  {INTENT_OPTIONS.map((intent) => {
+                    const selectedIntent = quickIntentValue === intent;
+                    return (
+                      <Pressable
+                        key={intent}
+                        onPress={() => {
+                          const intentDirty = intent !== aiIntentValue;
+                          setDraftIntentDirty(intentDirty);
+                          setDraftIntent(intent);
+                          updateSelectedReviewDraft({ intent, intentDirty });
+                          setQuickIntentOpen(false);
+                        }}
+                        style={[styles.intentChip, selectedIntent && styles.intentChipSelected]}
+                      >
+                        <Text style={[styles.intentChipText, selectedIntent && styles.intentChipTextSelected]}>
+                          {humanize(intent)}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
                 </View>
-              ) : (
-                <Pressable
-                  onPress={() => void openCollectionPicker()}
-                  style={({ pressed }) => [styles.addCollectionButton, pressed && styles.subtlePressed]}
-                >
-                  <Text style={styles.inlineAction}>Add to collection</Text>
-                </Pressable>
-              )}
-              {quickBecause ? (
-                <IconButton
-                  Icon={Info}
-                  label={quickBecause}
-                  onPress={() => showRationale("Suggestion", primaryRationale)}
-                />
               ) : null}
-            {quickIntentOpen ? (
-              <View style={styles.quickOptions}>
-                {INTENT_OPTIONS.map((intent) => {
-                  const selectedIntent = quickIntentValue === intent;
-                  return (
-                    <Pressable
-                      key={intent}
-                      onPress={() => {
-                        const intentDirty = intent !== aiIntentValue;
-                        setDraftIntentDirty(intentDirty);
-                        setDraftIntent(intent);
-                        updateSelectedReviewDraft({ intent, intentDirty });
-                        setQuickIntentOpen(false);
-                      }}
-                      style={[styles.intentChip, selectedIntent && styles.intentChipSelected]}
-                    >
-                      <Text style={[styles.intentChipText, selectedIntent && styles.intentChipTextSelected]}>
-                        {humanize(intent)}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            ) : null}
-            {draftIntentDirty ? (
-              <View style={styles.changeLine}>
-                <Text style={styles.changeText}>
-                  Original suggestion: {humanize(aiIntentValue) || "something useful"}
-                </Text>
-                <Pressable
-                  onPress={() => {
-                    setDraftIntent(aiIntentValue);
-                    setDraftIntentDirty(false);
-                    updateSelectedReviewDraft({ intent: aiIntentValue, intentDirty: false });
-                  }}
-                  hitSlop={8}
-                >
-                  <Text style={styles.suggestionAction}>Undo</Text>
-                </Pressable>
-              </View>
-            ) : null}
+              {draftIntentDirty ? (
+                <View style={styles.changeLine}>
+                  <Text style={styles.changeText}>
+                    Original suggestion: {humanize(aiIntentValue) || "something useful"}
+                  </Text>
+                  <Pressable
+                    onPress={() => {
+                      setDraftIntent(aiIntentValue);
+                      setDraftIntentDirty(false);
+                      updateSelectedReviewDraft({ intent: aiIntentValue, intentDirty: false });
+                    }}
+                    hitSlop={8}
+                  >
+                    <Text style={styles.suggestionAction}>Undo</Text>
+                  </Pressable>
+                </View>
+              ) : null}
               {collectionPickerContent}
             </View>
             {selectedVisitTarget && selectedVisitTargetMapCandidates.length ? (
@@ -4135,13 +4161,6 @@ export default function App() {
                       {selectedVisitTarget.query}
                     </Text>
                   </View>
-                  {selectedVisitTarget.evidence.length ? (
-                    <IconButton
-                      Icon={Info}
-                      label="Why this place?"
-                      onPress={() => showRationale("Why this place?", selectedVisitTarget.evidence.join("\n"))}
-                    />
-                  ) : null}
                 </View>
                 <View style={styles.mapActionRow}>
                   {selectedVisitTargetMapCandidates.map((candidate) => (
@@ -4157,90 +4176,66 @@ export default function App() {
               </View>
             ) : null}
             {urlEvidenceNotice ? (
-            <View style={styles.sourceBlock}>
-              <Text style={styles.meta}>Link evidence</Text>
-              <Text style={styles.supportingText}>{urlEvidenceNotice}</Text>
-              {selected.urlEvidence?.status === "needs_client_resolution" && selected.sourceUrl ? (
-                <>
-                  <Pressable onPress={() => void Linking.openURL(selected.sourceUrl || "")} style={styles.secondaryButton}>
-                    <Text style={styles.secondaryButtonText}>Open link</Text>
-                  </Pressable>
-                  <Pressable onPress={() => void pasteExpandedUrl()} style={styles.secondaryButton}>
-                    <Text style={styles.secondaryButtonText}>Paste expanded URL</Text>
-                  </Pressable>
-                </>
-              ) : null}
-            </View>
-          ) : null}
-            <View style={styles.sourceBlock}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.meta}>{noteHasText ? "Note" : "Add note"}</Text>
-                {noteStatusLabel ? (
-                  <Text style={[styles.noteSaveState, noteSaveState === "error" && styles.noteSaveStateError]}>
-                    {noteStatusLabel}
-                  </Text>
+              <View style={styles.sourceBlock}>
+                <Text style={styles.meta}>Link evidence</Text>
+                <Text style={styles.supportingText}>{urlEvidenceNotice}</Text>
+                {selected.urlEvidence?.status === "needs_client_resolution" && selected.sourceUrl ? (
+                  <>
+                    <Pressable onPress={() => void Linking.openURL(selected.sourceUrl || "")} style={styles.secondaryButton}>
+                      <Text style={styles.secondaryButtonText}>Open link</Text>
+                    </Pressable>
+                    <Pressable onPress={() => void pasteExpandedUrl()} style={styles.secondaryButton}>
+                      <Text style={styles.secondaryButtonText}>Paste expanded URL</Text>
+                    </Pressable>
+                  </>
                 ) : null}
               </View>
-              {showNoteEditor ? (
-                <TextInput
-                  multiline
-                  onChangeText={(value) => {
-                    setDraftNoteDirty(true);
-                    setDraftNote(value);
-                    updateSelectedReviewDraft({ note: value, noteDirty: true });
-                  }}
-                  placeholder="Why did you save this?"
-                  placeholderTextColor={colors.muted}
-                  style={styles.noteInput}
-                  testID="pc.review.note"
-                  value={draftNote}
-                />
-              ) : (
-                <Pressable
-                  onPress={() => setNoteExpanded(true)}
-                  style={({ pressed }) => [styles.compactActionRow, pressed && styles.subtlePressed]}
-                >
-                  <StickyNote color={colors.muted} size={18} strokeWidth={2.2} />
-                  <Text numberOfLines={1} style={styles.compactActionText}>
-                    {noteHasText ? draftNote : "Add note"}
-                  </Text>
-                  <Pencil color={colors.muted} size={16} strokeWidth={2.2} />
-                </Pressable>
-              )}
+            ) : null}
+            <View style={styles.sourceBlock}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={openNoteSheet}
+                style={({ pressed }) => [styles.compactActionRow, pressed && styles.subtlePressed]}
+                testID="pc.review.note.open"
+              >
+                <StickyNote color={colors.muted} size={18} strokeWidth={2.2} />
+                <View style={styles.noteActionCopy}>
+                  <View style={styles.noteActionHeader}>
+                    <Text style={styles.compactActionText}>
+                      {noteHasText ? "Note" : "Add note"}
+                    </Text>
+                    {noteStatusLabel ? (
+                      <Text style={[styles.noteSaveState, noteSaveState === "error" && styles.noteSaveStateError]}>
+                        {noteStatusLabel}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {noteHasText ? (
+                    <Text numberOfLines={2} style={styles.noteActionPreview}>{draftNote}</Text>
+                  ) : null}
+                </View>
+                <Pencil color={colors.muted} size={16} strokeWidth={2.2} />
+              </Pressable>
             </View>
             <View style={styles.sourceBlock}>
               <View style={styles.sourceDisclosureRow}>
-                <Pressable
-                  disabled={!sourceValue}
-                  onPress={() => setSourceExpanded((current) => !current)}
-                  style={({ pressed }) => [styles.sourceDisclosureCopy, pressed && sourceValue && styles.subtlePressed]}
-                >
+                <View style={styles.sourceDisclosureCopy}>
                   <Text style={styles.meta}>Source</Text>
                   <Text numberOfLines={1} style={styles.reviewSourceMeta}>{captureSourceLabel(selected)}</Text>
-                </Pressable>
+                </View>
                 <View style={styles.sourceDisclosureActions}>
-                  {selected.sourceUrl ? (
+                  {selectedOpenUrl ? (
                     <IconButton
                       Icon={ExternalLink}
                       label="Open source"
-                      onPress={() => void Linking.openURL(selected.sourceUrl || "")}
+                      onPress={() => void openCaptureUrl(selectedOpenUrl)}
                     />
                   ) : null}
                   {sourceValue ? (
                     <IconButton Icon={Copy} label="Copy source" onPress={() => void copySource()} />
                   ) : null}
-                  {sourceValue ? (
-                    <IconButton
-                      Icon={MoreHorizontal}
-                      label={sourceExpanded ? "Hide source details" : "Show source details"}
-                      onPress={() => setSourceExpanded((current) => !current)}
-                    />
-                  ) : null}
                 </View>
               </View>
-              {sourceExpanded && sourceValue ? (
-                <Text selectable style={styles.sourceText}>{sourceValue}</Text>
-              ) : null}
             </View>
             <Pressable
               onPress={confirmArchive}
@@ -4255,7 +4250,7 @@ export default function App() {
             {message ? <Text style={styles.message}>{message}</Text> : null}
           </ScrollView>
           {showReviewFooter ? (
-          <View style={styles.reviewFooter}>
+            <View style={styles.reviewFooter}>
               <Pressable
                 disabled={collectionActionPending}
                 onPress={() => void saveReviewDecisions()}
@@ -4270,10 +4265,78 @@ export default function App() {
                   {collectionActionPending ? "Updating collection..." : "Save review"}
                 </Text>
               </Pressable>
-          </View>
+            </View>
           ) : null}
         </KeyboardAvoidingView>
         </Animated.View>
+        {noteSheetOpen ? (
+          <View style={styles.sheetLayer} pointerEvents="box-none">
+            <Pressable
+              accessibilityLabel="Close note editor"
+              onPress={closeNoteSheet}
+              style={styles.sheetBackdrop}
+            />
+            <KeyboardAvoidingView pointerEvents="box-none" style={styles.sheetKeyboard}>
+              <Animated.View
+                style={[
+                  styles.captureSheet,
+                  noteSheetKeyboardVisible && styles.captureSheetCompact,
+                  {
+                    marginBottom: noteSheetBottomInset,
+                    maxHeight: noteSheetMaxHeight,
+                    opacity: captureComposerMotion,
+                    transform: [
+                      {
+                        translateY: captureComposerMotion.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [28, 0]
+                        })
+                      }
+                    ]
+                  }
+                ]}
+              >
+                <View style={styles.sheetGrabber} />
+                <View style={styles.captureSheetHeader}>
+                  <View style={styles.sheetHeaderCopy}>
+                    <Text style={styles.sheetTitle}>Note</Text>
+                  </View>
+                  <View style={styles.sheetActions}>
+                    <IconButton Icon={X} label="Close note editor" onPress={closeNoteSheet} />
+                    <IconButton Icon={Check} label="Done" onPress={closeNoteSheet} tone="primary" />
+                  </View>
+                </View>
+                <View
+                  style={[
+                    styles.captureSheetBody,
+                    styles.captureSheetBodyContent,
+                    noteSheetKeyboardVisible && styles.captureSheetBodyContentCompact
+                  ]}
+                >
+                  <TextInput
+                    multiline
+                    onChangeText={(value) => {
+                      setDraftNoteDirty(true);
+                      setDraftNote(value);
+                      updateSelectedReviewDraft({ note: value, noteDirty: true });
+                    }}
+                    placeholder="Why did you save this?"
+                    placeholderTextColor={colors.muted}
+                    ref={noteInputRef}
+                    style={[styles.captureInput, styles.noteSheetInput]}
+                    testID="pc.review.note"
+                    value={draftNote}
+                  />
+                  {noteStatusLabel ? (
+                    <Text style={[styles.noteSaveState, noteSaveState === "error" && styles.noteSaveStateError]}>
+                      {noteStatusLabel}
+                    </Text>
+                  ) : null}
+                </View>
+              </Animated.View>
+            </KeyboardAvoidingView>
+          </View>
+        ) : null}
         {renderAppSheets()}
         {renderSnackbar()}
       </SafeAreaView>
@@ -5535,7 +5598,7 @@ const styles = StyleSheet.create({
   reviewMediaHeader: {
     backgroundColor: colors.surfaceContainer,
     borderColor: colors.line,
-    borderRadius: 18,
+    borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: "hidden"
   },
@@ -5593,19 +5656,20 @@ const styles = StyleSheet.create({
     lineHeight: 20
   },
   quickEditBlock: {
-    backgroundColor: colors.surfaceContainer,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: 14,
-    padding: 14
+    gap: 12,
+    paddingHorizontal: 2
+  },
+  reviewPrimaryBlock: {
+    gap: 8,
+    paddingHorizontal: 2
   },
   reviewTitleInput: {
     color: colors.ink,
-    fontSize: 22,
-    fontWeight: "700",
-    lineHeight: 28,
-    padding: 0
+    fontSize: 27,
+    fontWeight: "800",
+    lineHeight: 33,
+    padding: 0,
+    paddingVertical: 2
   },
   reviewSourceRow: {
     alignItems: "center",
@@ -5623,8 +5687,49 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
-    paddingTop: 2
+    gap: 7
+  },
+  reviewEditRows: {
+    gap: 2
+  },
+  reviewEditRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 46,
+    paddingVertical: 4
+  },
+  editRowLabel: {
+    color: colors.muted,
+    flexShrink: 0,
+    fontSize: 13,
+    fontWeight: "700",
+    width: 92
+  },
+  editRowValue: {
+    alignItems: "center",
+    borderBottomColor: colors.accentLine,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flex: 1,
+    flexDirection: "row",
+    justifyContent: "flex-start",
+    minHeight: 38,
+    minWidth: 0,
+    paddingVertical: 4
+  },
+  editRowValueText: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "700",
+    lineHeight: 21
+  },
+  editRowAction: {
+    color: colors.accent,
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "800",
+    lineHeight: 20
   },
   reviewPhrase: {
     alignItems: "center",
@@ -5634,35 +5739,35 @@ const styles = StyleSheet.create({
     maxWidth: "100%"
   },
   reviewSentenceText: {
-    color: colors.ink,
-    fontSize: 19,
+    color: colors.muted,
+    fontSize: 13,
     fontWeight: "700",
-    lineHeight: 28
+    lineHeight: 19
   },
   sentenceChip: {
-    backgroundColor: colors.accentSoft,
-    borderColor: colors.accentLine,
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.line,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     flexShrink: 1,
     justifyContent: "center",
     maxWidth: "100%",
-    minHeight: 44,
+    minHeight: 38,
     paddingHorizontal: 10,
-    paddingVertical: 6
+    paddingVertical: 5
   },
   sentenceChipActive: {
-    backgroundColor: colors.accentSoft,
-    borderColor: colors.accent
+    borderBottomColor: colors.accent
   },
   sentenceChipMuted: {
-    backgroundColor: colors.surfaceContainerHigh
+    borderBottomColor: colors.line,
+    opacity: 0.66
   },
   sentenceChipText: {
     color: colors.ink,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "700",
-    lineHeight: 20
+    lineHeight: 19
   },
   reviewSentenceSubtext: {
     color: colors.muted,
@@ -5961,15 +6066,10 @@ const styles = StyleSheet.create({
   },
   mapTargetRow: {
     alignItems: "center",
-    backgroundColor: colors.surfaceContainerHigh,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 10,
-    minHeight: 58,
-    paddingHorizontal: 12,
-    paddingVertical: 10
+    minHeight: 46,
+    paddingVertical: 2
   },
   mapTargetCopy: {
     flex: 1,
@@ -5983,31 +6083,47 @@ const styles = StyleSheet.create({
   },
   mapActionButton: {
     alignSelf: "flex-start",
-    backgroundColor: colors.surfaceContainerHigh,
-    borderColor: colors.line,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
     justifyContent: "center",
     minHeight: 44,
-    paddingHorizontal: 12
+    paddingHorizontal: 2
   },
   compactActionRow: {
     alignItems: "center",
-    backgroundColor: colors.surfaceContainerHigh,
-    borderColor: colors.line,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
-    gap: 8,
+    gap: 10,
     justifyContent: "space-between",
-    minHeight: 48,
-    paddingHorizontal: 12
+    minHeight: 50,
+    paddingVertical: 4
   },
   compactActionText: {
     color: colors.ink,
     flex: 1,
     fontSize: 15,
     fontWeight: "700"
+  },
+  noteActionCopy: {
+    flex: 1,
+    gap: 3,
+    minWidth: 0
+  },
+  noteActionHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "space-between"
+  },
+  noteActionPreview: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18
+  },
+  noteSheetInput: {
+    fontSize: 16,
+    lineHeight: 22,
+    maxHeight: 260,
+    minHeight: 170
   },
   sourceDisclosureRow: {
     alignItems: "center",
