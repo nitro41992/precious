@@ -29,8 +29,9 @@ Recent Captures, Search, Map, Agenda, Library, and Review Inbox are Retrieval Le
 
 - Recent Captures is the default home lens. It shows active Captures ordered by most recently captured, grouped by recency, with Search as the primary retrieval action.
 - Search retrieves by fuzzy memory, meaning, entity, Save Intent, Collection, place, time, source, or remembered context.
-- Search is a full-screen lens opened from Home, not a small embedded filter field or generic chatbot.
+- Search is a full-screen lens opened from a compact Recent Captures top action, not a small embedded filter field or generic chatbot.
 - Search may use persisted extraction details such as entities, summary, Save Intent, Platform Evidence, Collection links, Reminder suggestions, source URL, notes, and timestamps.
+- Collections is a top-level management destination for user-owned organization, while Recent Captures remains the default home lens.
 - Map retrieves by place-like Captured Entities, not where the user happened to be when saving. Map is deferred for this revamp.
 - Agenda retrieves time-relevant Captures and Confirmed Reminders. Agenda is deferred until Confirmed Reminders function.
 - Library can later become organized memory for browsing saved Captures by recency, place, time, Collection, and archived state. It is not top-level for this revamp.
@@ -40,22 +41,22 @@ Recent Captures, Search, Map, Agenda, Library, and Review Inbox are Retrieval Le
 
 Primary mobile navigation:
 
-- Home
-- Search
+- Recent
+- Collections
 - Settings/account as a small contextual action
+- Separate contextual floating `+` action
 
-Capture should remain globally available through a prominent floating action button and through native share surfaces.
+On Recent, capture should remain globally available through a prominent floating button beside the bottom app bar and through native share surfaces. On Collections, the floating button opens New Collection.
 
 Do not expose these as top-level destinations in the current revamp:
 
 - Map
 - Agenda
-- Collections
 - Archived
 - Upcoming
 - Library
 
-Collections remain editable from Capture Review. Archived Captures remain available through a secondary filter or view, not the default Home list.
+Collections remain editable from Capture Review and manageable from the bottom app bar. Archived Captures remain available through a secondary filter or view, not the default Home list.
 
 ## Intake
 
@@ -162,7 +163,7 @@ Home should feel like a consumer memory surface, not an audit table.
 - Row metadata must include source and date/time, not only time.
 - Rows should show consumer-facing meaning: title, source/date/time, summary, `Saved as [intent]`, meaningful status, and optional note preview.
 - Rows should not show model/provider details, analysis mode, confidence percentages, generic `Analyzed` labels, or other audit metadata.
-- Put a large `Search anything you saved` affordance at the top that opens full-screen Search.
+- Put a compact Search action in the top bar that opens full-screen Search.
 - Use smooth transitions, loading states, press feedback, and snackbar undo for reversible removal actions.
 
 ## Design Principles

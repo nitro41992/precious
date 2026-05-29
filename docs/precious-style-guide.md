@@ -11,9 +11,10 @@ Use this guide when designing or reviewing capture intake, capture lists, Captur
 The current consumer UI target is search-first memory retrieval:
 
 - The default home screen is `Recent Captures`, a beautiful active-capture list ordered by most recently captured.
-- Search is a full-screen Retrieval Lens opened from a prominent home affordance, not a small embedded filter field.
+- Search is a full-screen Retrieval Lens opened from a compact, prominent Recent Captures action, not a small embedded filter field.
 - Capture rows should feel rich and consumer-facing, while audit-like extraction details remain hidden from the row and available to Search.
-- Collections are not a top-level home mode. Collection attachment belongs in Capture Review, and Collection management should also exist as a secondary independent screen.
+- The top-level app shell uses a Material 3-inspired bottom app bar for Recent, Collections, and Settings, with a separate contextual floating `+` action.
+- Collections is a top-level management destination, but Recent Captures remains the default home and Search remains the primary retrieval lens.
 - Map, Agenda, and full reminder delivery are deferred. Agenda depends on functioning Confirmed Reminders.
 - Smooth transitions, loading states, press feedback, draft-preserving saves, and snackbar undo are part of the expected product quality.
 
@@ -126,6 +127,8 @@ Rules:
 - Use safe areas on every screen, including Android status bar and bottom action areas.
 - Put one screen title at the top. Avoid stacking multiple hero-like headings.
 - Keep account, settings, or sign-out as small contextual actions, not primary workflow controls.
+- Use the bottom app bar for top-level `Recent`, `Collections`, and contextual `Settings`, with a separate floating `+` beside the bar. On Recent it opens New Capture; on Collections it opens New Collection.
+- Hide the bottom app bar on Search, Capture Review, collection detail, authentication, and modal-focused flows.
 - Use a sticky bottom action only when the screen has one clear completion action.
 
 ### Lists And Rows
@@ -204,11 +207,11 @@ Rules:
 
 - Home shows active Captures only, ordered by most recently captured.
 - Archived Captures stay retrievable through a secondary filter or view, not the default list.
-- Place a large search affordance at the top: `Search anything you saved`.
-- Tapping the search affordance opens full-screen Search.
+- Place a compact Search action in the top bar.
+- Tapping Search opens full-screen Search.
 - Rows should include source and date/time metadata, not only time.
 - Extraction details should remain persisted and searchable without being rendered as audit metadata.
-- Collections, Map, Agenda, and reminder modules should not appear as top-level home sections in this pass. A small secondary entry to Collection management is allowed from Home/account/menu.
+- Collections, Map, Agenda, and reminder modules should not appear as home sections. Collections lives in the bottom app bar; Map and Agenda remain deferred.
 
 ### Capture Intake
 
@@ -268,14 +271,14 @@ Collections need an independent management surface so organization does not feel
 Use:
 
 - Screen title: `Collections`
-- Primary action: `New collection`
+- Primary action: floating `+` opens `New collection`
 - Row metadata: capture count, recent use, or short description when available
 - Empty state: `Create a collection when a saved thing belongs somewhere specific.`
 
 Rules:
 
 - Keep Collection management secondary to Recent Captures and Search.
-- Do not add Collections as a primary top-level tab or default home module in this pass.
+- Collections may be a top-level management destination, but it should not become the default home module.
 - Let users create, rename, and manage Collections outside an individual Capture.
 - Let Capture Review open collection selection or management and return without losing unsaved edits.
 - Treat `No collection` as a valid choice, not an unresolved state.
@@ -311,19 +314,20 @@ Avoid:
 Collections are ongoing purpose groups, not folders.
 
 - Show title, description, capture count, and archived state.
+- Open `New collection` from the Collections floating `+` as a focused bottom sheet using the same sheet treatment as New Capture.
 - Creating a new collection from AI requires user confirmation.
 - High-confidence attachment to an existing collection may be quietly applied, but must remain editable.
 - A Capture may intentionally have no Collection.
 - If the user removes or changes an AI-applied Collection, do not reattach it automatically.
 - Prior AI suggestions may remain available as `Use suggestion`.
 - Collection removal should offer immediate snackbar undo when feasible.
-- Collection browsing is not a top-level home mode in the current consumer revamp.
+- Collection management is a top-level bottom-bar destination, but Recent Captures and Search remain the primary retrieval surfaces.
 
 ### Search
 
 Search is a full-screen retrieval utility, not a chatbot default.
 
-- Place a prominent search affordance at the top of Recent Captures that opens the full-screen Search lens.
+- Place a compact prominent Search action in the Recent Captures top bar that opens the full-screen Search lens.
 - Results should explain why they matched: source, place, intent, collection, time, or remembered context.
 - Filters should be chips or compact segments.
 - Keep command-like filters optional and discoverable later.

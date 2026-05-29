@@ -46,12 +46,12 @@ import {
   Pencil,
   Plus,
   Search,
-  Settings,
   ShoppingBag,
   SlidersHorizontal,
   StickyNote,
   X
 } from "lucide-react-native";
+import Svg, { Circle, Path } from "react-native-svg";
 
 import saveIntents from "../supabase/functions/_shared/save-intents.json";
 import {
@@ -305,6 +305,76 @@ type LucideIconComponent = ComponentType<{
   size?: number;
   strokeWidth?: number;
 }>;
+type NavIconProps = {
+  color: string;
+  selected?: boolean;
+  size?: number;
+};
+type NavIconComponent = ComponentType<NavIconProps>;
+
+const SETTINGS_ICON_PATH = "M19.43 12.98c.04-.32.07-.65.07-.98s-.02-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.37-.31-.6-.22l-2.49 1a7.28 7.28 0 0 0-1.69-.98l-.38-2.65A.5.5 0 0 0 14 2h-4a.5.5 0 0 0-.5.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1a.5.5 0 0 0-.6.22l-2 3.46a.5.5 0 0 0 .12.64l2.11 1.65c-.05.32-.08.65-.08.98s.03.66.08.98l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46c.12.22.37.31.6.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.48 0 .6-.22l2-3.46a.5.5 0 0 0-.12-.64l-2.11-1.65ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z";
+
+function RecentNavIcon({ color, selected = false, size = 24 }: NavIconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {selected ? (
+        <Path
+          d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 5h-2v6l5.25 3.15.75-1.23-4-2.37V7Z"
+          fill={color}
+          fillRule="evenodd"
+          clipRule="evenodd"
+        />
+      ) : (
+        <>
+          <Circle cx="12" cy="12" r="8.5" stroke={color} strokeWidth="2.1" />
+          <Path
+            d="M12 7.2v5.1l3.55 2.13"
+            stroke={color}
+            strokeWidth="2.1"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </>
+      )}
+    </Svg>
+  );
+}
+
+function CollectionsNavIcon({ color, selected = false, size = 24 }: NavIconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {selected ? (
+        <Path
+          d="M3 6.75A2.75 2.75 0 0 1 5.75 4h3.42c.78 0 1.51.35 2 .95l1.05 1.3h6.03A2.75 2.75 0 0 1 21 9v7.25A2.75 2.75 0 0 1 18.25 19H5.75A2.75 2.75 0 0 1 3 16.25v-9.5Z"
+          fill={color}
+        />
+      ) : (
+        <Path
+          d="M3.5 6.9A2.4 2.4 0 0 1 5.9 4.5h3.18c.68 0 1.33.31 1.77.84l1.13 1.36h6.12a2.4 2.4 0 0 1 2.4 2.4v7a2.4 2.4 0 0 1-2.4 2.4H5.9a2.4 2.4 0 0 1-2.4-2.4V6.9Z"
+          stroke={color}
+          strokeWidth="2.1"
+          strokeLinejoin="round"
+        />
+      )}
+    </Svg>
+  );
+}
+
+function SettingsNavIcon({ color, selected = false, size = 24 }: NavIconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d={SETTINGS_ICON_PATH}
+        fill={selected ? color : "none"}
+        stroke={selected ? "none" : color}
+        strokeWidth={selected ? 0 : 1.35}
+        strokeLinejoin="round"
+        fillRule="evenodd"
+        clipRule="evenodd"
+      />
+    </Svg>
+  );
+}
 
 class ApiRequestError extends Error {
   status: number;
@@ -1186,6 +1256,7 @@ export default function App() {
   const latestNoteRef = useRef("");
   const autoAppliedCollectionKeysRef = useRef<Set<string>>(new Set());
   const sourceInputRef = useRef<TextInput>(null);
+  const collectionTitleInputRef = useRef<TextInput>(null);
   const lastKeyboardHeightRef = useRef(0);
   const captureComposerClosingRef = useRef(false);
   const searchMotion = useRef(new Animated.Value(0)).current;
@@ -1415,11 +1486,21 @@ export default function App() {
     setSearchOpen(true);
   }
 
+  function openRecentHome() {
+    selectCapture(null);
+    selectCollection(null);
+    setSearchOpen(false);
+    setCollectionsOpen(false);
+    setAccountSheetOpen(false);
+    setMessage("");
+  }
+
   function openAccountActions() {
     setAccountSheetOpen(true);
   }
 
   function openCaptureComposer() {
+    setShowCollectionForm(false);
     const screenHeight = Dimensions.get("screen").height;
     const estimatedKeyboardHeight = captureMode === "image"
       ? 0
@@ -1433,6 +1514,27 @@ export default function App() {
     captureComposerMotion.setValue(0);
     captureKeyboardInset.setValue(estimatedKeyboardHeight);
     setShowCaptureComposer(true);
+  }
+
+  function openCollectionComposer() {
+    selectCapture(null);
+    selectCollection(null);
+    setSearchOpen(false);
+    setCollectionsOpen(true);
+    setAccountSheetOpen(false);
+    setMessage("");
+    setCollectionTitle("");
+    setCollectionDescription("");
+    setCollectionDraftDirty(false);
+    setShowCaptureComposer(false);
+    const screenHeight = Dimensions.get("screen").height;
+    const estimatedKeyboardHeight = lastKeyboardHeightRef.current || Math.round(screenHeight * (Platform.OS === "ios" ? 0.34 : 0.4));
+    setKeyboardHeight(estimatedKeyboardHeight);
+    captureComposerMotion.stopAnimation();
+    captureKeyboardInset.stopAnimation();
+    captureComposerMotion.setValue(0);
+    captureKeyboardInset.setValue(estimatedKeyboardHeight);
+    setShowCollectionForm(true);
   }
 
   function closeCaptureComposer() {
@@ -1463,6 +1565,16 @@ export default function App() {
     });
   }
 
+  function closeCollectionComposer() {
+    Keyboard.dismiss();
+    setShowCollectionForm(false);
+    setCollectionTitle("");
+    setCollectionDescription("");
+    setCollectionDraftDirty(false);
+    setKeyboardHeight(0);
+    captureKeyboardInset.setValue(0);
+  }
+
   function chooseCaptureMode(mode: CaptureComposerMode) {
     setCaptureMode(mode);
     if (mode === "image") {
@@ -1475,6 +1587,7 @@ export default function App() {
   async function openCollectionsScreen(mode: CollectionListMode = collectionsMode) {
     selectCapture(null);
     setSearchOpen(false);
+    setAccountSheetOpen(false);
     setCollectionsMode(mode);
     setCollectionsOpen(true);
     setSelectedCollectionId(null);
@@ -1580,6 +1693,7 @@ export default function App() {
       !selectedCollectionId &&
       !searchOpen &&
       !showCaptureComposer &&
+      !showCollectionForm &&
       !collectionsOpen &&
       !accountSheetOpen &&
       !rationaleSheet &&
@@ -1605,6 +1719,10 @@ export default function App() {
       }
       if (showCaptureComposer) {
         closeCaptureComposer();
+        return true;
+      }
+      if (showCollectionForm) {
+        closeCollectionComposer();
         return true;
       }
       if (searchOpen) {
@@ -1641,7 +1759,8 @@ export default function App() {
     selectCollection,
     selectedCollectionId,
     selectedId,
-    showCaptureComposer
+    showCaptureComposer,
+    showCollectionForm
   ]);
 
   useEffect(() => {
@@ -1669,7 +1788,7 @@ export default function App() {
   }, [reviewMotion, selectedId]);
 
   useEffect(() => {
-    if (!showCaptureComposer || captureComposerClosing) return;
+    if ((!showCaptureComposer && !showCollectionForm) || captureComposerClosing) return;
     captureComposerMotion.setValue(0);
     Animated.spring(captureComposerMotion, {
       damping: 24,
@@ -1678,7 +1797,7 @@ export default function App() {
       toValue: 1,
       useNativeDriver: false
     }).start();
-  }, [captureComposerClosing, captureComposerMotion, showCaptureComposer]);
+  }, [captureComposerClosing, captureComposerMotion, showCaptureComposer, showCollectionForm]);
 
   useEffect(() => {
     if (!showCaptureComposer || captureComposerClosing || captureMode === "image") return;
@@ -1687,6 +1806,14 @@ export default function App() {
     });
     return () => cancelAnimationFrame(frame);
   }, [captureComposerClosing, captureMode, showCaptureComposer]);
+
+  useEffect(() => {
+    if (!showCollectionForm) return;
+    const frame = requestAnimationFrame(() => {
+      collectionTitleInputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [showCollectionForm]);
 
   useEffect(() => {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
@@ -2382,6 +2509,7 @@ export default function App() {
           body: { title, description }
         });
         setCollections((current) => [collectionFromRemote(json.collection), ...current]);
+        Keyboard.dismiss();
         setCollectionTitle("");
         setCollectionDescription("");
         setShowCollectionForm(false);
@@ -2932,16 +3060,190 @@ export default function App() {
     );
   }
 
-  function renderSnackbar() {
+  function renderSnackbar(withBottomNav = false) {
     if (!snackbar) return null;
     return (
-      <View style={styles.snackbar}>
+      <View style={[styles.snackbar, withBottomNav && styles.snackbarAboveBottomNav]}>
         <Text style={styles.snackbarText}>{snackbar.text}</Text>
         {snackbar.action && snackbar.actionLabel ? (
           <Pressable onPress={snackbar.action} hitSlop={8}>
             <Text style={styles.snackbarAction}>{snackbar.actionLabel}</Text>
           </Pressable>
         ) : null}
+      </View>
+    );
+  }
+
+  function renderBottomAppBar(active: "recent" | "collections") {
+    const collectionAction = active === "collections";
+    const navItems: Array<{
+      key: "recent" | "collections" | "settings";
+      label: string;
+      Icon: NavIconComponent;
+      selected: boolean;
+      onPress: () => void;
+      testID: string;
+    }> = [
+      {
+        key: "recent",
+        label: "Recent",
+        Icon: RecentNavIcon,
+        selected: active === "recent",
+        onPress: openRecentHome,
+        testID: "pc.nav.recent"
+      },
+      {
+        key: "collections",
+        label: "Collections",
+        Icon: CollectionsNavIcon,
+        selected: active === "collections",
+        onPress: () => void openCollectionsScreen("active"),
+        testID: "pc.nav.collections"
+      },
+      {
+        key: "settings",
+        label: "Settings",
+        Icon: SettingsNavIcon,
+        selected: false,
+        onPress: openAccountActions,
+        testID: "pc.nav.settings"
+      }
+    ];
+
+    return (
+      <View pointerEvents="box-none" style={styles.bottomNavLayer}>
+        <View style={styles.bottomNavDock}>
+          <View style={styles.bottomNavBar}>
+            {navItems.map(({ key, label, Icon, selected, onPress, testID }) => (
+              <Pressable
+                accessibilityLabel={label}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                key={key}
+                onPress={onPress}
+                style={({ pressed }) => [
+                  styles.bottomNavItem,
+                  pressed && styles.bottomNavItemPressed
+                ]}
+                testID={testID}
+              >
+                <View style={[styles.bottomNavIconWrap, selected && styles.bottomNavIconWrapSelected]}>
+                  <Icon
+                    color={selected ? colors.accent : colors.muted}
+                    selected={selected}
+                    size={24}
+                  />
+                </View>
+              </Pressable>
+            ))}
+          </View>
+          <Pressable
+            accessibilityLabel={collectionAction ? "New collection" : "New capture"}
+            accessibilityRole="button"
+            onPress={collectionAction ? openCollectionComposer : openCaptureComposer}
+            style={({ pressed }) => [styles.bottomNavFab, pressed && styles.bottomNavFabPressed]}
+            testID={collectionAction ? "pc.nav.collection-create" : "pc.nav.capture"}
+          >
+            <Plus color={colors.onAccent} size={24} strokeWidth={2.55} />
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  function renderCollectionComposerSheet() {
+    if (!showCollectionForm || selectedCollection) return null;
+    const keyboardVisible = keyboardHeight > 0;
+    const screenHeight = Dimensions.get("screen").height;
+    const windowAlreadyKeyboardSized = keyboardVisible && Math.abs(windowHeight + keyboardHeight - screenHeight) < 96;
+    const visibleHeight = keyboardVisible && !windowAlreadyKeyboardSized
+      ? windowHeight - keyboardHeight
+      : windowHeight;
+    const sheetMaxHeight = keyboardVisible
+      ? Math.min(430, Math.max(320, visibleHeight - 24))
+      : Math.min(440, Math.max(340, windowHeight * 0.62));
+    const sheetBottomInset = windowAlreadyKeyboardSized ? 0 : captureKeyboardInset;
+    const saveDisabled = !collectionTitle.trim() || !collectionDescription.trim();
+
+    return (
+      <View style={styles.sheetLayer} pointerEvents="box-none">
+        <Pressable
+          accessibilityLabel="Close collection composer"
+          onPress={closeCollectionComposer}
+          style={styles.sheetBackdrop}
+        />
+        <KeyboardAvoidingView pointerEvents="box-none" style={styles.sheetKeyboard}>
+          <Animated.View
+            style={[
+              styles.captureSheet,
+              keyboardVisible && styles.captureSheetCompact,
+              {
+                marginBottom: sheetBottomInset,
+                maxHeight: sheetMaxHeight,
+                opacity: captureComposerMotion,
+                transform: [
+                  {
+                    translateY: captureComposerMotion.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [28, 0]
+                    })
+                  }
+                ]
+              }
+            ]}
+          >
+            <View style={styles.sheetGrabber} />
+            <View style={styles.captureSheetHeader}>
+              <View style={styles.sheetHeaderCopy}>
+                <Text style={styles.sheetTitle}>New collection</Text>
+              </View>
+              <View style={styles.sheetActions}>
+                <IconButton Icon={X} label="Close" onPress={closeCollectionComposer} />
+                <IconButton
+                  Icon={Check}
+                  label="Create collection"
+                  disabled={saveDisabled}
+                  onPress={() => void saveCollection()}
+                  tone="primary"
+                  testID="pc.collections.create.save"
+                />
+              </View>
+            </View>
+            <View
+              style={[
+                styles.captureSheetBody,
+                styles.captureSheetBodyContent,
+                keyboardVisible && styles.captureSheetBodyContentCompact
+              ]}
+            >
+              <TextInput
+                onChangeText={(value) => {
+                  setCollectionDraftDirty(true);
+                  setCollectionTitle(value);
+                }}
+                placeholder="Title"
+                placeholderTextColor={colors.muted}
+                ref={collectionTitleInputRef}
+                returnKeyType="next"
+                style={[styles.captureInput, styles.collectionSheetTitleInput]}
+                testID="pc.collections.create.title"
+                value={collectionTitle}
+              />
+              <TextInput
+                multiline
+                onChangeText={(value) => {
+                  setCollectionDraftDirty(true);
+                  setCollectionDescription(value);
+                }}
+                placeholder="What belongs here"
+                placeholderTextColor={colors.muted}
+                style={[styles.captureInput, styles.collectionSheetDescriptionInput]}
+                testID="pc.collections.create.description"
+                value={collectionDescription}
+              />
+            </View>
+          </Animated.View>
+        </KeyboardAvoidingView>
       </View>
     );
   }
@@ -2959,24 +3261,11 @@ export default function App() {
             <View style={styles.sheetGrabber} />
             <View style={styles.sheetHeader}>
               <View style={styles.sheetHeaderCopy}>
-                <Text style={styles.sheetTitle}>Account</Text>
+                <Text style={styles.sheetTitle}>Settings</Text>
                 <Text style={styles.sheetSubtitle}>Manage this device session.</Text>
               </View>
               <IconButton Icon={X} label="Close account actions" onPress={() => setAccountSheetOpen(false)} />
             </View>
-            <Pressable
-              onPress={() => {
-                setAccountSheetOpen(false);
-                void openCollectionsScreen();
-              }}
-              style={({ pressed }) => [styles.sheetActionRow, pressed && styles.subtlePressed]}
-            >
-              <Folder color={colors.accent} size={20} strokeWidth={2.3} />
-              <View style={styles.sheetActionCopy}>
-                <Text style={styles.sheetActionTitle}>Collections</Text>
-                <Text style={styles.sheetActionText}>Create, rename, and manage saved groups.</Text>
-              </View>
-            </Pressable>
             <Pressable
               onPress={() => {
                 setAccountSheetOpen(false);
@@ -3194,27 +3483,10 @@ export default function App() {
   }
 
   if (collectionsOpen) {
-    const collectionSaveDisabled = !collectionTitle.trim() || !collectionDescription.trim();
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="light-content" />
         <View style={styles.collectionsScreen}>
-          <View style={styles.detailHeader}>
-            <IconButton Icon={ArrowLeft} label="Back" onPress={() => setCollectionsOpen(false)} />
-            <IconButton
-              Icon={Plus}
-              label="New collection"
-              onPress={() => {
-                setShowCollectionForm((current) => !current);
-                setCollectionTitle("");
-                setCollectionDescription("");
-                setCollectionDraftDirty(false);
-              }}
-              selected={showCollectionForm}
-              tone="primary"
-              testID="pc.collections.new"
-            />
-          </View>
           <View style={styles.collectionsTitleBlock}>
             <Text style={styles.title}>Collections</Text>
             <Text style={styles.sourceText}>
@@ -3238,42 +3510,6 @@ export default function App() {
               </Pressable>
             ))}
           </View>
-          {showCollectionForm ? (
-            <View style={styles.collectionCreatePanel}>
-              <Text style={styles.sheetTitle}>New collection</Text>
-              <TextInput
-                onChangeText={(value) => {
-                  setCollectionDraftDirty(true);
-                  setCollectionTitle(value);
-                }}
-                placeholder="Title"
-                placeholderTextColor={colors.muted}
-                style={styles.search}
-                testID="pc.collections.create.title"
-                value={collectionTitle}
-              />
-              <TextInput
-                multiline
-                onChangeText={(value) => {
-                  setCollectionDraftDirty(true);
-                  setCollectionDescription(value);
-                }}
-                placeholder="What belongs here"
-                placeholderTextColor={colors.muted}
-                style={styles.detailInput}
-                testID="pc.collections.create.description"
-                value={collectionDescription}
-              />
-              <Pressable
-                disabled={collectionSaveDisabled}
-                onPress={() => void saveCollection()}
-                style={[styles.primaryButton, collectionSaveDisabled && styles.disabledButton]}
-                testID="pc.collections.create.save"
-              >
-                <Text style={styles.primaryButtonText}>Create collection</Text>
-              </Pressable>
-            </View>
-          ) : null}
           {collectionsError ? <Text style={styles.errorText}>{collectionsError}</Text> : null}
           <FlatList
             data={collections}
@@ -3301,7 +3537,9 @@ export default function App() {
           {message ? <Text style={styles.messageInline}>{message}</Text> : null}
         </View>
         {renderAppSheets()}
-        {renderSnackbar()}
+        {!showCollectionForm ? renderBottomAppBar("collections") : null}
+        {renderCollectionComposerSheet()}
+        {renderSnackbar(!showCollectionForm)}
       </SafeAreaView>
     );
   }
@@ -4219,7 +4457,7 @@ export default function App() {
               <Text style={styles.title}>Recent Captures</Text>
             </View>
             {session ? (
-              <IconButton Icon={Settings} label="Account and settings" onPress={openAccountActions} />
+              <IconButton Icon={Search} label="Search saved things" onPress={openSearch} testID="pc.home.search" />
             ) : null}
           </View>
           {quickLookCount ? (
@@ -4238,32 +4476,6 @@ export default function App() {
               </Text>
             </Pressable>
           ) : null}
-          <View style={styles.homeActionRow}>
-            <Pressable
-              android_ripple={{ color: "rgba(31, 122, 91, 0.08)" }}
-              onPress={openSearch}
-              style={({ pressed }) => [styles.searchAffordance, pressed && styles.subtlePressed]}
-              testID="pc.home.search"
-            >
-              <Search color={colors.muted} size={20} strokeWidth={2.3} />
-              <View style={styles.searchAffordanceCopy}>
-                <Text style={styles.searchAffordanceText}>Search anything you saved</Text>
-                <Text numberOfLines={1} style={styles.searchAffordanceMeta}>
-                  Places, notes, sources, collections
-                </Text>
-              </View>
-              <SlidersHorizontal color={colors.accent} size={18} strokeWidth={2.3} />
-            </Pressable>
-            <Pressable
-              android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
-              accessibilityLabel="Paste link or note"
-              onPress={openCaptureComposer}
-              style={({ pressed }) => [styles.fallbackCaptureToggle, pressed && styles.subtlePressed]}
-              testID="pc.capture.open"
-            >
-              <Plus color={colors.onAccent} size={25} strokeWidth={2.4} />
-            </Pressable>
-          </View>
           {message ? <Text style={styles.messageInline}>{message}</Text> : null}
         </View>
         <FlatList
@@ -4438,7 +4650,8 @@ export default function App() {
         </View>
       ) : null}
       {renderAppSheets()}
-      {renderSnackbar()}
+      {!showCaptureComposer ? renderBottomAppBar("recent") : null}
+      {renderSnackbar(!showCaptureComposer)}
     </SafeAreaView>
   );
 }
@@ -4545,54 +4758,66 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12
   },
-  searchAffordance: {
+  bottomNavLayer: {
+    bottom: 0,
+    left: 0,
+    paddingBottom: Platform.OS === "android" ? 34 : 28,
+    paddingHorizontal: 40,
+    position: "absolute",
+    right: 0,
+    zIndex: 24
+  },
+  bottomNavDock: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between"
+  },
+  bottomNavBar: {
     alignItems: "center",
     backgroundColor: colors.surfaceContainer,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: 30,
     borderWidth: StyleSheet.hairlineWidth,
     flex: 1,
     flexDirection: "row",
-    gap: 10,
+    gap: 6,
     justifyContent: "space-between",
-    minHeight: 58,
-    paddingHorizontal: 14,
-    paddingVertical: 10
+    minHeight: 60,
+    paddingHorizontal: 8,
+    paddingVertical: 6
   },
-  homeActionRow: {
-    alignItems: "stretch",
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 13
-  },
-  searchAffordanceCopy: {
+  bottomNavItem: {
+    alignItems: "center",
     flex: 1,
-    gap: 3,
-    minWidth: 0
+    justifyContent: "center",
+    minHeight: 48,
+    minWidth: 0,
+    paddingHorizontal: 2
   },
-  searchAffordanceText: {
-    color: colors.ink,
-    fontSize: 15,
-    fontWeight: "800",
-    lineHeight: 20
+  bottomNavItemPressed: {
+    transform: [{ scale: 0.985 }]
   },
-  searchAffordanceMeta: {
-    color: colors.muted,
-    fontSize: 12,
-    lineHeight: 17
+  bottomNavIconWrap: {
+    alignItems: "center",
+    borderRadius: 22,
+    height: 42,
+    justifyContent: "center",
+    minWidth: 54,
+    paddingHorizontal: 12
   },
-  searchAffordanceAction: {
-    color: colors.accent,
-    fontSize: 13,
-    fontWeight: "800"
-  },
-  fallbackCaptureToggle: {
+  bottomNavIconWrapSelected: {},
+  bottomNavFab: {
     alignItems: "center",
     backgroundColor: colors.accent,
-    borderRadius: 28,
+    borderRadius: 30,
     justifyContent: "center",
-    minHeight: 56,
-    width: 56
+    height: 60,
+    width: 60
+  },
+  bottomNavFabPressed: {
+    backgroundColor: "#96e5bf",
+    transform: [{ scale: 0.965 }]
   },
   searchScreen: {
     flex: 1
@@ -4679,6 +4904,15 @@ const styles = StyleSheet.create({
     minHeight: 80,
     paddingVertical: 10
   },
+  collectionSheetTitleInput: {
+    maxHeight: 64,
+    minHeight: 54,
+    paddingVertical: 10,
+    textAlignVertical: "center"
+  },
+  collectionSheetDescriptionInput: {
+    minHeight: 96
+  },
   captureModeRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -4741,7 +4975,8 @@ const styles = StyleSheet.create({
     left: 0,
     position: "absolute",
     right: 0,
-    top: 0
+    top: 0,
+    zIndex: 36
   },
   modalLayer: {
     bottom: 0,
@@ -4867,7 +5102,7 @@ const styles = StyleSheet.create({
     width: 46
   },
   listContent: {
-    paddingBottom: 96,
+    paddingBottom: 132,
     paddingTop: 0
   },
   searchResultsContent: {
@@ -5079,7 +5314,8 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth
   },
   emptyContent: {
-    flexGrow: 1
+    flexGrow: 1,
+    paddingBottom: 132
   },
   empty: {
     flex: 1,
@@ -5229,16 +5465,8 @@ const styles = StyleSheet.create({
     minHeight: 34,
     paddingHorizontal: 10
   },
-  collectionCreatePanel: {
-    backgroundColor: colors.surfaceContainer,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: 10,
-    padding: 12
-  },
   collectionsListContent: {
-    paddingBottom: 40
+    paddingBottom: 132
   },
   detail: {
     gap: 16,
@@ -5925,7 +6153,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     position: "absolute",
-    right: 22
+    right: 22,
+    zIndex: 32
+  },
+  snackbarAboveBottomNav: {
+    bottom: Platform.OS === "android" ? 124 : 128
   },
   snackbarText: {
     color: colors.ink,

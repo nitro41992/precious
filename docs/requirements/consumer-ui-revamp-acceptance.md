@@ -4,7 +4,7 @@
 
 This artifact records the agreed scope for the current Precious consumer UI revamp. Use it with `docs/precious-style-guide.md`, `docs/requirements/CONTEXT.md`, and `docs/requirements/PRODUCT.md` before implementing or reviewing UI work.
 
-Related ADR: `docs/adr/0001-recent-captures-and-full-screen-search.md`.
+Related ADRs: `docs/adr/0001-recent-captures-and-full-screen-search.md` and `docs/adr/0005-bottom-app-bar-and-top-level-collections.md`.
 
 ## Product Shape
 
@@ -12,9 +12,11 @@ Related ADR: `docs/adr/0001-recent-captures-and-full-screen-search.md`.
 - The consumer shell uses a calm dark Material 3-inspired surface hierarchy by default, not the earlier warm paper shell.
 - The default screen is `Recent Captures`: active Captures only, ordered by most recently captured.
 - Search is a primary product function and opens as its own full-screen Retrieval Lens.
-- Settings/account actions stay small and contextual.
-- Collections, Map, Agenda, Library, Upcoming, and Archived are not top-level destinations in this pass.
-- Collection management should exist as an independent screen outside Capture Review, without turning Collections into a primary home mode.
+- The top-level app shell uses a bottom app bar with `Recent`, `Collections`, and `Settings`, plus a separate contextual floating `+` action.
+- Search opens from a compact top action on `Recent Captures`, replacing the prior top-right Settings affordance.
+- Settings/account actions stay small and contextual, opening a bottom sheet rather than a primary screen in this pass.
+- Collections is a top-level management destination, while Map, Agenda, Library, Upcoming, and Archived are not top-level destinations in this pass.
+- Collection management should exist as an independent screen outside Capture Review, without turning Collections into the default home mode.
 - Map and Agenda are deferred. Agenda depends on functioning Confirmed Reminders.
 - This pass focuses on UI and workflow. Do not add a broad first-class reminder backend unless the scope is explicitly reopened.
 
@@ -22,7 +24,7 @@ Related ADR: `docs/adr/0001-recent-captures-and-full-screen-search.md`.
 
 Home must:
 
-- Show a large affordance such as `Search anything you saved` that opens full-screen Search.
+- Show a compact, prominent top action that opens full-screen Search.
 - Show active Captures grouped by recency, such as `Today`, `Yesterday`, `This week`, and `Earlier`.
 - Show each row as rich consumer content: optional existing thumbnail or shared image preview, title, source plus date/time, summary when available, `Saved as [intent]` when available, meaningful status when needed, and optional note preview.
 - Hide audit-like extraction details from rows, including model/provider names, analysis mode, confidence percentages, generic `Analyzed` labels, and debug state.
@@ -76,12 +78,13 @@ Capture Review must:
 
 Collection management must:
 
-- Be available from outside an individual Capture, such as a small Home/account/menu entry, while remaining secondary to Recent Captures and Search.
+- Be available from the bottom app bar as the top-level `Collections` destination, while remaining secondary to Recent Captures and Search.
 - Provide an independent `Collections` screen for creating, renaming, and managing Collections.
+- Open new Collection creation from the Collections floating `+` as a bottom sheet, not as an inline card.
 - Show existing Collections in a consumer-facing list with useful metadata such as capture count or recent use when available.
 - Let Capture Review navigate to collection selection/management and return without losing edits.
 - Preserve `No collection` as a valid state for any Capture.
-- Avoid making Collection browsing a top-level retrieval destination in this pass; Search remains the primary retrieval lens.
+- Avoid making Collection browsing the default retrieval surface; Search remains the primary retrieval lens.
 - Use snackbar undo or confirmation for reversible/destructive collection changes where feasible.
 
 ## Trust Rules
@@ -107,7 +110,6 @@ Collection management must:
 - Map.
 - Agenda.
 - Full reminder notification delivery.
-- Top-level Collection browsing as a primary destination.
 - A general Library destination.
 - Chatbot search.
 - Broad backend restructuring beyond what is necessary to support the agreed UI.
