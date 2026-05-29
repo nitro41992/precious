@@ -55,6 +55,20 @@ PRECIOUS_E2E_PASSWORD=...
 
 Keep Maestro coverage focused on user-critical flows: sign-in, manual capture, review/edit, collection creation, archive/restore, and Android share intake. Prefer visible text for stable user-facing assertions and `testID` only for controls whose labels or placement may change during design iteration.
 
+## Android phone dev loop
+
+For fast UI work on a physical phone, install the debug APK once, then run Metro. This is the phone equivalent of the emulator dev loop: JavaScript and TypeScript changes update through Metro without rebuilding a hosted APK.
+
+```sh
+npm run android:dev:install
+npm run android:dev
+npm run android:dev:launch
+```
+
+Keep `npm run android:dev` running while you edit. Run `npm run android:dev:launch` in another terminal when you need to relaunch the app. Re-run `npm run android:dev:install` only after native Android, manifest, Gradle, native dependency, or BuildConfig environment changes.
+
+Debug builds depend on Metro. For handoff or standalone phone testing, use the hosted release flow below instead.
+
 After the sign-in flow has established a session on the device, run the Android share-intake smoke:
 
 ```sh

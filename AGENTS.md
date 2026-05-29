@@ -12,6 +12,26 @@ Before product, UI, workflow, capture-review, search, collection, reminder, or n
 
 If a product decision changes, update the smallest relevant artifact immediately. Use `CONTEXT.md` only for domain language, use the acceptance doc for current UI criteria, use the style guide for visual/workflow rules, and create or update an ADR when the decision is durable, surprising without context, and the result of a real trade-off.
 
+## Testing
+
+Use `docs/testing.md` as the source of truth for test commands, Android phone dev loops, hosted release smoke tests, and handoff install flows.
+
+For fast checks, run:
+
+```sh
+npm test
+```
+
+For physical-phone UI development, it is acceptable to use the debug APK with Metro running:
+
+```sh
+npm run android:dev:install
+npm run android:dev
+npm run android:dev:launch
+```
+
+The debug APK is for active development only. For normal handoff or standalone phone testing, use the hosted release APK flow below.
+
 ## Android Phone Installs
 
 Do not install `android/app/build/outputs/apk/debug/app-debug.apk` onto the phone for normal handoff. The debug APK expects a Metro/dev-server JavaScript bundle and can show `Unable to load script` when Metro is not running.
