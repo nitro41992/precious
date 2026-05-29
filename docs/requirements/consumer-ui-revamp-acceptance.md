@@ -53,7 +53,8 @@ New Capture must:
 - Open from the primary `+` action as a bottom sheet, not as an inline form in Recent Captures.
 - Keep the paste input, close action, and save action visible and reachable when the keyboard is open on a small Android phone.
 - Open with one upward sheet motion; keyboard focus must not make the sheet appear to pull down or jump against its entrance.
-- Hide optional context behind a secondary `Add context` action until the user asks for it.
+- Present exactly one capture mode at a time: `Link`, `Note`, or `Image`.
+- Offer an explicit in-app image upload mode that uses existing image capture processing and opens the platform photo picker, without adding new extraction rules.
 
 ## Capture Review
 

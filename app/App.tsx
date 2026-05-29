@@ -6,6 +6,7 @@ import {
   Animated,
   AppState,
   BackHandler,
+  Dimensions,
   Easing,
   FlatList,
   Image,
@@ -171,6 +172,7 @@ type ReminderSuggestion = NonNullable<Capture["suggestedReminders"]>[number];
 type ReminderDraftAction = "keep" | "remove";
 type CollectionDraftAction = "keep" | "remove" | "ignore" | "link" | "create" | "added";
 type NoteSaveState = "idle" | "saving" | "saved" | "error";
+type CaptureComposerMode = "link" | "note" | "image";
 
 type ReminderReviewDecision = {
   index: number;
@@ -209,6 +211,7 @@ type CaptureReviewDraft = {
 
 type CaptureStore = {
   captureSource: (sourceText: string) => Promise<string>;
+  captureImage?: () => Promise<string | null>;
   submitExpandedUrl?: (id: string, expandedUrl: string) => Promise<string>;
   getCaptures: () => Promise<string>;
   updateCapture: (id: string, title: string, note: string, currentSaveIntent: string | null) => Promise<string>;
@@ -1164,9 +1167,9 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [snackbar, setSnackbar] = useState<SnackbarState | null>(null);
   const [sourceDraft, setSourceDraft] = useState("");
-  const [sourceContextDraft, setSourceContextDraft] = useState("");
-  const [showCaptureContext, setShowCaptureContext] = useState(false);
+  const [captureMode, setCaptureMode] = useState<CaptureComposerMode>("link");
   const [showCaptureComposer, setShowCaptureComposer] = useState(false);
+  const [captureComposerClosing, setCaptureComposerClosing] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [sourceExpanded, setSourceExpanded] = useState(false);
   const [noteExpanded, setNoteExpanded] = useState(false);
@@ -1176,6 +1179,7 @@ export default function App() {
   const [archiveCollectionTarget, setArchiveCollectionTarget] = useState<Collection | null>(null);
   const [faviconFailures, setFaviconFailures] = useState<Record<string, boolean>>({});
   const [savingCapture, setSavingCapture] = useState(false);
+  const [pickingCaptureImage, setPickingCaptureImage] = useState(false);
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authLoading, setAuthLoading] = useState<"signin" | "signup" | null>(null);
@@ -1183,6 +1187,7 @@ export default function App() {
   const autoAppliedCollectionKeysRef = useRef<Set<string>>(new Set());
   const sourceInputRef = useRef<TextInput>(null);
   const lastKeyboardHeightRef = useRef(0);
+  const captureComposerClosingRef = useRef(false);
   const searchMotion = useRef(new Animated.Value(0)).current;
   const reviewMotion = useRef(new Animated.Value(0)).current;
   const captureComposerMotion = useRef(new Animated.Value(0)).current;
@@ -1415,28 +1420,56 @@ export default function App() {
   }
 
   function openCaptureComposer() {
-    const estimatedKeyboardHeight = lastKeyboardHeightRef.current || Math.round(windowHeight * (Platform.OS === "ios" ? 0.34 : 0.42));
+    const screenHeight = Dimensions.get("screen").height;
+    const estimatedKeyboardHeight = captureMode === "image"
+      ? 0
+      : lastKeyboardHeightRef.current || Math.round(screenHeight * (Platform.OS === "ios" ? 0.34 : 0.4));
     setMessage("");
+    captureComposerClosingRef.current = false;
+    setCaptureComposerClosing(false);
     setKeyboardHeight(estimatedKeyboardHeight);
+    captureComposerMotion.stopAnimation();
+    captureKeyboardInset.stopAnimation();
     captureComposerMotion.setValue(0);
-    captureKeyboardInset.setValue(0);
-    Animated.timing(captureKeyboardInset, {
-      duration: 260,
-      easing: Easing.out(Easing.cubic),
-      toValue: estimatedKeyboardHeight,
-      useNativeDriver: false
-    }).start();
+    captureKeyboardInset.setValue(estimatedKeyboardHeight);
     setShowCaptureComposer(true);
   }
 
   function closeCaptureComposer() {
+    if (!showCaptureComposer || captureComposerClosing) return;
+    captureComposerClosingRef.current = true;
+    setCaptureComposerClosing(true);
     Keyboard.dismiss();
-    setShowCaptureComposer(false);
-    setKeyboardHeight(0);
-    captureKeyboardInset.setValue(0);
-    if (!sourceDraft.trim() && !sourceContextDraft.trim()) {
-      setShowCaptureContext(false);
+    Animated.parallel([
+      Animated.timing(captureComposerMotion, {
+        duration: 170,
+        easing: Easing.in(Easing.cubic),
+        toValue: 0,
+        useNativeDriver: false
+      }),
+      Animated.timing(captureKeyboardInset, {
+        duration: 180,
+        easing: Easing.in(Easing.cubic),
+        toValue: 0,
+        useNativeDriver: false
+      })
+    ]).start(() => {
+      setShowCaptureComposer(false);
+      setCaptureComposerClosing(false);
+      captureComposerClosingRef.current = false;
+      setKeyboardHeight(0);
+      captureComposerMotion.setValue(0);
+      captureKeyboardInset.setValue(0);
+    });
+  }
+
+  function chooseCaptureMode(mode: CaptureComposerMode) {
+    setCaptureMode(mode);
+    if (mode === "image") {
+      Keyboard.dismiss();
+      return;
     }
+    requestAnimationFrame(() => sourceInputRef.current?.focus());
   }
 
   async function openCollectionsScreen(mode: CollectionListMode = collectionsMode) {
@@ -1636,7 +1669,7 @@ export default function App() {
   }, [reviewMotion, selectedId]);
 
   useEffect(() => {
-    if (!showCaptureComposer) return;
+    if (!showCaptureComposer || captureComposerClosing) return;
     captureComposerMotion.setValue(0);
     Animated.spring(captureComposerMotion, {
       damping: 24,
@@ -1645,20 +1678,21 @@ export default function App() {
       toValue: 1,
       useNativeDriver: false
     }).start();
-  }, [captureComposerMotion, showCaptureComposer]);
+  }, [captureComposerClosing, captureComposerMotion, showCaptureComposer]);
 
   useEffect(() => {
-    if (!showCaptureComposer) return;
+    if (!showCaptureComposer || captureComposerClosing || captureMode === "image") return;
     const frame = requestAnimationFrame(() => {
       sourceInputRef.current?.focus();
     });
     return () => cancelAnimationFrame(frame);
-  }, [showCaptureComposer]);
+  }, [captureComposerClosing, captureMode, showCaptureComposer]);
 
   useEffect(() => {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
     const showSubscription = Keyboard.addListener(showEvent, (event) => {
+      if (captureComposerClosingRef.current) return;
       const nextHeight = event.endCoordinates.height;
       lastKeyboardHeightRef.current = nextHeight;
       setKeyboardHeight(nextHeight);
@@ -1671,7 +1705,7 @@ export default function App() {
       }).start();
     });
     const hideSubscription = Keyboard.addListener(hideEvent, (event) => {
-      setKeyboardHeight(0);
+      if (!captureComposerClosingRef.current) setKeyboardHeight(0);
       if (Platform.OS === "ios") Keyboard.scheduleLayoutAnimation(event);
       Animated.timing(captureKeyboardInset, {
         duration: Math.max(120, Math.min(event.duration || 200, 300)),
@@ -2656,19 +2690,39 @@ export default function App() {
     setSavingCapture(true);
     setMessage("");
     try {
-      const context = sourceContextDraft.trim();
-      const raw = await nativeStore.captureSource(context ? `${source}\n\n${context}` : source);
+      const raw = await nativeStore.captureSource(source);
       const localCapture = JSON.parse(raw) as Capture;
       setCaptures((current) => [localCapture, ...current.filter((item) => item.id !== localCapture.id)]);
       setSourceDraft("");
-      setSourceContextDraft("");
-      setShowCaptureContext(false);
       closeCaptureComposer();
       setMessage("Saved. Checking the source now.");
     } catch (error) {
       setMessage(friendlyError(error, "Could not save capture."));
     } finally {
       setSavingCapture(false);
+    }
+  }
+
+  async function pickCaptureImage() {
+    if (!nativeStore?.captureImage) {
+      setMessage("Image upload is unavailable in this build.");
+      return;
+    }
+    setPickingCaptureImage(true);
+    setMessage("");
+    Keyboard.dismiss();
+    try {
+      const raw = await nativeStore.captureImage();
+      if (!raw) return;
+      const localCapture = JSON.parse(raw) as Capture;
+      setCaptures((current) => [localCapture, ...current.filter((item) => item.id !== localCapture.id)]);
+      setSourceDraft("");
+      closeCaptureComposer();
+      setMessage("Image saved. Checking the source now.");
+    } catch (error) {
+      setMessage(friendlyError(error, "Could not save image."));
+    } finally {
+      setPickingCaptureImage(false);
     }
   }
 
@@ -4138,9 +4192,21 @@ export default function App() {
     ? "Loading captures"
     : `${homeCaptures.length} recent ${homeCaptures.length === 1 ? "capture" : "captures"}`;
   const composerKeyboardVisible = showCaptureComposer && keyboardHeight > 0;
+  const screenHeight = Dimensions.get("screen").height;
+  const windowAlreadyKeyboardSized = composerKeyboardVisible && Math.abs(windowHeight + keyboardHeight - screenHeight) < 96;
+  const composerVisibleHeight = composerKeyboardVisible && !windowAlreadyKeyboardSized
+    ? windowHeight - keyboardHeight
+    : windowHeight;
+  const composerAvailableHeight = composerKeyboardVisible
+    ? Math.max(320, composerVisibleHeight - 24)
+    : Math.max(360, windowHeight * 0.72);
+  const imageCaptureAvailable = Boolean(nativeStore?.captureImage);
+  const captureModeIsText = captureMode !== "image";
   const captureSheetMaxHeight = composerKeyboardVisible
-    ? Math.min(430, Math.max(300, windowHeight * 0.52))
+    ? Math.min(captureModeIsText ? 430 : 500, composerAvailableHeight)
     : Math.min(560, Math.max(340, windowHeight * 0.72));
+  const captureSourcePlaceholder = captureMode === "link" ? "Paste a link" : "Write a note";
+  const captureSheetBottomInset = windowAlreadyKeyboardSized ? 0 : captureKeyboardInset;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -4255,7 +4321,7 @@ export default function App() {
                 styles.captureSheet,
                 composerKeyboardVisible && styles.captureSheetCompact,
                 {
-                  marginBottom: captureKeyboardInset,
+                  marginBottom: captureSheetBottomInset,
                   maxHeight: captureSheetMaxHeight,
                   opacity: captureComposerMotion,
                   transform: [
@@ -4276,54 +4342,97 @@ export default function App() {
                 </View>
                 <View style={styles.sheetActions}>
                   <IconButton Icon={X} label="Close" onPress={closeCaptureComposer} />
-                  <IconButton
-                    Icon={Check}
-                    label={savingCapture ? "Saving capture" : "Save capture"}
-                    disabled={savingCapture || !sourceDraft.trim()}
-                    onPress={() => void saveCaptureSource()}
-                    tone="primary"
-                    testID="pc.capture.save"
-                  />
+                  {captureModeIsText ? (
+                    <IconButton
+                      Icon={Check}
+                      label={savingCapture ? "Saving capture" : "Save capture"}
+                      disabled={savingCapture || !sourceDraft.trim()}
+                      onPress={() => void saveCaptureSource()}
+                      tone="primary"
+                      testID="pc.capture.save"
+                    />
+                  ) : null}
                 </View>
               </View>
-              <ScrollView
-                contentContainerStyle={[
+              <View style={styles.captureModeRow}>
+                {([
+                  { mode: "link", label: "Link", Icon: Link2 },
+                  { mode: "note", label: "Note", Icon: StickyNote },
+                  { mode: "image", label: "Image", Icon: ImageIcon }
+                ] as const).map(({ mode, label, Icon }) => {
+                  const selectedMode = captureMode === mode;
+                  return (
+                    <Pressable
+                      accessibilityRole="button"
+                      key={mode}
+                      onPress={() => chooseCaptureMode(mode)}
+                      style={({ pressed }) => [
+                        styles.captureModeChip,
+                        selectedMode && styles.captureModeChipSelected,
+                        pressed && styles.subtlePressed
+                      ]}
+                      testID={`pc.capture.mode.${mode}`}
+                    >
+                      <Icon color={selectedMode ? colors.onAccent : colors.muted} size={16} strokeWidth={2.4} />
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          styles.captureModeText,
+                          selectedMode && styles.captureModeTextSelected
+                        ]}
+                      >
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <View
+                style={[
+                  styles.captureSheetBody,
                   styles.captureSheetBodyContent,
                   composerKeyboardVisible && styles.captureSheetBodyContentCompact
                 ]}
-                keyboardShouldPersistTaps="handled"
-                style={styles.captureSheetBody}
               >
-                <TextInput
-                  ref={sourceInputRef}
-                  multiline
-                  onChangeText={setSourceDraft}
-                  placeholder="Paste a link or write a note"
-                  placeholderTextColor={colors.muted}
-                  style={[styles.captureInput, composerKeyboardVisible && styles.captureInputCompact]}
-                  testID="pc.capture.source"
-                  value={sourceDraft}
-                />
-                {showCaptureContext ? (
+                {captureModeIsText ? (
                   <TextInput
+                    autoCapitalize={captureMode === "link" ? "none" : "sentences"}
+                    autoCorrect={captureMode !== "link"}
+                    keyboardType={captureMode === "link" ? "url" : "default"}
                     multiline
-                    onChangeText={setSourceContextDraft}
-                    placeholder="Why did you save this?"
+                    ref={sourceInputRef}
+                    onChangeText={setSourceDraft}
+                    placeholder={captureSourcePlaceholder}
                     placeholderTextColor={colors.muted}
-                    style={[styles.captureContextInput, composerKeyboardVisible && styles.captureContextInputCompact]}
-                    testID="pc.capture.context"
-                    value={sourceContextDraft}
+                    style={[styles.captureInput, composerKeyboardVisible && styles.captureInputCompact]}
+                    testID="pc.capture.source"
+                    value={sourceDraft}
                   />
                 ) : (
-                  <Pressable
-                    onPress={() => setShowCaptureContext(true)}
-                    style={({ pressed }) => [styles.addContextButton, pressed && styles.subtlePressed]}
-                  >
-                    <Plus color={colors.muted} size={16} strokeWidth={2.3} />
-                    <Text style={styles.inlineAction}>Add context</Text>
-                  </Pressable>
+                  <View style={styles.captureImagePanel}>
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={!imageCaptureAvailable || pickingCaptureImage}
+                      onPress={() => void pickCaptureImage()}
+                      style={({ pressed }) => [
+                        styles.captureImageButton,
+                        (!imageCaptureAvailable || pickingCaptureImage) && styles.captureImageButtonDisabled,
+                        pressed && imageCaptureAvailable && !pickingCaptureImage && styles.darkButtonPressed
+                      ]}
+                      testID="pc.capture.image"
+                    >
+                      <ImageIcon color={colors.ink} size={18} strokeWidth={2.4} />
+                      <Text style={styles.captureImageButtonText}>
+                        {pickingCaptureImage
+                          ? "Opening Photos..."
+                          : imageCaptureAvailable
+                            ? "Choose image"
+                            : "Image upload unavailable"}
+                      </Text>
+                    </Pressable>
+                  </View>
                 )}
-              </ScrollView>
+              </View>
             </Animated.View>
           </KeyboardAvoidingView>
         </View>
@@ -4559,39 +4668,72 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 16,
     lineHeight: 22,
-    minHeight: 74,
+    maxHeight: 124,
+    minHeight: 86,
     paddingHorizontal: 14,
     paddingVertical: 12,
     textAlignVertical: "top"
   },
   captureInputCompact: {
-    minHeight: 68,
+    maxHeight: 104,
+    minHeight: 80,
     paddingVertical: 10
   },
-  captureContextInput: {
+  captureModeRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8
+  },
+  captureModeChip: {
+    alignItems: "center",
     backgroundColor: colors.paper,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
-    color: colors.ink,
-    fontSize: 15,
-    lineHeight: 21,
-    minHeight: 58,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    textAlignVertical: "top"
-  },
-  captureContextInputCompact: {
-    minHeight: 52,
-    paddingVertical: 8
-  },
-  addContextButton: {
-    alignItems: "center",
-    alignSelf: "flex-start",
+    flex: 1,
     flexDirection: "row",
     gap: 7,
+    justifyContent: "center",
     minHeight: 44,
-    paddingHorizontal: 2
+    minWidth: 0,
+    paddingHorizontal: 8
+  },
+  captureModeChipSelected: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent
+  },
+  captureModeText: {
+    color: colors.ink,
+    flexShrink: 1,
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  captureModeTextSelected: {
+    color: colors.onAccent
+  },
+  captureImagePanel: {
+    alignItems: "stretch"
+  },
+  captureImageButton: {
+    alignItems: "center",
+    alignSelf: "stretch",
+    backgroundColor: colors.surfaceContainerHighest,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    minHeight: 56,
+    paddingHorizontal: 14
+  },
+  captureImageButtonDisabled: {
+    opacity: 0.56
+  },
+  captureImageButtonText: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "800"
   },
   sheetLayer: {
     bottom: 0,
@@ -4655,18 +4797,19 @@ const styles = StyleSheet.create({
   },
   captureSheetCompact: {
     gap: 10,
-    paddingBottom: Platform.OS === "android" ? 12 : 20
+    paddingBottom: Platform.OS === "android" ? 16 : 22
   },
   captureSheetBody: {
-    flexShrink: 1
+    flexShrink: 1,
+    minWidth: 0
   },
   captureSheetBodyContent: {
     gap: 14,
-    paddingBottom: 2
+    paddingBottom: 8
   },
   captureSheetBodyContentCompact: {
     gap: 10,
-    paddingBottom: 0
+    paddingBottom: 12
   },
   sheetGrabber: {
     alignSelf: "center",
