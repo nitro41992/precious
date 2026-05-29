@@ -13,7 +13,7 @@ The current consumer UI target is search-first memory retrieval:
 - The default home screen is `Recent Captures`, a beautiful active-capture list ordered by most recently captured.
 - Search is a full-screen Retrieval Lens opened from a prominent home affordance, not a small embedded filter field.
 - Capture rows should feel rich and consumer-facing, while audit-like extraction details remain hidden from the row and available to Search.
-- Collections are not a top-level home mode. Collection attachment belongs in Capture Review and can be edited from there.
+- Collections are not a top-level home mode. Collection attachment belongs in Capture Review, and Collection management should also exist as a secondary independent screen.
 - Map, Agenda, and full reminder delivery are deferred. Agenda depends on functioning Confirmed Reminders.
 - Smooth transitions, loading states, press feedback, draft-preserving saves, and snackbar undo are part of the expected product quality.
 
@@ -60,6 +60,7 @@ Mobbin access was limited during research: the supplied pages exposed title shel
 - **Quiet Confidence:** Persist low-risk, reversible AI decisions quietly; ask before creating reminders, obligations, or new organizational structures.
 - **Guided Review:** Correction should feel like editing meaning with chips and short rationale, not filling out an analysis report.
 - **Search-First Retrieval:** Home should make Search feel primary while still giving users a rich recent-memory list.
+- **Owned Organization:** Collections should feel user-owned and manageable without turning organization into the main product surface.
 - **Semantic Color:** Color communicates state, confidence, or category. Avoid decorative gradients, color fields, and ornamental backgrounds.
 - **Scan Before Explain:** Rows and summaries should be legible in a two-second scan. Long rationale belongs behind an intentional affordance.
 - **Private By Default:** AI and sync behavior should be legible, especially around source content, notes, images, and reminders.
@@ -205,7 +206,7 @@ Rules:
 - Tapping the search affordance opens full-screen Search.
 - Rows should include source and date/time metadata, not only time.
 - Extraction details should remain persisted and searchable without being rendered as audit metadata.
-- Collections, Map, Agenda, and reminder modules should not appear as top-level home sections in this pass.
+- Collections, Map, Agenda, and reminder modules should not appear as top-level home sections in this pass. A small secondary entry to Collection management is allowed from Home/account/menu.
 
 ### Capture Intake
 
@@ -253,6 +254,26 @@ Each chip can expand into a small picker. Keep concise rationale visible only wh
 `Because the post mentions a SoHo ramen shop.`
 
 When reminders are not fully implemented, use `Reminder idea: [before Saturday]` rather than copy that implies notification delivery.
+
+### Collection Management
+
+Collections need an independent management surface so organization does not feel hidden inside Capture Review.
+
+Use:
+
+- Screen title: `Collections`
+- Primary action: `New collection`
+- Row metadata: capture count, recent use, or short description when available
+- Empty state: `Create a collection when a saved thing belongs somewhere specific.`
+
+Rules:
+
+- Keep Collection management secondary to Recent Captures and Search.
+- Do not add Collections as a primary top-level tab or default home module in this pass.
+- Let users create, rename, and manage Collections outside an individual Capture.
+- Let Capture Review open collection selection or management and return without losing unsaved edits.
+- Treat `No collection` as a valid choice, not an unresolved state.
+- Avoid manual-filing pressure; Collections are optional organization, not required review work.
 
 ### Ready
 

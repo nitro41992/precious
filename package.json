@@ -16,7 +16,7 @@
     "android:install": "adb install -r android/app/build/outputs/apk/release/app-release.apk",
     "android:launch": "adb shell am start -n com.preciouscaptures/.MainActivity",
     "android:reverse": "adb reverse tcp:3030 tcp:3030",
-    "android:share": "adb shell am start -a android.intent.action.SEND -t text/plain --es android.intent.extra.TEXT 'https://example.com/quiet-place' -n com.preciouscaptures/.ShareIntakeActivity",
+    "android:share": "adb shell am start -a android.intent.action.SEND -t text/plain --es android.intent.extra.TEXT 'https://www.nps.gov/yose/planyourvisit/index.htm' -n com.preciouscaptures/.ShareIntakeActivity",
     "hosted:deploy": "node scripts/deploy-hosted-function.mjs",
     "hosted:db:push": "node scripts/push-supabase-db.mjs",
     "hosted:create-user": "node scripts/create-password-user.mjs",
@@ -31,10 +31,12 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.106.2",
     "expo": "^56.0.4",
+    "lucide-react-native": "1.17.0",
     "next": "^16.2.6",
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
     "react-native": "^0.85.3",
+    "react-native-svg": "15.15.5",
     "react-native-url-polyfill": "^3.0.0"
   },
   "devDependencies": {

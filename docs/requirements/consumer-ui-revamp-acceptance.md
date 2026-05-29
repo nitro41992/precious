@@ -13,6 +13,7 @@ Related ADR: `docs/adr/0001-recent-captures-and-full-screen-search.md`.
 - Search is a primary product function and opens as its own full-screen Retrieval Lens.
 - Settings/account actions stay small and contextual.
 - Collections, Map, Agenda, Library, Upcoming, and Archived are not top-level destinations in this pass.
+- Collection management should exist as an independent screen outside Capture Review, without turning Collections into a primary home mode.
 - Map and Agenda are deferred. Agenda depends on functioning Confirmed Reminders.
 - This pass focuses on UI and workflow. Do not add a broad first-class reminder backend unless the scope is explicitly reopened.
 
@@ -43,6 +44,14 @@ Search must:
 - Use empty and loading states that feel intentionally designed.
 - Avoid chatbot framing unless a future product decision explicitly introduces it.
 
+## New Capture
+
+New Capture must:
+
+- Open from the primary `+` action as a bottom sheet, not as an inline form in Recent Captures.
+- Keep the paste input, close action, and save action visible and reachable when the keyboard is open on a small Android phone.
+- Hide optional context behind a secondary `Add context` action until the user asks for it.
+
 ## Capture Review
 
 Capture Review must:
@@ -56,6 +65,18 @@ Capture Review must:
 - Use `Reminder idea: [before Saturday]` for AI reminder suggestions until Confirmed Reminders and notification delivery are implemented.
 - Include an `Add reminder` flow only when the selected reminder can at least persist as a capture-local or otherwise durable value. Do not imply notification delivery until it exists.
 - Keep raw source, destructive archive actions, and detailed rationale visually secondary.
+
+## Collection Management
+
+Collection management must:
+
+- Be available from outside an individual Capture, such as a small Home/account/menu entry, while remaining secondary to Recent Captures and Search.
+- Provide an independent `Collections` screen for creating, renaming, and managing Collections.
+- Show existing Collections in a consumer-facing list with useful metadata such as capture count or recent use when available.
+- Let Capture Review navigate to collection selection/management and return without losing edits.
+- Preserve `No collection` as a valid state for any Capture.
+- Avoid making Collection browsing a top-level retrieval destination in this pass; Search remains the primary retrieval lens.
+- Use snackbar undo or confirmation for reversible/destructive collection changes where feasible.
 
 ## Trust Rules
 
@@ -80,7 +101,7 @@ Capture Review must:
 - Map.
 - Agenda.
 - Full reminder notification delivery.
-- Top-level Collection browsing.
+- Top-level Collection browsing as a primary destination.
 - A general Library destination.
 - Chatbot search.
 - Broad backend restructuring beyond what is necessary to support the agreed UI.

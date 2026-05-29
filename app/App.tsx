@@ -1,13 +1,15 @@
 import "react-native-url-polyfill/auto";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ComponentType } from "react";
 import {
   Alert,
   Animated,
   AppState,
   BackHandler,
-  Easing,
   FlatList,
+  Image,
+  Keyboard,
   KeyboardAvoidingView,
   Linking,
   NativeModules,
@@ -20,8 +22,34 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View
 } from "react-native";
+import {
+  AlertTriangle,
+  Archive,
+  ArrowLeft,
+  BookOpen,
+  CalendarDays,
+  Check,
+  Clock3,
+  Copy,
+  ExternalLink,
+  Folder,
+  Image as ImageIcon,
+  Info,
+  Link2,
+  MapPin,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Search,
+  Settings,
+  ShoppingBag,
+  SlidersHorizontal,
+  StickyNote,
+  X
+} from "lucide-react-native";
 
 import saveIntents from "../supabase/functions/_shared/save-intents.json";
 import {
@@ -246,6 +274,19 @@ type SnackbarState = {
 };
 
 const PROCESSING_REFRESH_MS = 3000;
+const SEARCH_PROMPTS = [
+  { label: "Places", query: "places", Icon: MapPin },
+  { label: "Links from yesterday", query: "links from yesterday", Icon: Link2 },
+  { label: "Things to read", query: "things to read", Icon: BookOpen },
+  { label: "Products", query: "products", Icon: ShoppingBag },
+  { label: "Travel ideas", query: "travel ideas", Icon: CalendarDays }
+];
+
+type LucideIconComponent = ComponentType<{
+  color?: string;
+  size?: number;
+  strokeWidth?: number;
+}>;
 
 class ApiRequestError extends Error {
   status: number;
@@ -300,25 +341,69 @@ function captureSourceLabel(capture: Capture) {
   return capture.siteName || hostFromUrl(capture.sourceUrl) || conciseText(capture.sourceText, 56) || "Shared text";
 }
 
+function captureSourceHost(capture: Capture) {
+  return hostFromUrl(capture.sourceUrl) || capture.siteName || "";
+}
+
+function sourceFaviconUrl(host: string) {
+  const cleaned = host.replace(/^www\./i, "").trim();
+  if (!cleaned || !cleaned.includes(".") || /[\s/]/.test(cleaned)) return "";
+  return `https://${cleaned}/favicon.ico`;
+}
+
+function isMapSource(capture: Capture) {
+  const host = captureSourceHost(capture).toLowerCase();
+  const url = String(capture.sourceUrl || "").toLowerCase();
+  const intent = capture.defaultIntent || "";
+  return (
+    host.includes("maps") ||
+    host === "goo.gl" ||
+    host.endsWith(".goo.gl") ||
+    url.includes("/maps") ||
+    url.includes("maps.app.goo.gl") ||
+    url.includes("goo.gl/maps") ||
+    intent.includes("place") ||
+    intent.includes("trip")
+  );
+}
+
+function sourceIconForCapture(capture: Capture): LucideIconComponent {
+  const host = captureSourceHost(capture).toLowerCase();
+  const intent = capture.defaultIntent || "";
+  if (isMapSource(capture)) {
+    return MapPin;
+  }
+  if (intent.includes("buy") || intent.includes("product") || host.includes("amazon") || host.includes("etsy")) {
+    return ShoppingBag;
+  }
+  if (intent.includes("read") || host.includes("medium") || host.includes("substack")) {
+    return BookOpen;
+  }
+  if (host.includes("youtube") || host.includes("instagram") || host.includes("tiktok") || host.includes("photos")) {
+    return ImageIcon;
+  }
+  if (intent.includes("event") || intent.includes("reminder")) return CalendarDays;
+  if (capture.sourceUrl) return Link2;
+  return StickyNote;
+}
+
 function captureStatusLabel(capture: Capture) {
   if (isArchived(capture)) return "Archived";
   const status = displayStatus(capture);
   if (status === "processing") return "Analyzing";
   if (status === "failed") return "Could not analyze";
+  if (status === "needs_review") return "Needs a quick look";
   return statusLabel(status);
 }
 
-function captureMeaningLine(capture: Capture) {
-  if (!capture.defaultIntent) return "";
-  return `Saved as ${humanize(capture.defaultIntent)}`;
+function captureIntentLabel(capture: Capture) {
+  return humanize(capture.defaultIntent) || "";
 }
 
-function captureVisibleStatus(capture: Capture) {
-  const status = displayStatus(capture);
-  if (isArchived(capture) || status === "processing" || status === "needs_review" || status === "failed") {
-    return captureStatusLabel(capture);
-  }
-  return "";
+function auditLikeText(value: string | null | undefined) {
+  return /url returned|saved url failed|saved link:|failed to fetch metadata|could not fetch metadata|metadata fetch|metadata|no readable title|readable title|readable description|path suggests|generic evidence|insufficient url|link saved from android share|android share|untitled capture|extraction|analysis|confidence|model|provider/i.test(
+    String(value || "")
+  );
 }
 
 function consumerSummary(capture: Capture) {
@@ -329,10 +414,45 @@ function consumerSummary(capture: Capture) {
     .replace(/\.\s*the user\b.*$/i, ".");
   const summary = conciseText(cleaned, 128);
   if (!summary) return "";
-  if (/url returned|generic evidence|insufficient url|extraction|analysis|confidence|model|provider/i.test(summary)) {
+  if (auditLikeText(summary)) {
     return "";
   }
   return summary;
+}
+
+function rawTitleLikeSource(capture: Capture) {
+  const title = cleanSentence(capture.title).toLowerCase();
+  if (!title) return true;
+  if (auditLikeText(title)) return true;
+  if (/^https?:\/\//i.test(title)) return true;
+  const host = captureSourceHost(capture).toLowerCase();
+  const source = captureSourceLabel(capture).toLowerCase();
+  if (/^[a-z0-9.-]+\/\S+/i.test(title)) return true;
+  if (host && title.startsWith(`${host}/`)) return true;
+  if (host && (title === host || title === host.replace(/^www\./, ""))) return true;
+  if (source && title === source) return true;
+  return !title.includes(" ") && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(title);
+}
+
+function captureDisplayTitle(capture: Capture) {
+  const title = cleanSentence(capture.title);
+  if (title && !rawTitleLikeSource(capture)) return title;
+  const summary = consumerSummary(capture);
+  if (summary) return conciseText(summary, 72);
+  const source = captureSourceLabel(capture);
+  if (source && source !== "Shared text") return `Saved from ${source}`;
+  return capture.sourceUrl ? "Saved link" : "Saved note";
+}
+
+function captureSupportLine(capture: Capture, visibleSummary: string) {
+  if (visibleSummary) return "";
+  const status = displayStatus(capture);
+  if (status === "processing") return "Checking the source now.";
+  if (status === "failed") return "Saved. Open it to review or try again.";
+  if (status === "needs_review") return "A quick review will help finish this capture.";
+  const evidence = urlEvidenceMessage(capture.urlEvidence);
+  if (evidence) return evidence;
+  return "";
 }
 
 function reviewStatusCue(capture: Capture, pendingAutoCollection: boolean, hasReviewReasons: boolean) {
@@ -344,8 +464,11 @@ function reviewStatusCue(capture: Capture, pendingAutoCollection: boolean, hasRe
 }
 
 function shortTrustCue(value: string | null | undefined) {
-  if (!cleanSentence(value)) return "";
-  return "Suggestion based on saved content.";
+  const cleaned = cleanSentence(value);
+  if (!cleaned) return "";
+  if (auditLikeText(cleaned)) return "";
+  if (/^suggestion based on saved content\.?$/i.test(cleaned)) return "";
+  return "Suggestion detail";
 }
 
 function recencyGroupLabel(value: number, now = Date.now()) {
@@ -544,14 +667,17 @@ function conciseText(value: string | null | undefined, maxLength = 110) {
 
 function urlEvidenceMessage(evidence?: UrlEvidence | null) {
   if (!evidence) return "";
+  const suppliedMessage = evidence.user_facing_message && !auditLikeText(evidence.user_facing_message)
+    ? evidence.user_facing_message
+    : "";
   if (evidence.status === "needs_client_resolution") {
-    return evidence.user_facing_message || "We couldn't access the exact content from this shared link. Open it once so we can categorize it accurately.";
+    return suppliedMessage || "Saved. Open the link once if you want richer details.";
   }
   if (evidence.status === "insufficient_url_evidence") {
-    return evidence.user_facing_message || "We couldn't verify enough public information to categorize this exact link.";
+    return suppliedMessage || "Saved with limited public details.";
   }
   if (evidence.status === "partial_evidence" || evidence.evidence_quality === "low") {
-    return "Categorized from limited public information.";
+    return "Saved with partial source details.";
   }
   return "";
 }
@@ -567,6 +693,9 @@ function friendlyError(error: unknown, fallback: string) {
   }
   if (/unauthorized|session expired/i.test(message)) {
     return "Your session expired. Sign in again.";
+  }
+  if (auditLikeText(message) || /stack trace|edge function|supabase|native bridge|request failed/i.test(message)) {
+    return fallback;
   }
   return message || fallback;
 }
@@ -759,7 +888,154 @@ async function requestJson<T>(
   return json as T;
 }
 
+function IconButton({
+  Icon,
+  label,
+  onPress,
+  disabled = false,
+  selected = false,
+  tone = "default",
+  testID
+}: {
+  Icon: LucideIconComponent;
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  selected?: boolean;
+  tone?: "default" | "primary" | "danger";
+  testID?: string;
+}) {
+  const iconColor = disabled
+    ? colors.muted
+    : tone === "danger"
+      ? colors.danger
+      : tone === "primary" || selected
+        ? colors.accent
+        : colors.ink;
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      disabled={disabled}
+      hitSlop={8}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.iconButton,
+        selected && styles.iconButtonSelected,
+        disabled && styles.iconButtonDisabled,
+        pressed && !disabled && styles.subtlePressed
+      ]}
+      testID={testID}
+    >
+      <Icon color={iconColor} size={20} strokeWidth={2.3} />
+    </Pressable>
+  );
+}
+
+function SourceMark({
+  capture,
+  failedFavicons,
+  onFaviconFailure,
+  size = "row"
+}: {
+  capture: Capture;
+  failedFavicons: Record<string, boolean>;
+  onFaviconFailure: (host: string) => void;
+  size?: "row" | "detail";
+}) {
+  const host = captureSourceHost(capture).replace(/^www\./i, "");
+  const faviconUri = !isMapSource(capture) && !failedFavicons[host] ? sourceFaviconUrl(host) : "";
+  const Icon = sourceIconForCapture(capture);
+  const itemStatus = displayStatus(capture);
+  const markStyle = size === "detail" ? styles.sourceMarkDetail : styles.sourceMark;
+  const iconSize = size === "detail" ? 16 : 20;
+  return (
+    <View
+      accessibilityLabel={host ? `Source: ${host}` : "Source"}
+      accessible
+      style={[
+        markStyle,
+        itemStatus === "processing" && styles.sourceMarkProcessing,
+        itemStatus === "needs_review" && styles.sourceMarkReview,
+        itemStatus === "failed" && styles.sourceMarkFailed
+      ]}
+    >
+      <Icon color={sourceIconColor(itemStatus)} size={iconSize} strokeWidth={2.3} />
+      {faviconUri ? (
+        <Image
+          onError={() => onFaviconFailure(host)}
+          source={{ uri: faviconUri }}
+          style={[
+            styles.sourceFaviconOverlay,
+            size === "detail" ? styles.sourceFaviconDetail : styles.sourceFavicon
+          ]}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function sourceIconColor(status: CaptureStatus) {
+  if (status === "processing") return colors.processing;
+  if (status === "needs_review") return colors.review;
+  if (status === "failed") return colors.danger;
+  return colors.accent;
+}
+
+function StatusGlyph({ capture }: { capture: Capture }) {
+  const status = displayStatus(capture);
+  if (!isArchived(capture) && status === "ready") return null;
+  const archived = isArchived(capture);
+  const Icon = archived
+    ? Archive
+    : status === "processing"
+      ? Clock3
+      : status === "failed"
+        ? AlertTriangle
+        : Info;
+  const label = archived ? "Archived" : captureStatusLabel(capture);
+  return (
+    <View
+      accessibilityLabel={label}
+      accessible
+      style={[
+        styles.statusGlyph,
+        status === "processing" && styles.statusGlyphProcessing,
+        status === "needs_review" && styles.statusGlyphReview,
+        status === "failed" && styles.statusGlyphFailed,
+        archived && styles.statusGlyphArchived
+      ]}
+    >
+      <Icon
+        color={
+          archived
+            ? colors.muted
+            : status === "processing"
+              ? colors.processing
+              : status === "failed"
+                ? colors.danger
+                : colors.review
+        }
+        size={15}
+        strokeWidth={2.5}
+      />
+    </View>
+  );
+}
+
+function MeaningToken({ Icon, text }: { Icon: LucideIconComponent; text: string }) {
+  return (
+    <View style={styles.meaningToken}>
+      <Icon color={colors.muted} size={13} strokeWidth={2.2} />
+      <Text numberOfLines={1} style={styles.meaningTokenText}>
+        {text}
+      </Text>
+    </View>
+  );
+}
+
 export default function App() {
+  const { height: windowHeight } = useWindowDimensions();
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [archivedCaptures, setArchivedCaptures] = useState<Capture[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -776,6 +1052,11 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchScope, setSearchScope] = useState<SearchScope>("active");
+  const [searchScopeOpen, setSearchScopeOpen] = useState(false);
+  const [collectionsOpen, setCollectionsOpen] = useState(false);
+  const [collectionsMode, setCollectionsMode] = useState<CollectionListMode>("active");
+  const [collectionsLoading, setCollectionsLoading] = useState(false);
+  const [collectionsError, setCollectionsError] = useState("");
   const [collectionCaptures, setCollectionCaptures] = useState<Capture[]>([]);
   const [collectionCapturesForId, setCollectionCapturesForId] = useState<string | null>(null);
   const [collectionCapturesLoading, setCollectionCapturesLoading] = useState(false);
@@ -803,7 +1084,13 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [snackbar, setSnackbar] = useState<SnackbarState | null>(null);
   const [sourceDraft, setSourceDraft] = useState("");
+  const [sourceContextDraft, setSourceContextDraft] = useState("");
+  const [showCaptureContext, setShowCaptureContext] = useState(false);
   const [showCaptureComposer, setShowCaptureComposer] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [sourceExpanded, setSourceExpanded] = useState(false);
+  const [noteExpanded, setNoteExpanded] = useState(false);
+  const [faviconFailures, setFaviconFailures] = useState<Record<string, boolean>>({});
   const [savingCapture, setSavingCapture] = useState(false);
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -812,6 +1099,7 @@ export default function App() {
   const autoAppliedCollectionKeysRef = useRef<Set<string>>(new Set());
   const searchMotion = useRef(new Animated.Value(0)).current;
   const reviewMotion = useRef(new Animated.Value(0)).current;
+  const captureComposerMotion = useRef(new Animated.Value(0)).current;
 
   const getFreshSession = useCallback(async (force = false) => {
     if (!session) return null;
@@ -998,6 +1286,7 @@ export default function App() {
     (captureId: string | null) => {
       if (!captureId) return;
       setSearchOpen(false);
+      setCollectionsOpen(false);
       setCaptureReturnCollectionId(null);
       const capture =
         captures.find((item) => item.id === captureId) ??
@@ -1016,6 +1305,7 @@ export default function App() {
 
   const openCaptureFromCollection = useCallback((capture: Capture, collectionId: string) => {
     setSearchOpen(false);
+    setCollectionsOpen(false);
     setSelectedCollectionId(null);
     setCaptureReturnCollectionId(collectionId);
     selectCapture(capture.id);
@@ -1027,7 +1317,9 @@ export default function App() {
   function openSearch() {
     selectCapture(null);
     selectCollection(null);
+    setCollectionsOpen(false);
     setMessage("");
+    setSearchScopeOpen(false);
     setSearchOpen(true);
   }
 
@@ -1036,10 +1328,35 @@ export default function App() {
       "Account",
       "Manage this device session.",
       [
+        { text: "Collections", onPress: () => void openCollectionsScreen() },
         { text: "Cancel", style: "cancel" },
         { text: "Sign out", style: "destructive", onPress: () => void signOut() }
       ]
     );
+  }
+
+  async function openCollectionsScreen(mode: CollectionListMode = collectionsMode) {
+    selectCapture(null);
+    setSearchOpen(false);
+    setCollectionsMode(mode);
+    setCollectionsOpen(true);
+    setSelectedCollectionId(null);
+    setCollectionsLoading(true);
+    setCollectionsError("");
+    try {
+      await loadCollections(mode);
+    } catch (error) {
+      const text = friendlyError(error, "Could not load collections.");
+      setCollectionsError(text);
+      setMessage(text);
+    } finally {
+      setCollectionsLoading(false);
+    }
+  }
+
+  function markFaviconFailed(host: string) {
+    if (!host) return;
+    setFaviconFailures((current) => (current[host] ? current : { ...current, [host]: true }));
   }
 
   function replaceLocalCaptureLists(next: Capture[]) {
@@ -1121,8 +1438,12 @@ export default function App() {
   }, [collectionDraftDirty, collections, selectedCollectionId]);
 
   useEffect(() => {
-    if (!selectedId && !selectedCollectionId && !searchOpen) return;
+    if (!selectedId && !selectedCollectionId && !searchOpen && !showCaptureComposer && !collectionsOpen) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (showCaptureComposer) {
+        setShowCaptureComposer(false);
+        return true;
+      }
       if (searchOpen) {
         setSearchOpen(false);
         return true;
@@ -1132,19 +1453,37 @@ export default function App() {
         selectCollection(captureReturnCollectionId);
         return true;
       }
+      if (selectedCollectionId) {
+        selectCollection(null);
+        return true;
+      }
+      if (collectionsOpen) {
+        setCollectionsOpen(false);
+        return true;
+      }
       selectCapture(null);
       selectCollection(null);
       return true;
     });
     return () => subscription.remove();
-  }, [captureReturnCollectionId, searchOpen, selectCapture, selectCollection, selectedCollectionId, selectedId]);
+  }, [
+    captureReturnCollectionId,
+    collectionsOpen,
+    searchOpen,
+    selectCapture,
+    selectCollection,
+    selectedCollectionId,
+    selectedId,
+    showCaptureComposer
+  ]);
 
   useEffect(() => {
     if (!searchOpen) return;
     searchMotion.setValue(0);
-    Animated.timing(searchMotion, {
-      duration: 180,
-      easing: Easing.out(Easing.cubic),
+    Animated.spring(searchMotion, {
+      damping: 22,
+      mass: 0.9,
+      stiffness: 260,
       toValue: 1,
       useNativeDriver: false
     }).start();
@@ -1153,16 +1492,48 @@ export default function App() {
   useEffect(() => {
     if (!selectedId) return;
     reviewMotion.setValue(0);
-    Animated.timing(reviewMotion, {
-      duration: 180,
-      easing: Easing.out(Easing.cubic),
+    Animated.spring(reviewMotion, {
+      damping: 22,
+      mass: 0.9,
+      stiffness: 260,
       toValue: 1,
       useNativeDriver: false
     }).start();
   }, [reviewMotion, selectedId]);
 
+  useEffect(() => {
+    if (!showCaptureComposer) return;
+    captureComposerMotion.setValue(0);
+    Animated.spring(captureComposerMotion, {
+      damping: 24,
+      mass: 0.9,
+      stiffness: 300,
+      toValue: 1,
+      useNativeDriver: false
+    }).start();
+  }, [captureComposerMotion, showCaptureComposer]);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSubscription = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
   const homeCaptures = useMemo(() => captures.filter((capture) => !isArchived(capture)), [captures]);
   const homeRows = useMemo(() => groupedCaptureRows(homeCaptures), [homeCaptures]);
+  const quickLookCount = useMemo(
+    () => homeCaptures.filter((capture) => displayStatus(capture) === "needs_review" || displayStatus(capture) === "failed").length,
+    [homeCaptures]
+  );
   const searchPool = useMemo(() => {
     if (searchScope === "archived") return archivedCaptures;
     if (searchScope === "all") return uniqueCaptures([...captures, ...archivedCaptures]);
@@ -1297,6 +1668,8 @@ export default function App() {
       setCollectionPickerQuery("");
       setCollectionCreateTitle("");
       setCollectionCreateDescription("");
+      setSourceExpanded(false);
+      setNoteExpanded(false);
       return;
     }
     const savedDraft = reviewDraftsByCapture[captureDraftKey(selected)] || {};
@@ -1318,6 +1691,8 @@ export default function App() {
     setCollectionPickerQuery("");
     setCollectionCreateTitle("");
     setCollectionCreateDescription("");
+    setSourceExpanded(false);
+    setNoteExpanded(false);
   }, [reviewDraftsByCapture, selectedDraftKey]);
 
   useEffect(() => {
@@ -1780,6 +2155,22 @@ export default function App() {
     }
   }
 
+  async function openCollectionSettings(collectionId: string) {
+    setCollectionPickerOpen(false);
+    setCollectionPickerQuery("");
+    setCollectionCreateTitle("");
+    setCollectionCreateDescription("");
+    if (!selected) setCollectionsOpen(true);
+    if (!collections.some((collection) => collection.id === collectionId)) {
+      try {
+        await loadCollections("active");
+      } catch (error) {
+        setMessage(friendlyError(error, "Could not load collection."));
+      }
+    }
+    selectCollection(collectionId);
+  }
+
   async function saveCollection() {
     const title = collectionTitle.trim();
     const description = collectionDescription.trim();
@@ -2108,10 +2499,13 @@ export default function App() {
     setSavingCapture(true);
     setMessage("");
     try {
-      const raw = await nativeStore.captureSource(source);
+      const context = sourceContextDraft.trim();
+      const raw = await nativeStore.captureSource(context ? `${source}\n\n${context}` : source);
       const localCapture = JSON.parse(raw) as Capture;
       setCaptures((current) => [localCapture, ...current.filter((item) => item.id !== localCapture.id)]);
       setSourceDraft("");
+      setSourceContextDraft("");
+      setShowCaptureContext(false);
       setShowCaptureComposer(false);
       setMessage("Saved. Checking the source now.");
     } catch (error) {
@@ -2169,108 +2563,91 @@ export default function App() {
     setCollectionCaptures([]);
     setCollectionCapturesForId(null);
     setCaptureReturnCollectionId(null);
+    setCollectionsOpen(false);
     setSearchOpen(false);
     setSearchQuery("");
     selectCapture(null);
     selectCollection(null);
   }
 
-  function renderCapture({ item }: { item: Capture }) {
-    const itemStatus = displayStatus(item);
-    const itemStatusText = captureVisibleStatus(item);
+  function renderCaptureRow(input: {
+    item: Capture;
+    onPress: () => void;
+    testID?: string;
+    matchReason?: string;
+  }) {
+    const { item, onPress, testID, matchReason } = input;
     const itemSummary = consumerSummary(item);
+    const supportLine = captureSupportLine(item, itemSummary);
+    const intentLabel = captureIntentLabel(item);
+    const collectionLabel = item.linkedCollections?.[0]?.title || "";
     return (
       <Pressable
-        onPress={() => openCapture(item.id)}
-        style={({ pressed }) => [styles.captureRow, pressed && styles.pressed]}
-        testID={`pc.capture.row.${item.id}`}
+        android_ripple={{ color: "rgba(31, 122, 91, 0.08)" }}
+        onPress={onPress}
+        style={({ pressed }) => [styles.captureRow, pressed && styles.captureRowPressed]}
+        testID={testID}
       >
-        <View style={styles.rowTitleLine}>
-          <Text numberOfLines={2} style={styles.captureTitle}>
-            {item.title}
-          </Text>
-        </View>
-        <View style={styles.rowMetaLine}>
+        <SourceMark capture={item} failedFavicons={faviconFailures} onFaviconFailure={markFaviconFailed} />
+        <View style={styles.rowContent}>
+          <View style={styles.rowTitleLine}>
+            <Text numberOfLines={2} style={styles.captureTitle}>
+              {captureDisplayTitle(item)}
+            </Text>
+            <StatusGlyph capture={item} />
+          </View>
           <Text numberOfLines={1} style={styles.meta}>
             {captureSourceLabel(item)} · {formatDateTime(item.createdAt)}
           </Text>
-          {itemStatusText ? (
-            <Text
-              style={[
-                styles.statusPill,
-                itemStatus === "processing" && styles.statusPillProcessing,
-                itemStatus === "needs_review" && styles.statusPillReview,
-                itemStatus === "failed" && styles.statusPillFailed
-              ]}
-            >
-              {itemStatusText}
+          {matchReason ? (
+            <Text numberOfLines={1} style={styles.searchMatchText}>
+              {matchReason}
             </Text>
           ) : null}
-        </View>
-        {itemSummary ? (
-          <Text numberOfLines={2} style={styles.summaryPreview}>
-            {itemSummary}
-          </Text>
-        ) : null}
-        {item.defaultIntent ? (
-          <Text numberOfLines={1} style={styles.intentPreview}>
-            {captureMeaningLine(item)}
-          </Text>
-        ) : null}
-        {item.note ? (
-          <Text numberOfLines={2} style={styles.notePreview}>
-            {item.note}
-          </Text>
-        ) : null}
-      </Pressable>
-    );
-  }
-
-  function renderCollectionCapture({ item }: { item: Capture }) {
-    const itemStatus = displayStatus(item);
-    const itemStatusText = captureVisibleStatus(item);
-    const itemSummary = consumerSummary(item);
-    return (
-      <View style={styles.collectionCaptureRow}>
-        <Pressable
-          onPress={() => {
-            if (selectedCollection) openCaptureFromCollection(item, selectedCollection.id);
-          }}
-          style={({ pressed }) => [styles.collectionCaptureMain, pressed && styles.pressed]}
-        >
-          <View style={styles.rowTitleLine}>
-            <Text numberOfLines={2} style={styles.captureTitle}>
-              {item.title}
-            </Text>
-          </View>
-          <View style={styles.rowMetaLine}>
-            <Text numberOfLines={1} style={styles.meta}>
-              {captureSourceLabel(item)} · {formatDateTime(item.createdAt)}
-            </Text>
-            {itemStatusText ? (
-              <Text
-                style={[
-                  styles.statusPill,
-                  itemStatus === "processing" && styles.statusPillProcessing,
-                  itemStatus === "needs_review" && styles.statusPillReview,
-                  itemStatus === "failed" && styles.statusPillFailed
-                ]}
-              >
-                {itemStatusText}
-              </Text>
-            ) : null}
-          </View>
           {itemSummary ? (
             <Text numberOfLines={2} style={styles.summaryPreview}>
               {itemSummary}
             </Text>
-          ) : null}
-          {item.defaultIntent ? (
-            <Text numberOfLines={1} style={styles.intentPreview}>
-              {captureMeaningLine(item)}
+          ) : supportLine ? (
+            <Text numberOfLines={2} style={styles.supportPreview}>
+              {supportLine}
             </Text>
           ) : null}
-        </Pressable>
+          <View style={styles.rowMeaningLine}>
+            {intentLabel ? (
+              <MeaningToken Icon={BookOpen} text={intentLabel} />
+            ) : null}
+            {collectionLabel ? (
+              <MeaningToken Icon={Folder} text={collectionLabel} />
+            ) : null}
+            {item.note ? (
+              <MeaningToken Icon={StickyNote} text={item.note} />
+            ) : null}
+          </View>
+        </View>
+      </Pressable>
+    );
+  }
+
+  function renderCapture({ item }: { item: Capture }) {
+    return renderCaptureRow({
+      item,
+      onPress: () => openCapture(item.id),
+      testID: `pc.capture.row.${item.id}`
+    });
+  }
+
+  function renderCollectionCapture({ item }: { item: Capture }) {
+    return (
+      <View style={styles.collectionCaptureRow}>
+        <View style={styles.collectionCaptureMain}>
+          {renderCaptureRow({
+            item,
+            onPress: () => {
+              if (selectedCollection) openCaptureFromCollection(item, selectedCollection.id);
+            }
+          })}
+        </View>
         <Pressable
           onPress={() => {
             if (selectedCollection) void unlinkCaptureFromCollection(selectedCollection.id, item);
@@ -2291,16 +2668,21 @@ export default function App() {
           setCollectionTitle(item.title);
           setCollectionDescription(item.description);
         }}
-        style={({ pressed }) => [styles.captureRow, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.collectionRow, pressed && styles.captureRowPressed]}
         testID={`pc.collection.row.${item.id}`}
       >
-        <View style={styles.rowTop}>
-          <Text numberOfLines={1} style={styles.captureTitle}>
-            {item.title}
-          </Text>
-          <Text style={styles.status}>
-            {item.status === "archived" ? "Archived" : `${item.captureCount} captures`}
-          </Text>
+        <View style={styles.collectionRowTop}>
+          <View style={styles.collectionIconMark}>
+            <Folder color={item.status === "archived" ? colors.muted : colors.accent} size={18} strokeWidth={2.2} />
+          </View>
+          <View style={styles.collectionRowCopy}>
+            <Text numberOfLines={1} style={styles.captureTitle}>
+              {item.title}
+            </Text>
+            <Text style={styles.meta}>
+              {item.status === "archived" ? "Archived" : `${item.captureCount} captures`}
+            </Text>
+          </View>
         </View>
         <Text numberOfLines={2} style={styles.summaryPreview}>
           {item.description}
@@ -2317,57 +2699,12 @@ export default function App() {
   }
 
   function renderSearchResult({ item }: { item: Capture }) {
-    const itemStatus = displayStatus(item);
-    const itemStatusText = captureVisibleStatus(item);
-    const itemSummary = consumerSummary(item);
-    return (
-      <Pressable
-        onPress={() => openCapture(item.id)}
-        style={({ pressed }) => [styles.captureRow, pressed && styles.pressed]}
-        testID={`pc.search.result.${item.id}`}
-      >
-        <View style={styles.rowTitleLine}>
-          <Text numberOfLines={2} style={styles.captureTitle}>
-            {item.title}
-          </Text>
-        </View>
-        <View style={styles.rowMetaLine}>
-          <Text numberOfLines={1} style={styles.meta}>
-            {captureSourceLabel(item)} · {formatDateTime(item.createdAt)}
-          </Text>
-          {itemStatusText ? (
-            <Text
-              style={[
-                styles.statusPill,
-                itemStatus === "processing" && styles.statusPillProcessing,
-                itemStatus === "needs_review" && styles.statusPillReview,
-                itemStatus === "failed" && styles.statusPillFailed
-              ]}
-            >
-              {itemStatusText}
-            </Text>
-          ) : null}
-        </View>
-        <Text numberOfLines={1} style={styles.searchMatchText}>
-          {matchReasonForCapture(item, searchQuery)}
-        </Text>
-        {itemSummary ? (
-          <Text numberOfLines={2} style={styles.summaryPreview}>
-            {itemSummary}
-          </Text>
-        ) : null}
-        {item.defaultIntent ? (
-          <Text numberOfLines={1} style={styles.intentPreview}>
-            {captureMeaningLine(item)}
-          </Text>
-        ) : null}
-        {item.note ? (
-          <Text numberOfLines={2} style={styles.notePreview}>
-            {item.note}
-          </Text>
-        ) : null}
-      </Pressable>
-    );
+    return renderCaptureRow({
+      item,
+      matchReason: matchReasonForCapture(item, searchQuery),
+      onPress: () => openCapture(item.id),
+      testID: `pc.search.result.${item.id}`
+    });
   }
 
   function renderLoadingRows() {
@@ -2415,9 +2752,7 @@ export default function App() {
           ListHeaderComponent={
             <View style={styles.collectionDetailTop}>
               <View style={styles.detailHeader}>
-                <Pressable onPress={() => selectCollection(null)} style={styles.textButton}>
-                  <Text style={styles.textButtonText}>Back</Text>
-                </Pressable>
+                <IconButton Icon={ArrowLeft} label="Back" onPress={() => selectCollection(null)} />
                 <Text style={styles.status}>
                   {selectedCollection.status === "archived" ? "Archived" : `${selectedCollection.captureCount} captures`}
                 </Text>
@@ -2508,6 +2843,118 @@ export default function App() {
     );
   }
 
+  if (collectionsOpen) {
+    const collectionSaveDisabled = !collectionTitle.trim() || !collectionDescription.trim();
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="dark-content" />
+        <View style={styles.collectionsScreen}>
+          <View style={styles.detailHeader}>
+            <IconButton Icon={ArrowLeft} label="Back" onPress={() => setCollectionsOpen(false)} />
+            <IconButton
+              Icon={Plus}
+              label="New collection"
+              onPress={() => {
+                setShowCollectionForm((current) => !current);
+                setCollectionTitle("");
+                setCollectionDescription("");
+                setCollectionDraftDirty(false);
+              }}
+              selected={showCollectionForm}
+              tone="primary"
+              testID="pc.collections.new"
+            />
+          </View>
+          <View style={styles.collectionsTitleBlock}>
+            <Text style={styles.title}>Collections</Text>
+            <Text style={styles.sourceText}>
+              Keep projects, trips, recipes, and purchase decisions tidy without making them the main way to browse.
+            </Text>
+          </View>
+          <View style={styles.collectionModeRow}>
+            {(["active", "archived"] as const).map((mode) => (
+              <Pressable
+                key={mode}
+                onPress={() => void openCollectionsScreen(mode)}
+                style={[
+                  styles.scopeChip,
+                  styles.collectionModeChip,
+                  collectionsMode === mode && styles.scopeChipSelected
+                ]}
+              >
+                <Text style={[styles.scopeChipText, collectionsMode === mode && styles.scopeChipTextSelected]}>
+                  {mode === "active" ? "Active" : "Archived"}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          {showCollectionForm ? (
+            <View style={styles.collectionCreatePanel}>
+              <Text style={styles.sheetTitle}>New collection</Text>
+              <TextInput
+                onChangeText={(value) => {
+                  setCollectionDraftDirty(true);
+                  setCollectionTitle(value);
+                }}
+                placeholder="Title"
+                placeholderTextColor={colors.muted}
+                style={styles.search}
+                testID="pc.collections.create.title"
+                value={collectionTitle}
+              />
+              <TextInput
+                multiline
+                onChangeText={(value) => {
+                  setCollectionDraftDirty(true);
+                  setCollectionDescription(value);
+                }}
+                placeholder="What belongs here"
+                placeholderTextColor={colors.muted}
+                style={styles.detailInput}
+                testID="pc.collections.create.description"
+                value={collectionDescription}
+              />
+              <Pressable
+                disabled={collectionSaveDisabled}
+                onPress={() => void saveCollection()}
+                style={[styles.primaryButton, collectionSaveDisabled && styles.disabledButton]}
+                testID="pc.collections.create.save"
+              >
+                <Text style={styles.primaryButtonText}>Create collection</Text>
+              </Pressable>
+            </View>
+          ) : null}
+          {collectionsError ? <Text style={styles.errorText}>{collectionsError}</Text> : null}
+          <FlatList
+            data={collections}
+            keyExtractor={(item) => item.id}
+            renderItem={renderCollection}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            ListEmptyComponent={
+              collectionsLoading ? (
+                renderLoadingRows()
+              ) : (
+                <View style={styles.collectionEmpty}>
+                  <Text style={styles.emptyTitle}>
+                    {collectionsMode === "archived" ? "No archived collections." : "No collections yet."}
+                  </Text>
+                  <Text style={styles.emptyText}>
+                    {collectionsMode === "archived"
+                      ? "Archived collections will appear here."
+                      : "Create one when a group of captures starts to have a purpose."}
+                  </Text>
+                </View>
+              )
+            }
+            contentContainerStyle={styles.collectionsListContent}
+          />
+          {message ? <Text style={styles.messageInline}>{message}</Text> : null}
+        </View>
+        {renderSnackbar()}
+      </SafeAreaView>
+    );
+  }
+
   if (selected) {
     const selectedArchived = isArchived(selected);
     const sourceValue = selected.sourceUrl || selected.sourceText;
@@ -2550,6 +2997,9 @@ export default function App() {
     const primaryReminderRemoved = primaryReminder ? reminderDrafts[primaryReminderKey] === "remove" : false;
     const primaryLinkedCollection = collectionRows[0];
     const primaryCollectionDecision = collectionSuggestionRows[0];
+    const primaryCollectionChoice = primaryCollectionDecision
+      ? collectionChoiceFromDecision(primaryCollectionDecision)
+      : null;
     const primaryCollectionTitle = primaryLinkedCollection?.title || primaryCollectionDecision?.title || "";
     const primaryCollectionConfidence = primaryLinkedCollection?.confidence ?? primaryCollectionDecision?.confidence ?? null;
     const primaryCollectionRationale = primaryLinkedCollection?.rationale || primaryCollectionDecision?.rationale;
@@ -2559,13 +3009,9 @@ export default function App() {
     const reminderSentenceValue = primaryReminder && !primaryReminderRemoved
       ? reminderLabel(primaryReminder)
       : "no reminder";
-    const reminderStateLabel = primaryReminder
-      ? primaryReminderRemoved
-        ? "Removed"
-        : collectionConfidenceLabel(primaryReminder.confidence)
-      : "None";
     const pendingAutoCollection = Boolean(collectionChoiceSaving?.startsWith("auto-suggestion:"));
     const selectedReviewState = reviewStatusCue(selected, pendingAutoCollection, selectedReviewReasons.length > 0);
+    const showReviewStateText = selectedReviewState !== "Ready" && selectedReviewState !== captureStatusLabel(selected);
     const otherActiveCollectionSuggestions = collectionSuggestionRows
       .slice(primaryCollectionDecision ? 1 : 0, 3)
       .map((decision, offset) => ({ decision, index: (primaryCollectionDecision ? 1 : 0) + offset }));
@@ -2575,6 +3021,7 @@ export default function App() {
       .slice(0, 3);
     const collectionActionPending = Boolean(collectionChoiceSaving);
     const urlEvidenceNotice = urlEvidenceMessage(selected.urlEvidence);
+    const selectedSourceMeta = `${captureSourceLabel(selected)} · ${formatDateTime(selected.createdAt)}`;
     const noteStatusLabel =
       noteSaveState === "saving"
         ? "Saving..."
@@ -2585,6 +3032,21 @@ export default function App() {
             : draftNoteDirty
               ? "Autosaves"
               : "";
+    const noteHasText = Boolean(draftNote.trim());
+    const showNoteEditor = noteExpanded;
+    const reviewHasPendingChanges = Boolean(
+      draftTitleDirty ||
+        draftNoteDirty ||
+        draftIntentDirty ||
+        Object.keys(reminderDrafts).length ||
+        Object.keys(collectionDrafts).length
+    );
+    const reviewSupportText = draftIntentDirty
+      ? `Changed from ${humanize(aiIntentValue) || "the original suggestion"}`
+      : !primaryCollectionTitle
+        ? "A capture can stay without a collection."
+        : "";
+    const showReviewFooter = !collectionPickerOpen && (reviewHasPendingChanges || collectionActionPending);
     const collectionPickerContent = collectionPickerOpen ? (
       <View style={styles.collectionPicker}>
         <View style={styles.sheetHeader}>
@@ -2600,13 +3062,28 @@ export default function App() {
         {primaryCollectionTitle ? (
           <View style={styles.currentChoiceRow}>
             <View style={styles.suggestionValue}>
-              <Text style={styles.quickLabel}>Selected</Text>
+              <Text style={styles.quickLabel}>{primaryLinkedCollection ? "Selected" : "Suggestion"}</Text>
               <Text style={styles.suggestionText}>{primaryCollectionTitle}</Text>
               <Text style={styles.meta}>{selectedCollectionState}</Text>
             </View>
             {primaryLinkedCollection ? (
-              <Pressable onPress={() => void unlinkCollectionFromCapture(primaryLinkedCollection.id)} hitSlop={8}>
-                <Text style={styles.suggestionAction}>Remove</Text>
+              <View style={styles.suggestionActions}>
+                <Pressable onPress={() => void openCollectionSettings(primaryLinkedCollection.id)} hitSlop={8}>
+                  <Text style={styles.suggestionAction}>Manage</Text>
+                </Pressable>
+                <Pressable onPress={() => void unlinkCollectionFromCapture(primaryLinkedCollection.id)} hitSlop={8}>
+                  <Text style={styles.suggestionAction}>Remove</Text>
+                </Pressable>
+              </View>
+            ) : primaryCollectionDecision ? (
+              <Pressable
+                disabled={!primaryCollectionChoice || Boolean(collectionChoiceSaving)}
+                onPress={() => void autosaveCollectionDecision(primaryCollectionDecision, 0)}
+                hitSlop={8}
+              >
+                <Text style={styles.suggestionAction}>
+                  {collectionChoiceSaving === "suggestion:0" ? "Selecting..." : "Use suggestion"}
+                </Text>
               </Pressable>
             ) : null}
           </View>
@@ -2672,25 +3149,34 @@ export default function App() {
             value={collectionPickerQuery}
           />
           {collectionPickerRows.slice(0, 6).map((collection) => (
-            <Pressable
+            <View
               key={collection.id}
-              disabled={Boolean(collectionChoiceSaving)}
-              onPress={() => void sendCaptureCollectionChoice({
-                choice: { type: "existing", collectionId: collection.id },
-                source: "manual",
-                dismissCurrentCollectionSuggestions: collectionSuggestionRows.length > 0,
-                savingKey: `existing:${collection.id}`
-              })}
               style={styles.collectionPickerRow}
             >
               <View style={styles.suggestionValue}>
                 <Text style={styles.suggestionText}>{collection.title}</Text>
                 <Text numberOfLines={2} style={styles.meta}>{collection.description}</Text>
               </View>
-              <Text style={styles.suggestionAction}>
-                {collectionChoiceSaving === `existing:${collection.id}` ? "Selecting..." : "Use"}
-              </Text>
-            </Pressable>
+              <View style={styles.suggestionActions}>
+                <Pressable
+                  disabled={Boolean(collectionChoiceSaving)}
+                  onPress={() => void sendCaptureCollectionChoice({
+                    choice: { type: "existing", collectionId: collection.id },
+                    source: "manual",
+                    dismissCurrentCollectionSuggestions: collectionSuggestionRows.length > 0,
+                    savingKey: `existing:${collection.id}`
+                  })}
+                  hitSlop={8}
+                >
+                  <Text style={styles.suggestionAction}>
+                    {collectionChoiceSaving === `existing:${collection.id}` ? "Selecting..." : "Use"}
+                  </Text>
+                </Pressable>
+                <Pressable onPress={() => void openCollectionSettings(collection.id)} hitSlop={8}>
+                  <Text style={styles.suggestionAction}>Manage</Text>
+                </Pressable>
+              </View>
+            </View>
           ))}
           {!collectionPickerRows.length ? (
             <Text style={styles.meta}>No matching active collections.</Text>
@@ -2760,11 +3246,17 @@ export default function App() {
           style={styles.reviewShell}
         >
           <ScrollView
-            contentContainerStyle={[styles.detail, styles.reviewDetail]}
+            contentContainerStyle={[
+              styles.detail,
+              styles.reviewDetail,
+              !showReviewFooter && styles.reviewDetailNoFooter
+            ]}
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.detailHeader}>
-              <Pressable
+              <IconButton
+                Icon={ArrowLeft}
+                label="Back"
                 onPress={() => {
                   if (captureReturnCollectionId) {
                     const collectionId = captureReturnCollectionId;
@@ -2774,10 +3266,7 @@ export default function App() {
                     selectCapture(null);
                   }
                 }}
-                style={styles.textButton}
-              >
-                <Text style={styles.textButtonText}>Back</Text>
-              </Pressable>
+              />
               {showStatus ? (
                 <Text
                   style={[
@@ -2792,9 +3281,66 @@ export default function App() {
               ) : null}
             </View>
             <View style={styles.quickEditBlock}>
-              <View style={styles.reviewHeroTop}>
-                <Text style={styles.kicker}>Meaning</Text>
-                <Text style={styles.reviewState}>{selectedReviewState}</Text>
+              <View style={styles.reviewSentence}>
+                <View style={styles.reviewPhrase}>
+                  <Text style={styles.reviewSentenceText}>Saved as</Text>
+                  <Pressable
+                    android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
+                    onLongPress={() => showRationale("Why this intent?", selected.intentRationale)}
+                    onPress={() => setQuickIntentOpen((current) => !current)}
+                    style={({ pressed }) => [
+                      styles.sentenceChip,
+                      quickIntentOpen && styles.sentenceChipActive,
+                      pressed && styles.subtlePressed
+                    ]}
+                  >
+                    <Text numberOfLines={2} style={styles.sentenceChipText}>{quickIntentLabel}</Text>
+                  </Pressable>
+                </View>
+                {primaryCollectionTitle || pendingAutoCollection ? (
+                  <View style={styles.reviewPhrase}>
+                    <Text style={styles.reviewSentenceText}>in</Text>
+                    <Pressable
+                      android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
+                      onLongPress={() => showRationale("Why this collection?", primaryCollectionRationale)}
+                      onPress={() => void openCollectionPicker()}
+                      style={({ pressed }) => [
+                        styles.sentenceChip,
+                        collectionPickerOpen && styles.sentenceChipActive,
+                        pressed && styles.subtlePressed
+                      ]}
+                    >
+                      <Text numberOfLines={2} style={styles.sentenceChipText}>
+                        {pendingAutoCollection ? "choosing..." : primaryCollectionTitle}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+                {primaryReminder ? (
+                  <View style={styles.reviewPhrase}>
+                    <Text style={styles.reviewSentenceText}>Reminder idea:</Text>
+                    <Pressable
+                      android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
+                      onLongPress={() => showRationale("Why this reminder?", primaryReminder.rationale)}
+                      onPress={() => {
+                        const next = { ...reminderDrafts };
+                        if (primaryReminderRemoved) delete next[primaryReminderKey];
+                        else next[primaryReminderKey] = "remove";
+                        setReminderDrafts(next);
+                        updateSelectedReviewDraft({ reminders: next });
+                      }}
+                      style={({ pressed }) => [
+                        styles.sentenceChip,
+                        primaryReminderRemoved && styles.sentenceChipMuted,
+                        pressed && styles.subtlePressed
+                      ]}
+                    >
+                      <Text numberOfLines={2} style={[styles.sentenceChipText, primaryReminderRemoved && styles.suggestionTextMuted]}>
+                        {reminderSentenceValue}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
               </View>
               <TextInput
                 multiline
@@ -2809,74 +3355,54 @@ export default function App() {
                 testID="pc.review.title"
                 value={draftTitle}
               />
-              <View style={styles.reviewSentence}>
-                <Text style={styles.reviewSentenceText}>Saved as</Text>
-                <Pressable
-                  onLongPress={() => showRationale("Why this intent?", selected.intentRationale)}
-                  onPress={() => setQuickIntentOpen((current) => !current)}
-                  style={[styles.sentenceChip, quickIntentOpen && styles.sentenceChipActive]}
-                >
-                  <Text numberOfLines={2} style={styles.sentenceChipText}>{quickIntentLabel}</Text>
-                </Pressable>
-                {primaryCollectionTitle || pendingAutoCollection ? (
-                  <>
-                    <Text style={styles.reviewSentenceText}>in</Text>
-                    <Pressable
-                      onLongPress={() => showRationale("Why this collection?", primaryCollectionRationale)}
-                      onPress={() => void openCollectionPicker()}
-                      style={[styles.sentenceChip, collectionPickerOpen && styles.sentenceChipActive]}
-                    >
-                      <Text numberOfLines={2} style={styles.sentenceChipText}>
-                        {pendingAutoCollection ? "choosing..." : primaryCollectionTitle}
-                      </Text>
-                    </Pressable>
-                  </>
-                ) : null}
-                {primaryReminder ? (
-                  <>
-                    <Text style={styles.reviewSentenceText}>Reminder idea:</Text>
-                    <Pressable
-                      onLongPress={() => showRationale("Why this reminder?", primaryReminder.rationale)}
-                      onPress={() => {
-                        const next = { ...reminderDrafts };
-                        if (primaryReminderRemoved) delete next[primaryReminderKey];
-                        else next[primaryReminderKey] = "remove";
-                        setReminderDrafts(next);
-                        updateSelectedReviewDraft({ reminders: next });
-                      }}
-                      style={[styles.sentenceChip, primaryReminderRemoved && styles.sentenceChipMuted]}
-                    >
-                      <Text numberOfLines={2} style={[styles.sentenceChipText, primaryReminderRemoved && styles.suggestionTextMuted]}>
-                        {reminderSentenceValue}
-                      </Text>
-                    </Pressable>
-                  </>
-                ) : null}
+              <View style={styles.reviewSourceRow}>
+                <SourceMark
+                  capture={selected}
+                  failedFavicons={faviconFailures}
+                  onFaviconFailure={markFaviconFailed}
+                  size="detail"
+                />
+                <Text numberOfLines={1} style={styles.reviewSourceMeta}>{selectedSourceMeta}</Text>
               </View>
-              <Text style={styles.reviewSentenceSubtext}>
-                {draftIntentDirty
-                  ? `Changed from ${humanize(aiIntentValue) || "the original suggestion"}`
-                  : primaryCollectionTitle
-                    ? selectedCollectionState
-                    : "A capture can stay without a collection."}
-                {primaryReminder ? ` · Reminder ${reminderStateLabel.toLowerCase()}` : ""}
-              </Text>
-              {!primaryCollectionTitle && !pendingAutoCollection ? (
-                <Pressable onPress={() => void openCollectionPicker()} style={styles.addCollectionButton}>
+              {showReviewStateText ? (
+                <Text style={styles.reviewSentenceSubtext}>{selectedReviewState}</Text>
+              ) : null}
+              {reviewSupportText ? (
+                <Text style={styles.reviewSentenceSubtext}>{reviewSupportText}</Text>
+              ) : null}
+              {primaryCollectionTitle || pendingAutoCollection ? (
+                <View style={styles.collectionInlineActions}>
+                  <Pressable
+                    onPress={() => void openCollectionPicker()}
+                    style={({ pressed }) => [styles.addCollectionButton, pressed && styles.subtlePressed]}
+                  >
+                    <Text style={styles.inlineAction}>
+                      {pendingAutoCollection ? "Choose collection" : "Change collection"}
+                    </Text>
+                  </Pressable>
+                  {primaryLinkedCollection ? (
+                    <Pressable
+                      onPress={() => void openCollectionSettings(primaryLinkedCollection.id)}
+                      style={({ pressed }) => [styles.addCollectionButton, pressed && styles.subtlePressed]}
+                    >
+                      <Text style={styles.inlineAction}>Manage collection</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : (
+                <Pressable
+                  onPress={() => void openCollectionPicker()}
+                  style={({ pressed }) => [styles.addCollectionButton, pressed && styles.subtlePressed]}
+                >
                   <Text style={styles.inlineAction}>Add to collection</Text>
                 </Pressable>
-              ) : null}
+              )}
               {quickBecause ? (
-                <View style={styles.rationaleBlock}>
-                  <Text style={styles.becauseText}>{quickBecause}</Text>
-                  <Pressable
-                    onLongPress={() => showRationale("Why?", primaryRationale)}
-                    onPress={() => showRationale("Why?", primaryRationale)}
-                    hitSlop={8}
-                  >
-                    <Text style={styles.hintText}>Why</Text>
-                  </Pressable>
-                </View>
+                <IconButton
+                  Icon={Info}
+                  label={quickBecause}
+                  onPress={() => showRationale("Suggestion", primaryRationale)}
+                />
               ) : null}
             {quickIntentOpen ? (
               <View style={styles.quickOptions}>
@@ -2938,58 +3464,105 @@ export default function App() {
             </View>
           ) : null}
             <View style={styles.sourceBlock}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.meta}>Context note</Text>
-              {noteStatusLabel ? (
-                <Text style={[styles.noteSaveState, noteSaveState === "error" && styles.noteSaveStateError]}>
-                  {noteStatusLabel}
-                </Text>
-              ) : null}
-            </View>
-            <TextInput
-              multiline
-              onChangeText={(value) => {
-                setDraftNoteDirty(true);
-                setDraftNote(value);
-                updateSelectedReviewDraft({ note: value, noteDirty: true });
-              }}
-              placeholder="Add why you saved this, if anything is missing"
-              placeholderTextColor={colors.muted}
-              style={styles.noteInput}
-              testID="pc.review.note"
-              value={draftNote}
-            />
-          </View>
-            <View style={styles.sourceBlock}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.meta}>Source</Text>
-              {sourceValue ? (
-                <Pressable onPress={() => void copySource()} hitSlop={8}>
-                  <Text style={styles.inlineAction}>Copy</Text>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.meta}>{noteHasText ? "Note" : "Add note"}</Text>
+                {noteStatusLabel ? (
+                  <Text style={[styles.noteSaveState, noteSaveState === "error" && styles.noteSaveStateError]}>
+                    {noteStatusLabel}
+                  </Text>
+                ) : null}
+              </View>
+              {showNoteEditor ? (
+                <TextInput
+                  multiline
+                  onChangeText={(value) => {
+                    setDraftNoteDirty(true);
+                    setDraftNote(value);
+                    updateSelectedReviewDraft({ note: value, noteDirty: true });
+                  }}
+                  placeholder="Why did you save this?"
+                  placeholderTextColor={colors.muted}
+                  style={styles.noteInput}
+                  testID="pc.review.note"
+                  value={draftNote}
+                />
+              ) : (
+                <Pressable
+                  onPress={() => setNoteExpanded(true)}
+                  style={({ pressed }) => [styles.compactActionRow, pressed && styles.subtlePressed]}
+                >
+                  <StickyNote color={colors.muted} size={18} strokeWidth={2.2} />
+                  <Text numberOfLines={1} style={styles.compactActionText}>
+                    {noteHasText ? draftNote : "Add note"}
+                  </Text>
+                  <Pencil color={colors.muted} size={16} strokeWidth={2.2} />
                 </Pressable>
+              )}
+            </View>
+            <View style={styles.sourceBlock}>
+              <View style={styles.sourceDisclosureRow}>
+                <Pressable
+                  disabled={!sourceValue}
+                  onPress={() => setSourceExpanded((current) => !current)}
+                  style={({ pressed }) => [styles.sourceDisclosureCopy, pressed && sourceValue && styles.subtlePressed]}
+                >
+                  <Text style={styles.meta}>Source</Text>
+                  <Text numberOfLines={1} style={styles.reviewSourceMeta}>{captureSourceLabel(selected)}</Text>
+                </Pressable>
+                <View style={styles.sourceDisclosureActions}>
+                  {selected.sourceUrl ? (
+                    <IconButton
+                      Icon={ExternalLink}
+                      label="Open source"
+                      onPress={() => void Linking.openURL(selected.sourceUrl || "")}
+                    />
+                  ) : null}
+                  {sourceValue ? (
+                    <IconButton Icon={Copy} label="Copy source" onPress={() => void copySource()} />
+                  ) : null}
+                  {sourceValue ? (
+                    <IconButton
+                      Icon={MoreHorizontal}
+                      label={sourceExpanded ? "Hide source details" : "Show source details"}
+                      onPress={() => setSourceExpanded((current) => !current)}
+                    />
+                  ) : null}
+                </View>
+              </View>
+              {sourceExpanded && sourceValue ? (
+                <Text selectable style={styles.sourceText}>{sourceValue}</Text>
               ) : null}
             </View>
-            <Text selectable style={styles.sourceText}>{sourceValue}</Text>
-          </View>
-            <Pressable onPress={confirmArchive} style={styles.secondaryButton} testID="pc.capture.archive-toggle">
+            <Pressable
+              onPress={confirmArchive}
+              style={({ pressed }) => [styles.destructiveRow, pressed && styles.subtlePressed]}
+              testID="pc.capture.archive-toggle"
+            >
+              <Archive color={selectedArchived ? colors.ink : colors.danger} size={18} strokeWidth={2.2} />
               <Text style={selectedArchived ? styles.secondaryButtonText : styles.dangerButtonText}>
                 {selectedArchived ? "Restore capture" : "Archive capture"}
               </Text>
             </Pressable>
             {message ? <Text style={styles.message}>{message}</Text> : null}
           </ScrollView>
+          {showReviewFooter ? (
           <View style={styles.reviewFooter}>
-            <Pressable
-              disabled={collectionActionPending}
-              onPress={() => void saveReviewDecisions()}
-              style={[styles.primaryButton, collectionActionPending && styles.disabledButton]}
-              testID="pc.review.save"
-            >
-              <Text style={styles.primaryButtonText}>
-                {collectionActionPending ? "Updating collection..." : "Save review"}
-              </Text>
-            </Pressable>
+              <Pressable
+                disabled={collectionActionPending}
+                onPress={() => void saveReviewDecisions()}
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  pressed && !collectionActionPending && styles.primaryButtonPressed,
+                  collectionActionPending && styles.disabledButton
+                ]}
+                testID="pc.review.save"
+              >
+                <Text style={styles.primaryButtonText}>
+                  {collectionActionPending ? "Updating collection..." : "Save review"}
+                </Text>
+              </Pressable>
           </View>
+          ) : null}
         </KeyboardAvoidingView>
         </Animated.View>
         {renderSnackbar()}
@@ -3050,11 +3623,12 @@ export default function App() {
 
   if (searchOpen) {
     const searchIsLoading = searchScope !== "active" && archivedCapturesLoading && !archivedCapturesLoaded;
+    const showSearchScopes = searchScopeOpen || Boolean(searchQuery.trim());
     const emptyTitle = searchQuery.trim()
       ? "No matches yet."
       : searchScope === "archived"
         ? "No archived captures."
-        : "Start with what you remember.";
+        : "What do you remember?";
     const emptyText = searchQuery.trim()
       ? "Try a place, product, source, collection, note, date, or why you saved it."
       : searchScope === "archived"
@@ -3085,34 +3659,66 @@ export default function App() {
           >
             <View style={styles.searchTop}>
               <View style={styles.searchBarRow}>
-                <Pressable onPress={() => setSearchOpen(false)} style={styles.searchBackButton}>
-                  <Text style={styles.textButtonText}>Back</Text>
-                </Pressable>
-                <TextInput
-                  autoFocus
-                  onChangeText={setSearchQuery}
-                  placeholder="Search anything you saved"
-                  placeholderTextColor={colors.muted}
-                  returnKeyType="search"
-                  style={styles.searchInputLarge}
-                  testID="pc.search.input"
-                  value={searchQuery}
+                <IconButton Icon={ArrowLeft} label="Back" onPress={() => setSearchOpen(false)} />
+                <View style={styles.searchInputWrap}>
+                  <Search color={colors.muted} size={19} strokeWidth={2.3} />
+                  <TextInput
+                    autoFocus
+                    onChangeText={setSearchQuery}
+                    placeholder="Search saved things"
+                    placeholderTextColor={colors.muted}
+                    returnKeyType="search"
+                    style={styles.searchInputNative}
+                    testID="pc.search.input"
+                    value={searchQuery}
+                  />
+                  {searchQuery ? (
+                    <Pressable
+                      accessibilityLabel="Clear search"
+                      accessibilityRole="button"
+                      hitSlop={8}
+                      onPress={() => setSearchQuery("")}
+                    >
+                      <X color={colors.muted} size={18} strokeWidth={2.4} />
+                    </Pressable>
+                  ) : null}
+                </View>
+                <IconButton
+                  Icon={SlidersHorizontal}
+                  label="Search filters"
+                  onPress={() => setSearchScopeOpen((current) => !current)}
+                  selected={searchScopeOpen}
                 />
               </View>
-              <View style={styles.scopeRow}>
-                {(["active", "archived", "all"] as const).map((scope) => (
-                  <Pressable
-                    key={scope}
-                    onPress={() => setSearchScope(scope)}
-                    style={[styles.scopeChip, searchScope === scope && styles.scopeChipSelected]}
-                    testID={`pc.search.scope.${scope}`}
-                  >
-                    <Text style={[styles.scopeChipText, searchScope === scope && styles.scopeChipTextSelected]}>
-                      {scope === "active" ? "Active" : scope === "archived" ? "Archived" : "All"}
-                    </Text>
-                  </Pressable>
-                ))}
+              {showSearchScopes ? (
+              <View style={styles.searchAssistRow}>
+                <Text style={styles.searchScopeLabel}>
+                  {searchScope === "active"
+                    ? "Active captures"
+                    : searchScope === "archived"
+                      ? "Archived captures"
+                      : "All captures"}
+                </Text>
+                <View style={styles.scopeRow}>
+                  {(["active", "archived", "all"] as const).map((scope) => (
+                    <Pressable
+                      key={scope}
+                      onPress={() => setSearchScope(scope)}
+                      style={({ pressed }) => [
+                        styles.scopeChip,
+                        searchScope === scope && styles.scopeChipSelected,
+                        pressed && styles.subtlePressed
+                      ]}
+                      testID={`pc.search.scope.${scope}`}
+                    >
+                      <Text style={[styles.scopeChipText, searchScope === scope && styles.scopeChipTextSelected]}>
+                        {scope === "active" ? "Active" : scope === "archived" ? "Archived" : "All"}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
               </View>
+              ) : null}
               {archivedCapturesError && searchScope !== "active" ? (
                 <Text style={styles.errorText}>{archivedCapturesError}</Text>
               ) : null}
@@ -3129,6 +3735,20 @@ export default function App() {
                   <View style={styles.searchEmpty}>
                     <Text style={styles.emptyTitle}>{emptyTitle}</Text>
                     <Text style={styles.emptyText}>{emptyText}</Text>
+                    {!searchQuery.trim() && searchScope === "active" ? (
+                      <View style={styles.promptChips}>
+                        {SEARCH_PROMPTS.map(({ label, query, Icon }) => (
+                          <Pressable
+                            key={query}
+                            onPress={() => setSearchQuery(query)}
+                            style={({ pressed }) => [styles.promptChip, pressed && styles.subtlePressed]}
+                          >
+                            <Icon color={colors.muted} size={15} strokeWidth={2.2} />
+                            <Text style={styles.promptChipText}>{label}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    ) : null}
                   </View>
                 )
               }
@@ -3146,6 +3766,10 @@ export default function App() {
   const homeCountLabel = capturesLoading && !homeCaptures.length
     ? "Loading captures"
     : `${homeCaptures.length} recent ${homeCaptures.length === 1 ? "capture" : "captures"}`;
+  const captureSheetKeyboardOffset = Platform.OS === "android" && showCaptureComposer ? keyboardHeight : 0;
+  const captureSheetMaxHeight = captureSheetKeyboardOffset
+    ? Math.max(220, windowHeight - captureSheetKeyboardOffset - 40)
+    : undefined;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -3158,60 +3782,51 @@ export default function App() {
               <Text style={styles.title}>Recent Captures</Text>
             </View>
             {session ? (
-              <Pressable onPress={openAccountActions} style={styles.accountButton} hitSlop={8}>
-                <Text style={styles.accountButtonText}>Account</Text>
-              </Pressable>
+              <IconButton Icon={Settings} label="Account and settings" onPress={openAccountActions} />
             ) : null}
           </View>
+          {quickLookCount ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                const first = homeCaptures.find((capture) => displayStatus(capture) === "needs_review" || displayStatus(capture) === "failed");
+                if (first) openCapture(first.id);
+              }}
+              style={({ pressed }) => [styles.quickLookSummary, pressed && styles.subtlePressed]}
+              testID="pc.home.quick-look"
+            >
+              <Info color={colors.review} size={15} strokeWidth={2.4} />
+              <Text style={styles.quickLookSummaryText}>
+                {quickLookCount === 1 ? "1 needs a quick look" : `${quickLookCount} need a quick look`}
+              </Text>
+            </Pressable>
+          ) : null}
           <View style={styles.homeActionRow}>
             <Pressable
+              android_ripple={{ color: "rgba(31, 122, 91, 0.08)" }}
               onPress={openSearch}
-              style={({ pressed }) => [styles.searchAffordance, pressed && styles.pressed]}
+              style={({ pressed }) => [styles.searchAffordance, pressed && styles.subtlePressed]}
               testID="pc.home.search"
             >
+              <Search color={colors.muted} size={20} strokeWidth={2.3} />
               <View style={styles.searchAffordanceCopy}>
                 <Text style={styles.searchAffordanceText}>Search anything you saved</Text>
                 <Text numberOfLines={1} style={styles.searchAffordanceMeta}>
                   Places, notes, sources, collections
                 </Text>
               </View>
-              <Text style={styles.searchAffordanceAction}>Search</Text>
+              <SlidersHorizontal color={colors.accent} size={18} strokeWidth={2.3} />
             </Pressable>
             <Pressable
+              android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
               accessibilityLabel="Paste link or note"
-              onPress={() => setShowCaptureComposer((current) => !current)}
-              style={({ pressed }) => [styles.fallbackCaptureToggle, pressed && styles.pressed]}
+              onPress={() => setShowCaptureComposer(true)}
+              style={({ pressed }) => [styles.fallbackCaptureToggle, pressed && styles.subtlePressed]}
               testID="pc.capture.open"
             >
-              <Text style={styles.fallbackCaptureToggleText}>+</Text>
+              <Plus color={colors.paper} size={25} strokeWidth={2.4} />
             </Pressable>
           </View>
-          {showCaptureComposer ? (
-            <View style={styles.captureBox}>
-              <TextInput
-                multiline
-                onChangeText={setSourceDraft}
-                placeholder="Paste a link or note"
-                placeholderTextColor={colors.muted}
-                style={styles.captureInput}
-                testID="pc.capture.source"
-                value={sourceDraft}
-              />
-              <Pressable
-                disabled={savingCapture || !sourceDraft.trim()}
-                onPress={() => void saveCaptureSource()}
-                style={[
-                  styles.primaryButton,
-                  (savingCapture || !sourceDraft.trim()) && styles.disabledButton
-                ]}
-                testID="pc.capture.save"
-              >
-                <Text style={styles.primaryButtonText}>
-                  {savingCapture ? "Saving..." : "Save capture"}
-                </Text>
-              </Pressable>
-            </View>
-          ) : null}
           {message ? <Text style={styles.messageInline}>{message}</Text> : null}
         </View>
         <FlatList
@@ -3253,6 +3868,92 @@ export default function App() {
           keyboardShouldPersistTaps="handled"
         />
       </View>
+      {showCaptureComposer ? (
+        <View style={styles.sheetLayer} pointerEvents="box-none">
+          <Pressable
+            accessibilityLabel="Close capture composer"
+            onPress={() => setShowCaptureComposer(false)}
+            style={styles.sheetBackdrop}
+          />
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            pointerEvents="box-none"
+            style={styles.sheetKeyboard}
+          >
+            <Animated.View
+              style={[
+                styles.captureSheet,
+                {
+                  marginBottom: captureSheetKeyboardOffset,
+                  maxHeight: captureSheetMaxHeight,
+                  opacity: captureComposerMotion,
+                  transform: [
+                    {
+                      translateY: captureComposerMotion.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [28, 0]
+                      })
+                    }
+                  ]
+                }
+              ]}
+            >
+              <View style={styles.sheetGrabber} />
+              <View style={styles.captureSheetHeader}>
+                <View style={styles.sheetHeaderCopy}>
+                  <Text style={styles.sheetTitle}>New capture</Text>
+                </View>
+                <View style={styles.sheetActions}>
+                  <IconButton Icon={X} label="Close" onPress={() => setShowCaptureComposer(false)} />
+                  <IconButton
+                    Icon={Check}
+                    label={savingCapture ? "Saving capture" : "Save capture"}
+                    disabled={savingCapture || !sourceDraft.trim()}
+                    onPress={() => void saveCaptureSource()}
+                    tone="primary"
+                    testID="pc.capture.save"
+                  />
+                </View>
+              </View>
+              <ScrollView
+                contentContainerStyle={styles.captureSheetBodyContent}
+                keyboardShouldPersistTaps="handled"
+                style={styles.captureSheetBody}
+              >
+                <TextInput
+                  autoFocus
+                  multiline
+                  onChangeText={setSourceDraft}
+                  placeholder="Paste a link or note"
+                  placeholderTextColor={colors.muted}
+                  style={styles.captureInput}
+                  testID="pc.capture.source"
+                  value={sourceDraft}
+                />
+                {showCaptureContext ? (
+                  <TextInput
+                    multiline
+                    onChangeText={setSourceContextDraft}
+                    placeholder="Why did you save this?"
+                    placeholderTextColor={colors.muted}
+                    style={styles.captureContextInput}
+                    testID="pc.capture.context"
+                    value={sourceContextDraft}
+                  />
+                ) : (
+                  <Pressable
+                    onPress={() => setShowCaptureContext(true)}
+                    style={({ pressed }) => [styles.addContextButton, pressed && styles.subtlePressed]}
+                  >
+                    <Plus color={colors.muted} size={16} strokeWidth={2.3} />
+                    <Text style={styles.inlineAction}>Add context</Text>
+                  </Pressable>
+                )}
+              </ScrollView>
+            </Animated.View>
+          </KeyboardAvoidingView>
+        </View>
+      ) : null}
       {renderSnackbar()}
     </SafeAreaView>
   );
@@ -3302,8 +4003,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 12,
     fontWeight: "700",
-    letterSpacing: 0,
-    textTransform: "uppercase"
+    letterSpacing: 0
   },
   title: {
     color: colors.ink,
@@ -3312,14 +4012,33 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: 31
   },
-  accountButton: {
+  iconButton: {
     alignItems: "center",
+    backgroundColor: "transparent",
+    borderRadius: 8,
     justifyContent: "center",
     minHeight: 44,
-    paddingHorizontal: 4
+    minWidth: 44
   },
-  accountButtonText: {
-    color: colors.muted,
+  iconButtonSelected: {
+    backgroundColor: colors.accentSoft
+  },
+  iconButtonDisabled: {
+    opacity: 0.42
+  },
+  quickLookSummary: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: colors.reviewSoft,
+    borderRadius: 8,
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 10,
+    minHeight: 36,
+    paddingHorizontal: 10
+  },
+  quickLookSummaryText: {
+    color: colors.review,
     fontSize: 13,
     fontWeight: "700"
   },
@@ -3334,17 +4053,17 @@ const styles = StyleSheet.create({
   },
   searchAffordance: {
     alignItems: "center",
-    backgroundColor: colors.surface,
-    borderColor: colors.line,
+    backgroundColor: colors.soft,
+    borderColor: "transparent",
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     flex: 1,
     flexDirection: "row",
-    gap: 5,
+    gap: 10,
     justifyContent: "space-between",
     minHeight: 58,
     paddingHorizontal: 14,
-    paddingVertical: 11
+    paddingVertical: 10
   },
   homeActionRow: {
     alignItems: "stretch",
@@ -3359,14 +4078,14 @@ const styles = StyleSheet.create({
   },
   searchAffordanceText: {
     color: colors.ink,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "800",
-    lineHeight: 21
+    lineHeight: 20
   },
   searchAffordanceMeta: {
     color: colors.muted,
-    fontSize: 13,
-    lineHeight: 18
+    fontSize: 12,
+    lineHeight: 17
   },
   searchAffordanceAction: {
     color: colors.accent,
@@ -3375,115 +4094,280 @@ const styles = StyleSheet.create({
   },
   fallbackCaptureToggle: {
     alignItems: "center",
-    backgroundColor: colors.ink,
-    borderRadius: 8,
+    backgroundColor: colors.accent,
+    borderRadius: 28,
     justifyContent: "center",
-    minHeight: 58,
-    width: 50
-  },
-  fallbackCaptureToggleText: {
-    color: colors.paper,
-    fontSize: 26,
-    fontWeight: "500",
-    lineHeight: 30
+    minHeight: 56,
+    width: 56
   },
   searchScreen: {
     flex: 1
   },
   searchTop: {
     paddingHorizontal: 22,
-    paddingTop: 14
+    paddingTop: 14,
+    paddingBottom: 6
   },
   searchBarRow: {
     alignItems: "center",
     flexDirection: "row",
     gap: 12
   },
-  searchBackButton: {
-    justifyContent: "center",
-    minHeight: 50
-  },
-  searchInputLarge: {
+  searchInputWrap: {
+    alignItems: "center",
     backgroundColor: colors.soft,
     borderRadius: 8,
     flex: 1,
-    color: colors.ink,
-    fontSize: 17,
-    fontWeight: "600",
-    minHeight: 50,
-    paddingHorizontal: 14,
-    paddingVertical: 12
-  },
-  scopeRow: {
     flexDirection: "row",
     gap: 8,
-    paddingTop: 12
+    minHeight: 50,
+    paddingHorizontal: 12
+  },
+  searchInputNative: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 17,
+    fontWeight: "600",
+    minHeight: 48,
+    paddingVertical: 10
+  },
+  searchAssistRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between",
+    paddingTop: 8
+  },
+  searchScopeLabel: {
+    color: colors.muted,
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 15
+  },
+  scopeRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 4
   },
   scopeChip: {
     alignItems: "center",
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 6,
     justifyContent: "center",
-    minHeight: 38,
-    paddingHorizontal: 12
+    minHeight: 28,
+    paddingHorizontal: 7
   },
   scopeChipSelected: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink
+    backgroundColor: colors.soft
   },
   scopeChipText: {
     color: colors.muted,
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "700"
   },
   scopeChipTextSelected: {
-    color: colors.paper
-  },
-  captureBox: {
-    backgroundColor: colors.surface,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: 10,
-    marginTop: 10,
-    padding: 12
+    color: colors.ink
   },
   captureInput: {
     backgroundColor: colors.soft,
     borderRadius: 8,
     color: colors.ink,
-    fontSize: 15,
-    minHeight: 78,
+    fontSize: 16,
+    lineHeight: 22,
+    minHeight: 74,
     paddingHorizontal: 14,
     paddingVertical: 12,
     textAlignVertical: "top"
   },
+  captureContextInput: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    color: colors.ink,
+    fontSize: 15,
+    lineHeight: 21,
+    minHeight: 58,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    textAlignVertical: "top"
+  },
+  addContextButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    gap: 7,
+    minHeight: 44,
+    paddingHorizontal: 2
+  },
+  sheetLayer: {
+    bottom: 0,
+    justifyContent: "flex-end",
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0
+  },
+  sheetBackdrop: {
+    backgroundColor: "rgba(29, 33, 31, 0.18)",
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0
+  },
+  sheetKeyboard: {
+    flex: 1,
+    justifyContent: "flex-end",
+    width: "100%"
+  },
+  captureSheet: {
+    backgroundColor: colors.surface,
+    borderTopColor: colors.line,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 14,
+    paddingBottom: Platform.OS === "android" ? 18 : 26,
+    paddingHorizontal: 22,
+    paddingTop: 8
+  },
+  captureSheetBody: {
+    flexShrink: 1
+  },
+  captureSheetBodyContent: {
+    gap: 14,
+    paddingBottom: 2
+  },
+  sheetGrabber: {
+    alignSelf: "center",
+    backgroundColor: colors.line,
+    borderRadius: 3,
+    height: 5,
+    width: 44
+  },
+  captureSheetHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between"
+  },
+  sheetActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10
+  },
   listContent: {
     paddingBottom: 40,
-    paddingTop: 2
+    paddingTop: 0
   },
   searchResultsContent: {
     paddingBottom: 180,
-    paddingTop: 10,
+    paddingTop: 4,
     paddingHorizontal: 22
   },
   searchEmptyContent: {
     flexGrow: 1,
     paddingHorizontal: 22,
-    paddingTop: 20
+    paddingTop: 28
   },
   groupHeader: {
     color: colors.muted,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
     paddingBottom: 2,
-    paddingTop: 18
+    paddingTop: 16
   },
   captureRow: {
-    gap: 7,
-    minHeight: 74,
-    paddingVertical: 15
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 76,
+    paddingHorizontal: 0,
+    paddingVertical: 14
+  },
+  captureRowPressed: {
+    backgroundColor: "rgba(31, 122, 91, 0.06)",
+    borderRadius: 8,
+    transform: [{ scale: 0.995 }]
+  },
+  subtlePressed: {
+    backgroundColor: colors.soft,
+    transform: [{ scale: 0.985 }]
+  },
+  darkButtonPressed: {
+    backgroundColor: "#2a302d",
+    transform: [{ scale: 0.985 }]
+  },
+  sourceMark: {
+    alignItems: "center",
+    backgroundColor: colors.accentSoft,
+    borderColor: "#c6dfd4",
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 38,
+    justifyContent: "center",
+    marginTop: 2,
+    overflow: "hidden",
+    width: 38
+  },
+  sourceMarkDetail: {
+    alignItems: "center",
+    backgroundColor: colors.accentSoft,
+    borderColor: "#c6dfd4",
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 28,
+    justifyContent: "center",
+    overflow: "hidden",
+    width: 28
+  },
+  sourceMarkProcessing: {
+    backgroundColor: "#e6edf3",
+    borderColor: "#cbd7e2"
+  },
+  sourceMarkReview: {
+    backgroundColor: colors.reviewSoft,
+    borderColor: "#e0d3b8"
+  },
+  sourceMarkFailed: {
+    backgroundColor: "#f5e9e6",
+    borderColor: "#e5c8c1"
+  },
+  sourceFavicon: {
+    height: 22,
+    width: 22
+  },
+  sourceFaviconDetail: {
+    height: 16,
+    width: 16
+  },
+  sourceFaviconOverlay: {
+    position: "absolute"
+  },
+  statusGlyph: {
+    alignItems: "center",
+    backgroundColor: colors.soft,
+    borderRadius: 8,
+    flexShrink: 0,
+    height: 28,
+    justifyContent: "center",
+    width: 28
+  },
+  statusGlyphProcessing: {
+    backgroundColor: "#e6edf3"
+  },
+  statusGlyphReview: {
+    backgroundColor: colors.reviewSoft
+  },
+  statusGlyphFailed: {
+    backgroundColor: "#f5e9e6"
+  },
+  statusGlyphArchived: {
+    backgroundColor: "#eef1ee"
+  },
+  rowContent: {
+    flex: 1,
+    gap: 4,
+    minWidth: 0
   },
   rowTop: {
     alignItems: "center",
@@ -3492,21 +4376,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between"
   },
   rowTitleLine: {
-    alignItems: "flex-start",
-    flexDirection: "row"
-  },
-  rowMetaLine: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 8,
-    minHeight: 20
+    gap: 8
   },
   captureTitle: {
     color: colors.ink,
     flex: 1,
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "600",
-    lineHeight: 23
+    lineHeight: 22
   },
   status: {
     color: colors.ink,
@@ -3528,21 +4407,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18
   },
-  statusPill: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: "800",
-    flexShrink: 0
-  },
-  statusPillProcessing: {
-    color: colors.processing
-  },
-  statusPillReview: {
-    color: colors.review
-  },
-  statusPillFailed: {
-    color: colors.danger
-  },
   notePreview: {
     color: colors.ink,
     fontSize: 15,
@@ -3550,14 +4414,34 @@ const styles = StyleSheet.create({
   },
   summaryPreview: {
     color: colors.muted,
-    fontSize: 15,
-    lineHeight: 21
+    fontSize: 14,
+    lineHeight: 20
   },
-  intentPreview: {
-    color: colors.accent,
+  supportPreview: {
+    color: colors.muted,
     fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 19
+  },
+  rowMeaningLine: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingTop: 1
+  },
+  meaningToken: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 4,
+    maxWidth: "100%"
+  },
+  meaningTokenText: {
+    color: colors.muted,
+    flexShrink: 1,
+    fontSize: 12,
     fontWeight: "700",
-    lineHeight: 18
+    lineHeight: 17
   },
   searchMatchText: {
     color: colors.accent,
@@ -3568,9 +4452,6 @@ const styles = StyleSheet.create({
   separator: {
     backgroundColor: colors.line,
     height: StyleSheet.hairlineWidth
-  },
-  pressed: {
-    opacity: 0.55
   },
   emptyContent: {
     flexGrow: 1
@@ -3586,15 +4467,37 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     color: colors.ink,
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "700",
     marginBottom: 8
   },
   emptyText: {
     color: colors.muted,
-    fontSize: 16,
-    lineHeight: 23,
+    fontSize: 15,
+    lineHeight: 22,
     maxWidth: 280
+  },
+  promptChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    maxWidth: 320,
+    paddingTop: 10
+  },
+  promptChip: {
+    alignItems: "center",
+    backgroundColor: colors.soft,
+    borderRadius: 8,
+    flexDirection: "row",
+    gap: 6,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 12
+  },
+  promptChipText: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "700"
   },
   emptyCue: {
     color: colors.muted,
@@ -3647,6 +4550,28 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 7
   },
+  collectionRow: {
+    gap: 7,
+    minHeight: 74,
+    paddingVertical: 15
+  },
+  collectionRowTop: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10
+  },
+  collectionIconMark: {
+    alignItems: "center",
+    backgroundColor: colors.accentSoft,
+    borderRadius: 8,
+    height: 36,
+    justifyContent: "center",
+    width: 36
+  },
+  collectionRowCopy: {
+    flex: 1,
+    minWidth: 0
+  },
   removeButton: {
     paddingVertical: 4
   },
@@ -3661,6 +4586,35 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 16
   },
+  collectionsScreen: {
+    flex: 1,
+    gap: 14,
+    paddingHorizontal: 22,
+    paddingTop: 16
+  },
+  collectionsTitleBlock: {
+    gap: 6
+  },
+  collectionModeRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6
+  },
+  collectionModeChip: {
+    minHeight: 34,
+    paddingHorizontal: 10
+  },
+  collectionCreatePanel: {
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 10,
+    padding: 12
+  },
+  collectionsListContent: {
+    paddingBottom: 40
+  },
   detail: {
     gap: 16,
     padding: 22
@@ -3670,6 +4624,9 @@ const styles = StyleSheet.create({
   },
   reviewDetail: {
     paddingBottom: 118
+  },
+  reviewDetailNoFooter: {
+    paddingBottom: 44
   },
   reviewFooter: {
     backgroundColor: colors.paper,
@@ -3701,40 +4658,50 @@ const styles = StyleSheet.create({
     paddingVertical: 6
   },
   quickEditBlock: {
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
     gap: 14,
-    paddingBottom: 2
-  },
-  reviewHeroTop: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    justifyContent: "space-between"
-  },
-  reviewState: {
-    color: colors.accent,
-    flex: 1,
-    fontSize: 12,
-    fontWeight: "800",
-    textAlign: "right"
+    padding: 14
   },
   reviewTitleInput: {
     color: colors.ink,
-    fontSize: 25,
+    fontSize: 22,
     fontWeight: "700",
-    lineHeight: 31,
+    lineHeight: 28,
     padding: 0
   },
+  reviewSourceRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 30
+  },
+  reviewSourceMeta: {
+    color: colors.muted,
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18
+  },
   reviewSentence: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingTop: 2
+  },
+  reviewPhrase: {
     alignItems: "center",
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 6,
-    paddingTop: 2
+    gap: 8,
+    maxWidth: "100%"
   },
   reviewSentenceText: {
     color: colors.ink,
-    fontSize: 18,
-    fontWeight: "600",
+    fontSize: 19,
+    fontWeight: "700",
     lineHeight: 28
   },
   sentenceChip: {
@@ -3758,9 +4725,9 @@ const styles = StyleSheet.create({
   },
   sentenceChipText: {
     color: colors.ink,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
-    lineHeight: 21
+    lineHeight: 20
   },
   reviewSentenceSubtext: {
     color: colors.muted,
@@ -3781,8 +4748,7 @@ const styles = StyleSheet.create({
   quickLabel: {
     color: colors.muted,
     fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase"
+    fontWeight: "700"
   },
   quickSentenceRow: {
     alignItems: "center",
@@ -3822,6 +4788,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     minHeight: 44,
     paddingHorizontal: 12
+  },
+  collectionInlineActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
   },
   changeLine: {
     alignItems: "center",
@@ -4052,6 +5024,50 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingTop: 16
   },
+  compactActionRow: {
+    alignItems: "center",
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between",
+    minHeight: 48,
+    paddingHorizontal: 12
+  },
+  compactActionText: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "700"
+  },
+  sourceDisclosureRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "space-between",
+    minHeight: 50
+  },
+  sourceDisclosureCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0
+  },
+  sourceDisclosureActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 2
+  },
+  destructiveRow: {
+    alignItems: "center",
+    borderTopColor: colors.line,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 52,
+    paddingTop: 12
+  },
   sectionHeader: {
     alignItems: "center",
     flexDirection: "row",
@@ -4126,6 +5142,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     minHeight: 50,
     paddingVertical: 14
+  },
+  primaryButtonPressed: {
+    backgroundColor: "#2a302d",
+    transform: [{ scale: 0.99 }]
   },
   disabledButton: {
     opacity: 0.45

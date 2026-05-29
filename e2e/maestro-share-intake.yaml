@@ -6,5 +6,5 @@ name: android share intake
     id: "pc.home.captures"
 - extendedWaitUntil:
     visible:
-      text: "android-share-smoke|example.com|quiet-place|Analyzing|Ready|Needs review"
+      text: "android-share-smoke|nps.gov|Yosemite|National Park Service|Analyzing|Ready|Needs review"
     timeout: 30000

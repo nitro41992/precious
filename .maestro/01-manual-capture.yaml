@@ -25,10 +25,10 @@ name: 01 manual capture
     id: "pc.capture.open"
 - tapOn:
     id: "pc.capture.source"
-- inputText: "https://example.com/quiet-place Maestro regression capture"
+- inputText: "https://www.nps.gov/yose/planyourvisit/reservations.htm Yosemite reservation note"
 - hideKeyboard
 - tapOn:
     id: "pc.capture.save"
     enabled: true
 - assertVisible:
-    text: "Saving|Analyzing|Ready|Needs review|Maestro regression capture|example.com"
+    text: "Saving|Analyzing|Ready|Needs review|Yosemite|nps.gov"

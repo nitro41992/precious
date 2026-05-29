@@ -38,7 +38,7 @@ Capture
 --------------------------------------------------
 
 Copied link found
-https://example.com/restaurant-reel
+https://www.nps.gov/yose/planyourvisit/reservations.htm
 
 [ Save copied link ]
 

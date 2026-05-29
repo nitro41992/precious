@@ -61,7 +61,14 @@ After the sign-in flow has established a session on the device, run the Android 
 npm run test:e2e:android-share
 ```
 
-This sends an Android `ACTION_SEND` text intent to `ShareIntakeActivity`, then uses Maestro to confirm the capture appears in the app.
+This sends an Android `ACTION_SEND` text intent to `ShareIntakeActivity`, opens the app with `adb`, then polls Supabase for the unique marker in the persisted `source_text` / `source_url`. Maestro remains the preferred tool for normal in-app journeys; this smoke owns the Android system-share boundary directly because Maestro app launch can be flaky after external intents.
+
+The share smoke picks a random real-world URL from `test/fixtures/share-smoke-urls.txt`, appends a unique marker to the shared URL, and verifies that marker was persisted with the capture. To broaden coverage without editing the test, pass a larger newline, Tranco-style CSV, or Common Crawl CDX JSON-lines corpus:
+
+```sh
+PRECIOUS_SHARE_SMOKE_URL_CORPUS=/path/to/urls.txt npm run test:e2e:android-share
+PRECIOUS_SHARE_SMOKE_SEED=regression-2026-05-28 npm run test:e2e:android-share
+```
 
 ## Phone handoff
 
