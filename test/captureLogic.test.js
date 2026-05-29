@@ -78,11 +78,11 @@ test("mapSearchCandidates uses native providers and omits unavailable platform p
 test("reviewReasons prioritizes unresolved review causes and confirmed reviews stay ready", () => {
   assert.deepEqual(
     reviewReasons(capture({ confidenceLabel: "Maybe", collectionDecisions: [{ title: "Ideas" }] })),
-    ["intent", "collection"]
+    ["intent"]
   );
   assert.equal(
-    reviewReasonSummary(["intent", "collection", "analysis"]),
-    "Intent uncertain, Collection suggestions, Analysis needs review"
+    reviewReasonSummary(["intent", "analysis"]),
+    "Intent uncertain, Analysis needs review"
   );
   assert.deepEqual(
     reviewReasons(capture({ status: "needs_review", needsReview: true, reviewConfirmedAt: Date.now() })),

@@ -4,7 +4,7 @@
 
 This artifact records the agreed scope for the current Precious consumer UI revamp. Use it with `docs/precious-style-guide.md`, `docs/requirements/CONTEXT.md`, and `docs/requirements/PRODUCT.md` before implementing or reviewing UI work.
 
-Related ADRs: `docs/adr/0001-recent-captures-and-full-screen-search.md` and `docs/adr/0005-bottom-app-bar-and-top-level-collections.md`.
+Related ADRs: `docs/adr/0001-recent-captures-and-full-screen-search.md`, `docs/adr/0005-bottom-app-bar-and-top-level-collections.md`, and `docs/adr/0006-existing-only-multi-collection-assignment.md`.
 
 ## Product Shape
 
@@ -66,10 +66,10 @@ Capture Review must:
 - Feel like editing a saved memory, not inspecting an analysis report.
 - Lead with existing capture imagery or source media when available; tapping it opens the source URL when one is available.
 - Make the editable title the primary text under the media/source header.
-- Show Save Intent, Collection, and Reminder as quiet editable rows below the title rather than stacking prominent cards or pill-heavy controls.
-- Omit the collection phrase when no Collection is linked or suggested. A Capture may intentionally have no Collection.
-- Show `Add to collection` as a secondary action when relevant.
-- Show prior AI Collection suggestions as `Use suggestion` when useful, without reattaching automatically after user removal.
+- Show Save Intent, Collections, and Reminder as quiet editable rows below the title rather than stacking prominent cards or pill-heavy controls.
+- Show `Add collections` when no Collection is linked. A Capture may intentionally have no Collection.
+- Tapping Collections opens a focused full-screen selector for existing active Collections, including `No collection` as a valid clearing state.
+- Do not show AI Collection suggestions, `Use suggestion`, inline Collection creation, or per-row `Manage` actions inside Capture Review.
 - Offer snackbar undo for immediate collection removal when feasible.
 - Use `Reminder idea: [before Saturday]` for AI reminder suggestions until Confirmed Reminders and notification delivery are implemented.
 - Show an `Open in Maps` action when Capture Analysis has a maps-searchable Visit Target and a native map provider passes an open check. This action opens the available Google Maps or Apple Maps search from the persisted query; Android must not show Apple Maps through a browser fallback, and the action must not imply a verified address, coordinates, place ID, or a first-class Map destination.
@@ -85,17 +85,18 @@ Collection management must:
 - Provide an independent `Collections` screen for creating, renaming, and managing Collections.
 - Open new Collection creation from the Collections floating `+` as a bottom sheet, not as an inline card.
 - Show existing Collections in a consumer-facing list with useful metadata such as capture count or recent use when available.
-- Let Capture Review navigate to collection selection/management and return without losing edits.
+- Let Capture Review navigate to collection selection and return without losing edits.
 - Preserve `No collection` as a valid state for any Capture.
+- Allow a Capture to belong to multiple Collections.
 - Avoid making Collection browsing the default retrieval surface; Search remains the primary retrieval lens.
 - Use snackbar undo or confirmation for reversible/destructive collection changes where feasible.
 
 ## Trust Rules
 
-- AI output is a suggestion.
+- AI output is a suggestion, except high-confidence existing Collection matches may be applied quietly because they are finite and reversible.
 - User-approved output becomes first-class product data.
-- Existing Collection auto-attachment may be quietly applied when high-confidence because it is reversible.
-- New Collections require explicit user acceptance.
+- Existing Collection auto-attachment may be quietly applied when high-confidence because it uses only active user-owned Collections.
+- New Collections require explicit user creation from the Collections destination, never AI creation.
 - All reminders require explicit user action.
 - Leaving a Capture without a Collection is valid and should not appear as an unresolved task.
 

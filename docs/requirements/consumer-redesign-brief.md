@@ -35,7 +35,7 @@ Recent Captures, Search, Map, Agenda, Library, and Review Inbox are Retrieval Le
 - Map retrieves by place-like Captured Entities, not where the user happened to be when saving. Map is deferred for this revamp.
 - Agenda retrieves time-relevant Captures and Confirmed Reminders. Agenda is deferred until Confirmed Reminders function.
 - Library can later become organized memory for browsing saved Captures by recency, place, time, Collection, and archived state. It is not top-level for this revamp.
-- Review Inbox remains a useful concept for low-confidence intent, suggested Reminders, suggested Collections, failed analysis, and Quick Edit actions, but it is not a top-level screen in this revamp.
+- Review Inbox remains a useful concept for low-confidence intent, suggested Reminders, failed analysis, and Quick Edit actions, but it is not a top-level screen in this revamp.
 
 ## Navigation
 
@@ -88,7 +88,7 @@ Captured Entities may appear as supporting context, but entity editing should no
 
 Quick Edit should optimize for tactile delight: restrained visuals, tappable chips, haptic-feeling transitions where native platforms allow them, quick accept/change/dismiss gestures, and enough polish that correcting AI feels easy rather than punitive. It should not become gamified or visually loud.
 
-Quick Edit should include a concise because sentence for each AI-predicted suggestion that asks for user trust, including inferred Save Intent, suggested Reminder, suggested Collection, and location or place placement. The rationale should be short and specific, such as "Because the reel mentions a SoHo ramen shop." The first version should not include expandable evidence, confidence percentages, or an analysis report.
+Quick Edit should include a concise because sentence for each AI-predicted suggestion that asks for user trust, including inferred Save Intent, suggested Reminder, and location or place placement. Collection assignment should use only existing Collections and should not surface free-form AI suggestions. The rationale should be short and specific, such as "Because the reel mentions a SoHo ramen shop." The first version should not include expandable evidence, confidence percentages, or an analysis report.
 
 If the user dismisses Quick Edit:
 
@@ -96,9 +96,9 @@ If the user dismisses Quick Edit:
 - Default Intent persists.
 - Unconfirmed Reminders do not persist.
 - High-confidence attachment to an existing Collection may persist.
-- New Collections are not created without confirmation.
-- A Capture may intentionally have no Collection.
-- Prior AI Collection suggestions may remain available as `Use suggestion`, but should not reattach automatically after user removal.
+- New Collections are created only from the top-level Collections destination.
+- A Capture may intentionally have no Collection and may belong to multiple Collections.
+- AI Collection matches are not shown as `Use suggestion` review work.
 
 If the user misses or dismisses the Capture Completion Notification, the completed Capture and its suggestions should remain available in the Review Inbox for later triage when there is something actionable to review.
 

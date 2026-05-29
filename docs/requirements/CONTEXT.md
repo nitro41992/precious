@@ -57,11 +57,11 @@ An interface where the user creates an Explicit Capture, such as a mobile share 
 _Avoid_: Importer, scraper
 
 **Review Inbox**:
-The surface where users triage Captures and suggestions that need lightweight decisions, such as low-confidence intent, One-Tap Correction, Context Notes, suggested Reminders, suggested Collections, failed analysis, and Quick Edit actions. Review Inbox may use segments or tabs, but it should remain one surface rather than separate suggestion queues.
+The surface where users triage Captures and suggestions that need lightweight decisions, such as low-confidence intent, One-Tap Correction, Context Notes, suggested Reminders, failed analysis, and Quick Edit actions. Review Inbox may use segments or tabs, but it should remain one surface rather than separate suggestion queues.
 _Avoid_: Bookmark list, folder, separate suggestions inbox
 
 **Capture Review**:
-The focused single-Capture surface opened from a Capture Completion Notification, Review Inbox, Search, or Library. It shows extracted intent, entities, Reminder suggestions, Collection suggestions, human-readable Confidence States, concise rationale, and Quick Edit controls.
+The focused single-Capture surface opened from a Capture Completion Notification, Review Inbox, Search, or Library. It shows extracted intent, entities, Reminder suggestions, existing Collection attachments, human-readable Confidence States, concise rationale, and Quick Edit controls.
 _Avoid_: Analysis report, debug view, model score screen
 
 **Retrieval Lens**:
@@ -141,12 +141,12 @@ The lightweight network of Captures, Captured Entities, Capture Context, and Sav
 _Avoid_: Knowledge graph, database, collection
 
 **Collection**:
-A user- or system-created grouping of Captures that share an ongoing purpose, such as a trip, purchase decision, research topic, event, recipe queue, or project. A Capture may intentionally have no Collection.
+A user-created grouping of Captures that share an ongoing purpose, such as a trip, purchase decision, research topic, event, recipe queue, or project. A Capture may intentionally have no Collection and may belong to multiple Collections.
 _Avoid_: Folder, plan
 
 **Collection Suggestion**:
-An AI-proposed Collection attachment for a Capture. High-confidence suggestions for existing Collections may be quietly applied because they are reversible; suggestions for new Collections require explicit user acceptance before the Collection is created. If a user removes or changes a Collection, the prior suggestion may remain available as a suggestion, but the Capture should not be treated as unresolved.
-_Avoid_: Required filing, folder audit, automatic new Collection
+An internal AI match from a Capture to one or more existing active Collections. High-confidence matches may be quietly applied because they are finite and reversible. AI must not create, name, or surface new Collections, and lower-confidence matches should not become Capture Review work.
+_Avoid_: Required filing, folder audit, automatic new Collection, free-form collection name
 
 **Reminder**:
 A first-class prompt to resurface one or more Captures at a specific time, relative time, location, event, or other future context.

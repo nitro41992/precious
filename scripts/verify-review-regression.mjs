@@ -160,6 +160,15 @@ function captureMutationUrl(apiUrl) {
   return isEdgeCaptureApi(apiUrl) ? apiUrl : `${apiUrl}/api/captures`;
 }
 
+function edgeResourceUrl(apiUrl, resource) {
+  if (isEdgeCaptureApi(apiUrl)) {
+    const url = new URL(apiUrl);
+    url.searchParams.set("resource", resource);
+    return url.toString();
+  }
+  return `${apiUrl}/api/${resource}`;
+}
+
 async function patchCapture({ apiUrl, anonKey, accessToken, body }) {
   const json = await requestJson(captureMutationUrl(apiUrl), {
     method: "PATCH",
@@ -169,6 +178,18 @@ async function patchCapture({ apiUrl, anonKey, accessToken, body }) {
     body: JSON.stringify(body)
   });
   if (!json.capture?.id) throw new Error(`Capture mutation did not return a capture: ${body.action}`);
+  return json.capture;
+}
+
+async function patchCollectionLinks({ apiUrl, anonKey, accessToken, body }) {
+  const json = await requestJson(edgeResourceUrl(apiUrl, "collection-links"), {
+    method: "PATCH",
+    headers: userHeaders(anonKey, accessToken, {
+      "content-type": "application/json"
+    }),
+    body: JSON.stringify(body)
+  });
+  if (!json.capture?.id) throw new Error(`Collection link mutation did not return a capture: ${body.action}`);
   return json.capture;
 }
 
@@ -297,59 +318,36 @@ async function main() {
     });
     cleanup.captures.push(choiceCapture.id);
 
-    await patchCapture({
+    await patchCollectionLinks({
       apiUrl,
       anonKey,
       accessToken,
       body: {
         captureId: choiceCapture.id,
-        action: "apply_collection_choice",
-        choice: { type: "existing", collectionId: replacement.id },
-        source: "manual",
-        dismissCurrentCollectionSuggestions: true
+        action: "set_capture_collections",
+        collectionIds: [suggested.id, replacement.id]
       }
     });
     let capture = await fetchCapture({ supabaseUrl, serviceRoleKey, captureId: choiceCapture.id });
     let links = await activeLinks({ supabaseUrl, serviceRoleKey, captureId: choiceCapture.id });
-    assert(links.some((link) => link.collection_id === replacement.id), "Manual replacement did not link the replacement collection.");
-    assert((capture.analysis.collection_decisions || []).length === 0, "Manual replacement did not dismiss collection suggestions.");
-    assert(
-      (capture.analysis.collection_choice_overrides || []).some((override) =>
-        override.collection_id === replacement.id && override.restored_decisions?.length === 1
-      ),
-      "Manual replacement did not preserve the replaced AI suggestion for undo."
-    );
+    assert(links.some((link) => link.collection_id === suggested.id), "Batch selection did not keep the original collection.");
+    assert(links.some((link) => link.collection_id === replacement.id), "Batch selection did not link the replacement collection.");
+    assert((capture.analysis.collection_decisions || []).length === 0, "Batch selection did not clear legacy collection suggestions.");
 
-    await patchCapture({
+    await patchCollectionLinks({
       apiUrl,
       anonKey,
       accessToken,
       body: {
         captureId: choiceCapture.id,
-        action: "undo_collection_choice",
-        collectionId: replacement.id
+        action: "set_capture_collections",
+        collectionIds: []
       }
     });
     capture = await fetchCapture({ supabaseUrl, serviceRoleKey, captureId: choiceCapture.id });
     links = await activeLinks({ supabaseUrl, serviceRoleKey, captureId: choiceCapture.id });
-    assert(!links.some((link) => link.collection_id === replacement.id), "Undo did not unlink the manual replacement.");
-    assert(
-      (capture.analysis.collection_decisions || []).some((decision) => decision.collection_id === suggested.id),
-      "Undo did not restore the original AI collection suggestion."
-    );
-
-    await patchCapture({
-      apiUrl,
-      anonKey,
-      accessToken,
-      body: {
-        captureId: choiceCapture.id,
-        action: "clear_collection_suggestion",
-        suggestionIndex: 0
-      }
-    });
-    capture = await fetchCapture({ supabaseUrl, serviceRoleKey, captureId: choiceCapture.id });
-    assert((capture.analysis.collection_decisions || []).length === 0, "Clear AI did not remove the restored collection suggestion.");
+    assert(links.length === 0, "No collection selection did not clear active collection links.");
+    assert((capture.analysis.collection_decisions || []).length === 0, "No collection selection did not keep legacy suggestions cleared.");
 
     const autoCapture = await seedCapture({
       supabaseUrl,
@@ -382,14 +380,7 @@ async function main() {
     links = await activeLinks({ supabaseUrl, serviceRoleKey, captureId: autoCapture.id });
     assert(links.some((link) => link.collection_id === suggested.id), "Auto analysis selection did not link the top collection suggestion.");
     assert((capture.analysis.collection_decisions || []).length === 0, "Auto analysis selection did not clear pending collection suggestions.");
-    assert(
-      (capture.analysis.collection_choice_overrides || []).some((override) =>
-        override.collection_id === suggested.id &&
-          override.source === "analysis" &&
-          override.restored_decisions?.some((decision) => decision.collection_id === alternative.id)
-      ),
-      "Auto analysis selection did not preserve alternate AI collection ideas."
-    );
+    assert((capture.analysis.collection_choice_overrides || []).length === 0, "Auto analysis selection should not preserve alternate AI collection ideas.");
 
     const reviewCapture = await seedCapture({
       supabaseUrl,
@@ -410,27 +401,15 @@ async function main() {
         title: `${prefix} reviewed title`,
         note: "Reviewed note",
         reminderDecisions: [{ index: 0, action: "remove" }],
-        collectionDecisions: [
-          {
-            kind: "suggested",
-            index: 0,
-            type: "existing",
-            collectionId: suggested.id,
-            title: suggested.title,
-            description: suggested.description,
-            rationale: "Accepted by hosted review regression.",
-            confidence: 0.8,
-            action: "link"
-          }
-        ]
+        collectionDecisions: []
       }
     });
     capture = await fetchCapture({ supabaseUrl, serviceRoleKey, captureId: reviewCapture.id });
     links = await activeLinks({ supabaseUrl, serviceRoleKey, captureId: reviewCapture.id });
     assert(capture.analysis_state === "ready", `Expected review save to produce ready state, got ${capture.analysis_state}.`);
     assert((capture.analysis.suggested_reminders || []).length === 0, "Review save did not remove the reminder suggestion.");
-    assert((capture.analysis.collection_decisions || []).length === 0, "Review save did not consume the collection decision.");
-    assert(links.some((link) => link.collection_id === suggested.id), "Review save did not link the accepted collection.");
+    assert((capture.analysis.collection_decisions || []).length === 0, "Review save did not clear legacy collection decisions.");
+    assert(!links.some((link) => link.collection_id === suggested.id), "Review save should not link hidden legacy collection suggestions.");
     assert(capture.analysis.entities?.length === 1, "Review save dropped persisted extracted entities.");
     assert(capture.analysis.search_phrases?.length === 2, "Review save dropped search phrases.");
 
@@ -459,7 +438,7 @@ async function main() {
     assert(capture.analysis_state === "ready", `Expected confirm_review to produce ready state, got ${capture.analysis_state}.`);
     assert(capture.review_confirmed_at, "Confirm review did not persist review_confirmed_at.");
     assert((capture.analysis.collection_decisions || []).length === 0, "Confirm review did not clear pending collection decisions.");
-    assert(links.some((link) => link.collection_id === suggested.id), "Confirm review did not accept pending collection decisions.");
+    assert(!links.some((link) => link.collection_id === suggested.id), "Confirm review should not accept hidden legacy collection decisions.");
     assert(capture.analysis.entities?.length === 1, "Confirm review dropped persisted extracted entities.");
     assert(capture.analysis.search_phrases?.length === 2, "Confirm review dropped search phrases.");
 

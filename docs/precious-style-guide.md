@@ -172,7 +172,7 @@ Cards are allowed only for bounded summaries or decisions:
 - Needs-review module
 - Capture receipt
 - Weekly recap
-- Suggested collection
+- Existing collection assignment
 - Reminder suggestion
 - Link evidence notice
 
@@ -315,11 +315,12 @@ Collections are ongoing purpose groups, not folders.
 
 - Show title, description, capture count, and archived state.
 - Open `New collection` from the Collections floating `+` as a focused bottom sheet using the same sheet treatment as New Capture.
-- Creating a new collection from AI requires user confirmation.
-- High-confidence attachment to an existing collection may be quietly applied, but must remain editable.
-- A Capture may intentionally have no Collection.
+- AI never creates or suggests new Collections. It may only attach high-confidence matches to existing active Collections.
+- A Capture may intentionally have no Collection, and may belong to multiple Collections.
+- Capture Review opens a focused full-screen selector for existing active Collections instead of an inline picker.
+- The selector must include `No collection`, search, check states, and one sticky `Save collections` action.
 - If the user removes or changes an AI-applied Collection, do not reattach it automatically.
-- Prior AI suggestions may remain available as `Use suggestion`.
+- Do not show `Use suggestion`, inline Collection creation, or per-row `Manage` actions in Capture Review.
 - Collection removal should offer immediate snackbar undo when feasible.
 - Collection management is a top-level bottom-bar destination, but Recent Captures and Search remain the primary retrieval surfaces.
 
@@ -388,7 +389,7 @@ Before shipping a Precious UI change, verify:
 - Text does not overlap, clip awkwardly, or depend on fixed-height containers.
 - Loading, empty, failed, archived, and long-content states are designed.
 - AI rationale is concise and user-facing; model/provider/debug details are hidden.
-- Suggested reminders and new collections require confirmation.
+- Suggested reminders require confirmation, and new Collections require explicit user creation.
 - The UI respects safe areas and bottom insets.
 - No nested cards, decorative gradients, or dashboard-style density were introduced.
 - Recent Captures rows include date/time metadata and hide audit-like extraction details.

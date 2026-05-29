@@ -98,22 +98,16 @@ function confidenceRequiresReview(value) {
   return value === "Maybe" || value === "Not sure" || value === "Couldn't tell";
 }
 
-function hasUnresolvedCollectionDecisions(capture) {
-  return Boolean(capture.collectionDecisions?.length);
-}
-
 function reviewReasons(capture) {
   if (capture.reviewConfirmedAt || capture.status === "processing" || capture.status === "failed") return [];
   const reasons = [];
   if (confidenceRequiresReview(capture.confidenceLabel)) reasons.push("intent");
-  if (hasUnresolvedCollectionDecisions(capture)) reasons.push("collection");
   if ((capture.needsReview || capture.status === "needs_review") && !reasons.length) reasons.push("analysis");
   return reasons;
 }
 
 function reviewReasonLabel(reason) {
   if (reason === "intent") return "Intent uncertain";
-  if (reason === "collection") return "Collection suggestions";
   return "Analysis needs review";
 }
 

@@ -187,8 +187,8 @@ type CaptureGateDecision = {
   evidence_summary: string;
 };
 
-const PROMPT_VERSION = "precious-capture-analysis-v4";
-const SCHEMA_VERSION = "precious-capture-analysis-v4";
+const PROMPT_VERSION = "precious-capture-analysis-v5";
+const SCHEMA_VERSION = "precious-capture-analysis-v5";
 const PREFLIGHT_PROMPT_VERSION = "precious-capture-preflight-v1";
 const CAPTURE_GATE_PROMPT_VERSION = "precious-capture-gate-v1";
 const CLIENT_EVENT_RETENTION_DAYS = 90;
@@ -356,7 +356,7 @@ const analysisSchema = {
           "confidence",
         ],
         properties: {
-          type: { type: "string", enum: ["existing", "new"] },
+          type: { type: "string", enum: ["existing"] },
           collection_id: { type: ["string", "null"] },
           title: { type: "string" },
           description: { type: ["string", "null"] },
@@ -715,11 +715,6 @@ function confidenceRequiresReview(value: unknown) {
   return value === "Maybe" || value === "Not sure" || value === "Couldn't tell";
 }
 
-function hasCollectionDecisions(analysis: Record<string, unknown>) {
-  return Array.isArray(analysis.collection_decisions) &&
-    analysis.collection_decisions.length > 0;
-}
-
 function analysisRequiresReview(
   analysis: Record<string, unknown>,
   reviewConfirmedAt?: unknown,
@@ -727,8 +722,7 @@ function analysisRequiresReview(
   if (reviewConfirmedAt) return false;
   return Boolean(
     analysis.needs_review ||
-      confidenceRequiresReview(analysis.confidence_label) ||
-      hasCollectionDecisions(analysis),
+      confidenceRequiresReview(analysis.confidence_label),
   );
 }
 
@@ -3331,6 +3325,62 @@ function collectionEmbeddingContent(title: string, description: string) {
   return compactText([title, description], 1600);
 }
 
+function compactJsonText(value: unknown, maxLength = 1600) {
+  if (value === null || value === undefined) return null;
+  try {
+    return JSON.stringify(value).slice(0, maxLength);
+  } catch {
+    return null;
+  }
+}
+
+function captureEmbeddingContent(capture: Record<string, unknown>) {
+  const analysis = jsonObject(capture.analysis);
+  const defaultIntent = jsonObject(analysis.default_intent);
+  const urlEvidence = jsonObject(analysis.url_evidence);
+  const linkedCollections = Array.isArray(capture.linked_collections)
+    ? capture.linked_collections
+    : [];
+  return compactText([
+    stringValue(capture.display_title),
+    stringValue(capture.title),
+    stringValue(capture.context_note),
+    stringValue(capture.source_text),
+    stringValue(capture.source_url),
+    stringValue(capture.source_app),
+    stringValue(capture.current_save_intent),
+    stringValue(capture.default_intent),
+    stringValue(capture.intent_rationale),
+    stringValue(defaultIntent.category),
+    stringValue(defaultIntent.rationale),
+    stringValue(analysis.summary),
+    stringValue(analysis.visit_target_name),
+    stringValue(analysis.visit_target_query),
+    compactJsonText(analysis.visit_target_evidence, 800),
+    compactJsonText(analysis.entities, 1200),
+    compactJsonText(analysis.suggested_reminders, 1200),
+    compactJsonText(analysis.search_phrases, 1000),
+    stringValue(urlEvidence.title),
+    stringValue(urlEvidence.description),
+    stringValue(urlEvidence.readable_text_excerpt),
+    stringValue(urlEvidence.site_name),
+    stringValue(urlEvidence.platform),
+    compactJsonText(urlEvidence.entities, 1000),
+    linkedCollections
+      .map((collection) => {
+        if (!collection || typeof collection !== "object") return "";
+        const record = collection as Record<string, unknown>;
+        return compactText([
+          stringValue(record.title),
+          stringValue(record.description),
+        ], 600);
+      })
+      .filter(Boolean)
+      .join("\n"),
+    stringValue(capture.created_at),
+  ], 5000);
+}
+
 function retrievalQueryForCapture(
   capture: CaptureRow,
   urlEvidence: UrlEvidence | null,
@@ -3394,6 +3444,102 @@ async function upsertCollectionEmbedding(
   if (error) throw error;
 }
 
+async function upsertCaptureEmbeddingForRow(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  capture: Record<string, unknown>,
+) {
+  const rows = await attachLinkedCollections(supabase, userId, [capture]);
+  const hydrated = (rows[0] || capture) as Record<string, unknown>;
+  const content = captureEmbeddingContent(hydrated);
+  if (!content) return;
+  const embedding = await createEmbedding(content);
+  const { error } = await supabase.from("capture_embeddings").upsert({
+    user_id: userId,
+    capture_id: String(hydrated.id),
+    content,
+    embedding: embeddingLiteral(embedding),
+  }, { onConflict: "capture_id" });
+  if (error) throw error;
+}
+
+async function refreshCaptureEmbedding(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  captureId: string,
+  capture?: Record<string, unknown>,
+) {
+  let row = capture;
+  if (!row || String(row.id || "") !== captureId) {
+    const { data, error } = await supabase
+      .from("captures")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("id", captureId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return;
+    row = data as Record<string, unknown>;
+  }
+  await upsertCaptureEmbeddingForRow(supabase, userId, row);
+}
+
+function runInBackground(task: Promise<unknown>) {
+  const guarded = task.catch((error) => {
+    console.warn("Background task failed", errorMessage(error));
+  });
+  if (
+    typeof EdgeRuntime !== "undefined" &&
+    typeof EdgeRuntime.waitUntil === "function"
+  ) {
+    EdgeRuntime.waitUntil(guarded);
+    return;
+  }
+  void guarded;
+}
+
+function scheduleCaptureEmbeddingRefresh(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  captureId: string,
+  capture?: Record<string, unknown>,
+) {
+  runInBackground(
+    refreshCaptureEmbedding(supabase, userId, captureId, capture),
+  );
+}
+
+async function refreshCollectionCaptureEmbeddings(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  collectionId: string,
+) {
+  const { data, error } = await supabase
+    .from("collection_capture_links")
+    .select("capture_id")
+    .eq("user_id", userId)
+    .eq("collection_id", collectionId)
+    .is("unlinked_at", null)
+    .limit(100);
+  if (error) throw error;
+  await Promise.all(
+    (data ?? [])
+      .map((row) => String((row as Record<string, unknown>).capture_id || ""))
+      .filter(Boolean)
+      .map((captureId) => refreshCaptureEmbedding(supabase, userId, captureId)),
+  );
+}
+
+function scheduleCollectionCaptureEmbeddingsRefresh(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  collectionId: string,
+) {
+  runInBackground(
+    refreshCollectionCaptureEmbeddings(supabase, userId, collectionId),
+  );
+}
+
 async function retrieveCollectionsForCapture(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
@@ -3433,8 +3579,6 @@ async function retrieveCollectionsForCapture(
 function normalizeCollectionDecision(decision: Record<string, unknown>) {
   const type = decision.type === "existing"
     ? "existing"
-    : decision.type === "new"
-    ? "new"
     : "";
   const confidence = Number(decision.confidence);
   return {
@@ -3502,16 +3646,6 @@ async function linkCaptureToCollection(
     confidence?: number | null;
   } = {},
 ) {
-  const replacedAt = new Date().toISOString();
-  const replaced = await supabase
-    .from("collection_capture_links")
-    .update({ unlinked_at: replacedAt, unlink_reason: "collection_replaced" })
-    .eq("user_id", userId)
-    .eq("capture_id", captureId)
-    .neq("collection_id", collectionId)
-    .is("unlinked_at", null);
-  if (replaced.error) throw replaced.error;
-
   const active = await supabase
     .from("collection_capture_links")
     .select("id")
@@ -3536,6 +3670,7 @@ async function linkCaptureToCollection(
     .select("id")
     .single();
   if (error) throw error;
+  scheduleCaptureEmbeddingRefresh(supabase, userId, captureId);
   return data;
 }
 
@@ -3555,7 +3690,6 @@ async function autoLinkCollectionDecisions(
     )
     : [];
   const linked: Array<Record<string, unknown>> = [];
-  const review: Array<Record<string, unknown>> = [];
   for (const decision of decisions) {
     if (
       decision.type === "existing" &&
@@ -3575,16 +3709,11 @@ async function autoLinkCollectionDecisions(
         },
       );
       linked.push(decision);
-    } else if (
-      decision.type === "existing" ||
-      (decision.type === "new" && decision.title && decision.description)
-    ) {
-      review.push(decision);
     }
   }
   return {
     ...analysis,
-    collection_decisions: review,
+    collection_decisions: [],
     linked_collections: linked,
   };
 }
@@ -3614,8 +3743,8 @@ function buildPrompt(
     "When there is no real-world visit target, set visit_target_name and visit_target_query to null, visit_target_confidence to none, visit_target_evidence to [], and verified_place to false.",
     "Suggest a reminder only when the evidence has a useful future trigger. Do not invent events, places, or deadlines.",
     "You may choose from only the retrieved active collections listed below. If one fits strongly, return an existing collection decision with its exact collection_id and title.",
-    "If no retrieved collection is a good fit, you may suggest one new collection. New collection decisions must include both a non-empty title and description.",
-    "Use collection_decisions instead of free-form collection names. Return at most 2 decisions. Prefer no collection decision over a weak one.",
+    "Never invent a collection, propose a new collection name, or return a free-form collection. If no retrieved collection is a strong fit, return an empty collection_decisions array.",
+    "Use collection_decisions only for existing retrieved collections. Return at most 2 decisions. Prefer no collection decision over a weak one.",
     "If evidence is blocked, missing, or ambiguous, infer only from the URL path and shared text, mark low confidence, and set needs_review when needed.",
     "",
     JSON.stringify(
@@ -4246,6 +4375,11 @@ async function persistDeterministicAnalysis(
     })
     .eq("id", capture.id)
     .eq("user_id", userId);
+  await refreshCaptureEmbedding(supabase, userId, capture.id).catch(
+    (error) => {
+      console.warn("Capture embedding refresh failed", errorMessage(error));
+    },
+  );
 }
 
 async function persistCaptureGateNeedsReview(
@@ -4296,6 +4430,11 @@ async function persistCaptureGateNeedsReview(
     })
     .eq("id", capture.id)
     .eq("user_id", userId);
+  await refreshCaptureEmbedding(supabase, userId, capture.id).catch(
+    (error) => {
+      console.warn("Capture embedding refresh failed", errorMessage(error));
+    },
+  );
 }
 
 async function rejectCapturePreflight(
@@ -4339,6 +4478,11 @@ async function rejectCapturePreflight(
     })
     .eq("id", capture.id)
     .eq("user_id", userId);
+  await refreshCaptureEmbedding(supabase, userId, capture.id).catch(
+    (error) => {
+      console.warn("Capture embedding refresh failed", errorMessage(error));
+    },
+  );
 }
 
 async function runOpenAi(
@@ -4599,6 +4743,11 @@ async function processCapture(captureId: string, userId: string) {
       })
       .eq("id", captureId)
       .eq("user_id", userId);
+    await refreshCaptureEmbedding(supabase, userId, captureId).catch(
+      (error) => {
+        console.warn("Capture embedding refresh failed", errorMessage(error));
+      },
+    );
   } catch (error) {
     const message = error instanceof Error
       ? error.message
@@ -4885,7 +5034,7 @@ async function attachLinkedCollections(
   rows: Array<Record<string, unknown>>,
   options: { includeRemovedOverrides?: boolean } = {},
 ) {
-  const includeRemovedOverrides = options.includeRemovedOverrides ?? true;
+  const includeRemovedOverrides = options.includeRemovedOverrides ?? false;
   const captureIds = rows.map((row) => String(row.id)).filter(Boolean);
   if (!captureIds.length) return rows;
   const { data, error } = await supabase
@@ -5060,6 +5209,7 @@ async function markCollectionDecisionAccepted(
     })
     .eq("user_id", userId)
     .eq("id", data.id);
+  scheduleCaptureEmbeddingRefresh(supabase, userId, String(data.id));
 }
 
 function confirmedReminderSuggestions(analysis: Record<string, unknown>) {
@@ -5174,56 +5324,23 @@ async function applyCollectionReviewDecisions(
       continue;
     }
 
-    if (
-      decision.kind !== "suggested" ||
-      (decision.action !== "link" && decision.action !== "create")
-    ) continue;
+    if (decision.kind !== "suggested" || decision.action !== "link") continue;
     let collectionId = typeof decision.collectionId === "string"
       ? decision.collectionId
-      : "";
-    const title = typeof decision.title === "string"
-      ? decision.title.trim()
-      : "";
-    const description = typeof decision.description === "string"
-      ? decision.description.trim()
       : "";
     const rationale = typeof decision.rationale === "string"
       ? decision.rationale
       : null;
     const confidence = Number(decision.confidence);
-    if (!collectionId && decision.action === "create" && title && description) {
-      const existing = await supabase
-        .from("collections")
-        .select("id,status")
-        .eq("user_id", userId)
-        .eq("title", title)
-        .maybeSingle();
-      if (existing.error) throw existing.error;
-      if (existing.data?.status === "archived") continue;
-      collectionId = existing.data?.id ? String(existing.data.id) : "";
-      if (!collectionId) {
-        const created = await supabase
-          .from("collections")
-          .insert({
-            user_id: userId,
-            title,
-            description,
-            created_by: "analysis",
-          })
-          .select("id")
-          .single();
-        if (created.error) throw created.error;
-        collectionId = String(created.data.id);
-        await upsertCollectionEmbedding(
-          supabase,
-          userId,
-          collectionId,
-          title,
-          description,
-        );
-      }
-    }
     if (!collectionId) continue;
+    const collection = await supabase
+      .from("collections")
+      .select("id,status")
+      .eq("user_id", userId)
+      .eq("id", collectionId)
+      .maybeSingle();
+    if (collection.error) throw collection.error;
+    if (!collection.data || collection.data.status === "archived") continue;
     await linkCaptureToCollection(supabase, userId, collectionId, captureId, {
       createdBy: "analysis",
       rationale,
@@ -5238,79 +5355,10 @@ async function acceptPendingCollectionDecisions(
   captureId: string,
   analysis: Record<string, unknown>,
 ) {
-  const rawDecisions = Array.isArray(analysis.collection_decisions)
-    ? analysis.collection_decisions
-    : Array.isArray(analysis.suggested_collections)
-    ? analysis.suggested_collections
-    : [];
-  const decisions = rawDecisions
-    .map((item) => normalizeCollectionDecision(item as Record<string, unknown>))
-    .filter((decision) =>
-      (decision.type === "existing" && decision.collection_id) ||
-      (decision.type === "new" && decision.title && decision.description)
-    );
-
-  for (const decision of decisions) {
-    if (decision.type === "existing" && decision.collection_id) {
-      const collection = await supabase
-        .from("collections")
-        .select("id,status")
-        .eq("user_id", userId)
-        .eq("id", decision.collection_id)
-        .maybeSingle();
-      if (collection.error) throw collection.error;
-      if (!collection.data || collection.data.status === "archived") continue;
-      await linkCaptureToCollection(
-        supabase,
-        userId,
-        decision.collection_id,
-        captureId,
-        {
-          createdBy: "analysis",
-          rationale: decision.rationale,
-          confidence: decision.confidence,
-        },
-      );
-      continue;
-    }
-
-    const existing = await supabase
-      .from("collections")
-      .select("id,status")
-      .eq("user_id", userId)
-      .eq("title", decision.title)
-      .maybeSingle();
-    if (existing.error) throw existing.error;
-    let collectionId = existing.data?.id ? String(existing.data.id) : "";
-    if (!collectionId) {
-      const created = await supabase
-        .from("collections")
-        .insert({
-          user_id: userId,
-          title: decision.title,
-          description: decision.description,
-          created_by: "analysis",
-        })
-        .select("id")
-        .single();
-      if (created.error) throw created.error;
-      collectionId = String(created.data.id);
-      await upsertCollectionEmbedding(
-        supabase,
-        userId,
-        collectionId,
-        decision.title,
-        decision.description || "",
-      );
-    } else if (existing.data?.status === "archived") {
-      continue;
-    }
-    await linkCaptureToCollection(supabase, userId, collectionId, captureId, {
-      createdBy: "analysis",
-      rationale: decision.rationale,
-      confidence: decision.confidence,
-    });
-  }
+  void supabase;
+  void userId;
+  void captureId;
+  void analysis;
 }
 
 function activeCollectionDecisionRows(analysis: Record<string, unknown>) {
@@ -5371,6 +5419,12 @@ async function captureResponse(
     userId,
     (rows[0] ?? data) as Record<string, unknown>,
   );
+  scheduleCaptureEmbeddingRefresh(
+    supabase,
+    userId,
+    captureId,
+    signed as Record<string, unknown>,
+  );
   return json({ capture: withCaptureState(signed) });
 }
 
@@ -5411,36 +5465,7 @@ async function applyCollectionChoice(
   let collectionId = typeof choice.collectionId === "string"
     ? choice.collectionId
     : "";
-  let choiceTitle = "";
-  let choiceDescription = "";
-  if (choice.type === "new") {
-    const title = cleanRequiredText(choice.title);
-    const description = cleanRequiredText(choice.description);
-    if (!title || !description) {
-      return json({ error: "title and description are required" }, 400);
-    }
-    choiceTitle = title;
-    choiceDescription = description;
-    const created = await supabase
-      .from("collections")
-      .insert({
-        user_id: userId,
-        title,
-        description,
-        created_by: source === "analysis" ? "analysis" : "user",
-      })
-      .select("*")
-      .single();
-    if (created.error) throw created.error;
-    collectionId = String(created.data.id);
-    await upsertCollectionEmbedding(
-      supabase,
-      userId,
-      collectionId,
-      title,
-      description,
-    );
-  } else if (choice.type === "existing") {
+  if (choice.type === "existing") {
     if (!collectionId) return json({ error: "collectionId is required" }, 400);
     const collection = await supabase
       .from("collections")
@@ -5454,7 +5479,7 @@ async function applyCollectionChoice(
       return json({ error: "Archived collections cannot be linked" }, 400);
     }
   } else {
-    return json({ error: "choice.type must be existing or new" }, 400);
+    return json({ error: "choice.type must be existing" }, 400);
   }
 
   const captureId = String(capture.id);
@@ -5472,45 +5497,13 @@ async function applyCollectionChoice(
   const nextDecisions = currentDecisions.filter((decision, index) => {
     return !dismissedKeys.has(collectionDecisionKey(decision, index));
   });
-  const overrides = collectionChoiceOverrides(currentAnalysis)
-    .filter((override) =>
-      String(override.collection_id || "") !== collectionId
-    );
-  if (source !== "analysis" && dismissedDecisions.length) {
-    overrides.push({
-      collection_id: collectionId,
-      source,
-      restored_decisions: dismissedDecisions,
-      applied_at: new Date().toISOString(),
-    });
-  } else if (source === "analysis" && dismissedDecisions.length > 1) {
-    const acceptedDecision = {
-      type: choice.type,
-      collectionId,
-      collection_id: collectionId,
-      title: choiceTitle,
-      description: choiceDescription,
-    };
-    const alternatives = dismissedDecisions.filter(
-      (decision) => !sameCollectionDecision(decision, acceptedDecision),
-    );
-    if (alternatives.length) {
-      overrides.push({
-        collection_id: collectionId,
-        source: "analysis",
-        restored_decisions: alternatives,
-        applied_at: new Date().toISOString(),
-      });
-    }
-  }
-
   const nextAnalysis = normalizedReviewAnalysis(
     {
       ...currentAnalysis,
       needs_review: false,
       collection_decisions: nextDecisions,
       suggested_collections: [],
-      collection_choice_overrides: overrides,
+      collection_choice_overrides: [],
     },
     capture.review_confirmed_at,
   );
@@ -5670,9 +5663,7 @@ async function undoCollectionChoice(
     .eq("user_id", userId)
     .eq("capture_id", captureId)
     .is("unlinked_at", null);
-  const unlink = restoredDecisions.length
-    ? await unlinkQuery
-    : await unlinkQuery.eq("collection_id", collectionId);
+  const unlink = await unlinkQuery.eq("collection_id", collectionId);
   if (unlink.error) throw unlink.error;
 
   const nextDecisions = [...activeCollectionDecisionRows(currentAnalysis)];
@@ -5905,7 +5896,7 @@ async function handleCollectionsResource(
         user_id: userId,
         title,
         description,
-        created_by: body.createdBy === "analysis" ? "analysis" : "user",
+        created_by: "user",
       })
       .select("*")
       .single();
@@ -5919,7 +5910,7 @@ async function handleCollectionsResource(
     );
     if (typeof body.captureId === "string" && body.captureId) {
       await linkCaptureToCollection(supabase, userId, data.id, body.captureId, {
-        createdBy: body.createdBy === "analysis" ? "analysis" : "user",
+        createdBy: "user",
         rationale: typeof body.rationale === "string" ? body.rationale : null,
         confidence: Number.isFinite(Number(body.confidence))
           ? Number(body.confidence)
@@ -5979,6 +5970,9 @@ async function handleCollectionsResource(
       .select("*")
       .single();
     if (error) throw error;
+    for (const captureId of snapshot) {
+      scheduleCaptureEmbeddingRefresh(supabase, userId, captureId);
+    }
     return json({
       collection: collectionFromRow(data as Record<string, unknown>),
     });
@@ -6030,9 +6024,193 @@ async function handleCollectionsResource(
     title,
     description,
   );
+  scheduleCollectionCaptureEmbeddingsRefresh(supabase, userId, collectionId);
   return json({
     collection: collectionFromRow(data as Record<string, unknown>),
   });
+}
+
+async function handleSearchResource(
+  request: Request,
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  url: URL,
+) {
+  if (request.method !== "GET") return json({ error: "Not found" }, 404);
+  const queryText = String(
+    url.searchParams.get("q") || url.searchParams.get("query") || "",
+  ).trim();
+  if (!queryText) return json({ captures: [] });
+  const rawScope = url.searchParams.get("scope") || "active";
+  const scope = rawScope === "archived" || rawScope === "all"
+    ? rawScope
+    : "active";
+  const limit = boundedLimit(url.searchParams.get("limit"), 30, 100);
+  const embedding = await createEmbedding(queryText);
+  const { data, error } = await supabase.rpc("match_captures_for_search", {
+    p_user_id: userId,
+    p_query_text: queryText,
+    p_query_embedding: embeddingLiteral(embedding),
+    p_scope: scope,
+    p_match_count: limit,
+  });
+  if (error) throw error;
+  const ranked = (data ?? []) as Array<Record<string, unknown>>;
+  const ids = ranked.map((row) => String(row.id || "")).filter(Boolean);
+  if (!ids.length) return json({ captures: [] });
+
+  const { data: captureRows, error: captureError } = await supabase
+    .from("captures")
+    .select(CAPTURE_LIST_SELECT)
+    .eq("user_id", userId)
+    .in("id", ids);
+  if (captureError) throw captureError;
+  const byId = new Map(
+    ((captureRows ?? []) as unknown as Array<Record<string, unknown>>).map((
+      row,
+    ) => [
+      String(row.id),
+      row,
+    ]),
+  );
+  const orderedRows = ids
+    .map((id) => byId.get(id))
+    .filter(Boolean) as Array<Record<string, unknown>>;
+  const rows = await attachLinkedCollections(supabase, userId, orderedRows);
+  const signedRows = (await withSignedCaptureAssetRows(supabase, userId, rows))
+    .filter(Boolean) as Array<Record<string, unknown>>;
+  const semanticRankById = new Map(
+    ranked.map((row) => [String(row.id), row.semantic_rank ?? null]),
+  );
+  for (const row of signedRows) {
+    if (semanticRankById.get(String(row.id)) === null) {
+      scheduleCaptureEmbeddingRefresh(
+        supabase,
+        userId,
+        String(row.id),
+        row as Record<string, unknown>,
+      );
+    }
+  }
+  return json({
+    captures: withCaptureStates(signedRows).filter((row) =>
+      scope === "all" ? true : archivedFilter(row, scope === "archived")
+    ),
+  });
+}
+
+function collectionIdList(value: unknown) {
+  if (!Array.isArray(value)) return null;
+  return [
+    ...new Set(
+      value
+        .map((item) => typeof item === "string" ? item.trim() : "")
+        .filter(Boolean),
+    ),
+  ];
+}
+
+async function setCaptureCollections(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  captureRef: string,
+  collectionIdsValue: unknown,
+) {
+  const collectionIds = collectionIdList(collectionIdsValue);
+  if (!collectionIds) {
+    return json({ error: "collectionIds must be an array" }, 400);
+  }
+
+  const capture = await supabase
+    .from("captures")
+    .select("id, analysis, review_confirmed_at")
+    .eq("user_id", userId)
+    .or(`id.eq.${captureRef},client_capture_key.eq.${captureRef}`)
+    .maybeSingle();
+  if (capture.error) throw capture.error;
+  if (!capture.data) return json({ error: "Capture not found" }, 404);
+  const captureId = String(capture.data.id);
+
+  if (collectionIds.length) {
+    const collections = await supabase
+      .from("collections")
+      .select("id,status")
+      .eq("user_id", userId)
+      .in("id", collectionIds);
+    if (collections.error) throw collections.error;
+    const activeIds = new Set(
+      (collections.data ?? [])
+        .filter((collection) => collection.status === "active")
+        .map((collection) => String(collection.id)),
+    );
+    const missingIds = collectionIds.filter((id) => !activeIds.has(id));
+    if (missingIds.length) {
+      return json({ error: "Only active collections can be linked" }, 400);
+    }
+  }
+
+  const currentLinks = await supabase
+    .from("collection_capture_links")
+    .select("collection_id")
+    .eq("user_id", userId)
+    .eq("capture_id", captureId)
+    .is("unlinked_at", null);
+  if (currentLinks.error) throw currentLinks.error;
+  const currentIds = new Set(
+    (currentLinks.data ?? []).map((row) => String(row.collection_id)),
+  );
+  const targetIds = new Set(collectionIds);
+  const removeIds = [...currentIds].filter((id) => !targetIds.has(id));
+  const addIds = [...targetIds].filter((id) => !currentIds.has(id));
+
+  if (removeIds.length) {
+    const unlink = await supabase
+      .from("collection_capture_links")
+      .update({
+        unlinked_at: new Date().toISOString(),
+        unlink_reason: "user_removed",
+      })
+      .eq("user_id", userId)
+      .eq("capture_id", captureId)
+      .in("collection_id", removeIds)
+      .is("unlinked_at", null);
+    if (unlink.error) throw unlink.error;
+  }
+
+  for (const collectionId of addIds) {
+    await linkCaptureToCollection(supabase, userId, collectionId, captureId, {
+      createdBy: "user",
+    });
+  }
+
+  const currentAnalysis =
+    capture.data.analysis && typeof capture.data.analysis === "object"
+      ? capture.data.analysis as Record<string, unknown>
+      : {};
+  const nextAnalysis = normalizedReviewAnalysis(
+    {
+      ...currentAnalysis,
+      needs_review: false,
+      collection_decisions: [],
+      suggested_collections: [],
+      collection_choice_overrides: [],
+    },
+    capture.data.review_confirmed_at,
+  );
+  const update = await supabase
+    .from("captures")
+    .update({
+      analysis: nextAnalysis,
+      analysis_state:
+        analysisRequiresReview(nextAnalysis, capture.data.review_confirmed_at)
+          ? "needs_review"
+          : "ready",
+    })
+    .eq("user_id", userId)
+    .eq("id", captureId);
+  if (update.error) throw update.error;
+
+  return await captureResponse(supabase, userId, captureId);
 }
 
 async function handleCollectionLinksResource(
@@ -6041,6 +6219,18 @@ async function handleCollectionLinksResource(
   userId: string,
 ) {
   const body = await request.json().catch(() => ({}));
+  const action = typeof body.action === "string" ? body.action : "";
+  if (request.method === "PATCH" && action === "set_capture_collections") {
+    const captureId = typeof body.captureId === "string" ? body.captureId : "";
+    if (!captureId) return json({ error: "captureId is required" }, 400);
+    return await setCaptureCollections(
+      supabase,
+      userId,
+      captureId,
+      body.collectionIds,
+    );
+  }
+
   const collectionId = typeof body.collectionId === "string"
     ? body.collectionId
     : "";
@@ -6078,12 +6268,6 @@ async function handleCollectionLinksResource(
   }
 
   if (request.method === "PATCH" && body.action === "unlink") {
-    await preserveAiCollectionSuggestionForUnlink(
-      supabase,
-      userId,
-      captureId,
-      collectionId,
-    );
     const { error } = await supabase
       .from("collection_capture_links")
       .update({ unlinked_at: new Date().toISOString(), unlink_reason: "user" })
@@ -6092,6 +6276,7 @@ async function handleCollectionLinksResource(
       .eq("capture_id", captureId)
       .is("unlinked_at", null);
     if (error) throw error;
+    scheduleCaptureEmbeddingRefresh(supabase, userId, captureId);
     return json({ ok: true });
   }
 
@@ -6214,6 +6399,10 @@ if (import.meta.main) {
         return await handleClientEventsResource(request, supabase, user.id);
       }
 
+      if (resource === "search") {
+        return await handleSearchResource(request, supabase, user.id, url);
+      }
+
       if (resource === "collections") {
         return await handleCollectionsResource(request, supabase, user.id, url);
       }
@@ -6261,7 +6450,6 @@ if (import.meta.main) {
           supabase,
           user.id,
           pageRows,
-          { includeRemovedOverrides: Boolean(clientCaptureKey) },
         );
         const signedRows = await withSignedCaptureAssetRows(
           supabase,
@@ -6459,10 +6647,7 @@ if (import.meta.main) {
             {
               ...currentAnalysis,
               needs_review: false,
-              collection_decisions: reviewCollectionDecisions(
-                currentAnalysis,
-                body.collectionDecisions,
-              ),
+              collection_decisions: [],
               suggested_collections: [],
               suggested_reminders: reviewReminderSuggestions(
                 currentAnalysis,

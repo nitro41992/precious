@@ -1,5 +1,5 @@
 export type CaptureStatus = "processing" | "ready" | "needs_review" | "failed";
-export type ReviewReason = "intent" | "collection" | "analysis";
+export type ReviewReason = "intent" | "analysis";
 export type MapProvider = "google" | "apple";
 export type MapSearchCandidate = {
   provider: MapProvider;
@@ -11,7 +11,6 @@ type ReviewableCapture = {
   status: CaptureStatus;
   needsReview?: boolean;
   confidenceLabel?: string;
-  collectionDecisions?: unknown[];
   reviewConfirmedAt?: number | null;
 };
 

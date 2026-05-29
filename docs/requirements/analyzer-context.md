@@ -11,7 +11,7 @@ This supports Sharebook's core wedge: preserving the user's reason for saving so
 Capture Analysis currently understands a Capture from its immediate payload: URL, text, image, source metadata, entities, and other Capture Context. That is enough for many cases, but feedback from dogfooding shows several misses require prior user signals:
 
 - Reminder timing depends on past reminders, trips, routines, or accepted behavior.
-- Collection suggestions can duplicate existing Collections or be too broad.
+- Collection matching can be too broad or miss relevant existing Collections.
 - The model may speculate about actions, such as "build this," without evidence.
 - Past/future event reasoning needs current date/time and timezone.
 - Repeated user behavior should influence interpretation, but raw history should not be dumped into prompts.
@@ -23,7 +23,7 @@ The challenge is to add memory without making analysis noisy, expensive, privacy
 - Improve Capture Analysis using bounded, relevant prior signals.
 - Help the analyzer choose better Default Intent when current Capture evidence is ambiguous.
 - Improve Reminder suggestions, especially timing and past-date suppression.
-- Prefer existing Collections over near-duplicate generated Collections.
+- Reuse existing Collections instead of generating new Collection names.
 - Treat prior signals as weak evidence, not as facts.
 - Keep Analyzer Context internally bounded and explainable.
 - Preserve the current structured analysis output schema for the first version.
@@ -61,7 +61,7 @@ Initial v1 fields:
 - corrected Save Intents
 - prior Reminder suggestions and statuses
 - existing Collections
-- recent Collection suggestions
+- recent Collection attachments
 
 Future fields:
 
@@ -97,14 +97,14 @@ Analyzer Context should help the model:
 - avoid noisy reminders without a concrete future trigger
 - use prior accepted reminders as stronger signals than raw model suggestions
 
-### R4. Improve Collection Suggestions
+### R4. Improve Existing Collection Matching
 
 Analyzer Context should help the model:
 
 - prefer existing Collections when relevant
-- avoid near-duplicate Collection names
-- avoid broad intent-label Collections such as "Watch later" or "Buy later"
-- suggest Collection names that are more specific than Intent Categories
+- avoid broad intent-label matching such as "Watch later" or "Buy later"
+- return no Collection match when no retrieved active Collection fits strongly
+- never create or name a new Collection
 
 ### R5. Keep Capture Analysis Durable
 
@@ -160,7 +160,7 @@ User-facing effects should appear indirectly:
 - better Default Intent
 - better Reminder Rationale
 - fewer noisy reminders
-- better Collection suggestions
+- better existing Collection assignment
 - better search phrases
 
 The user should still be able to correct intent or add a Context Note when the analyzer is wrong.
@@ -187,8 +187,8 @@ The user should still be able to correct intent or add a Context Note when the a
 
 - A new Capture Analysis run receives current date/time, timezone, recent Captures, prior Reminders, and existing Collections.
 - The model prompt states that Analyzer Context is weak evidence.
-- Collection suggestions avoid broad intent-label names.
-- Existing exact-normalized Collection names are reused instead of duplicated.
+- Collection matching avoids broad intent-label names.
+- Existing exact-normalized Collection names are reused instead of duplicated, and no new Collection names are generated.
 - Feedback report groups product-signal comments into actionable themes.
 - No database migration is required for v1.
 - Capture save continues to work even when analysis fails.
@@ -198,4 +198,4 @@ The user should still be able to correct intent or add a Context Note when the a
 - `CONTEXT.md`
 - `docs/mvp-spec.md`
 - `docs/phase-0a-implementation.md`
-- `docs/adr/0006-use-bounded-analyzer-context.md`
+- `docs/adr/0006-existing-only-multi-collection-assignment.md`

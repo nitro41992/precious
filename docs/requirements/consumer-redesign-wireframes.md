@@ -147,7 +147,7 @@ Saved as
 [ try this place ] [ send/share ] [ plan trip ] [ review later ]
 
 Collection
-[ NYC restaurants ] [ Japan trip ] [ New collection... ]
+[ Choose existing collections ]
 
 Reminder
 [ Accept Saturday ] [ Change time ] [ No reminder ]
