@@ -74,7 +74,7 @@ Capture Review must:
 - Use `Reminder idea: [before Saturday]` for AI reminder suggestions until Confirmed Reminders and notification delivery are implemented.
 - Show an `Open in Maps` action when Capture Analysis has a maps-searchable Visit Target and a native map provider passes an open check. This action opens the available Google Maps or Apple Maps search from the persisted query; Android must not show Apple Maps through a browser fallback, and the action must not imply a verified address, coordinates, place ID, or a first-class Map destination.
 - Include an `Add reminder` flow only when the selected reminder can at least persist as a capture-local or otherwise durable value. Do not imply notification delivery until it exists.
-- Include one consolidated `Review insight` rationale surface for Save Intent, Collections, and Reminder idea decisions, including cases where no Collection or no Reminder idea was applied.
+- Include one consolidated `Review insight` rationale surface for Save Intent, Collections, and Reminder idea decisions, including cases where no Collection or no Reminder idea was applied. Its visible cue should point to the exact review decision rather than repeat a content summary.
 - Keep raw source, destructive archive actions, and detailed rationale visually secondary.
 - Use modality-specific evidence in review copy. Image and note captures without a source URL must not show Link evidence fallback copy or a `Link evidence` module; they should show `Needs review` / `Couldn't tell` language when saved content needs more context.
 

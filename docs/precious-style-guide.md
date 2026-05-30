@@ -260,7 +260,7 @@ Each chip can expand into a small picker. Keep concise rationale visible only wh
 
 `Because the post mentions a SoHo ramen shop.`
 
-Capture Review should use one `Review insight` surface for AI rationale across Save Intent, Collections, and Reminder idea. The row may show one concise summary and open a native-feeling sheet with the specific rationale for each decision, including "no collection" or "no reminder" outcomes. Do not scatter rationale across hidden-only long presses or expose model traces.
+Capture Review should use one `Review insight` surface for AI rationale across Save Intent, Collections, and Reminder idea. The row should show a very short review cue that names the exact thing to check, such as `Confirm intent: visit or menu reference`, then open a native-feeling sheet with the specific rationale for each decision, including "no collection" or "no reminder" outcomes. Do not scatter rationale across hidden-only long presses, duplicate the same blurb in the sheet, or expose model traces.
 
 When reminders are not fully implemented, use `Reminder idea: [before Saturday]` rather than copy that implies notification delivery.
 

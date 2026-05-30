@@ -86,6 +86,7 @@ type UrlEvidence = {
 };
 
 type ReviewRationale = {
+  focus?: string;
   summary?: string;
   intent?: string;
   collections?: string;
@@ -93,13 +94,13 @@ type ReviewRationale = {
 };
 
 type ReviewInsight = {
-  summary: string;
+  focus: string;
   sections: Array<{ label: string; text: string }>;
 };
 
 type RationaleSheet = {
   title: string;
-  text: string;
+  text?: string;
   sections?: Array<{ label: string; text: string }>;
 };
 
@@ -644,7 +645,7 @@ function captureSupportLine(capture: Capture, visibleSummary: string) {
   const status = displayStatus(capture);
   if (status === "processing") return "Checking the source now.";
   if (status === "failed") return "Saved. Open it to review or try again.";
-  if (status === "needs_review") return "A quick review will help finish this capture.";
+  if (status === "needs_review") return reviewInsightForCapture(capture).focus;
   const evidence = urlEvidenceMessage(capture.urlEvidence);
   if (evidence) return evidence;
   return "";
@@ -815,7 +816,7 @@ function reviewRationaleFromRemote(value: unknown): ReviewRationale | undefined 
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const record = value as Record<string, unknown>;
   const next: ReviewRationale = {};
-  for (const key of ["summary", "intent", "collections", "reminder"] as const) {
+  for (const key of ["focus", "summary", "intent", "collections", "reminder"] as const) {
     const text = cleanSentence(typeof record[key] === "string" ? record[key] : "");
     if (text && !auditLikeText(text)) next[key] = text;
   }
@@ -826,6 +827,19 @@ function rationaleLine(value: string | null | undefined) {
   const text = cleanSentence(value);
   if (!text || auditLikeText(text)) return "";
   return text;
+}
+
+function reviewFocusForCapture(capture: Capture, intentText: string) {
+  const rationale = capture.reviewRationale || {};
+  const providedFocus = rationaleLine(rationale.focus);
+  if (providedFocus) return conciseText(providedFocus, 88);
+  if (displayStatus(capture) === "failed") return "Review source details";
+  if (confidenceRequiresReview(capture.confidenceLabel)) {
+    const intentLabel = humanize(capture.defaultIntent);
+    return intentLabel ? `Confirm intent: ${intentLabel}` : "Confirm suggested intent";
+  }
+  if (capture.needsReview) return "Review the suggested fields";
+  return conciseText(intentText, 88) || "Review the suggested fields";
 }
 
 function reviewInsightForCapture(capture: Capture): ReviewInsight {
@@ -850,13 +864,9 @@ function reviewInsightForCapture(capture: Capture): ReviewInsight {
     rationaleLine(rationale.reminder) ||
     reminderRationale ||
     "No concrete time, place, or event trigger was found.";
-  const summary =
-    rationaleLine(rationale.summary) ||
-    conciseText(intentText, 150) ||
-    conciseText(capture.summary, 150) ||
-    "Review the suggested meaning before you save changes.";
+  const focus = reviewFocusForCapture(capture, intentText);
   return {
-    summary,
+    focus,
     sections: [
       { label: "Intent", text: intentText },
       { label: "Collections", text: collectionsText },
@@ -3028,10 +3038,10 @@ export default function App() {
   }, [captureReturnCollectionId, loadCollectionCaptures, selectedCollection?.status, selectedCollectionId]);
 
   function openReviewInsight(insight: ReviewInsight) {
-    if (!insight.summary && !insight.sections.length) return;
+    if (!insight.focus && !insight.sections.length) return;
     setRationaleSheet({
       title: "Review insight",
-      text: insight.summary,
+      text: insight.focus,
       sections: insight.sections
     });
   }
@@ -4054,7 +4064,7 @@ export default function App() {
           !rowRevealed &&
           (imageLoadKey ? !imageLoadState : true))
     );
-    const itemSummary = consumerSummary(item);
+    const itemSummary = displayStatus(item) === "needs_review" ? "" : consumerSummary(item);
     const supportLine = captureSupportLine(item, itemSummary);
     const intentLabel = captureIntentLabel(item);
     const collectionLabel = showCollectionToken ? item.linkedCollections?.[0]?.title || "" : "";
@@ -4581,7 +4591,9 @@ export default function App() {
             <View style={styles.sheetHeader}>
               <View style={styles.sheetHeaderCopy}>
                 <Text style={styles.sheetTitle}>{rationaleSheet.title}</Text>
-                <Text style={styles.sheetSubtitle}>{rationaleSheet.text}</Text>
+                {rationaleSheet.sections?.length ? null : (
+                  <Text style={styles.sheetSubtitle}>{rationaleSheet.text}</Text>
+                )}
               </View>
               <IconButton Icon={X} label="Close review insight" onPress={() => setRationaleSheet(null)} />
             </View>
@@ -5372,7 +5384,7 @@ export default function App() {
                     <Text style={styles.reviewInsightAction}>Details</Text>
                   </View>
                   <Text numberOfLines={2} style={styles.reviewInsightSummary}>
-                    {selectedReviewInsight.summary}
+                    {selectedReviewInsight.focus}
                   </Text>
                 </View>
                 <ChevronRight color={colors.muted} size={18} strokeWidth={2.4} />
@@ -7478,7 +7490,7 @@ const styles = StyleSheet.create({
   rationaleSheetText: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "500",
     lineHeight: 20
   },
   currentChoiceRow: {

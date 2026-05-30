@@ -187,8 +187,8 @@ type CaptureGateDecision = {
   evidence_summary: string;
 };
 
-const PROMPT_VERSION = "precious-capture-analysis-v6";
-const SCHEMA_VERSION = "precious-capture-analysis-v6";
+const PROMPT_VERSION = "precious-capture-analysis-v7";
+const SCHEMA_VERSION = "precious-capture-analysis-v7";
 const PREFLIGHT_PROMPT_VERSION = "precious-capture-preflight-v1";
 const CAPTURE_GATE_PROMPT_VERSION = "precious-capture-gate-v1";
 const CLIENT_EVENT_RETENTION_DAYS = 90;
@@ -369,8 +369,9 @@ const analysisSchema = {
     review_rationale: {
       type: "object",
       additionalProperties: false,
-      required: ["summary", "intent", "collections", "reminder"],
+      required: ["focus", "summary", "intent", "collections", "reminder"],
       properties: {
+        focus: { type: "string" },
         summary: { type: "string" },
         intent: { type: "string" },
         collections: { type: "string" },
@@ -748,6 +749,16 @@ function firstRationale(records: unknown) {
   return null;
 }
 
+function intentLabelFromKey(value: unknown) {
+  const key = stringValue(value);
+  if (!key) return null;
+  const configured = activeSaveIntents.find((intent) => intent.key === key);
+  if (configured?.label) return configured.label;
+  return key.replace(/_/g, " ").replace(/\b\w/g, (letter) =>
+    letter.toUpperCase()
+  );
+}
+
 function reviewRationaleFromAnalysis(analysis: Record<string, unknown>) {
   const reviewRationale = jsonObject(analysis.review_rationale);
   const defaultIntent = jsonObject(analysis.default_intent);
@@ -775,7 +786,14 @@ function reviewRationaleFromAnalysis(analysis: Record<string, unknown>) {
       stringValue(analysis.summary),
     ], 260) ||
     "Sharebook used the available capture evidence to suggest the review fields.";
-  return { summary, intent, collections, reminder };
+  const focus =
+    stringValue(reviewRationale.focus) ||
+    (confidenceRequiresReview(analysis.confidence_label)
+      ? `Confirm intent: ${intentLabelFromKey(defaultIntent.category) || "suggested intent"}`
+      : analysis.needs_review
+      ? "Review the suggested fields"
+      : "Review insight available");
+  return { focus, summary, intent, collections, reminder };
 }
 
 function normalizedReviewAnalysis(
@@ -3407,6 +3425,7 @@ function captureEmbeddingContent(capture: Record<string, unknown>) {
     stringValue(capture.intent_rationale),
     stringValue(defaultIntent.category),
     stringValue(defaultIntent.rationale),
+    stringValue(reviewRationale.focus),
     stringValue(reviewRationale.summary),
     stringValue(reviewRationale.intent),
     stringValue(reviewRationale.collections),
@@ -3804,7 +3823,10 @@ function buildPrompt(
     "Never invent a collection, propose a new collection name, or return a free-form collection. If no retrieved collection is a strong fit, return an empty collection_decisions array.",
     "Use collection_decisions only for existing retrieved collections. Return at most 2 decisions. Prefer no collection decision over a weak one.",
     "Always fill review_rationale with concise user-facing evidence for Capture Review. It is not chain-of-thought and must not mention models, prompts, scores, or hidden reasoning.",
-    "review_rationale.summary should summarize why the overall suggestion is useful. review_rationale.intent explains the Save Intent. review_rationale.collections explains the existing Collection match, or why no existing Collection was strong enough. review_rationale.reminder explains the Reminder idea, or why no concrete future trigger was found.",
+    "review_rationale.focus is the visible review cue, under 80 characters. It must name exactly what the user should check, such as 'Confirm intent: visit or menu reference', 'Choose whether to add a collection', 'Confirm the reminder timing', or 'Open link once for context'.",
+    "If needs_review is true, review_rationale.focus must point to the uncertain field or decision rather than restating the content. If nothing needs review, use a short trust cue such as 'Intent and reminder choice look ready'.",
+    "review_rationale.summary should summarize why the overall suggestion is useful, but keep it under 140 characters because it may be used only as fallback. review_rationale.intent, collections, and reminder should each be one concise user-facing sentence explaining that decision or non-decision.",
+    "review_rationale.intent explains the Save Intent. review_rationale.collections explains the existing Collection match, or why no existing Collection was strong enough. review_rationale.reminder explains the Reminder idea, or why no concrete future trigger was found.",
     "If evidence is blocked, missing, or ambiguous, infer only from the URL path and shared text, mark low confidence, and set needs_review when needed.",
     "",
     JSON.stringify(

@@ -65,7 +65,7 @@ The focused single-Capture surface opened from a Capture Completion Notification
 _Avoid_: Analysis report, debug view, model score screen
 
 **Review Insight**:
-A concise, user-facing explanation in Capture Review for why Capture Analysis chose the Save Intent, Collection outcome, and Reminder idea. It may explain that no existing Collection or no concrete Reminder trigger was strong enough. It is evidence/rationale, not hidden model reasoning.
+A concise, user-facing explanation in Capture Review for why Capture Analysis chose the Save Intent, Collection outcome, and Reminder idea. Its visible cue should point to the exact review decision, while its expanded detail may explain that no existing Collection or no concrete Reminder trigger was strong enough. It is evidence/rationale, not hidden model reasoning.
 _Avoid_: Chain-of-thought, audit report, model trace, confidence percentage
 
 **Retrieval Lens**:
