@@ -67,7 +67,7 @@ for (const path of [
 }
 
 const gradle = process.platform === "win32" ? "gradlew.bat" : "./gradlew";
-const result = spawnSync(gradle, [":app:assembleRelease"], {
+const result = spawnSync(gradle, [":app:assembleRelease", "--stacktrace", "--no-daemon"], {
   cwd: androidDir,
   env: process.env,
   stdio: "inherit"
