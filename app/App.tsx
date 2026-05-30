@@ -4197,20 +4197,39 @@ export default function App() {
     );
   }
 
-  function renderCollectionSkeletonRows(count = 4) {
+  function collectionSkeletonDescriptionLines(collection: Collection | undefined, index: number) {
+    if (collection) return String(collection.description || "").length > 58 ? 2 : 1;
+    return index === 0 || index === 2 || index === 5 ? 2 : 1;
+  }
+
+  function renderCollectionSkeletonRows(count = 7, withSelectionControl = false, skeletonCollections: Collection[] = []) {
     return (
-      <View style={styles.loadingRows}>
+      <View style={styles.collectionListSkeletonRows}>
         {Array.from({ length: count }).map((_, item) => (
-          <View key={item} style={styles.collectionListSkeletonRow}>
-            <View style={styles.collectionRowTop}>
-              <SkeletonBlock style={styles.collectionListSkeletonIcon} />
-              <View style={styles.collectionRowCopy}>
-                <SkeletonBlock style={styles.collectionListSkeletonTitle} />
-                <SkeletonBlock style={styles.collectionListSkeletonMeta} />
+          (() => {
+            const descriptionLines = collectionSkeletonDescriptionLines(skeletonCollections[item], item);
+            return (
+              <View key={item}>
+                <View style={withSelectionControl ? styles.collectionChoiceRow : styles.collectionRow}>
+                  <View style={withSelectionControl ? styles.collectionChoiceBody : styles.collectionListSkeletonBody}>
+                    <View style={styles.collectionRowTop}>
+                      <SkeletonBlock style={styles.collectionListSkeletonIcon} />
+                      <View style={styles.collectionRowCopy}>
+                        <SkeletonBlock style={styles.collectionListSkeletonTitle} />
+                        <SkeletonBlock style={styles.collectionListSkeletonMeta} />
+                      </View>
+                    </View>
+                    <View style={styles.collectionListSkeletonSummaryStack}>
+                      <SkeletonBlock style={styles.collectionListSkeletonSummary} />
+                      {descriptionLines > 1 ? <SkeletonBlock style={styles.collectionListSkeletonSummaryShort} /> : null}
+                    </View>
+                  </View>
+                  {withSelectionControl ? <SkeletonBlock style={styles.collectionSelectionSkeletonControl} /> : null}
+                </View>
+                {item < count - 1 ? <View style={styles.separator} /> : null}
               </View>
-            </View>
-            <SkeletonBlock style={styles.collectionListSkeletonSummary} />
-          </View>
+            );
+          })()
         ))}
       </View>
     );
@@ -4737,7 +4756,7 @@ export default function App() {
             ItemSeparatorComponent={() => <View style={styles.separator} />}
             ListEmptyComponent={
               collectionsBlockingLoading ? (
-                renderCollectionSkeletonRows()
+                renderCollectionSkeletonRows(collections.length ? Math.min(collections.length, 7) : 7, false, collections)
               ) : (
                 <View style={styles.collectionEmpty}>
                   <Text style={styles.emptyTitle}>
@@ -4882,7 +4901,7 @@ export default function App() {
             }
             ListEmptyComponent={
               collectionsLoading ? (
-                renderCollectionSkeletonRows()
+                renderCollectionSkeletonRows(4, true, collections.filter((collection) => collection.status === "active"))
               ) : (
                 <View style={styles.collectionEmpty}>
                   <Text style={styles.emptyTitle}>
@@ -6623,12 +6642,11 @@ const styles = StyleSheet.create({
     minWidth: 0,
     paddingTop: 3
   },
-  collectionListSkeletonRow: {
-    borderBottomColor: colors.line,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 9,
-    minHeight: 84,
-    paddingVertical: 15
+  collectionListSkeletonRows: {
+    paddingTop: 0
+  },
+  collectionListSkeletonBody: {
+    gap: 7
   },
   collectionListSkeletonIcon: {
     borderRadius: 8,
@@ -6647,11 +6665,25 @@ const styles = StyleSheet.create({
     marginTop: 7,
     width: "38%"
   },
+  collectionListSkeletonSummaryStack: {
+    gap: 7
+  },
   collectionListSkeletonSummary: {
     borderRadius: 6,
     height: 13,
-    marginLeft: 46,
+    width: "90%"
+  },
+  collectionListSkeletonSummaryShort: {
+    borderRadius: 6,
+    height: 13,
     width: "76%"
+  },
+  collectionSelectionSkeletonControl: {
+    borderRadius: 8,
+    flexShrink: 0,
+    height: 34,
+    marginRight: 2,
+    width: 34
   },
   loadingSourceMark: {
     borderColor: colors.line,
