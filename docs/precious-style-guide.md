@@ -149,6 +149,7 @@ Rules:
 - Keep row tap targets at least 44px high.
 - Use stable row structure for `processing`, `ready`, `needs_review`, `failed`, and `archived`; do not make processing rows jump or disappear.
 - Do not show model/provider details, analysis mode, confidence percentages, or generic `Analyzed` metadata in Recent Captures rows.
+- When a Capture belongs to multiple Collections, rows should make that visible compactly, such as first Collection plus a quiet `+N` count, rather than rendering only one Collection or listing every Collection name.
 - Group Recent Captures by recency with headers such as `Today`, `Yesterday`, `This week`, and `Earlier`.
 
 ### Chips
@@ -202,6 +203,15 @@ Rules:
 - Do not use fake example feeds.
 - Do not explain every future retrieval lens.
 - For archived and collection-related empty states, state what will appear there and how it becomes useful.
+
+### Authentication
+
+- Authentication is a focused setup flow, not part of the authenticated app shell.
+- Password sign-in may remain available for existing users, but `Create account` should open a separate email-only screen.
+- Account creation should send a secure Supabase email link and then show a `Check your email` confirmation state.
+- The confirmation state should tell the user to open the link on the phone where Precious Captures is installed.
+- Do not ask for a password during account creation unless the product explicitly reintroduces password setup.
+- Auth errors should name the fix without exposing provider internals where possible.
 
 ### Recent Captures Home
 

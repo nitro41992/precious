@@ -20,6 +20,17 @@ Related ADRs: `docs/adr/0001-recent-captures-and-full-screen-search.md`, `docs/a
 - Map and Agenda are deferred. Agenda depends on functioning Confirmed Reminders.
 - This pass focuses on UI and workflow. Do not add a broad first-class reminder backend unless the scope is explicitly reopened.
 
+## Authentication
+
+Authentication must:
+
+- Keep account creation separate from password sign-in.
+- Let new users start account creation with email only.
+- Send a Supabase email confirmation or magic link, then show a dedicated `Check your email` state.
+- Tell users to open the confirmation link on the phone with Precious Captures installed.
+- Preserve password sign-in for existing accounts.
+- Avoid surfacing anonymous-auth or provider-debug messages as primary user copy.
+
 ## Home
 
 Home must:
@@ -27,6 +38,7 @@ Home must:
 - Show a compact, prominent top action that opens full-screen Search.
 - Show active Captures grouped by recency, such as `Today`, `Yesterday`, `This week`, and `Earlier`.
 - Show each row as rich consumer content: optional existing thumbnail or shared image preview, title, source plus date/time, summary when available, `Saved as [intent]` when available, meaningful status when needed, and optional note preview.
+- Indicate when a Capture belongs to more than one Collection without making the row noisy, for example by showing the first Collection with a compact additional-count marker.
 - Hide audit-like extraction details from rows, including model/provider names, analysis mode, confidence percentages, generic `Analyzed` labels, and debug state.
 - Keep extraction details persisted and searchable.
 - Provide designed loading, empty, error, long-content, processing, failed, and archived/filter states.

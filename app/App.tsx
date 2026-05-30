@@ -327,6 +327,18 @@ type SnackbarState = {
   action?: () => void;
 };
 
+type AuthScreenMode = "signin" | "create" | "check-email";
+type AuthLoadingState = "signin" | "magiclink" | "callback" | null;
+type AuthCallbackPayload =
+  | {
+      kind: "session";
+      accessToken: string;
+      refreshToken: string;
+      expiresAt: number;
+    }
+  | { kind: "error"; message: string };
+
+const AUTH_CALLBACK_URL = "preciouscaptures://auth/callback";
 const PROCESSING_REFRESH_MS = 3000;
 const CAPTURE_PAGE_SIZE = 18;
 const COLLECTION_CAPTURE_PAGE_SIZE = 18;
@@ -940,6 +952,21 @@ function urlEvidenceMessage(evidence?: UrlEvidence | null) {
 
 function friendlyError(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : String(error || "");
+  if (/anonymous sign-ins are disabled/i.test(message)) {
+    return "Enter an email and password.";
+  }
+  if (/signup|signups|registration/i.test(message) && /disabled|not allowed/i.test(message)) {
+    return "Account creation is not enabled yet. Turn on email signups in Supabase Auth.";
+  }
+  if (/email/i.test(message) && /provider/i.test(message) && /disabled/i.test(message)) {
+    return "Email sign-in is not enabled yet in Supabase Auth.";
+  }
+  if (/redirect|uri|url/i.test(message) && /not allowed|not supported|invalid/i.test(message)) {
+    return `The confirmation link is not allowed yet. Add ${AUTH_CALLBACK_URL} in Supabase Auth URL settings.`;
+  }
+  if (/rate limit|too many requests|over_email_send_rate_limit/i.test(message)) {
+    return "A confirmation email was already sent. Wait a minute before trying again.";
+  }
   if (
     /UnknownHostException|Unable to resolve host|No address associated|fetch failed|SocketException|Software caused connection abort|Connection reset|unexpected end of stream|native_request_failed/i.test(
       message
@@ -954,6 +981,53 @@ function friendlyError(error: unknown, fallback: string) {
     return fallback;
   }
   return message || fallback;
+}
+
+function emailInputError(email: string) {
+  if (!email) {
+    return "Enter your email address.";
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return "Enter a valid email address.";
+  }
+  return "";
+}
+
+function passwordSignInInputError(email: string, password: string) {
+  if (!email || !password) {
+    return "Enter your email and password.";
+  }
+  return emailInputError(email);
+}
+
+function authCallbackPayload(url: string | null | undefined): AuthCallbackPayload | null {
+  if (!url) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  const route = `${parsed.host}${parsed.pathname}`.replace(/^\/+/, "");
+  if (parsed.protocol !== "preciouscaptures:" || route !== "auth/callback") return null;
+
+  const params = new URLSearchParams(parsed.search);
+  if (parsed.hash.startsWith("#")) {
+    new URLSearchParams(parsed.hash.slice(1)).forEach((value, key) => params.set(key, value));
+  }
+  const error = params.get("error_description") || params.get("error");
+  if (error) {
+    return { kind: "error", message: error.replace(/\+/g, " ") };
+  }
+
+  const accessToken = params.get("access_token") || "";
+  const refreshToken = params.get("refresh_token") || "";
+  const expiresAt = Number(params.get("expires_at")) ||
+    Math.floor(Date.now() / 1000) + Number(params.get("expires_in") || 3600);
+  if (!accessToken || !refreshToken) {
+    return { kind: "error", message: "This confirmation link is incomplete. Send yourself a new link." };
+  }
+  return { kind: "session", accessToken, refreshToken, expiresAt };
 }
 
 function isCaptureImageCancel(error: unknown) {
@@ -1511,6 +1585,37 @@ function MeaningToken({ Icon, text }: { Icon: LucideIconComponent; text: string 
   );
 }
 
+function CollectionMeaningToken({ collections }: { collections: LinkedCollection[] }) {
+  const collectionNames = uniqueStrings(collections.map((collection) => collection.title.trim()));
+  const primaryCollection = collectionNames[0] || "";
+  const overflowCount = Math.max(collectionNames.length - 1, 0);
+  if (!primaryCollection) return null;
+  return (
+    <View
+      accessibilityLabel={
+        overflowCount
+          ? `Collections: ${collectionNames.join(", ")}`
+          : `Collection: ${primaryCollection}`
+      }
+      style={[
+        styles.meaningToken,
+        styles.collectionMeaningToken,
+        overflowCount > 0 && styles.collectionMeaningTokenMulti
+      ]}
+    >
+      <Folder color={overflowCount > 0 ? colors.accent : colors.muted} size={13} strokeWidth={2.2} />
+      <Text numberOfLines={1} style={[styles.meaningTokenText, styles.collectionMeaningTokenText]}>
+        {primaryCollection}
+      </Text>
+      {overflowCount > 0 ? (
+        <View style={styles.collectionOverflowBadge}>
+          <Text style={styles.collectionOverflowText}>+{overflowCount}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 export default function App() {
   const { height: windowHeight } = useWindowDimensions();
   const [captures, setCaptures] = useState<Capture[]>([]);
@@ -1588,9 +1693,12 @@ export default function App() {
   const [captureRowRevealStates, setCaptureRowRevealStates] = useState<Record<string, boolean>>({});
   const [homeFeedReadyKey, setHomeFeedReadyKey] = useState("");
   const [collectionFeedReadyKey, setCollectionFeedReadyKey] = useState("");
+  const [authScreen, setAuthScreen] = useState<AuthScreenMode>("signin");
   const [authEmail, setAuthEmail] = useState("");
+  const [authCreateEmail, setAuthCreateEmail] = useState("");
+  const [authPendingEmail, setAuthPendingEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
-  const [authLoading, setAuthLoading] = useState<"signin" | "signup" | null>(null);
+  const [authLoading, setAuthLoading] = useState<AuthLoadingState>(null);
   const latestNoteRef = useRef("");
   const capturesRef = useRef<Capture[]>([]);
   const archivedCapturesRef = useRef<Capture[]>([]);
@@ -1610,6 +1718,7 @@ export default function App() {
   const lastKeyboardHeightRef = useRef(0);
   const captureComposerClosingRef = useRef(false);
   const captureImagePickerActiveRef = useRef(false);
+  const pendingAuthCallbackUrlRef = useRef<string | null>(null);
   const searchMotion = useRef(new Animated.Value(0)).current;
   const reviewMotion = useRef(new Animated.Value(0)).current;
   const captureComposerMotion = useRef(new Animated.Value(0)).current;
@@ -2265,6 +2374,50 @@ export default function App() {
     setArchivedCaptures(sortCaptures(next.filter(isArchived)));
   }
 
+  async function persistSupabaseSession(accessToken: string, refreshToken: string, expiresAt: number) {
+    if (!config?.supabaseUrl || !config.supabaseAnonKey || !nativeAuth) {
+      throw new Error("Supabase URL and anon key are not configured in the Android build.");
+    }
+    const user = await requestJson<{ id?: string; user?: { id?: string } }>(`${config.supabaseUrl}/auth/v1/user`, {
+      headers: {
+        apikey: config.supabaseAnonKey,
+        authorization: `Bearer ${accessToken}`
+      }
+    });
+    const userId = user.id || user.user?.id;
+    if (!userId) throw new Error("Could not finish sign in.");
+    const next = { accessToken, refreshToken, expiresAt, userId };
+    await nativeAuth.persistSession(accessToken, refreshToken, expiresAt, userId);
+    setSession(next);
+    setMessage("");
+    setAuthScreen("signin");
+  }
+
+  async function handleAuthCallbackUrl(url: string | null | undefined) {
+    const payload = authCallbackPayload(url);
+    if (!payload) return false;
+    if (!config?.supabaseUrl || !config.supabaseAnonKey || !nativeAuth) {
+      pendingAuthCallbackUrlRef.current = url || null;
+      return true;
+    }
+    if (payload.kind === "error") {
+      setAuthScreen("signin");
+      setMessage(payload.message || "The confirmation link could not be used.");
+      return true;
+    }
+    setAuthLoading("callback");
+    setMessage("Finishing sign in...");
+    try {
+      await persistSupabaseSession(payload.accessToken, payload.refreshToken, payload.expiresAt);
+    } catch (error) {
+      setAuthScreen("signin");
+      setMessage(friendlyError(error, "Could not finish sign in."));
+    } finally {
+      setAuthLoading(null);
+    }
+    return true;
+  }
+
   useEffect(() => {
     nativeAuth?.getConfig().then((raw) => {
       setConfig(JSON.parse(raw || "{}") as AppConfig);
@@ -2279,10 +2432,21 @@ export default function App() {
     }
 
     Linking.getInitialURL().then((url) => {
+      if (authCallbackPayload(url)) {
+        pendingAuthCallbackUrlRef.current = url;
+        return;
+      }
       const captureId = parseCaptureUrl(url);
       if (captureId) selectCapture(captureId);
     });
   }, [selectCapture]);
+
+  useEffect(() => {
+    if (!config || !pendingAuthCallbackUrlRef.current) return;
+    const url = pendingAuthCallbackUrlRef.current;
+    pendingAuthCallbackUrlRef.current = null;
+    void handleAuthCallbackUrl(url);
+  }, [config]);
 
   useEffect(() => {
     capturesRef.current = captures;
@@ -2300,6 +2464,10 @@ export default function App() {
 
   useEffect(() => {
     const linkSubscription = Linking.addEventListener("url", ({ url }) => {
+      if (authCallbackPayload(url)) {
+        void handleAuthCallbackUrl(url);
+        return;
+      }
       const captureId = parseCaptureUrl(url);
       if (captureId) selectCapture(captureId);
       void loadCaptures();
@@ -3934,25 +4102,27 @@ export default function App() {
     }
   }
 
-  async function submitAuth(mode: "signin" | "signup") {
+  async function submitPasswordSignIn() {
     if (!config?.supabaseUrl || !config.supabaseAnonKey || !nativeAuth) {
       setMessage("Supabase URL and anon key are not configured in the Android build.");
       return;
     }
-    setAuthLoading(mode);
+    const email = authEmail.trim();
+    const inputError = passwordSignInInputError(email, authPassword);
+    if (inputError) {
+      setMessage(inputError);
+      return;
+    }
+    setAuthLoading("signin");
     setMessage("");
     try {
-      const endpoint =
-        mode === "signin"
-          ? `${config.supabaseUrl}/auth/v1/token?grant_type=password`
-          : `${config.supabaseUrl}/auth/v1/signup`;
-      const json = await requestJson<Record<string, any>>(endpoint, {
+      const json = await requestJson<Record<string, any>>(`${config.supabaseUrl}/auth/v1/token?grant_type=password`, {
         method: "POST",
         headers: {
           apikey: config.supabaseAnonKey,
           "content-type": "application/json"
         },
-        body: { email: authEmail.trim(), password: authPassword }
+        body: { email, password: authPassword }
       });
       const accessToken = json.access_token;
       const refreshToken = json.refresh_token;
@@ -3970,6 +4140,54 @@ export default function App() {
     } finally {
       setAuthLoading(null);
     }
+  }
+
+  async function sendCreateAccountLink() {
+    if (!config?.supabaseUrl || !config.supabaseAnonKey) {
+      setMessage("Supabase URL and anon key are not configured in the Android build.");
+      return;
+    }
+    const email = authCreateEmail.trim();
+    const inputError = emailInputError(email);
+    if (inputError) {
+      setMessage(inputError);
+      return;
+    }
+    setAuthLoading("magiclink");
+    setMessage("");
+    try {
+      await requestJson<Record<string, any>>(`${config.supabaseUrl}/auth/v1/otp?redirect_to=${encodeURIComponent(AUTH_CALLBACK_URL)}`, {
+        method: "POST",
+        headers: {
+          apikey: config.supabaseAnonKey,
+          "content-type": "application/json"
+        },
+        body: {
+          email,
+          data: {},
+          create_user: true,
+          gotrue_meta_security: {}
+        }
+      });
+      setAuthPendingEmail(email);
+      setAuthScreen("check-email");
+      setMessage("");
+    } catch (error) {
+      setMessage(friendlyError(error, "Could not send the confirmation email."));
+    } finally {
+      setAuthLoading(null);
+    }
+  }
+
+  function openCreateAccount() {
+    setAuthCreateEmail(authEmail.trim());
+    setAuthScreen("create");
+    setMessage("");
+  }
+
+  function backToSignIn() {
+    setAuthScreen("signin");
+    setMessage("");
   }
 
   async function signOut() {
@@ -4067,7 +4285,7 @@ export default function App() {
     const itemSummary = displayStatus(item) === "needs_review" ? "" : consumerSummary(item);
     const supportLine = captureSupportLine(item, itemSummary);
     const intentLabel = captureIntentLabel(item);
-    const collectionLabel = showCollectionToken ? item.linkedCollections?.[0]?.title || "" : "";
+    const collectionTokens = showCollectionToken ? item.linkedCollections || [] : [];
     const ghostSourceMark = deferFallbackIcon || shouldGhostSourceMark(item);
     const imageLoadingGhost = Boolean(
       !ghostSourceMark &&
@@ -4133,9 +4351,7 @@ export default function App() {
             {intentLabel ? (
               <MeaningToken Icon={BookOpen} text={intentLabel} />
             ) : null}
-            {collectionLabel ? (
-              <MeaningToken Icon={Folder} text={collectionLabel} />
-            ) : null}
+            <CollectionMeaningToken collections={collectionTokens} />
             {item.note ? (
               <MeaningToken Icon={StickyNote} text={item.note} />
             ) : null}
@@ -5588,52 +5804,140 @@ export default function App() {
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="light-content" />
         <ScrollView
-          contentContainerStyle={styles.detail}
+          contentContainerStyle={[styles.detail, styles.authDetail]}
           keyboardShouldPersistTaps="handled"
           showsHorizontalScrollIndicator={false}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.kicker}>Sign in</Text>
-          <Text style={styles.title}>Precious Captures</Text>
-          <TextInput
-            autoCapitalize="none"
-            keyboardType="email-address"
-            onChangeText={setAuthEmail}
-            placeholder="Email"
-            placeholderTextColor={colors.muted}
-            style={styles.search}
-            testID="pc.auth.email"
-            value={authEmail}
-          />
-          <TextInput
-            onChangeText={setAuthPassword}
-            placeholder="Password"
-            placeholderTextColor={colors.muted}
-            secureTextEntry
-            style={styles.search}
-            testID="pc.auth.password"
-            value={authPassword}
-          />
-          <Pressable
-            disabled={Boolean(authLoading)}
-            onPress={() => void submitAuth("signin")}
-            style={styles.primaryButton}
-            testID="pc.auth.sign-in"
-          >
-            <Text style={styles.primaryButtonText}>
-              {authLoading === "signin" ? "Signing in..." : "Sign in"}
-            </Text>
-          </Pressable>
-          <Pressable
-            disabled={Boolean(authLoading)}
-            onPress={() => void submitAuth("signup")}
-            style={styles.secondaryButton}
-          >
-            <Text style={styles.secondaryButtonText}>
-              {authLoading === "signup" ? "Creating..." : "Create account"}
-            </Text>
-          </Pressable>
-          {message ? <Text style={styles.errorText}>{message}</Text> : null}
+          {authScreen === "signin" ? (
+            <>
+              <Text style={styles.kicker}>Sign in</Text>
+              <Text style={styles.title}>Precious Captures</Text>
+              <TextInput
+                autoCapitalize="none"
+                keyboardType="email-address"
+                onChangeText={setAuthEmail}
+                placeholder="Email"
+                placeholderTextColor={colors.muted}
+                style={styles.search}
+                testID="pc.auth.email"
+                value={authEmail}
+              />
+              <TextInput
+                onChangeText={setAuthPassword}
+                placeholder="Password"
+                placeholderTextColor={colors.muted}
+                secureTextEntry
+                style={styles.search}
+                testID="pc.auth.password"
+                value={authPassword}
+              />
+              <Pressable
+                disabled={Boolean(authLoading)}
+                onPress={() => void submitPasswordSignIn()}
+                style={[styles.primaryButton, authLoading && styles.disabledButton]}
+                testID="pc.auth.sign-in"
+              >
+                <Text style={styles.primaryButtonText}>
+                  {authLoading === "signin" || authLoading === "callback" ? "Signing in..." : "Sign in"}
+                </Text>
+              </Pressable>
+              <Pressable
+                disabled={Boolean(authLoading)}
+                onPress={openCreateAccount}
+                style={styles.secondaryButton}
+                testID="pc.auth.create-account"
+              >
+                <Text style={styles.secondaryButtonText}>Create account</Text>
+              </Pressable>
+              {message ? <Text style={styles.errorText}>{message}</Text> : null}
+            </>
+          ) : authScreen === "create" ? (
+            <>
+              <View style={styles.authHeaderRow}>
+                <Pressable
+                  accessibilityLabel="Back to sign in"
+                  hitSlop={10}
+                  onPress={backToSignIn}
+                  style={styles.iconButton}
+                  testID="pc.auth.create.back"
+                >
+                  <ArrowLeft color={colors.ink} size={26} strokeWidth={2.2} />
+                </Pressable>
+                <View style={styles.authHeaderCopy}>
+                  <Text style={styles.kicker}>Create account</Text>
+                  <Text style={styles.title}>Start with email</Text>
+                </View>
+              </View>
+              <Text style={styles.supportingText}>
+                We will send a secure confirmation link. Open it on this phone to finish.
+              </Text>
+              <TextInput
+                autoCapitalize="none"
+                keyboardType="email-address"
+                onChangeText={setAuthCreateEmail}
+                placeholder="Email"
+                placeholderTextColor={colors.muted}
+                style={styles.search}
+                testID="pc.auth.create.email"
+                value={authCreateEmail}
+              />
+              <Pressable
+                disabled={Boolean(authLoading)}
+                onPress={() => void sendCreateAccountLink()}
+                style={[styles.primaryButton, authLoading && styles.disabledButton]}
+                testID="pc.auth.create.send"
+              >
+                <Text style={styles.primaryButtonText}>
+                  {authLoading === "magiclink" ? "Sending..." : "Send confirmation email"}
+                </Text>
+              </Pressable>
+              {message ? <Text style={styles.errorText}>{message}</Text> : null}
+            </>
+          ) : (
+            <>
+              <View style={styles.authHeaderRow}>
+                <Pressable
+                  accessibilityLabel="Back to sign in"
+                  hitSlop={10}
+                  onPress={backToSignIn}
+                  style={styles.iconButton}
+                  testID="pc.auth.check.back"
+                >
+                  <ArrowLeft color={colors.ink} size={26} strokeWidth={2.2} />
+                </Pressable>
+                <View style={styles.authHeaderCopy}>
+                  <Text style={styles.kicker}>Create account</Text>
+                  <Text style={styles.title}>Check your email</Text>
+                </View>
+              </View>
+              <View style={styles.authSuccessMark}>
+                <Check color={colors.onAccent} size={28} strokeWidth={2.5} />
+              </View>
+              <Text style={styles.supportingText}>
+                We sent a confirmation link to {authPendingEmail || authCreateEmail.trim() || "your email"}. Open it on this phone to finish creating your account.
+              </Text>
+              <Pressable
+                disabled={Boolean(authLoading)}
+                onPress={backToSignIn}
+                style={styles.primaryButton}
+                testID="pc.auth.check.sign-in"
+              >
+                <Text style={styles.primaryButtonText}>Back to sign in</Text>
+              </Pressable>
+              <Pressable
+                disabled={Boolean(authLoading)}
+                onPress={() => void sendCreateAccountLink()}
+                style={styles.secondaryButton}
+                testID="pc.auth.check.resend"
+              >
+                <Text style={styles.secondaryButtonText}>
+                  {authLoading === "magiclink" ? "Sending..." : "Send again"}
+                </Text>
+              </Pressable>
+              {message ? <Text style={styles.errorText}>{message}</Text> : null}
+            </>
+          )}
         </ScrollView>
         {renderAppSheets()}
       </SafeAreaView>
@@ -6654,7 +6958,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: 4,
-    maxWidth: "100%"
+    maxWidth: "100%",
+    minWidth: 0
   },
   meaningTokenText: {
     color: colors.muted,
@@ -6662,6 +6967,40 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     lineHeight: 17
+  },
+  collectionMeaningToken: {
+    backgroundColor: colors.surfaceContainer,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    minHeight: 26,
+    paddingLeft: 7,
+    paddingRight: 8,
+    paddingVertical: 4
+  },
+  collectionMeaningTokenMulti: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accentLine,
+    paddingRight: 4
+  },
+  collectionMeaningTokenText: {
+    color: colors.secondary
+  },
+  collectionOverflowBadge: {
+    alignItems: "center",
+    backgroundColor: colors.accent,
+    borderRadius: 6,
+    flexShrink: 0,
+    justifyContent: "center",
+    minHeight: 18,
+    minWidth: 24,
+    paddingHorizontal: 5
+  },
+  collectionOverflowText: {
+    color: colors.onAccent,
+    fontSize: 11,
+    fontWeight: "800",
+    lineHeight: 14
   },
   searchMatchText: {
     color: colors.accent,
@@ -7043,6 +7382,27 @@ const styles = StyleSheet.create({
   detail: {
     gap: 16,
     padding: 22
+  },
+  authDetail: {
+    paddingTop: 44
+  },
+  authHeaderRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10
+  },
+  authHeaderCopy: {
+    flex: 1,
+    gap: 4
+  },
+  authSuccessMark: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: colors.accent,
+    borderRadius: 8,
+    height: 52,
+    justifyContent: "center",
+    width: 52
   },
   reviewShell: {
     flex: 1
