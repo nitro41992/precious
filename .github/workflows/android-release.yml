@@ -47,6 +47,20 @@ jobs:
       - name: Fast checks
         run: npm test
 
+      - name: Generate Android debug keystore
+        run: |
+          keytool -genkeypair \
+            -v \
+            -storetype JKS \
+            -keystore android/app/debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
       - name: Build hosted release APK
         run: npm run android:build:hosted
 
