@@ -34,6 +34,7 @@ import {
   BookOpen,
   CalendarDays,
   Check,
+  ChevronRight,
   Clock3,
   Copy,
   ExternalLink,
@@ -84,6 +85,24 @@ type UrlEvidence = {
   image_url?: string;
 };
 
+type ReviewRationale = {
+  summary?: string;
+  intent?: string;
+  collections?: string;
+  reminder?: string;
+};
+
+type ReviewInsight = {
+  summary: string;
+  sections: Array<{ label: string; text: string }>;
+};
+
+type RationaleSheet = {
+  title: string;
+  text: string;
+  sections?: Array<{ label: string; text: string }>;
+};
+
 type Capture = {
   id: string;
   remoteId?: string;
@@ -104,6 +123,7 @@ type Capture = {
   analysisError?: string;
   defaultIntent?: string;
   intentRationale?: string;
+  reviewRationale?: ReviewRationale;
   confidenceLabel?: string;
   needsReview?: boolean;
   entities?: Array<{ type: string; name: string; evidence: string; confidence: number }>;
@@ -791,6 +811,60 @@ function linkedCollectionsLabel(collections: LinkedCollection[]) {
   return `${collections[0].title} +${collections.length - 1}`;
 }
 
+function reviewRationaleFromRemote(value: unknown): ReviewRationale | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const next: ReviewRationale = {};
+  for (const key of ["summary", "intent", "collections", "reminder"] as const) {
+    const text = cleanSentence(typeof record[key] === "string" ? record[key] : "");
+    if (text && !auditLikeText(text)) next[key] = text;
+  }
+  return Object.keys(next).length ? next : undefined;
+}
+
+function rationaleLine(value: string | null | undefined) {
+  const text = cleanSentence(value);
+  if (!text || auditLikeText(text)) return "";
+  return text;
+}
+
+function reviewInsightForCapture(capture: Capture): ReviewInsight {
+  const rationale = capture.reviewRationale || {};
+  const linkedRationales = (capture.linkedCollections || [])
+    .map((collection) => rationaleLine(collection.rationale))
+    .filter(Boolean);
+  const reminderRationale = (capture.suggestedReminders || [])
+    .map((reminder) => rationaleLine(reminder.rationale))
+    .find(Boolean) || "";
+  const intentText =
+    rationaleLine(rationale.intent) ||
+    rationaleLine(capture.intentRationale) ||
+    "The saved content suggested this intent, and you can change it here.";
+  const collectionsText =
+    rationaleLine(rationale.collections) ||
+    linkedRationales[0] ||
+    (capture.linkedCollections?.length
+      ? `Matched ${linkedCollectionsLabel(capture.linkedCollections)} from your existing collections.`
+      : "No existing collection looked specific enough to attach automatically.");
+  const reminderText =
+    rationaleLine(rationale.reminder) ||
+    reminderRationale ||
+    "No concrete time, place, or event trigger was found.";
+  const summary =
+    rationaleLine(rationale.summary) ||
+    conciseText(intentText, 150) ||
+    conciseText(capture.summary, 150) ||
+    "Review the suggested meaning before you save changes.";
+  return {
+    summary,
+    sections: [
+      { label: "Intent", text: intentText },
+      { label: "Collections", text: collectionsText },
+      { label: "Reminder idea", text: reminderText }
+    ].filter((section) => Boolean(section.text))
+  };
+}
+
 function collectionCountLabel(count: number) {
   return `${count} ${count === 1 ? "capture" : "captures"}`;
 }
@@ -928,6 +1002,7 @@ function captureFromRemote(row: Record<string, any>): Capture {
     analysisError: row.analysis_error || undefined,
     defaultIntent: row.current_save_intent || row.default_intent || defaultIntent.category || undefined,
     intentRationale: row.intent_rationale || defaultIntent.rationale || undefined,
+    reviewRationale: reviewRationaleFromRemote(analysis.review_rationale),
     confidenceLabel: analysis.confidence_label || undefined,
     needsReview: Boolean(
       !reviewConfirmedAtValue &&
@@ -1493,7 +1568,7 @@ export default function App() {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [noteSheetOpen, setNoteSheetOpen] = useState(false);
   const [accountSheetOpen, setAccountSheetOpen] = useState(false);
-  const [rationaleSheet, setRationaleSheet] = useState<{ title: string; text: string } | null>(null);
+  const [rationaleSheet, setRationaleSheet] = useState<RationaleSheet | null>(null);
   const [archiveCaptureConfirmOpen, setArchiveCaptureConfirmOpen] = useState(false);
   const [archiveCollectionTarget, setArchiveCollectionTarget] = useState<Collection | null>(null);
   const [faviconFailures, setFaviconFailures] = useState<Record<string, boolean>>({});
@@ -2952,10 +3027,13 @@ export default function App() {
     });
   }, [captureReturnCollectionId, loadCollectionCaptures, selectedCollection?.status, selectedCollectionId]);
 
-  function showRationale(title: string, rationale: string | null | undefined) {
-    const text = cleanSentence(rationale);
-    if (!text) return;
-    setRationaleSheet({ title, text });
+  function openReviewInsight(insight: ReviewInsight) {
+    if (!insight.summary && !insight.sections.length) return;
+    setRationaleSheet({
+      title: "Review insight",
+      text: insight.summary,
+      sections: insight.sections
+    });
   }
 
   function applyUpdatedCapture(updatedCapture: Capture, previousId: string) {
@@ -4494,7 +4572,7 @@ export default function App() {
       return (
         <View style={styles.modalLayer} pointerEvents="box-none">
           <Pressable
-            accessibilityLabel="Close suggestion detail"
+            accessibilityLabel="Close review insight"
             onPress={() => setRationaleSheet(null)}
             style={styles.modalBackdrop}
           />
@@ -4505,8 +4583,18 @@ export default function App() {
                 <Text style={styles.sheetTitle}>{rationaleSheet.title}</Text>
                 <Text style={styles.sheetSubtitle}>{rationaleSheet.text}</Text>
               </View>
-              <IconButton Icon={X} label="Close suggestion detail" onPress={() => setRationaleSheet(null)} />
+              <IconButton Icon={X} label="Close review insight" onPress={() => setRationaleSheet(null)} />
             </View>
+            {rationaleSheet.sections?.length ? (
+              <View style={styles.rationaleSheetSections}>
+                {rationaleSheet.sections.map((section) => (
+                  <View key={section.label} style={styles.rationaleSheetSection}>
+                    <Text style={styles.rationaleSheetLabel}>{section.label}</Text>
+                    <Text style={styles.rationaleSheetText}>{section.text}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
             <Pressable onPress={() => setRationaleSheet(null)} style={styles.primaryButton}>
               <Text style={styles.primaryButtonText}>Done</Text>
             </Pressable>
@@ -4980,6 +5068,14 @@ export default function App() {
     const selectedVisitTarget = selected.visitTarget;
     const selectedVisitTargetMapCandidates = selectedVisitTarget ? visitTargetMapCandidates : [];
     const selectedSourceMeta = `${captureSourceLabel(selected)} · ${formatDateTime(selected.createdAt)}`;
+    const selectedReviewInsight = reviewInsightForCapture(selected);
+    const showReviewInsight = Boolean(
+      selected.reviewRationale ||
+        selected.intentRationale ||
+        selected.defaultIntent ||
+        selected.suggestedReminders?.length ||
+        selected.linkedCollections?.some((collection) => collection.rationale)
+    );
     const noteStatusLabel =
       noteSaveState === "saving"
         ? "Saving..."
@@ -5153,7 +5249,7 @@ export default function App() {
                   <Text style={styles.editRowLabel}>Intent</Text>
                   <Pressable
                     android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
-                    onLongPress={() => showRationale("Why this intent?", selected.intentRationale)}
+                    onLongPress={() => openReviewInsight(selectedReviewInsight)}
                     onPress={() => setQuickIntentOpen((current) => !current)}
                     style={({ pressed }) => [
                       styles.editRowValue,
@@ -5168,6 +5264,7 @@ export default function App() {
                   <Text style={styles.editRowLabel}>Collections</Text>
                   <Pressable
                     android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
+                    onLongPress={() => openReviewInsight(selectedReviewInsight)}
                     onPress={() => void openCollectionPicker()}
                     style={({ pressed }) => [
                       styles.editRowValue,
@@ -5191,7 +5288,7 @@ export default function App() {
                     <Text style={styles.editRowLabel}>Reminder idea</Text>
                     <Pressable
                       android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
-                      onLongPress={() => showRationale("Why this reminder?", primaryReminder.rationale)}
+                      onLongPress={() => openReviewInsight(selectedReviewInsight)}
                       onPress={() => {
                         const next = { ...reminderDrafts };
                         if (primaryReminderRemoved) delete next[primaryReminderKey];
@@ -5257,6 +5354,30 @@ export default function App() {
                 </View>
               ) : null}
             </View>
+            {showReviewInsight ? (
+              <Pressable
+                accessibilityHint="Shows why the suggested intent, collection, and reminder were chosen."
+                accessibilityLabel="Review insight"
+                accessibilityRole="button"
+                onPress={() => openReviewInsight(selectedReviewInsight)}
+                style={({ pressed }) => [styles.reviewInsightCard, pressed && styles.subtlePressed]}
+                testID="pc.review.insight"
+              >
+                <View style={styles.reviewInsightIcon}>
+                  <Info color={colors.accent} size={17} strokeWidth={2.4} />
+                </View>
+                <View style={styles.reviewInsightCopy}>
+                  <View style={styles.reviewInsightHeader}>
+                    <Text style={styles.reviewInsightTitle}>Review insight</Text>
+                    <Text style={styles.reviewInsightAction}>Details</Text>
+                  </View>
+                  <Text numberOfLines={2} style={styles.reviewInsightSummary}>
+                    {selectedReviewInsight.summary}
+                  </Text>
+                </View>
+                <ChevronRight color={colors.muted} size={18} strokeWidth={2.4} />
+              </Pressable>
+            ) : null}
             {selectedVisitTarget && selectedVisitTargetMapCandidates.length ? (
               <View style={styles.sourceBlock}>
                 <Text style={styles.meta}>Open in Maps</Text>
@@ -7013,6 +7134,56 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 2
   },
+  reviewInsightCard: {
+    alignItems: "center",
+    backgroundColor: colors.surfaceContainer,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 11,
+    minHeight: 78,
+    paddingHorizontal: 12,
+    paddingVertical: 12
+  },
+  reviewInsightIcon: {
+    alignItems: "center",
+    backgroundColor: colors.accentSoft,
+    borderRadius: 8,
+    height: 34,
+    justifyContent: "center",
+    width: 34
+  },
+  reviewInsightCopy: {
+    flex: 1,
+    gap: 4,
+    minWidth: 0
+  },
+  reviewInsightHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between"
+  },
+  reviewInsightTitle: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "800",
+    lineHeight: 19
+  },
+  reviewInsightAction: {
+    color: colors.accent,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 16
+  },
+  reviewInsightSummary: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 19
+  },
   reviewPrimaryBlock: {
     gap: 8,
     paddingHorizontal: 2
@@ -7285,6 +7456,30 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 8,
     paddingTop: 12
+  },
+  rationaleSheetSections: {
+    gap: 10
+  },
+  rationaleSheetSection: {
+    backgroundColor: colors.surfaceContainer,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  rationaleSheetLabel: {
+    color: colors.accent,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 16
+  },
+  rationaleSheetText: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 20
   },
   currentChoiceRow: {
     alignItems: "center",

@@ -187,8 +187,8 @@ type CaptureGateDecision = {
   evidence_summary: string;
 };
 
-const PROMPT_VERSION = "precious-capture-analysis-v5";
-const SCHEMA_VERSION = "precious-capture-analysis-v5";
+const PROMPT_VERSION = "precious-capture-analysis-v6";
+const SCHEMA_VERSION = "precious-capture-analysis-v6";
 const PREFLIGHT_PROMPT_VERSION = "precious-capture-preflight-v1";
 const CAPTURE_GATE_PROMPT_VERSION = "precious-capture-gate-v1";
 const CLIENT_EVENT_RETENTION_DAYS = 90;
@@ -286,6 +286,7 @@ const analysisSchema = {
     "verified_place",
     "suggested_reminders",
     "collection_decisions",
+    "review_rationale",
     "search_phrases",
     "confidence_label",
     "needs_review",
@@ -363,6 +364,17 @@ const analysisSchema = {
           rationale: { type: "string" },
           confidence: { type: "number" },
         },
+      },
+    },
+    review_rationale: {
+      type: "object",
+      additionalProperties: false,
+      required: ["summary", "intent", "collections", "reminder"],
+      properties: {
+        summary: { type: "string" },
+        intent: { type: "string" },
+        collections: { type: "string" },
+        reminder: { type: "string" },
       },
     },
     search_phrases: { type: "array", items: { type: "string" } },
@@ -726,6 +738,46 @@ function analysisRequiresReview(
   );
 }
 
+function firstRationale(records: unknown) {
+  if (!Array.isArray(records)) return null;
+  for (const item of records) {
+    const record = jsonObject(item);
+    const rationale = stringValue(record.rationale);
+    if (rationale) return rationale;
+  }
+  return null;
+}
+
+function reviewRationaleFromAnalysis(analysis: Record<string, unknown>) {
+  const reviewRationale = jsonObject(analysis.review_rationale);
+  const defaultIntent = jsonObject(analysis.default_intent);
+  const collectionRationale =
+    firstRationale(analysis.linked_collections) ||
+    firstRationale(analysis.collection_decisions) ||
+    firstRationale(analysis.suggested_collections);
+  const reminderRationale = firstRationale(analysis.suggested_reminders);
+  const intent =
+    stringValue(reviewRationale.intent) ||
+    stringValue(defaultIntent.rationale) ||
+    "The saved content suggested this intent, and the user can change it in Capture Review.";
+  const collections =
+    stringValue(reviewRationale.collections) ||
+    collectionRationale ||
+    "No existing collection looked specific enough to attach automatically.";
+  const reminder =
+    stringValue(reviewRationale.reminder) ||
+    reminderRationale ||
+    "No concrete time, place, or event trigger was found.";
+  const summary =
+    stringValue(reviewRationale.summary) ||
+    compactText([
+      stringValue(defaultIntent.rationale),
+      stringValue(analysis.summary),
+    ], 260) ||
+    "Sharebook used the available capture evidence to suggest the review fields.";
+  return { summary, intent, collections, reminder };
+}
+
 function normalizedReviewAnalysis(
   analysis: Record<string, unknown>,
   reviewConfirmedAt?: unknown,
@@ -734,6 +786,7 @@ function normalizedReviewAnalysis(
   return {
     ...analysis,
     ...normalizeVisitTargetFields(analysis),
+    review_rationale: reviewRationaleFromAnalysis(analysis),
     needs_review: needsReview,
   };
 }
@@ -3337,6 +3390,7 @@ function compactJsonText(value: unknown, maxLength = 1600) {
 function captureEmbeddingContent(capture: Record<string, unknown>) {
   const analysis = jsonObject(capture.analysis);
   const defaultIntent = jsonObject(analysis.default_intent);
+  const reviewRationale = jsonObject(analysis.review_rationale);
   const urlEvidence = jsonObject(analysis.url_evidence);
   const linkedCollections = Array.isArray(capture.linked_collections)
     ? capture.linked_collections
@@ -3353,6 +3407,10 @@ function captureEmbeddingContent(capture: Record<string, unknown>) {
     stringValue(capture.intent_rationale),
     stringValue(defaultIntent.category),
     stringValue(defaultIntent.rationale),
+    stringValue(reviewRationale.summary),
+    stringValue(reviewRationale.intent),
+    stringValue(reviewRationale.collections),
+    stringValue(reviewRationale.reminder),
     stringValue(analysis.summary),
     stringValue(analysis.visit_target_name),
     stringValue(analysis.visit_target_query),
@@ -3745,6 +3803,8 @@ function buildPrompt(
     "You may choose from only the retrieved active collections listed below. If one fits strongly, return an existing collection decision with its exact collection_id and title.",
     "Never invent a collection, propose a new collection name, or return a free-form collection. If no retrieved collection is a strong fit, return an empty collection_decisions array.",
     "Use collection_decisions only for existing retrieved collections. Return at most 2 decisions. Prefer no collection decision over a weak one.",
+    "Always fill review_rationale with concise user-facing evidence for Capture Review. It is not chain-of-thought and must not mention models, prompts, scores, or hidden reasoning.",
+    "review_rationale.summary should summarize why the overall suggestion is useful. review_rationale.intent explains the Save Intent. review_rationale.collections explains the existing Collection match, or why no existing Collection was strong enough. review_rationale.reminder explains the Reminder idea, or why no concrete future trigger was found.",
     "If evidence is blocked, missing, or ambiguous, infer only from the URL path and shared text, mark low confidence, and set needs_review when needed.",
     "",
     JSON.stringify(
@@ -4343,6 +4403,7 @@ async function persistDeterministicAnalysis(
   analysis: AnalysisOutput,
   mode: string,
 ) {
+  const normalizedAnalysis = normalizedReviewAnalysis(analysis);
   await supabase.from("analysis_runs").insert({
     user_id: userId,
     capture_id: capture.id,
@@ -4351,26 +4412,26 @@ async function persistDeterministicAnalysis(
     status: "succeeded",
     prompt_version: "url-evidence-policy-v1",
     schema_version: "url-evidence-policy-v1",
-    raw_output: analysis,
-    raw_model_output: JSON.stringify({ url_evidence: analysis.url_evidence }),
+    raw_output: normalizedAnalysis,
+    raw_model_output: JSON.stringify({ url_evidence: normalizedAnalysis.url_evidence }),
   });
   await supabase
     .from("captures")
     .update({
       analysis_state: "needs_review",
-      analysis_error: typeof analysis.summary === "string"
-        ? analysis.summary
+      analysis_error: typeof normalizedAnalysis.summary === "string"
+        ? normalizedAnalysis.summary
         : null,
-      analysis,
+      analysis: normalizedAnalysis,
       analysis_provider: "system",
       analysis_model: "url-evidence-policy",
       analysis_mode: mode,
-      display_title: analysis.display_title,
-      title: capture.title || analysis.display_title,
-      default_intent: analysis.default_intent.category,
-      default_intent_confidence: analysis.default_intent.confidence,
-      current_save_intent: analysis.default_intent.category,
-      intent_rationale: analysis.default_intent.rationale,
+      display_title: normalizedAnalysis.display_title,
+      title: capture.title || normalizedAnalysis.display_title,
+      default_intent: normalizedAnalysis.default_intent.category,
+      default_intent_confidence: normalizedAnalysis.default_intent.confidence,
+      current_save_intent: normalizedAnalysis.default_intent.category,
+      intent_rationale: normalizedAnalysis.default_intent.rationale,
       processed_at: new Date().toISOString(),
     })
     .eq("id", capture.id)
@@ -4394,6 +4455,7 @@ async function persistCaptureGateNeedsReview(
     result.gate,
     urlEvidence,
   );
+  const normalizedAnalysis = normalizedReviewAnalysis(analysis);
   await supabase.from("analysis_runs").insert({
     user_id: userId,
     capture_id: capture.id,
@@ -4404,7 +4466,7 @@ async function persistCaptureGateNeedsReview(
     schema_version: CAPTURE_GATE_PROMPT_VERSION,
     latency_ms: result.latencyMs,
     usage: result.usage,
-    raw_output: analysis,
+    raw_output: normalizedAnalysis,
     raw_model_output: JSON.stringify({
       capture_gate_request: result.requestBody,
       capture_gate_response: result.raw,
@@ -4416,16 +4478,16 @@ async function persistCaptureGateNeedsReview(
     .update({
       analysis_state: "needs_review",
       analysis_error: null,
-      analysis,
+      analysis: normalizedAnalysis,
       analysis_provider: "openai",
       analysis_model: result.model,
       analysis_mode: "capture_gate_needs_review",
-      display_title: analysis.display_title,
-      title: capture.title || analysis.display_title,
-      default_intent: analysis.default_intent.category,
-      default_intent_confidence: analysis.default_intent.confidence,
-      current_save_intent: analysis.default_intent.category,
-      intent_rationale: analysis.default_intent.rationale,
+      display_title: normalizedAnalysis.display_title,
+      title: capture.title || normalizedAnalysis.display_title,
+      default_intent: normalizedAnalysis.default_intent.category,
+      default_intent_confidence: normalizedAnalysis.default_intent.confidence,
+      current_save_intent: normalizedAnalysis.default_intent.category,
+      intent_rationale: normalizedAnalysis.default_intent.rationale,
       processed_at: new Date().toISOString(),
     })
     .eq("id", capture.id)
@@ -4445,6 +4507,7 @@ async function rejectCapturePreflight(
   result: Awaited<ReturnType<typeof runPreflight>>,
 ) {
   const analysis = rejectedAnalysis(capture, result.preflight, urlEvidence);
+  const normalizedAnalysis = normalizedReviewAnalysis(analysis);
   await supabase.from("analysis_runs").insert({
     user_id: userId,
     capture_id: capture.id,
@@ -4468,12 +4531,12 @@ async function rejectCapturePreflight(
     .update({
       analysis_state: "failed",
       analysis_error: result.preflight.user_message,
-      analysis,
+      analysis: normalizedAnalysis,
       analysis_provider: "openai",
       analysis_model: result.model,
       analysis_mode: "preflight_rejected",
-      display_title: analysis.display_title,
-      title: capture.title || analysis.display_title,
+      display_title: normalizedAnalysis.display_title,
+      title: capture.title || normalizedAnalysis.display_title,
       processed_at: new Date().toISOString(),
     })
     .eq("id", capture.id)
@@ -4507,7 +4570,7 @@ async function runOpenAi(
   const requestBody: Record<string, unknown> = {
     model,
     reasoning: { effort: "low" },
-    max_output_tokens: 1600,
+    max_output_tokens: 1900,
     input: [
       {
         role: "system",

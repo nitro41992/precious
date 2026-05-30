@@ -64,6 +64,10 @@ _Avoid_: Bookmark list, folder, separate suggestions inbox
 The focused single-Capture surface opened from a Capture Completion Notification, Review Inbox, Search, or Library. It shows extracted intent, entities, Reminder suggestions, existing Collection attachments, human-readable Confidence States, concise rationale, and Quick Edit controls.
 _Avoid_: Analysis report, debug view, model score screen
 
+**Review Insight**:
+A concise, user-facing explanation in Capture Review for why Capture Analysis chose the Save Intent, Collection outcome, and Reminder idea. It may explain that no existing Collection or no concrete Reminder trigger was strong enough. It is evidence/rationale, not hidden model reasoning.
+_Avoid_: Chain-of-thought, audit report, model trace, confidence percentage
+
 **Retrieval Lens**:
 A user-facing view over Captures and related entities that helps the user find saved things by a primary access pattern, such as meaning, place, time, or recency. Recent Captures, Search, Map, Agenda, Library, and Review Inbox are Retrieval Lenses, not separate saved object types.
 _Avoid_: Item type, folder, separate app
