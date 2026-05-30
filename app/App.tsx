@@ -92,6 +92,7 @@ type Capture = {
   sourceUrl: string | null;
   siteName?: string;
   summary?: string;
+  captureType?: string;
   thumbnailUrl?: string;
   imageAssetUrl?: string;
   imageAssetCacheKey?: string;
@@ -309,7 +310,6 @@ const PROCESSING_REFRESH_MS = 3000;
 const CAPTURE_PAGE_SIZE = 18;
 const COLLECTION_CAPTURE_PAGE_SIZE = 18;
 const RECENT_FEED_REVEAL_COUNT = 8;
-const RECENT_FEED_REVEAL_MAX_MS = 1800;
 const CAPTURE_LIST_PERF_PROPS = {
   initialNumToRender: 8,
   maxToRenderPerBatch: 8,
@@ -480,7 +480,8 @@ function remoteImageAsset(row: Record<string, any>) {
   return assets.find((asset) => {
     const mimeType = String(asset?.mime_type || asset?.mimeType || "");
     const url = asset?.signed_url || asset?.signedUrl || asset?.public_url || asset?.publicUrl;
-    return mimeType.startsWith("image/") && typeof url === "string" && url.trim();
+    const storagePath = asset?.storage_path || asset?.storagePath;
+    return mimeType.startsWith("image/") && Boolean((typeof url === "string" && url.trim()) || storagePath);
   });
 }
 
@@ -499,11 +500,25 @@ function captureImageLoadKey(capture: Capture) {
 }
 
 function captureRowRevealKey(capture: Capture) {
-  return capture.remoteId || capture.id;
+  return capture.id;
+}
+
+function isImageCapture(capture: Capture) {
+  const captureType = String(capture.captureType || "").toLowerCase();
+  const mimeType = String(capture.imageAssetMimeType || "").toLowerCase();
+  const sourceText = String(capture.sourceText || "").trim();
+  return (
+    captureType === "image" ||
+    captureType === "screenshot" ||
+    (captureType === "mixed" && mimeType.startsWith("image/")) ||
+    mimeType.startsWith("image/") ||
+    /^(selected|shared)\s+(image|screenshot):/i.test(sourceText)
+  );
 }
 
 function shouldGhostSourceMark(capture: Capture) {
   if (captureImageUrl(capture)) return false;
+  if (isImageCapture(capture) && displayStatus(capture) !== "failed") return true;
   return displayStatus(capture) === "processing";
 }
 
@@ -899,6 +914,7 @@ function captureFromRemote(row: Record<string, any>): Capture {
     sourceUrl: typeof row.source_url === "string" ? row.source_url : null,
     siteName: hostFromUrl(typeof row.source_url === "string" ? row.source_url : null),
     summary: analysis.summary || undefined,
+    captureType: nullableValue(row.capture_type || row.captureType || analysis.capture_type),
     thumbnailUrl: nullableValue(row.thumbnail_url || row.thumbnailUrl || analysis.thumbnail_url),
     imageAssetUrl: assetUrl,
     imageAssetCacheKey: imageAsset
@@ -1316,7 +1332,7 @@ function SourceMark({
           onLoad={() => {
             if (imageLoadKey) onImageLoadState?.(imageLoadKey, "loaded");
           }}
-          source={{ uri: imageUri }}
+          source={imageLoadKey ? { uri: imageUri, cacheKey: imageLoadKey } : { uri: imageUri }}
           style={styles.captureThumbnailImage}
           transition={90}
         />
@@ -2473,15 +2489,10 @@ export default function App() {
   const homeFeedRevealKey = useMemo(
     () =>
       homeRevealCaptures
-        .map((capture) => `${captureRowRevealKey(capture)}:${captureImageLoadKey(capture) || "no-media"}`)
+        .map(captureRowRevealKey)
         .join("|"),
     [homeRevealCaptures]
   );
-  const homeFeedImageKeys = useMemo(
-    () => uniqueStrings(homeRevealCaptures.map(captureImageLoadKey)),
-    [homeRevealCaptures]
-  );
-  const homeFeedImagesReady = homeFeedImageKeys.every((key) => Boolean(captureImageLoadStates[key]));
   const homeFeedRevealPending = Boolean(homeFeedRevealKey && !homeFeedReadyKey);
   const visibleHomeCapturesForReveal = useMemo(
     () => homeCaptures,
@@ -2518,16 +2529,11 @@ export default function App() {
     () =>
       selectedCollectionId
         ? `${selectedCollectionId}:${collectionRevealCaptures
-            .map((capture) => `${captureRowRevealKey(capture)}:${captureImageLoadKey(capture) || "no-media"}`)
+            .map(captureRowRevealKey)
             .join("|")}`
         : "",
     [collectionRevealCaptures, selectedCollectionId]
   );
-  const collectionFeedImageKeys = useMemo(
-    () => uniqueStrings(collectionRevealCaptures.map(captureImageLoadKey)),
-    [collectionRevealCaptures]
-  );
-  const collectionFeedImagesReady = collectionFeedImageKeys.every((key) => Boolean(captureImageLoadStates[key]));
   const collectionFeedRevealPending = Boolean(collectionFeedRevealKey && !collectionFeedReadyKey);
   useEffect(() => {
     if (capturesLoading && !activeCapturesLoadedOnce && !homeRows.length) {
@@ -2571,18 +2577,12 @@ export default function App() {
     const revealKeys = uniqueStrings([
       ...visibleHomeCapturesForReveal,
       ...visibleCollectionCapturesForReveal
-    ]
-      .filter((capture) => {
-        const imageLoadKey = captureImageLoadKey(capture);
-        return !imageLoadKey || Boolean(captureImageLoadStatesRef.current[imageLoadKey]);
-      })
-      .map(captureRowRevealKey))
+    ].map(captureRowRevealKey))
       .filter((key) => !captureRowRevealStatesRef.current[key]);
     if (!revealKeys.length) return;
     const timer = setTimeout(() => markCaptureRowsRevealed(revealKeys), 120);
     return () => clearTimeout(timer);
   }, [
-    captureImageLoadStates,
     markCaptureRowsRevealed,
     visibleCollectionCapturesForReveal,
     visibleHomeCapturesForReveal
@@ -2595,7 +2595,7 @@ export default function App() {
     if (homeFeedReadyKey) return;
     if (!activeCapturesLoadedOnce || capturesLoading) return;
     const revealKeys = uniqueStrings(homeRevealCaptures.map(captureRowRevealKey));
-    const delay = homeFeedImagesReady ? 100 : RECENT_FEED_REVEAL_MAX_MS;
+    const delay = 100;
     const timer = setTimeout(() => {
       markCaptureRowsRevealed(revealKeys);
       setHomeFeedReadyKey(homeFeedRevealKey);
@@ -2604,7 +2604,6 @@ export default function App() {
   }, [
     activeCapturesLoadedOnce,
     capturesLoading,
-    homeFeedImagesReady,
     homeFeedReadyKey,
     homeFeedRevealKey,
     homeRevealCaptures,
@@ -2618,7 +2617,7 @@ export default function App() {
     if (collectionFeedReadyKey) return;
     if (collectionCapturesLoading && collectionCapturesLoadPhase !== "append") return;
     const revealKeys = uniqueStrings(collectionRevealCaptures.map(captureRowRevealKey));
-    const delay = collectionFeedImagesReady ? 100 : RECENT_FEED_REVEAL_MAX_MS;
+    const delay = 100;
     const timer = setTimeout(() => {
       markCaptureRowsRevealed(revealKeys);
       setCollectionFeedReadyKey(collectionFeedRevealKey);
@@ -2627,7 +2626,6 @@ export default function App() {
   }, [
     collectionCapturesLoadPhase,
     collectionCapturesLoading,
-    collectionFeedImagesReady,
     collectionFeedReadyKey,
     collectionFeedRevealKey,
     collectionRevealCaptures,
@@ -3983,6 +3981,23 @@ export default function App() {
     const intentLabel = captureIntentLabel(item);
     const collectionLabel = showCollectionToken ? item.linkedCollections?.[0]?.title || "" : "";
     const ghostSourceMark = deferFallbackIcon || shouldGhostSourceMark(item);
+    const imageLoadingGhost = Boolean(
+      !ghostSourceMark &&
+        isImageCapture(item) &&
+        imageLoadKey &&
+        imageLoadState !== "loaded" &&
+        imageLoadState !== "failed"
+    );
+    const sourceMark = (
+      <SourceMark
+        capture={item}
+        failedFavicons={faviconFailures}
+        imageLoadKey={imageLoadKey}
+        imageUnavailable={imageLoadState === "failed"}
+        onFaviconFailure={markFaviconFailed}
+        onImageLoadState={markCaptureImageLoadState}
+      />
+    );
     const row = (
       <Pressable
         android_ripple={{ color: "rgba(31, 122, 91, 0.08)" }}
@@ -3992,15 +4007,15 @@ export default function App() {
       >
         {ghostSourceMark ? (
           <SkeletonBlock style={styles.loadingThumbnailMark} />
+        ) : imageLoadingGhost ? (
+          <View style={styles.thumbnailRevealSlot}>
+            {sourceMark}
+            <View pointerEvents="none" style={styles.thumbnailGhostOverlay}>
+              <SkeletonBlock style={styles.loadingThumbnailMark} />
+            </View>
+          </View>
         ) : (
-          <SourceMark
-            capture={item}
-            failedFavicons={faviconFailures}
-            imageLoadKey={imageLoadKey}
-            imageUnavailable={imageLoadState === "failed"}
-            onFaviconFailure={markFaviconFailed}
-            onImageLoadState={markCaptureImageLoadState}
-          />
+          sourceMark
         )}
         <View style={styles.rowContent}>
           <View style={styles.rowTitleLine}>
@@ -6402,6 +6417,18 @@ const styles = StyleSheet.create({
   captureThumbnailImage: {
     height: "100%",
     width: "100%"
+  },
+  thumbnailRevealSlot: {
+    height: 60,
+    position: "relative",
+    width: 58
+  },
+  thumbnailGhostOverlay: {
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0
   },
   statusGlyph: {
     alignItems: "center",
