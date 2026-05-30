@@ -292,6 +292,7 @@ const INTENT_LABELS = new Map(INTENT_CONFIG.map((intent) => [intent.key, intent.
 
 type CaptureListMode = "active" | "archived";
 type CollectionListMode = "active" | "archived";
+type CollectionCapturesLoadPhase = "idle" | "initial" | "refresh" | "append";
 type SearchScope = "active" | "archived" | "all";
 type HomeListRow =
   | { type: "section"; id: string; title: string }
@@ -1169,11 +1170,13 @@ function IconButton({
 
 function SourceMark({
   capture,
+  deferFallbackIcon = false,
   failedFavicons,
   onFaviconFailure,
   size = "row"
 }: {
   capture: Capture;
+  deferFallbackIcon?: boolean;
   failedFavicons: Record<string, boolean>;
   onFaviconFailure: (host: string) => void;
   size?: "row" | "detail";
@@ -1200,6 +1203,15 @@ function SourceMark({
           transition={90}
         />
       </View>
+    );
+  }
+  if (deferFallbackIcon && size === "row") {
+    return (
+      <View
+        accessibilityLabel="Loading capture image"
+        accessible
+        style={styles.loadingSourceMark}
+      />
     );
   }
   return (
@@ -1301,6 +1313,7 @@ export default function App() {
   const [captureReturnCollectionId, setCaptureReturnCollectionId] = useState<string | null>(null);
   const [capturesLoading, setCapturesLoading] = useState(false);
   const [capturesError, setCapturesError] = useState("");
+  const [activeCapturesLoadedOnce, setActiveCapturesLoadedOnce] = useState(false);
   const [archivedCapturesLoading, setArchivedCapturesLoading] = useState(false);
   const [archivedCapturesError, setArchivedCapturesError] = useState("");
   const [archivedCapturesLoaded, setArchivedCapturesLoaded] = useState(false);
@@ -1320,6 +1333,8 @@ export default function App() {
   const [collectionCaptures, setCollectionCaptures] = useState<Capture[]>([]);
   const [collectionCapturesForId, setCollectionCapturesForId] = useState<string | null>(null);
   const [collectionCapturesLoading, setCollectionCapturesLoading] = useState(false);
+  const [collectionCapturesLoadPhase, setCollectionCapturesLoadPhase] = useState<CollectionCapturesLoadPhase>("idle");
+  const [collectionCapturesError, setCollectionCapturesError] = useState("");
   const [collectionCapturesNextCursor, setCollectionCapturesNextCursor] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftNote, setDraftNote] = useState("");
@@ -1481,6 +1496,7 @@ export default function App() {
       setSession(null);
       setCaptures([]);
       setArchivedCaptures([]);
+      setActiveCapturesLoadedOnce(false);
       setArchivedCapturesLoaded(false);
       setCapturesNextCursor(null);
       setArchivedCapturesNextCursor(null);
@@ -1492,6 +1508,8 @@ export default function App() {
       collectionCapturesCacheRef.current = {};
       collectionCapturesCursorCacheRef.current = {};
       setCollectionCapturesNextCursor(null);
+      setCollectionCapturesLoadPhase("idle");
+      setCollectionCapturesError("");
       return null;
     }
     const next = JSON.parse(raw) as AuthSession;
@@ -1562,6 +1580,7 @@ export default function App() {
         throw error;
       } finally {
         loadingSetter(false);
+        if (mode === "active" && !options.append) setActiveCapturesLoadedOnce(true);
       }
       return;
     }
@@ -1592,6 +1611,7 @@ export default function App() {
       throw error;
     } finally {
       loadingSetter(false);
+      if (mode === "active" && !options.append) setActiveCapturesLoadedOnce(true);
     }
   }, [config, getFreshSession, session]);
 
@@ -1647,15 +1667,20 @@ export default function App() {
 
   const loadCollectionCaptures = useCallback(async (
     collectionId: string,
-    options: { append?: boolean; before?: string | null } = {}
+    options: { append?: boolean; before?: string | null; phase?: CollectionCapturesLoadPhase } = {}
   ) => {
+    const phase = options.phase || (options.append ? "append" : "initial");
     if (!config?.apiUrl || !session?.accessToken) {
       setCollectionCaptures([]);
       setCollectionCapturesForId(collectionId);
       setCollectionCapturesNextCursor(null);
+      setCollectionCapturesLoadPhase("idle");
+      setCollectionCapturesError("");
       return;
     }
     setCollectionCapturesLoading(true);
+    setCollectionCapturesLoadPhase(phase);
+    setCollectionCapturesError("");
     try {
       const activeSession = await getFreshSession();
       if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
@@ -1692,8 +1717,10 @@ export default function App() {
       setCollectionCaptures(merged);
       setCollectionCapturesNextCursor(json.next_cursor || null);
       setCollectionCapturesForId(collectionId);
+      setCollectionCapturesError("");
     } finally {
       setCollectionCapturesLoading(false);
+      setCollectionCapturesLoadPhase("idle");
     }
   }, [config, getFreshSession, session]);
 
@@ -1701,7 +1728,8 @@ export default function App() {
     if (!selectedCollectionId || !collectionCapturesNextCursor || collectionCapturesLoading) return;
     void loadCollectionCaptures(selectedCollectionId, {
       append: true,
-      before: collectionCapturesNextCursor
+      before: collectionCapturesNextCursor,
+      phase: "append"
     }).catch((error) => {
       setMessage((current) => current || friendlyError(error, "Could not load more collection captures"));
     });
@@ -1711,6 +1739,19 @@ export default function App() {
     loadCollectionCaptures,
     selectedCollectionId
   ]);
+
+  const retryLoadCollectionCaptures = useCallback(() => {
+    if (!selectedCollectionId || collectionCapturesLoading) return;
+    setCollectionCapturesError("");
+    void loadCollectionCaptures(selectedCollectionId, { phase: "initial" }).catch((error) => {
+      const text = friendlyError(error, "Could not load collection captures");
+      setCollectionCaptures([]);
+      setCollectionCapturesForId(selectedCollectionId);
+      setCollectionCapturesNextCursor(null);
+      setCollectionCapturesError(text);
+      setMessage((current) => current || text);
+    });
+  }, [collectionCapturesLoading, loadCollectionCaptures, selectedCollectionId]);
 
   const loadCaptureDetail = useCallback(async (capture: Capture) => {
     const captureRef = capture.remoteId || capture.id;
@@ -1999,6 +2040,10 @@ export default function App() {
   useEffect(() => {
     archivedCapturesRef.current = archivedCaptures;
   }, [archivedCaptures]);
+
+  useEffect(() => {
+    setActiveCapturesLoadedOnce(false);
+  }, [session?.userId]);
 
   useEffect(() => {
     const linkSubscription = Linking.addEventListener("url", ({ url }) => {
@@ -2538,12 +2583,16 @@ export default function App() {
         setCollectionCapturesForId(null);
         setCollectionCapturesNextCursor(null);
       }
+      setCollectionCapturesLoadPhase("idle");
+      setCollectionCapturesError("");
       return;
     }
     if (selectedCollection?.status === "archived") {
       setCollectionCaptures([]);
       setCollectionCapturesForId(selectedCollectionId);
       setCollectionCapturesNextCursor(null);
+      setCollectionCapturesLoadPhase("idle");
+      setCollectionCapturesError("");
       return;
     }
     const cached = knownCapturesForCollection(selectedCollectionId);
@@ -2553,10 +2602,16 @@ export default function App() {
       setCollectionCapturesForId(selectedCollectionId);
       setCollectionCapturesNextCursor(collectionCapturesCursorCacheRef.current[selectedCollectionId] || null);
     }
-    void loadCollectionCaptures(selectedCollectionId).catch((error) => {
-      setCollectionCaptures([]);
-      setCollectionCapturesForId(selectedCollectionId);
-      setMessage((current) => current || friendlyError(error, "Could not load collection captures"));
+    setCollectionCapturesError("");
+    void loadCollectionCaptures(selectedCollectionId, { phase: cached.length ? "refresh" : "initial" }).catch((error) => {
+      const text = friendlyError(error, "Could not load collection captures");
+      if (!cached.length) {
+        setCollectionCaptures([]);
+        setCollectionCapturesForId(selectedCollectionId);
+        setCollectionCapturesNextCursor(null);
+        setCollectionCapturesError(text);
+      }
+      setMessage((current) => current || text);
     });
   }, [captureReturnCollectionId, loadCollectionCaptures, selectedCollection?.status, selectedCollectionId]);
 
@@ -3496,6 +3551,7 @@ export default function App() {
     setSession(null);
     setCaptures([]);
     setArchivedCaptures([]);
+    setActiveCapturesLoadedOnce(false);
     setArchivedCapturesLoaded(false);
     setCapturesNextCursor(null);
     setArchivedCapturesNextCursor(null);
@@ -3512,6 +3568,8 @@ export default function App() {
     setCollectionCaptures([]);
     setCollectionCapturesNextCursor(null);
     setCollectionCapturesForId(null);
+    setCollectionCapturesLoadPhase("idle");
+    setCollectionCapturesError("");
     setCaptureReturnCollectionId(null);
     setCollectionsOpen(false);
     setSearchOpen(false);
@@ -3528,12 +3586,14 @@ export default function App() {
     onPress: () => void;
     testID?: string;
     matchReason?: string;
+    showCollectionToken?: boolean;
+    deferFallbackIcon?: boolean;
   }) {
-    const { item, onPress, testID, matchReason } = input;
+    const { item, onPress, testID, matchReason, showCollectionToken = true, deferFallbackIcon = false } = input;
     const itemSummary = consumerSummary(item);
     const supportLine = captureSupportLine(item, itemSummary);
     const intentLabel = captureIntentLabel(item);
-    const collectionLabel = item.linkedCollections?.[0]?.title || "";
+    const collectionLabel = showCollectionToken ? item.linkedCollections?.[0]?.title || "" : "";
     return (
       <Pressable
         android_ripple={{ color: "rgba(31, 122, 91, 0.08)" }}
@@ -3541,7 +3601,12 @@ export default function App() {
         style={({ pressed }) => [styles.captureRow, pressed && styles.captureRowPressed]}
         testID={testID}
       >
-        <SourceMark capture={item} failedFavicons={faviconFailures} onFaviconFailure={markFaviconFailed} />
+        <SourceMark
+          capture={item}
+          deferFallbackIcon={deferFallbackIcon}
+          failedFavicons={faviconFailures}
+          onFaviconFailure={markFaviconFailed}
+        />
         <View style={styles.rowContent}>
           <View style={styles.rowTitleLine}>
             <Text numberOfLines={2} style={styles.captureTitle}>
@@ -3582,19 +3647,12 @@ export default function App() {
     );
   }
 
-  function renderCapture({ item }: { item: Capture }) {
-    return renderCaptureRow({
-      item,
-      onPress: () => openCapture(item.id),
-      testID: `pc.capture.row.${item.id}`
-    });
-  }
-
   function renderCollectionCapture({ item }: { item: Capture }) {
     return (
       <View style={styles.collectionCaptureRow}>
         <View style={styles.collectionCaptureMain}>
           {renderCaptureRow({
+            showCollectionToken: false,
             item,
             onPress: () => {
               if (selectedCollection) openCaptureFromCollection(item, selectedCollection.id);
@@ -3648,7 +3706,12 @@ export default function App() {
     if (item.type === "section") {
       return <Text style={styles.groupHeader}>{item.title}</Text>;
     }
-    return renderCapture({ item: item.capture });
+    return renderCaptureRow({
+      item: item.capture,
+      deferFallbackIcon: capturesLoading && !activeCapturesLoadedOnce,
+      onPress: () => openCapture(item.capture.id),
+      testID: `pc.capture.row.${item.capture.id}`
+    });
   }
 
   function renderSearchResult({ item }: { item: Capture }) {
@@ -3668,6 +3731,26 @@ export default function App() {
             <View style={styles.loadingTitle} />
             <View style={styles.loadingLine} />
             <View style={styles.loadingLineShort} />
+          </View>
+        ))}
+      </View>
+    );
+  }
+
+  function renderCollectionCaptureSkeletonRows() {
+    return (
+      <View style={styles.collectionCaptureSkeletonRows}>
+        {[0, 1, 2, 3].map((item) => (
+          <View key={item} style={styles.collectionCaptureSkeletonRow}>
+            <View style={styles.collectionCaptureSkeletonMain}>
+              <View style={styles.loadingSourceMark} />
+              <View style={styles.collectionCaptureSkeletonCopy}>
+                <View style={styles.collectionLoadingTitle} />
+                <View style={styles.collectionLoadingLine} />
+                <View style={styles.collectionLoadingLineShort} />
+              </View>
+            </View>
+            <View style={styles.collectionLoadingAction} />
           </View>
         ))}
       </View>
@@ -3999,7 +4082,11 @@ export default function App() {
     const activeCollection = selectedCollection.status === "active";
     const capturesReadyForCollection = collectionCapturesForId === selectedCollection.id;
     const visibleCollectionCaptures = activeCollection && capturesReadyForCollection ? collectionCaptures : [];
-    const collectionCapturesPending = activeCollection && (!capturesReadyForCollection || (collectionCapturesLoading && !visibleCollectionCaptures.length));
+    const collectionCapturesInitialLoading = activeCollection && !collectionCapturesError && (
+      !capturesReadyForCollection ||
+      (collectionCapturesLoadPhase === "initial" && !visibleCollectionCaptures.length)
+    );
+    const collectionCapturesAppending = activeCollection && collectionCapturesLoadPhase === "append";
     const collectionDetailBottomPadding = keyboardHeight > 0
       ? Math.min(Math.max(keyboardHeight + 72, 180), 380)
       : 40;
@@ -4036,7 +4123,6 @@ export default function App() {
                 {activeCollection ? (
                   <View style={styles.sectionHeader}>
                     <Text style={styles.meta}>Captures</Text>
-                    {collectionCapturesPending ? <Text style={styles.meta}>Loading...</Text> : null}
                   </View>
                 ) : (
                   <View style={styles.sourceBlock}>
@@ -4050,20 +4136,28 @@ export default function App() {
             }
             ListEmptyComponent={
               activeCollection ? (
-                <View style={styles.collectionEmpty}>
-                  <Text style={styles.emptyTitle}>
-                    {collectionCapturesPending ? "Loading captures..." : "No captures in this collection."}
-                  </Text>
-                  {!collectionCapturesPending ? (
+                collectionCapturesInitialLoading ? (
+                  renderCollectionCaptureSkeletonRows()
+                ) : collectionCapturesError ? (
+                  <View style={styles.collectionEmpty}>
+                    <Text style={styles.emptyTitle}>Could not load collection captures.</Text>
+                    <Text style={styles.emptyText}>{collectionCapturesError}</Text>
+                    <Pressable onPress={retryLoadCollectionCaptures} style={styles.secondaryButton}>
+                      <Text style={styles.secondaryButtonText}>Try again</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <View style={styles.collectionEmpty}>
+                    <Text style={styles.emptyTitle}>No captures in this collection.</Text>
                     <Text style={styles.emptyText}>Linked captures will appear here.</Text>
-                  ) : null}
-                </View>
+                  </View>
+                )
               ) : null
             }
             ListFooterComponent={
               <>
-                {visibleCollectionCaptures.length && collectionCapturesLoading
-                  ? renderListLoadingFooter(collectionCapturesNextCursor ? "Loading more captures..." : "Updating captures...")
+                {visibleCollectionCaptures.length && collectionCapturesAppending
+                  ? renderListLoadingFooter("Loading more captures...")
                   : null}
                 <View style={styles.collectionSettings}>
                   {activeCollection ? (
@@ -5994,6 +6088,65 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     height: 13,
     width: "58%"
+  },
+  collectionCaptureSkeletonRows: {
+    paddingTop: 2
+  },
+  collectionCaptureSkeletonRow: {
+    alignItems: "flex-start",
+    borderBottomColor: colors.line,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 96,
+    paddingVertical: 16
+  },
+  collectionCaptureSkeletonMain: {
+    alignItems: "flex-start",
+    flex: 1,
+    flexDirection: "row",
+    gap: 10,
+    minWidth: 0
+  },
+  collectionCaptureSkeletonCopy: {
+    flex: 1,
+    gap: 8,
+    minWidth: 0,
+    paddingTop: 3
+  },
+  loadingSourceMark: {
+    backgroundColor: colors.soft,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 52,
+    marginTop: 2,
+    width: 52
+  },
+  collectionLoadingTitle: {
+    backgroundColor: colors.soft,
+    borderRadius: 6,
+    height: 18,
+    width: "68%"
+  },
+  collectionLoadingLine: {
+    backgroundColor: colors.soft,
+    borderRadius: 6,
+    height: 13,
+    width: "88%"
+  },
+  collectionLoadingLineShort: {
+    backgroundColor: colors.soft,
+    borderRadius: 6,
+    height: 13,
+    width: "52%"
+  },
+  collectionLoadingAction: {
+    backgroundColor: colors.soft,
+    borderRadius: 6,
+    height: 16,
+    marginTop: 9,
+    width: 58
   },
   listLoadingFooter: {
     alignItems: "center",
