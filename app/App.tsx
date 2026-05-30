@@ -1,7 +1,7 @@
 import "react-native-url-polyfill/auto";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import {
   Animated,
   AppState,
@@ -135,6 +135,7 @@ type LinkedCollection = {
   createdBy?: string;
   rationale?: string | null;
   confidence?: number | null;
+  linkedAt?: number | null;
 };
 
 type CollectionDecision = {
@@ -293,6 +294,7 @@ const INTENT_LABELS = new Map(INTENT_CONFIG.map((intent) => [intent.key, intent.
 type CaptureListMode = "active" | "archived";
 type CollectionListMode = "active" | "archived";
 type CollectionCapturesLoadPhase = "idle" | "initial" | "refresh" | "append";
+type CaptureImageLoadState = "loaded" | "failed";
 type SearchScope = "active" | "archived" | "all";
 type HomeListRow =
   | { type: "section"; id: string; title: string }
@@ -306,6 +308,8 @@ type SnackbarState = {
 const PROCESSING_REFRESH_MS = 3000;
 const CAPTURE_PAGE_SIZE = 18;
 const COLLECTION_CAPTURE_PAGE_SIZE = 18;
+const RECENT_FEED_REVEAL_COUNT = 8;
+const RECENT_FEED_REVEAL_MAX_MS = 1800;
 const CAPTURE_LIST_PERF_PROPS = {
   initialNumToRender: 8,
   maxToRenderPerBatch: 8,
@@ -489,6 +493,20 @@ function captureImageUrl(capture: Capture) {
   );
 }
 
+function captureImageLoadKey(capture: Capture) {
+  const imageUri = captureImageUrl(capture);
+  return imageUri ? capture.imageAssetCacheKey || imageUri : "";
+}
+
+function captureRowRevealKey(capture: Capture) {
+  return capture.remoteId || capture.id;
+}
+
+function shouldGhostSourceMark(capture: Capture) {
+  if (captureImageUrl(capture)) return false;
+  return displayStatus(capture) === "processing";
+}
+
 function captureOpenUrl(capture: Capture) {
   return capture.sourceUrl || extractHttpUrl(capture.sourceText) || "";
 }
@@ -638,6 +656,10 @@ function uniqueCaptures(captures: Capture[]) {
     seen.add(key);
     return true;
   });
+}
+
+function uniqueStrings(values: string[]) {
+  return [...new Set(values.filter(Boolean))];
 }
 
 function captureSearchParts(capture: Capture) {
@@ -948,6 +970,13 @@ function nullableValue(value: unknown) {
   return text && text !== "null" ? text : undefined;
 }
 
+function nullableTimestamp(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function visitTargetFromRemote(analysis: Record<string, any>): VisitTarget | null {
   const name = nullableValue(analysis.visit_target_name);
   const query = nullableValue(analysis.visit_target_query);
@@ -1014,7 +1043,8 @@ function linkedCollectionFromRemote(row: Record<string, any>): LinkedCollection 
     description: nullableValue(row.description),
     createdBy: nullableValue(row.created_by || row.createdBy),
     rationale: nullableValue(row.rationale) || null,
-    confidence: Number.isFinite(Number(row.confidence)) ? Number(row.confidence) : null
+    confidence: Number.isFinite(Number(row.confidence)) ? Number(row.confidence) : null,
+    linkedAt: nullableTimestamp(row.linked_at || row.linkedAt)
   };
 }
 
@@ -1094,6 +1124,20 @@ function captureBelongsToCollection(capture: Capture, collectionId: string) {
   return (capture.linkedCollections || []).some((collection) => collection.id === collectionId);
 }
 
+function collectionLinkTimestamp(capture: Capture, collectionId: string) {
+  const linkedCollection = (capture.linkedCollections || []).find((collection) => collection.id === collectionId);
+  return nullableTimestamp(linkedCollection?.linkedAt);
+}
+
+function sortCollectionCaptures(captures: Capture[], collectionId: string) {
+  return uniqueCaptures(captures).sort((left, right) => {
+    const rightLinkedAt = collectionLinkTimestamp(right, collectionId) || 0;
+    const leftLinkedAt = collectionLinkTimestamp(left, collectionId) || 0;
+    if (rightLinkedAt !== leftLinkedAt) return rightLinkedAt - leftLinkedAt;
+    return right.createdAt - left.createdAt;
+  });
+}
+
 function sameStringSet(left: string[], right: string[]) {
   if (left.length !== right.length) return false;
   const rightSet = new Set(right);
@@ -1168,22 +1212,90 @@ function IconButton({
   );
 }
 
+function SkeletonRevealFrame({
+  children,
+  pending,
+  skeleton
+}: {
+  children: ReactNode;
+  pending: boolean;
+  skeleton: ReactNode;
+}) {
+  const contentOpacity = useRef(new Animated.Value(pending ? 0 : 1)).current;
+  const skeletonOpacity = useRef(new Animated.Value(pending ? 1 : 0)).current;
+  const [showSkeleton, setShowSkeleton] = useState(pending);
+
+  useEffect(() => {
+    if (pending) {
+      setShowSkeleton(true);
+      contentOpacity.setValue(0);
+      skeletonOpacity.setValue(1);
+      return;
+    }
+    const animation = Animated.parallel([
+      Animated.timing(contentOpacity, {
+        duration: 150,
+        easing: Easing.out(Easing.cubic),
+        toValue: 1,
+        useNativeDriver: true
+      }),
+      Animated.timing(skeletonOpacity, {
+        duration: 170,
+        easing: Easing.out(Easing.cubic),
+        toValue: 0,
+        useNativeDriver: true
+      })
+    ]);
+    animation.start(({ finished }) => {
+      if (finished) setShowSkeleton(false);
+    });
+    return () => animation.stop();
+  }, [contentOpacity, pending, skeletonOpacity]);
+
+  return (
+    <View style={styles.skeletonRevealFrame}>
+      <Animated.View
+        accessibilityElementsHidden={pending}
+        importantForAccessibility={pending ? "no-hide-descendants" : "auto"}
+        pointerEvents={pending ? "none" : "auto"}
+        style={{ opacity: contentOpacity }}
+      >
+        {children}
+      </Animated.View>
+      {showSkeleton ? (
+        <Animated.View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          pointerEvents="none"
+          style={[styles.skeletonRevealOverlay, { opacity: skeletonOpacity }]}
+        >
+          {skeleton}
+        </Animated.View>
+      ) : null}
+    </View>
+  );
+}
+
 function SourceMark({
   capture,
-  deferFallbackIcon = false,
   failedFavicons,
+  imageLoadKey = "",
+  imageUnavailable = false,
   onFaviconFailure,
+  onImageLoadState,
   size = "row"
 }: {
   capture: Capture;
-  deferFallbackIcon?: boolean;
   failedFavicons: Record<string, boolean>;
+  imageLoadKey?: string;
+  imageUnavailable?: boolean;
   onFaviconFailure: (host: string) => void;
+  onImageLoadState?: (key: string, state: CaptureImageLoadState) => void;
   size?: "row" | "detail";
 }) {
   const host = captureSourceHost(capture).replace(/^www\./i, "");
   const faviconUri = size === "detail" && !isMapSource(capture) && !failedFavicons[host] ? sourceFaviconUrl(host) : "";
-  const imageUri = size === "row" ? captureImageUrl(capture) : "";
+  const imageUri = size === "row" && !imageUnavailable ? captureImageUrl(capture) : "";
   const Icon = sourceIconForCapture(capture);
   const itemStatus = displayStatus(capture);
   const markStyle = size === "detail" ? styles.sourceMarkDetail : styles.sourceMark;
@@ -1198,20 +1310,17 @@ function SourceMark({
         <Image
           cachePolicy="memory-disk"
           contentFit="cover"
+          onError={() => {
+            if (imageLoadKey) onImageLoadState?.(imageLoadKey, "failed");
+          }}
+          onLoad={() => {
+            if (imageLoadKey) onImageLoadState?.(imageLoadKey, "loaded");
+          }}
           source={{ uri: imageUri }}
           style={styles.captureThumbnailImage}
           transition={90}
         />
       </View>
-    );
-  }
-  if (deferFallbackIcon && size === "row") {
-    return (
-      <View
-        accessibilityLabel="Loading capture image"
-        accessible
-        style={styles.loadingSourceMark}
-      />
     );
   }
   return (
@@ -1374,6 +1483,10 @@ export default function App() {
   const [faviconFailures, setFaviconFailures] = useState<Record<string, boolean>>({});
   const [savingCapture, setSavingCapture] = useState(false);
   const [pickingCaptureImage, setPickingCaptureImage] = useState(false);
+  const [captureImageLoadStates, setCaptureImageLoadStates] = useState<Record<string, CaptureImageLoadState>>({});
+  const [captureRowRevealStates, setCaptureRowRevealStates] = useState<Record<string, boolean>>({});
+  const [homeFeedReadyKey, setHomeFeedReadyKey] = useState("");
+  const [collectionFeedReadyKey, setCollectionFeedReadyKey] = useState("");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authLoading, setAuthLoading] = useState<"signin" | "signup" | null>(null);
@@ -1385,7 +1498,8 @@ export default function App() {
   const collectionCapturesCacheRef = useRef<Record<string, Capture[]>>({});
   const collectionCapturesCursorCacheRef = useRef<Record<string, string | null>>({});
   const captureDetailHydrationRef = useRef<Set<string>>(new Set());
-  const prefetchedImageKeysRef = useRef<Set<string>>(new Set());
+  const captureImageLoadStatesRef = useRef<Record<string, CaptureImageLoadState>>({});
+  const captureRowRevealStatesRef = useRef<Record<string, boolean>>({});
   const collectionsPrefetchStartedRef = useRef(false);
   const sourceInputRef = useRef<TextInput>(null);
   const noteInputRef = useRef<TextInput>(null);
@@ -1399,6 +1513,28 @@ export default function App() {
   const reviewMotion = useRef(new Animated.Value(0)).current;
   const captureComposerMotion = useRef(new Animated.Value(0)).current;
   const captureKeyboardInset = useRef(new Animated.Value(0)).current;
+  const skeletonPulse = useRef(new Animated.Value(0)).current;
+  const homeRowsFade = useRef(new Animated.Value(0)).current;
+  const collectionRowsFade = useRef(new Animated.Value(0)).current;
+  const collectionListFade = useRef(new Animated.Value(0)).current;
+
+  const markCaptureImageLoadState = useCallback((key: string, state: CaptureImageLoadState) => {
+    if (!key || captureImageLoadStatesRef.current[key] === state) return;
+    const next = { ...captureImageLoadStatesRef.current, [key]: state };
+    captureImageLoadStatesRef.current = next;
+    setCaptureImageLoadStates(next);
+  }, []);
+
+  const markCaptureRowsRevealed = useCallback((keys: string[]) => {
+    const missing = keys.filter((key) => key && !captureRowRevealStatesRef.current[key]);
+    if (!missing.length) return;
+    const next = { ...captureRowRevealStatesRef.current };
+    missing.forEach((key) => {
+      next[key] = true;
+    });
+    captureRowRevealStatesRef.current = next;
+    setCaptureRowRevealStates(next);
+  }, []);
 
   function commitCaptureRows(
     mode: CaptureListMode,
@@ -1468,13 +1604,15 @@ export default function App() {
   }
 
   function knownCapturesForCollection(collectionId: string) {
-    return sortCaptures(
-      uniqueCaptures([
-        ...(collectionCapturesCacheRef.current[collectionId] || []),
-        ...capturesRef.current.filter((capture) => captureBelongsToCollection(capture, collectionId)),
-        ...archivedCapturesRef.current.filter((capture) => captureBelongsToCollection(capture, collectionId))
-      ])
-    );
+    const cached = collectionCapturesCacheRef.current[collectionId] || [];
+    if (cached.length) return uniqueCaptures(cached);
+    const known = uniqueCaptures([
+      ...capturesRef.current.filter((capture) => captureBelongsToCollection(capture, collectionId)),
+      ...archivedCapturesRef.current.filter((capture) => captureBelongsToCollection(capture, collectionId))
+    ]);
+    if (!known.length) return [];
+    const hasCollectionOrder = known.every((capture) => collectionLinkTimestamp(capture, collectionId));
+    return hasCollectionOrder ? sortCollectionCaptures(known, collectionId) : [];
   }
 
   function scrollCollectionSettingsIntoView() {
@@ -1507,6 +1645,12 @@ export default function App() {
       collectionsCacheRef.current = { active: [], archived: [] };
       collectionCapturesCacheRef.current = {};
       collectionCapturesCursorCacheRef.current = {};
+      captureImageLoadStatesRef.current = {};
+      captureRowRevealStatesRef.current = {};
+      setCaptureImageLoadStates({});
+      setCaptureRowRevealStates({});
+      setHomeFeedReadyKey("");
+      setCollectionFeedReadyKey("");
       setCollectionCapturesNextCursor(null);
       setCollectionCapturesLoadPhase("idle");
       setCollectionCapturesError("");
@@ -1529,12 +1673,12 @@ export default function App() {
   ) => {
     const loadingSetter = mode === "archived" ? setArchivedCapturesLoading : setCapturesLoading;
     const errorSetter = mode === "archived" ? setArchivedCapturesError : setCapturesError;
+    loadingSetter(true);
+    errorSetter("");
     if (!options.append) {
       await hydrateCachedCapturePage(mode);
       if (mode === "active") await hydrateLocalProcessingCaptures();
     }
-    loadingSetter(true);
-    errorSetter("");
     if (config?.apiUrl && session?.accessToken) {
       try {
         const activeSession = await getFreshSession();
@@ -1800,6 +1944,12 @@ export default function App() {
   }, []);
 
   const selectCollection = useCallback((collectionId: string | null) => {
+    setCollectionFeedReadyKey("");
+    if (collectionId) {
+      setCollectionCapturesLoading(true);
+      setCollectionCapturesLoadPhase(collectionCapturesCacheRef.current[collectionId]?.length ? "refresh" : "initial");
+      setCollectionCapturesError("");
+    }
     setSelectedCollectionId(collectionId);
     setCaptureReturnCollectionId(null);
     setCollectionDraftDirty(false);
@@ -1991,7 +2141,7 @@ export default function App() {
     const cached = collectionsCacheRef.current[mode];
     if (cached.length) setCollections(cached);
     else setCollections([]);
-    setCollectionsLoading(!cached.length);
+    setCollectionsLoading(true);
     setCollectionsError("");
     try {
       await loadCollections(mode);
@@ -2043,6 +2193,8 @@ export default function App() {
 
   useEffect(() => {
     setActiveCapturesLoadedOnce(false);
+    setHomeFeedReadyKey("");
+    setCollectionFeedReadyKey("");
   }, [session?.userId]);
 
   useEffect(() => {
@@ -2217,6 +2369,28 @@ export default function App() {
   }, [reviewMotion, selectedId]);
 
   useEffect(() => {
+    skeletonPulse.setValue(0);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(skeletonPulse, {
+          duration: 820,
+          easing: Easing.inOut(Easing.cubic),
+          toValue: 1,
+          useNativeDriver: true
+        }),
+        Animated.timing(skeletonPulse, {
+          duration: 820,
+          easing: Easing.inOut(Easing.cubic),
+          toValue: 0,
+          useNativeDriver: true
+        })
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [skeletonPulse]);
+
+  useEffect(() => {
     if ((!showCaptureComposer && !showCollectionForm && !noteSheetOpen) || captureComposerClosing) return;
     captureComposerMotion.setValue(0);
     Animated.spring(captureComposerMotion, {
@@ -2287,27 +2461,190 @@ export default function App() {
 
   const homeCaptures = useMemo(() => captures.filter((capture) => !isArchived(capture)), [captures]);
   const homeRows = useMemo(() => groupedCaptureRows(homeCaptures), [homeCaptures]);
+  const homeInitialLoading = capturesLoading && !activeCapturesLoadedOnce;
+  const visibleHomeRows = homeRows;
+  const homeRevealCaptures = useMemo(
+    () =>
+      homeRows
+        .flatMap((row) => row.type === "capture" ? [row.capture] : [])
+        .slice(0, RECENT_FEED_REVEAL_COUNT),
+    [homeRows]
+  );
+  const homeFeedRevealKey = useMemo(
+    () =>
+      homeRevealCaptures
+        .map((capture) => `${captureRowRevealKey(capture)}:${captureImageLoadKey(capture) || "no-media"}`)
+        .join("|"),
+    [homeRevealCaptures]
+  );
+  const homeFeedImageKeys = useMemo(
+    () => uniqueStrings(homeRevealCaptures.map(captureImageLoadKey)),
+    [homeRevealCaptures]
+  );
+  const homeFeedImagesReady = homeFeedImageKeys.every((key) => Boolean(captureImageLoadStates[key]));
+  const homeFeedRevealPending = Boolean(homeFeedRevealKey && !homeFeedReadyKey);
+  const visibleHomeCapturesForReveal = useMemo(
+    () => homeCaptures,
+    [homeCaptures]
+  );
+  const collectionCapturesBlockingLoadingForReveal = Boolean(
+    selectedCollectionId &&
+      collectionCapturesLoading &&
+      collectionCapturesLoadPhase !== "append"
+  );
+  const visibleCollectionCapturesForReveal = useMemo(
+    () =>
+      selectedCollectionId &&
+      collectionCapturesForId === selectedCollectionId &&
+      (!collectionCapturesBlockingLoadingForReveal || collectionCaptures.length)
+        ? collectionCaptures
+        : [],
+    [
+      collectionCaptures,
+      collectionCapturesBlockingLoadingForReveal,
+      collectionCapturesForId,
+      selectedCollectionId
+    ]
+  );
   const quickLookCount = useMemo(
     () => homeCaptures.filter((capture) => displayStatus(capture) === "needs_review" || displayStatus(capture) === "failed").length,
     [homeCaptures]
   );
+  const collectionRevealCaptures = useMemo(
+    () => visibleCollectionCapturesForReveal.slice(0, RECENT_FEED_REVEAL_COUNT),
+    [visibleCollectionCapturesForReveal]
+  );
+  const collectionFeedRevealKey = useMemo(
+    () =>
+      selectedCollectionId
+        ? `${selectedCollectionId}:${collectionRevealCaptures
+            .map((capture) => `${captureRowRevealKey(capture)}:${captureImageLoadKey(capture) || "no-media"}`)
+            .join("|")}`
+        : "",
+    [collectionRevealCaptures, selectedCollectionId]
+  );
+  const collectionFeedImageKeys = useMemo(
+    () => uniqueStrings(collectionRevealCaptures.map(captureImageLoadKey)),
+    [collectionRevealCaptures]
+  );
+  const collectionFeedImagesReady = collectionFeedImageKeys.every((key) => Boolean(captureImageLoadStates[key]));
+  const collectionFeedRevealPending = Boolean(collectionFeedRevealKey && !collectionFeedReadyKey);
   useEffect(() => {
-    const prefetchUrls = homeCaptures
-      .slice(0, 10)
-      .map((capture) => ({
-        key: capture.imageAssetCacheKey || captureImageUrl(capture),
-        url: captureImageUrl(capture)
-      }))
-      .filter(({ key, url }) => key && url && !prefetchedImageKeysRef.current.has(key));
-    if (!prefetchUrls.length) return;
-    prefetchUrls.forEach(({ key }) => prefetchedImageKeysRef.current.add(key));
-    const task = InteractionManager.runAfterInteractions(() => {
-      void Image.prefetch(prefetchUrls.map(({ url }) => url), "memory-disk").catch(() => {
-        prefetchUrls.forEach(({ key }) => prefetchedImageKeysRef.current.delete(key));
-      });
-    });
-    return () => task.cancel();
-  }, [homeCaptures]);
+    if (capturesLoading && !activeCapturesLoadedOnce && !homeRows.length) {
+      homeRowsFade.setValue(0);
+      return;
+    }
+    if (!activeCapturesLoadedOnce && !homeRows.length) return;
+    Animated.timing(homeRowsFade, {
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: true
+    }).start();
+  }, [activeCapturesLoadedOnce, capturesLoading, homeRows.length, homeRowsFade]);
+  useEffect(() => {
+    const blockingCollectionLoad = Boolean(
+      selectedCollectionId &&
+        collectionCapturesLoading &&
+        collectionCapturesLoadPhase !== "append"
+    );
+    if (blockingCollectionLoad || (selectedCollectionId && collectionCapturesForId !== selectedCollectionId)) {
+      collectionRowsFade.setValue(0);
+      return;
+    }
+    if (!selectedCollectionId || collectionCapturesForId !== selectedCollectionId) return;
+    Animated.timing(collectionRowsFade, {
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: true
+    }).start();
+  }, [
+    collectionCapturesForId,
+    collectionCapturesLoadPhase,
+    collectionCapturesLoading,
+    collectionCaptures.length,
+    collectionRowsFade,
+    selectedCollectionId
+  ]);
+  useEffect(() => {
+    const revealKeys = uniqueStrings([
+      ...visibleHomeCapturesForReveal,
+      ...visibleCollectionCapturesForReveal
+    ]
+      .filter((capture) => {
+        const imageLoadKey = captureImageLoadKey(capture);
+        return !imageLoadKey || Boolean(captureImageLoadStatesRef.current[imageLoadKey]);
+      })
+      .map(captureRowRevealKey))
+      .filter((key) => !captureRowRevealStatesRef.current[key]);
+    if (!revealKeys.length) return;
+    const timer = setTimeout(() => markCaptureRowsRevealed(revealKeys), 120);
+    return () => clearTimeout(timer);
+  }, [
+    captureImageLoadStates,
+    markCaptureRowsRevealed,
+    visibleCollectionCapturesForReveal,
+    visibleHomeCapturesForReveal
+  ]);
+  useEffect(() => {
+    if (!homeFeedRevealKey) {
+      if (homeFeedReadyKey) setHomeFeedReadyKey("");
+      return;
+    }
+    if (homeFeedReadyKey) return;
+    if (!activeCapturesLoadedOnce || capturesLoading) return;
+    const revealKeys = uniqueStrings(homeRevealCaptures.map(captureRowRevealKey));
+    const delay = homeFeedImagesReady ? 100 : RECENT_FEED_REVEAL_MAX_MS;
+    const timer = setTimeout(() => {
+      markCaptureRowsRevealed(revealKeys);
+      setHomeFeedReadyKey(homeFeedRevealKey);
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [
+    activeCapturesLoadedOnce,
+    capturesLoading,
+    homeFeedImagesReady,
+    homeFeedReadyKey,
+    homeFeedRevealKey,
+    homeRevealCaptures,
+    markCaptureRowsRevealed
+  ]);
+  useEffect(() => {
+    if (!collectionFeedRevealKey) {
+      if (collectionFeedReadyKey) setCollectionFeedReadyKey("");
+      return;
+    }
+    if (collectionFeedReadyKey) return;
+    if (collectionCapturesLoading && collectionCapturesLoadPhase !== "append") return;
+    const revealKeys = uniqueStrings(collectionRevealCaptures.map(captureRowRevealKey));
+    const delay = collectionFeedImagesReady ? 100 : RECENT_FEED_REVEAL_MAX_MS;
+    const timer = setTimeout(() => {
+      markCaptureRowsRevealed(revealKeys);
+      setCollectionFeedReadyKey(collectionFeedRevealKey);
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [
+    collectionCapturesLoadPhase,
+    collectionCapturesLoading,
+    collectionFeedImagesReady,
+    collectionFeedReadyKey,
+    collectionFeedRevealKey,
+    collectionRevealCaptures,
+    markCaptureRowsRevealed
+  ]);
+  useEffect(() => {
+    if (collectionsLoading) {
+      collectionListFade.setValue(0);
+      return;
+    }
+    Animated.timing(collectionListFade, {
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: true
+    }).start();
+  }, [collectionListFade, collections.length, collectionsLoading]);
   const searchPool = useMemo(() => {
     if (searchScope === "archived") return archivedCaptures;
     if (searchScope === "all") return uniqueCaptures([...captures, ...archivedCaptures]);
@@ -2583,6 +2920,7 @@ export default function App() {
         setCollectionCapturesForId(null);
         setCollectionCapturesNextCursor(null);
       }
+      setCollectionCapturesLoading(false);
       setCollectionCapturesLoadPhase("idle");
       setCollectionCapturesError("");
       return;
@@ -2591,6 +2929,7 @@ export default function App() {
       setCollectionCaptures([]);
       setCollectionCapturesForId(selectedCollectionId);
       setCollectionCapturesNextCursor(null);
+      setCollectionCapturesLoading(false);
       setCollectionCapturesLoadPhase("idle");
       setCollectionCapturesError("");
       return;
@@ -3237,13 +3576,14 @@ export default function App() {
           title: collection.title
         }
       });
+      const restoredCollection = { ...collection, linkedAt: Date.now() };
       const addCollection = (item: Capture) =>
         item.id === capture.id || item.remoteId === captureId
           ? {
               ...item,
               linkedCollections: (item.linkedCollections || []).some((linked) => linked.id === collectionId)
                 ? item.linkedCollections
-                : [...(item.linkedCollections || []), collection]
+                : [...(item.linkedCollections || []), restoredCollection]
             }
           : item;
       collectionCapturesCacheRef.current[collectionId] = [
@@ -3563,7 +3903,11 @@ export default function App() {
     collectionCapturesCacheRef.current = {};
     collectionCapturesCursorCacheRef.current = {};
     captureDetailHydrationRef.current.clear();
-    prefetchedImageKeysRef.current.clear();
+    captureImageLoadStatesRef.current = {};
+    captureRowRevealStatesRef.current = {};
+    setCaptureImageLoadStates({});
+    setCaptureRowRevealStates({});
+    setHomeFeedReadyKey("");
     collectionsPrefetchStartedRef.current = false;
     setCollectionCaptures([]);
     setCollectionCapturesNextCursor(null);
@@ -3581,6 +3925,29 @@ export default function App() {
     selectCollection(null);
   }
 
+  const skeletonOpacity = skeletonPulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.48, 0.9]
+  });
+  const skeletonSheenTranslate = skeletonPulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-74, 132]
+  });
+
+  function SkeletonBlock({ style }: { style?: any }) {
+    return (
+      <Animated.View style={[style, styles.skeletonBlock, { opacity: skeletonOpacity }]}>
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.skeletonSheen,
+            { transform: [{ translateX: skeletonSheenTranslate }, { rotate: "18deg" }] }
+          ]}
+        />
+      </Animated.View>
+    );
+  }
+
   function renderCaptureRow(input: {
     item: Capture;
     onPress: () => void;
@@ -3588,25 +3955,53 @@ export default function App() {
     matchReason?: string;
     showCollectionToken?: boolean;
     deferFallbackIcon?: boolean;
+    deferMediaUntilLoaded?: boolean;
+    forceSkeleton?: boolean;
   }) {
-    const { item, onPress, testID, matchReason, showCollectionToken = true, deferFallbackIcon = false } = input;
+    const {
+      item,
+      onPress,
+      testID,
+      matchReason,
+      showCollectionToken = true,
+      deferFallbackIcon = false,
+      deferMediaUntilLoaded = false,
+      forceSkeleton = false
+    } = input;
+    const imageLoadKey = captureImageLoadKey(item);
+    const imageLoadState = imageLoadKey ? captureImageLoadStates[imageLoadKey] : undefined;
+    const revealKey = captureRowRevealKey(item);
+    const rowRevealed = Boolean(captureRowRevealStates[revealKey]);
+    const deferRowUntilImageReady = Boolean(
+      forceSkeleton ||
+        (deferMediaUntilLoaded &&
+          !rowRevealed &&
+          (imageLoadKey ? !imageLoadState : true))
+    );
     const itemSummary = consumerSummary(item);
     const supportLine = captureSupportLine(item, itemSummary);
     const intentLabel = captureIntentLabel(item);
     const collectionLabel = showCollectionToken ? item.linkedCollections?.[0]?.title || "" : "";
-    return (
+    const ghostSourceMark = deferFallbackIcon || shouldGhostSourceMark(item);
+    const row = (
       <Pressable
         android_ripple={{ color: "rgba(31, 122, 91, 0.08)" }}
         onPress={onPress}
         style={({ pressed }) => [styles.captureRow, pressed && styles.captureRowPressed]}
         testID={testID}
       >
-        <SourceMark
-          capture={item}
-          deferFallbackIcon={deferFallbackIcon}
-          failedFavicons={faviconFailures}
-          onFaviconFailure={markFaviconFailed}
-        />
+        {ghostSourceMark ? (
+          <SkeletonBlock style={styles.loadingThumbnailMark} />
+        ) : (
+          <SourceMark
+            capture={item}
+            failedFavicons={faviconFailures}
+            imageLoadKey={imageLoadKey}
+            imageUnavailable={imageLoadState === "failed"}
+            onFaviconFailure={markFaviconFailed}
+            onImageLoadState={markCaptureImageLoadState}
+          />
+        )}
         <View style={styles.rowContent}>
           <View style={styles.rowTitleLine}>
             <Text numberOfLines={2} style={styles.captureTitle}>
@@ -3645,73 +4040,102 @@ export default function App() {
         </View>
       </Pressable>
     );
+    if (!deferMediaUntilLoaded) return row;
+    return (
+      <SkeletonRevealFrame pending={deferRowUntilImageReady} skeleton={renderCaptureRowInlineSkeleton()}>
+        {row}
+      </SkeletonRevealFrame>
+    );
   }
 
   function renderCollectionCapture({ item }: { item: Capture }) {
+    const imageLoadKey = captureImageLoadKey(item);
+    const imageLoadState = imageLoadKey ? captureImageLoadStates[imageLoadKey] : undefined;
+    const revealKey = captureRowRevealKey(item);
+    const rowRevealed = Boolean(captureRowRevealStates[revealKey]);
+    const deferRowUntilImageReady = Boolean(
+      collectionFeedRevealPending ||
+        (!rowRevealed &&
+          (imageLoadKey ? !imageLoadState : true))
+    );
     return (
-      <View style={styles.collectionCaptureRow}>
-        <View style={styles.collectionCaptureMain}>
-          {renderCaptureRow({
-            showCollectionToken: false,
-            item,
-            onPress: () => {
-              if (selectedCollection) openCaptureFromCollection(item, selectedCollection.id);
-            }
-          })}
-        </View>
-        <Pressable
-          onPress={() => {
-            if (selectedCollection) void unlinkCaptureFromCollection(selectedCollection.id, item);
-          }}
-          style={styles.removeButton}
-        >
-          <Text style={styles.inlineAction}>Remove</Text>
-        </Pressable>
-      </View>
+      <SkeletonRevealFrame pending={deferRowUntilImageReady} skeleton={renderCaptureRowInlineSkeleton(true)}>
+        <Animated.View style={[styles.collectionCaptureRow, { opacity: collectionRowsFade }]}>
+          <View style={styles.collectionCaptureMain}>
+            {renderCaptureRow({
+              showCollectionToken: false,
+              item,
+              onPress: () => {
+                if (selectedCollection) openCaptureFromCollection(item, selectedCollection.id);
+              }
+            })}
+          </View>
+          <Pressable
+            onPress={() => {
+              if (selectedCollection) void unlinkCaptureFromCollection(selectedCollection.id, item);
+            }}
+            style={styles.removeButton}
+          >
+            <Text style={styles.inlineAction}>Remove</Text>
+          </Pressable>
+        </Animated.View>
+      </SkeletonRevealFrame>
     );
   }
 
   function renderCollection({ item }: { item: Collection }) {
     return (
-      <Pressable
-        onPress={() => {
-          selectCollection(item.id);
-          setCollectionTitle(item.title);
-          setCollectionDescription(item.description);
-        }}
-        style={({ pressed }) => [styles.collectionRow, pressed && styles.captureRowPressed]}
-        testID={`pc.collection.row.${item.id}`}
-      >
-        <View style={styles.collectionRowTop}>
-          <View style={styles.collectionIconMark}>
-            <Folder color={item.status === "archived" ? colors.muted : colors.accent} size={18} strokeWidth={2.2} />
+      <Animated.View style={{ opacity: collectionListFade }}>
+        <Pressable
+          onPress={() => {
+            selectCollection(item.id);
+            setCollectionTitle(item.title);
+            setCollectionDescription(item.description);
+          }}
+          style={({ pressed }) => [styles.collectionRow, pressed && styles.captureRowPressed]}
+          testID={`pc.collection.row.${item.id}`}
+        >
+          <View style={styles.collectionRowTop}>
+            <View style={styles.collectionIconMark}>
+              <Folder color={item.status === "archived" ? colors.muted : colors.accent} size={18} strokeWidth={2.2} />
+            </View>
+            <View style={styles.collectionRowCopy}>
+              <Text numberOfLines={1} style={styles.captureTitle}>
+                {item.title}
+              </Text>
+              <Text style={styles.meta}>
+                {item.status === "archived" ? "Archived" : `${item.captureCount} captures`}
+              </Text>
+            </View>
           </View>
-          <View style={styles.collectionRowCopy}>
-            <Text numberOfLines={1} style={styles.captureTitle}>
-              {item.title}
-            </Text>
-            <Text style={styles.meta}>
-              {item.status === "archived" ? "Archived" : `${item.captureCount} captures`}
-            </Text>
-          </View>
-        </View>
-        <Text numberOfLines={2} style={styles.summaryPreview}>
-          {item.description}
-        </Text>
-      </Pressable>
+          <Text numberOfLines={2} style={styles.summaryPreview}>
+            {item.description}
+          </Text>
+        </Pressable>
+      </Animated.View>
     );
   }
 
   function renderHomeRow({ item }: { item: HomeListRow }) {
     if (item.type === "section") {
-      return <Text style={styles.groupHeader}>{item.title}</Text>;
+      return (
+        <Animated.Text style={[styles.groupHeader, { opacity: homeFeedRevealPending ? 0 : homeRowsFade }]}>
+          {item.title}
+        </Animated.Text>
+      );
     }
-    return renderCaptureRow({
-      item: item.capture,
-      deferFallbackIcon: capturesLoading && !activeCapturesLoadedOnce,
-      onPress: () => openCapture(item.capture.id),
-      testID: `pc.capture.row.${item.capture.id}`
-    });
+    return (
+      <Animated.View style={{ opacity: homeRowsFade }}>
+        {renderCaptureRow({
+          item: item.capture,
+          deferFallbackIcon: capturesLoading && !activeCapturesLoadedOnce,
+          deferMediaUntilLoaded: true,
+          forceSkeleton: homeFeedRevealPending,
+          onPress: () => openCapture(item.capture.id),
+          testID: `pc.capture.row.${item.capture.id}`
+        })}
+      </Animated.View>
+    );
   }
 
   function renderSearchResult({ item }: { item: Capture }) {
@@ -3723,38 +4147,81 @@ export default function App() {
     });
   }
 
-  function renderLoadingRows() {
+  function renderCaptureRowInlineSkeleton(withRemoveAction = false) {
+    const body = (
+      <>
+        <SkeletonBlock style={styles.loadingThumbnailMark} />
+        <View style={styles.captureRowSkeletonCopy}>
+          <SkeletonBlock style={styles.collectionLoadingTitle} />
+          <SkeletonBlock style={styles.collectionLoadingLine} />
+          <SkeletonBlock style={styles.collectionLoadingLineShort} />
+          <SkeletonBlock style={styles.collectionLoadingToken} />
+        </View>
+      </>
+    );
+    if (withRemoveAction) {
+      return (
+        <View style={styles.collectionCaptureSkeletonInline}>
+          <View style={styles.collectionCaptureMain}>
+            <View style={styles.captureRowSkeletonInline}>{body}</View>
+          </View>
+          <SkeletonBlock style={styles.collectionLoadingAction} />
+        </View>
+      );
+    }
+    return <View style={styles.captureRowSkeletonInline}>{body}</View>;
+  }
+
+  function renderCaptureSkeletonRow(withRemoveAction = false, key?: number) {
+    return (
+      <View key={key} style={withRemoveAction ? styles.collectionCaptureSkeletonRow : styles.captureSkeletonRow}>
+        <View style={styles.collectionCaptureSkeletonMain}>
+          <SkeletonBlock style={styles.loadingThumbnailMark} />
+          <View style={styles.collectionCaptureSkeletonCopy}>
+            <SkeletonBlock style={styles.collectionLoadingTitle} />
+            <SkeletonBlock style={styles.collectionLoadingLine} />
+            <SkeletonBlock style={styles.collectionLoadingLineShort} />
+            <SkeletonBlock style={styles.collectionLoadingToken} />
+          </View>
+        </View>
+        {withRemoveAction ? <SkeletonBlock style={styles.collectionLoadingAction} /> : null}
+      </View>
+    );
+  }
+
+  function renderCaptureSkeletonRows(count = 3, withRemoveAction = false) {
     return (
       <View style={styles.loadingRows}>
-        {[0, 1, 2].map((item) => (
-          <View key={item} style={styles.loadingRow}>
-            <View style={styles.loadingTitle} />
-            <View style={styles.loadingLine} />
-            <View style={styles.loadingLineShort} />
+        {Array.from({ length: count }).map((_, item) => renderCaptureSkeletonRow(withRemoveAction, item))}
+      </View>
+    );
+  }
+
+  function renderCollectionSkeletonRows(count = 4) {
+    return (
+      <View style={styles.loadingRows}>
+        {Array.from({ length: count }).map((_, item) => (
+          <View key={item} style={styles.collectionListSkeletonRow}>
+            <View style={styles.collectionRowTop}>
+              <SkeletonBlock style={styles.collectionListSkeletonIcon} />
+              <View style={styles.collectionRowCopy}>
+                <SkeletonBlock style={styles.collectionListSkeletonTitle} />
+                <SkeletonBlock style={styles.collectionListSkeletonMeta} />
+              </View>
+            </View>
+            <SkeletonBlock style={styles.collectionListSkeletonSummary} />
           </View>
         ))}
       </View>
     );
   }
 
-  function renderCollectionCaptureSkeletonRows() {
-    return (
-      <View style={styles.collectionCaptureSkeletonRows}>
-        {[0, 1, 2, 3].map((item) => (
-          <View key={item} style={styles.collectionCaptureSkeletonRow}>
-            <View style={styles.collectionCaptureSkeletonMain}>
-              <View style={styles.loadingSourceMark} />
-              <View style={styles.collectionCaptureSkeletonCopy}>
-                <View style={styles.collectionLoadingTitle} />
-                <View style={styles.collectionLoadingLine} />
-                <View style={styles.collectionLoadingLineShort} />
-              </View>
-            </View>
-            <View style={styles.collectionLoadingAction} />
-          </View>
-        ))}
-      </View>
-    );
+  function renderLoadingRows() {
+    return renderCaptureSkeletonRows(3);
+  }
+
+  function renderCollectionCaptureSkeletonRows(count = 4) {
+    return renderCaptureSkeletonRows(count, true);
   }
 
   function renderListLoadingFooter(label = "Loading more captures...") {
@@ -4081,12 +4548,23 @@ export default function App() {
     const saveDisabled = !collectionTitle.trim() || !collectionDescription.trim();
     const activeCollection = selectedCollection.status === "active";
     const capturesReadyForCollection = collectionCapturesForId === selectedCollection.id;
-    const visibleCollectionCaptures = activeCollection && capturesReadyForCollection ? collectionCaptures : [];
+    const collectionCapturesBlockingLoading = activeCollection &&
+      collectionCapturesLoading &&
+      collectionCapturesLoadPhase !== "append";
+    const visibleCollectionCaptures = activeCollection &&
+      capturesReadyForCollection &&
+      (!collectionCapturesBlockingLoading || collectionCaptures.length)
+      ? collectionCaptures
+      : [];
     const collectionCapturesInitialLoading = activeCollection && !collectionCapturesError && (
       !capturesReadyForCollection ||
+      collectionCapturesBlockingLoading ||
       (collectionCapturesLoadPhase === "initial" && !visibleCollectionCaptures.length)
     );
     const collectionCapturesAppending = activeCollection && collectionCapturesLoadPhase === "append";
+    const collectionCaptureSkeletonCount = selectedCollection.captureCount > 0
+      ? Math.min(selectedCollection.captureCount, 4)
+      : 2;
     const collectionDetailBottomPadding = keyboardHeight > 0
       ? Math.min(Math.max(keyboardHeight + 72, 180), 380)
       : 40;
@@ -4137,7 +4615,7 @@ export default function App() {
             ListEmptyComponent={
               activeCollection ? (
                 collectionCapturesInitialLoading ? (
-                  renderCollectionCaptureSkeletonRows()
+                  renderCollectionCaptureSkeletonRows(collectionCaptureSkeletonCount)
                 ) : collectionCapturesError ? (
                   <View style={styles.collectionEmpty}>
                     <Text style={styles.emptyTitle}>Could not load collection captures.</Text>
@@ -4221,6 +4699,8 @@ export default function App() {
   }
 
   if (collectionsOpen) {
+    const collectionsBlockingLoading = collectionsLoading && !collectionsError;
+    const visibleManagedCollections = collectionsBlockingLoading ? [] : collections;
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="light-content" />
@@ -4251,13 +4731,13 @@ export default function App() {
           {collectionsError ? <Text style={styles.errorText}>{collectionsError}</Text> : null}
           <FlatList
             {...COLLECTION_LIST_PERF_PROPS}
-            data={collections}
+            data={visibleManagedCollections}
             keyExtractor={(item) => item.id}
             renderItem={renderCollection}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
             ListEmptyComponent={
-              collectionsLoading ? (
-                renderLoadingRows()
+              collectionsBlockingLoading ? (
+                renderCollectionSkeletonRows()
               ) : (
                 <View style={styles.collectionEmpty}>
                   <Text style={styles.emptyTitle}>
@@ -4289,50 +4769,54 @@ export default function App() {
     const selectionChanged = !sameStringSet(collectionSelectionIds, currentCollectionIds);
     const selectionSaving = collectionChoiceSaving === "set-collections";
     const selectionTerm = collectionPickerQuery.trim().toLowerCase();
-    const visibleCollections = collections
-      .filter((collection) => collection.status === "active")
-      .filter((collection) =>
-        !selectionTerm ||
-        [collection.title, collection.description].join(" ").toLowerCase().includes(selectionTerm)
-      );
+    const visibleCollections = collectionsLoading
+      ? []
+      : collections
+          .filter((collection) => collection.status === "active")
+          .filter((collection) =>
+            !selectionTerm ||
+            [collection.title, collection.description].join(" ").toLowerCase().includes(selectionTerm)
+          );
     const selectionCountText = collectionSelectionIds.length
       ? `${collectionSelectionIds.length} selected`
       : "No collection";
     const renderSelectableCollection = ({ item }: { item: Collection }) => {
       const selectedRow = selectedCollectionIds.has(item.id);
       return (
-        <Pressable
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: selectedRow }}
-          onPress={() => toggleCollectionSelection(item.id)}
-          style={({ pressed }) => [
-            styles.collectionChoiceRow,
-            pressed && styles.captureRowPressed
-          ]}
-          testID={`pc.collection.select.${item.id}`}
-        >
-          <View style={styles.collectionChoiceBody}>
-            <View style={styles.collectionRowTop}>
-              <View style={styles.collectionIconMark}>
-                <Folder color={colors.accent} size={18} strokeWidth={2.2} />
+        <Animated.View style={{ opacity: collectionListFade }}>
+          <Pressable
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: selectedRow }}
+            onPress={() => toggleCollectionSelection(item.id)}
+            style={({ pressed }) => [
+              styles.collectionChoiceRow,
+              pressed && styles.captureRowPressed
+            ]}
+            testID={`pc.collection.select.${item.id}`}
+          >
+            <View style={styles.collectionChoiceBody}>
+              <View style={styles.collectionRowTop}>
+                <View style={styles.collectionIconMark}>
+                  <Folder color={colors.accent} size={18} strokeWidth={2.2} />
+                </View>
+                <View style={styles.collectionRowCopy}>
+                  <Text numberOfLines={1} style={styles.captureTitle}>
+                    {item.title}
+                  </Text>
+                  <Text style={styles.meta}>{collectionCountLabel(item.captureCount)}</Text>
+                </View>
               </View>
-              <View style={styles.collectionRowCopy}>
-                <Text numberOfLines={1} style={styles.captureTitle}>
-                  {item.title}
+              {item.description ? (
+                <Text numberOfLines={2} style={styles.summaryPreview}>
+                  {item.description}
                 </Text>
-                <Text style={styles.meta}>{collectionCountLabel(item.captureCount)}</Text>
-              </View>
+              ) : null}
             </View>
-            {item.description ? (
-              <Text numberOfLines={2} style={styles.summaryPreview}>
-                {item.description}
-              </Text>
-            ) : null}
-          </View>
-          <View style={[styles.collectionSelectionControl, selectedRow && styles.collectionSelectionControlSelected]}>
-            {selectedRow ? <Check color={colors.paper} size={15} strokeWidth={3} /> : null}
-          </View>
-        </Pressable>
+            <View style={[styles.collectionSelectionControl, selectedRow && styles.collectionSelectionControlSelected]}>
+              {selectedRow ? <Check color={colors.paper} size={15} strokeWidth={3} /> : null}
+            </View>
+          </Pressable>
+        </Animated.View>
       );
     };
 
@@ -4398,7 +4882,7 @@ export default function App() {
             }
             ListEmptyComponent={
               collectionsLoading ? (
-                renderLoadingRows()
+                renderCollectionSkeletonRows()
               ) : (
                 <View style={styles.collectionEmpty}>
                   <Text style={styles.emptyTitle}>
@@ -5191,7 +5675,7 @@ export default function App() {
         </View>
         <FlatList
           {...CAPTURE_LIST_PERF_PROPS}
-          data={homeRows}
+          data={visibleHomeRows}
           keyExtractor={(item) => item.id}
           renderItem={renderHomeRow}
           onEndReached={() => loadMoreCaptures("active")}
@@ -5200,8 +5684,8 @@ export default function App() {
             leadingItem?.type === "section" ? null : <View style={styles.separator} />
           }
           ListEmptyComponent={
-            capturesLoading ? (
-              renderLoadingRows()
+            homeInitialLoading ? (
+              renderCaptureSkeletonRows(5)
             ) : capturesError ? (
               <View style={styles.empty}>
                 <Text style={styles.emptyTitle}>Could not load captures.</Text>
@@ -5228,11 +5712,11 @@ export default function App() {
             )
           }
           ListFooterComponent={
-            homeRows.length && capturesLoading && capturesNextCursor
+            visibleHomeRows.length && capturesLoading && capturesNextCursor
               ? renderListLoadingFooter()
               : null
           }
-          contentContainerStyle={homeRows.length ? styles.listContent : styles.emptyContent}
+          contentContainerStyle={visibleHomeRows.length ? styles.listContent : styles.emptyContent}
           keyboardShouldPersistTaps="handled"
         />
       </View>
@@ -6067,30 +6551,35 @@ const styles = StyleSheet.create({
     gap: 1,
     paddingTop: 10
   },
-  loadingRow: {
-    gap: 8,
+  skeletonRevealFrame: {
+    position: "relative"
+  },
+  skeletonRevealOverlay: {
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0
+  },
+  skeletonBlock: {
+    backgroundColor: colors.surfaceContainerHigh,
+    overflow: "hidden"
+  },
+  skeletonSheen: {
+    backgroundColor: "rgba(245, 251, 247, 0.10)",
+    bottom: -14,
+    position: "absolute",
+    top: -14,
+    width: 38
+  },
+  captureSkeletonRow: {
+    alignItems: "flex-start",
+    borderBottomColor: colors.line,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 132,
     paddingVertical: 16
-  },
-  loadingTitle: {
-    backgroundColor: colors.soft,
-    borderRadius: 6,
-    height: 18,
-    width: "74%"
-  },
-  loadingLine: {
-    backgroundColor: colors.soft,
-    borderRadius: 6,
-    height: 13,
-    width: "92%"
-  },
-  loadingLineShort: {
-    backgroundColor: colors.soft,
-    borderRadius: 6,
-    height: 13,
-    width: "58%"
-  },
-  collectionCaptureSkeletonRows: {
-    paddingTop: 2
   },
   collectionCaptureSkeletonRow: {
     alignItems: "flex-start",
@@ -6098,7 +6587,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 12,
-    minHeight: 96,
+    minHeight: 156,
     paddingVertical: 16
   },
   collectionCaptureSkeletonMain: {
@@ -6114,8 +6603,57 @@ const styles = StyleSheet.create({
     minWidth: 0,
     paddingTop: 3
   },
+  captureRowSkeletonInline: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 76,
+    paddingVertical: 14
+  },
+  collectionCaptureSkeletonInline: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 108,
+    paddingVertical: 16
+  },
+  captureRowSkeletonCopy: {
+    flex: 1,
+    gap: 8,
+    minWidth: 0,
+    paddingTop: 3
+  },
+  collectionListSkeletonRow: {
+    borderBottomColor: colors.line,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 9,
+    minHeight: 84,
+    paddingVertical: 15
+  },
+  collectionListSkeletonIcon: {
+    borderRadius: 8,
+    height: 36,
+    width: 36
+  },
+  collectionListSkeletonTitle: {
+    borderRadius: 6,
+    height: 18,
+    marginTop: 1,
+    width: "66%"
+  },
+  collectionListSkeletonMeta: {
+    borderRadius: 6,
+    height: 13,
+    marginTop: 7,
+    width: "38%"
+  },
+  collectionListSkeletonSummary: {
+    borderRadius: 6,
+    height: 13,
+    marginLeft: 46,
+    width: "76%"
+  },
   loadingSourceMark: {
-    backgroundColor: colors.soft,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
@@ -6123,26 +6661,36 @@ const styles = StyleSheet.create({
     marginTop: 2,
     width: 52
   },
+  loadingThumbnailMark: {
+    borderColor: colors.line,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 58,
+    marginTop: 1,
+    width: 58
+  },
   collectionLoadingTitle: {
-    backgroundColor: colors.soft,
     borderRadius: 6,
     height: 18,
     width: "68%"
   },
   collectionLoadingLine: {
-    backgroundColor: colors.soft,
     borderRadius: 6,
     height: 13,
     width: "88%"
   },
   collectionLoadingLineShort: {
-    backgroundColor: colors.soft,
     borderRadius: 6,
     height: 13,
     width: "52%"
   },
+  collectionLoadingToken: {
+    borderRadius: 6,
+    height: 14,
+    marginTop: 2,
+    width: 72
+  },
   collectionLoadingAction: {
-    backgroundColor: colors.soft,
     borderRadius: 6,
     height: 16,
     marginTop: 9,
