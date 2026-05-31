@@ -10,6 +10,24 @@ if (!Array.isArray(intents)) {
 
 const keys = new Set();
 const activeKeys = [];
+const expectedActiveKeys = [
+  "watch",
+  "read",
+  "visit",
+  "buy",
+  "cook",
+  "make",
+  "do",
+  "plan",
+  "learn"
+];
+const expectedInactiveLegacyKeys = [
+  "share",
+  "research",
+  "reference",
+  "remember",
+  "follow_up"
+];
 
 for (const [index, intent] of intents.entries()) {
   if (!intent || typeof intent !== "object") {
@@ -35,5 +53,17 @@ for (const [index, intent] of intents.entries()) {
 }
 
 if (!activeKeys.length) throw new Error("At least one intent must be active.");
+
+const activeKeyText = activeKeys.join(",");
+const expectedActiveKeyText = expectedActiveKeys.join(",");
+if (activeKeyText !== expectedActiveKeyText) {
+  throw new Error(`Active save intents changed: expected ${expectedActiveKeyText}, got ${activeKeyText}`);
+}
+
+for (const key of expectedInactiveLegacyKeys) {
+  const intent = intents.find((item) => item.key === key);
+  if (!intent) throw new Error(`Missing inactive legacy intent: ${key}`);
+  if (intent.active) throw new Error(`Legacy intent '${key}' must remain inactive.`);
+}
 
 console.log(`Validated ${intents.length} save intents (${activeKeys.length} active).`);

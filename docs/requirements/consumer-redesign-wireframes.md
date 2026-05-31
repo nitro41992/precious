@@ -144,7 +144,7 @@ Expanded chip behavior:
 
 ```text
 Saved as
-[ try this place ] [ send/share ] [ plan trip ] [ review later ]
+[ visit ] [ cook ] [ do ] [ plan ]
 
 Collection
 [ Choose existing collections ]
@@ -199,8 +199,8 @@ Library
 All
 --------------------------------------------------
 [ Ramen reel ]        try this place
-[ Chair screenshot ]  buy later
-[ Article ]           read later
+[ Chair screenshot ]  buy
+[ Article ]           read
 ```
 
 Map lens:

@@ -583,6 +583,29 @@ Deno.test("Visit target prompt allows brand-plus-service disambiguation from evi
   );
 });
 
+Deno.test("save intent catalog is small, active, and action-oriented", () => {
+  assertEqual(
+    urlEvidence.activeSaveIntentKeys.join("|"),
+    "watch|read|visit|buy|cook|make|do|plan|learn",
+    "active save intent keys",
+  );
+
+  const prompt = urlEvidence.buildPrompt(
+    captureFixture({
+      source_text: "Physical therapy routine: three ankle mobility stretches.",
+    }),
+    null,
+    [],
+  );
+  assert(
+    prompt.includes("- do (Do):") &&
+      prompt.includes("physical therapy") &&
+      prompt.includes("- cook (Cook):") &&
+      prompt.includes("return null when no listed action is clearly supported"),
+    "prompt should describe do/cook and allow blank intent",
+  );
+});
+
 function captureFixture(overrides: Record<string, unknown> = {}): any {
   return {
     id: "capture-1",
@@ -730,6 +753,50 @@ Deno.test("capture gate review analysis does not invent URL evidence", () => {
     analysis.capture_gate.rationale_code,
     "filename_or_uuid_only",
     "capture gate rationale is persisted",
+  );
+  assertEqual(
+    analysis.default_intent.category,
+    null,
+    "unclear capture gate analysis should leave intent blank",
+  );
+});
+
+Deno.test("legacy broad intents normalize to blank intent and review", () => {
+  const normalized = urlEvidence.normalizedReviewAnalysis({
+    display_title: "Saved note",
+    summary: "Useful but not clearly actionable.",
+    default_intent: {
+      category: "remember",
+      confidence: 0.91,
+      rationale: "Legacy broad intent.",
+    },
+    confidence_label: "Looks right",
+    needs_review: false,
+  });
+  assertEqual(
+    normalized.default_intent.category,
+    null,
+    "inactive legacy intent should normalize to blank",
+  );
+  assertEqual(
+    normalized.default_intent.confidence,
+    0,
+    "blank intent confidence should be zero",
+  );
+  assertEqual(
+    normalized.needs_review,
+    true,
+    "blank inferred intent should need review",
+  );
+
+  const reviewedBlank = urlEvidence.normalizedReviewAnalysis({
+    ...normalized,
+    needs_review: false,
+  }, "2026-05-31T12:00:00.000Z");
+  assertEqual(
+    reviewedBlank.needs_review,
+    false,
+    "user-reviewed blank intent should be allowed",
   );
 });
 

@@ -45,7 +45,7 @@ Primary 0A user:
 
 Future users:
 
-- People who save things with a latent intent: places to try, things to buy, trips/events, videos to watch, articles to read, references, and facts to remember.
+- People who save things with a latent intent: places to visit, products to buy, trips or events to plan, videos to watch, articles to read, recipes to cook, things to make or do, and topics to learn.
 
 ## Product Requirements
 

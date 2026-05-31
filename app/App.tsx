@@ -313,6 +313,7 @@ type SaveIntentConfig = {
 const INTENT_CONFIG = (saveIntents as SaveIntentConfig[]).filter((intent) => intent.active);
 const INTENT_OPTIONS = INTENT_CONFIG.map((intent) => intent.key);
 const INTENT_LABELS = new Map(INTENT_CONFIG.map((intent) => [intent.key, intent.label]));
+const ADD_INTENT_LABEL = "Add intent";
 
 type CaptureListMode = "active" | "archived";
 type CollectionListMode = "active" | "archived";
@@ -490,6 +491,10 @@ function normalizeIntent(value: string | undefined) {
   return normalizeKnownIntent(value, INTENT_OPTIONS);
 }
 
+function activeIntentLabel(value: string | undefined) {
+  return value ? INTENT_LABELS.get(value) || "" : "";
+}
+
 function reminderLabel(reminder: ReminderSuggestion | undefined) {
   if (!reminder) return "";
   return reminder.trigger_value || humanize(reminder.trigger_type);
@@ -606,7 +611,7 @@ function captureStatusLabel(capture: Capture) {
 }
 
 function captureIntentLabel(capture: Capture) {
-  return humanize(capture.defaultIntent) || "";
+  return activeIntentLabel(capture.defaultIntent);
 }
 
 function auditLikeText(value: string | null | undefined) {
@@ -848,8 +853,8 @@ function reviewFocusForCapture(capture: Capture, intentText: string) {
   if (providedFocus) return conciseText(providedFocus, 88);
   if (displayStatus(capture) === "failed") return "Review source details";
   if (confidenceRequiresReview(capture.confidenceLabel)) {
-    const intentLabel = humanize(capture.defaultIntent);
-    return intentLabel ? `Confirm intent: ${intentLabel}` : "Confirm suggested intent";
+    const intentLabel = activeIntentLabel(capture.defaultIntent);
+    return intentLabel ? `Confirm intent: ${intentLabel}` : "Choose an intent";
   }
   if (capture.needsReview) return "Review the suggested fields";
   return conciseText(intentText, 88) || "Review the suggested fields";
@@ -906,8 +911,8 @@ function cleanedReviewDraft(draft: CaptureReviewDraft): CaptureReviewDraft | nul
     next.note = draft.note;
     next.noteDirty = true;
   }
-  if (draft.intentDirty && draft.intent) {
-    next.intent = draft.intent;
+  if (draft.intentDirty) {
+    next.intent = typeof draft.intent === "string" ? draft.intent : "";
     next.intentDirty = true;
   }
   if (draft.reminders && Object.keys(draft.reminders).length) {
@@ -3139,7 +3144,7 @@ export default function App() {
     setDraftTitle(savedDraft.titleDirty && typeof savedDraft.title === "string" ? savedDraft.title : selected.title);
     setDraftNote(savedDraft.noteDirty && typeof savedDraft.note === "string" ? savedDraft.note : selected.note);
     setDraftIntent(
-      savedDraft.intentDirty && savedDraft.intent
+      savedDraft.intentDirty && typeof savedDraft.intent === "string"
         ? savedDraft.intent
         : normalizeIntent(selected.defaultIntent)
     );
@@ -3287,7 +3292,18 @@ export default function App() {
 
   async function saveQuickEdit(nextIntent?: string) {
     if (!selected) return;
-    const intentOverride = nextIntent && normalizeIntent(nextIntent) ? nextIntent : undefined;
+    const intentOverride =
+      nextIntent === ""
+        ? null
+        : nextIntent && normalizeIntent(nextIntent)
+          ? nextIntent
+          : undefined;
+    const currentSaveIntent =
+      intentOverride !== undefined
+        ? intentOverride
+        : draftIntentDirty
+          ? draftIntent || null
+          : undefined;
     if (config?.apiUrl && session?.accessToken) {
       try {
         const activeSession = await getFreshSession();
@@ -3304,7 +3320,7 @@ export default function App() {
               captureId: selected.remoteId || selected.id,
               title: draftTitle.trim(),
               note: draftNote.trim(),
-              currentSaveIntent: intentOverride || (draftIntentDirty && draftIntent ? draftIntent : undefined)
+              currentSaveIntent
             }
           });
         let json: { capture: Record<string, any> };
@@ -3332,7 +3348,7 @@ export default function App() {
       selected.id,
       draftTitle.trim(),
       draftNote.trim(),
-      intentOverride || (draftIntentDirty && draftIntent ? draftIntent : null)
+      currentSaveIntent === undefined ? null : currentSaveIntent
     );
     const next = JSON.parse(raw || "[]") as Capture[];
     replaceLocalCaptureLists(next);
@@ -3377,6 +3393,7 @@ export default function App() {
         })
         .filter((decision) => decision.action === "link" || decision.action === "create")
     ];
+    const currentSaveIntent = draftIntentDirty ? draftIntent || null : undefined;
 
     if (config?.apiUrl && session?.accessToken) {
       try {
@@ -3395,7 +3412,7 @@ export default function App() {
               action: "save_review_decisions",
               title: draftTitle.trim(),
               note: draftNote.trim(),
-              currentSaveIntent: draftIntentDirty && draftIntent ? draftIntent : undefined,
+              currentSaveIntent,
               reminderDecisions,
               collectionDecisions
             }
@@ -3463,6 +3480,7 @@ export default function App() {
       try {
         const activeSession = await getFreshSession();
         if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
+        const currentSaveIntent = draftIntentDirty ? draftIntent || null : undefined;
         const confirmWithToken = (accessToken: string) =>
           requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
             method: "PATCH",
@@ -3476,7 +3494,7 @@ export default function App() {
               action: "confirm_review",
               title: draftTitle.trim(),
               note: draftNote.trim(),
-              currentSaveIntent: draftIntentDirty && draftIntent ? draftIntent : undefined
+              currentSaveIntent
             }
           });
         let json: { capture: Record<string, any> };
@@ -5298,9 +5316,9 @@ export default function App() {
     const selectedOpenUrl = captureOpenUrl(selected);
     const selectedImageUrl = captureImageUrl(selected);
     const selectedReviewReasons = reviewReasons(selected);
-    const aiIntentValue = normalizeIntent(selected.defaultIntent) || selected.defaultIntent || "";
-    const quickIntentValue = draftIntent || aiIntentValue;
-    const quickIntentLabel = humanize(quickIntentValue) || "something useful";
+    const aiIntentValue = normalizeIntent(selected.defaultIntent);
+    const quickIntentValue = draftIntentDirty ? draftIntent : aiIntentValue;
+    const quickIntentLabel = activeIntentLabel(quickIntentValue) || ADD_INTENT_LABEL;
     const reminderRows = selected.suggestedReminders || [];
     const collectionRows = selected.linkedCollections || [];
     const collectionRowLabel = linkedCollectionsLabel(collectionRows);
@@ -5321,7 +5339,7 @@ export default function App() {
     const showReviewInsight = Boolean(
       selected.reviewRationale ||
         selected.intentRationale ||
-        selected.defaultIntent ||
+        activeIntentLabel(selected.defaultIntent) ||
         selected.suggestedReminders?.length ||
         selected.linkedCollections?.some((collection) => collection.rationale)
     );
@@ -5343,7 +5361,9 @@ export default function App() {
         Object.keys(reminderDrafts).length
     );
     const reviewSupportText = draftIntentDirty
-      ? `Changed from ${humanize(aiIntentValue) || "the original suggestion"}`
+      ? aiIntentValue
+        ? `Changed from ${activeIntentLabel(aiIntentValue)}`
+        : "Added intent"
       : "";
     const showReviewFooter = reviewHasPendingChanges || collectionActionPending;
     const noteSheetKeyboardVisible = noteSheetOpen && keyboardHeight > 0;
@@ -5506,7 +5526,15 @@ export default function App() {
                       pressed && styles.subtlePressed
                     ]}
                   >
-                    <Text numberOfLines={1} style={styles.editRowValueText}>{quickIntentLabel}</Text>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.editRowValueText,
+                        !quickIntentValue && styles.editRowPlaceholderText
+                      ]}
+                    >
+                      {quickIntentLabel}
+                    </Text>
                   </Pressable>
                 </View>
                 <View style={styles.reviewEditRow}>
@@ -5578,7 +5606,7 @@ export default function App() {
                         style={[styles.intentChip, selectedIntent && styles.intentChipSelected]}
                       >
                         <Text style={[styles.intentChipText, selectedIntent && styles.intentChipTextSelected]}>
-                          {humanize(intent)}
+                          {activeIntentLabel(intent)}
                         </Text>
                       </Pressable>
                     );
@@ -5588,7 +5616,9 @@ export default function App() {
               {draftIntentDirty ? (
                 <View style={styles.changeLine}>
                   <Text style={styles.changeText}>
-                    Original suggestion: {humanize(aiIntentValue) || "something useful"}
+                    {aiIntentValue
+                      ? `Original suggestion: ${activeIntentLabel(aiIntentValue)}`
+                      : "Started without intent"}
                   </Text>
                   <Pressable
                     onPress={() => {

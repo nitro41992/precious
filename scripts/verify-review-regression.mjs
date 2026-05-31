@@ -212,9 +212,9 @@ function baseAnalysis({ existingCollection, label, extraCollectionDecisions = []
   return {
     summary: `${label} summary`,
     default_intent: {
-      category: "remember",
+      category: "learn",
       confidence: 0.82,
-      rationale: "The text is useful reference material worth saving."
+      rationale: "The text is useful educational material worth saving."
     },
     confidence_label: "Looks right",
     needs_review: true,
@@ -275,10 +275,10 @@ async function seedCapture({ supabaseUrl, serviceRoleKey, userId, prefix, existi
       analysis_provider: "system",
       analysis_model: "review-regression",
       analysis_mode: "llm",
-      default_intent: "remember",
+      default_intent: "learn",
       default_intent_confidence: 0.82,
-      current_save_intent: "remember",
-      intent_rationale: "The text is useful reference material worth saving.",
+      current_save_intent: "learn",
+      intent_rationale: "The text is useful educational material worth saving.",
       analysis: baseAnalysis({ existingCollection, label: suffix, extraCollectionDecisions })
     }
   });

@@ -13,15 +13,15 @@ The form in which a Capture entered Sharebook, such as link, screenshot, social 
 _Avoid_: Source, category
 
 **Save Intent**:
-The user's likely reason for creating a Capture at that moment, such as watch later, try this place, buy this product, send to someone, compare options, or use as reference.
+An optional action signal for what the saved thing clearly supports, such as watch, read, visit, buy, cook, make, do, plan, or learn. Save Intent should not duplicate Collection topic or project grouping, and it may be blank when Capture evidence does not support a concrete action.
 _Avoid_: Summary, tag, category
 
 **Default Intent**:
-The Save Intent Sharebook assigns when Capture Analysis finishes and the user does not apply One-Tap Correction or add a Context Note.
+The Save Intent Sharebook assigns when Capture Analysis finishes and the user does not apply One-Tap Correction or add a Context Note. Default Intent may be blank when no active Intent Category is clearly inferable.
 _Avoid_: Unconfirmed tag, uncategorized
 
 **Intent Category**:
-A small canonical Save Intent option used for Default Intent assignment and One-Tap Correction.
+A small canonical Save Intent option used for Default Intent assignment and One-Tap Correction. Intent Categories should stay action-oriented and finite: watch, read, visit, buy, cook, make, do, plan, and learn.
 _Avoid_: Tag taxonomy, folder structure
 
 **Captured Entity**:
@@ -133,7 +133,7 @@ Optional free text added by the user when One-Tap Correction is not expressive e
 _Avoid_: Required rationale, mandatory note
 
 **Quick Edit**:
-A compact post-capture amendment that reads like an editable sentence with tappable chips for Save Intent, suggested Reminder, Collection attachment, and optional Context Note. Captured Entities may appear as supporting context, but Quick Edit is not the primary entity-editing surface.
+A compact post-capture amendment that reads like an editable sentence with tappable chips for optional Save Intent, suggested Reminder, Collection attachment, and optional Context Note. Captured Entities may appear as supporting context, but Quick Edit is not the primary entity-editing surface.
 _Avoid_: Gamification, tagging workflow, command language, entity editor, correction form
 
 **Visual Understanding**:
@@ -224,7 +224,7 @@ Domain Expert: "Start with a mobile-first Capture Surface through the phone shar
 
 Product: "How many intent choices should users see?"
 
-Domain Expert: "Keep Intent Categories small and action-oriented: watch later, read later, try place, buy later, cook or make, send or share, plan trip or event, compare or research, use as reference, remember fact, and review later."
+Domain Expert: "Keep Intent Categories small and action-oriented: watch, read, visit, buy, cook, make, do, plan, and learn. If none of those actions is supported by the Capture evidence, leave intent blank and ask for a quick look instead of inventing a broad category."
 
 Product: "Should the user have to explain the reason while saving?"
 

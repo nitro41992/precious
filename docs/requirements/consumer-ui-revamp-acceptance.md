@@ -4,7 +4,7 @@
 
 This artifact records the agreed scope for the current Precious consumer UI revamp. Use it with `docs/precious-style-guide.md`, `docs/requirements/CONTEXT.md`, and `docs/requirements/PRODUCT.md` before implementing or reviewing UI work.
 
-Related ADRs: `docs/adr/0001-recent-captures-and-full-screen-search.md`, `docs/adr/0005-bottom-app-bar-and-top-level-collections.md`, `docs/adr/0006-existing-only-multi-collection-assignment.md`, and `docs/adr/0008-starter-collections-for-empty-accounts.md`.
+Related ADRs: `docs/adr/0001-recent-captures-and-full-screen-search.md`, `docs/adr/0005-bottom-app-bar-and-top-level-collections.md`, `docs/adr/0006-existing-only-multi-collection-assignment.md`, `docs/adr/0008-starter-collections-for-empty-accounts.md`, and `docs/adr/0009-action-oriented-save-intents.md`.
 
 ## Product Shape
 
@@ -79,7 +79,8 @@ Capture Review must:
 - Feel like editing a saved memory, not inspecting an analysis report.
 - Lead with existing capture imagery or source media when available; tapping it opens the source URL when one is available.
 - Make the editable title the primary text under the media/source header.
-- Show Save Intent, Collections, and Reminder as quiet editable rows below the title rather than stacking prominent cards or pill-heavy controls.
+- Show optional Save Intent, Collections, and Reminder as quiet editable rows below the title rather than stacking prominent cards or pill-heavy controls.
+- Show `Add intent` when no concrete action is inferable; blank intent should be a reviewable state, not a broad fallback label or selectable chip.
 - Show `Add collections` when no Collection is linked. A Capture may intentionally have no Collection.
 - Tapping Collections opens a focused full-screen selector for existing active Collections, including `No collection` as a valid clearing state.
 - Do not show AI Collection suggestions, `Use suggestion`, inline Collection creation, or per-row `Manage` actions inside Capture Review.

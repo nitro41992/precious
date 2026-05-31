@@ -264,7 +264,7 @@ Use:
 - `Choose collection`
 - `Open link once`
 
-Capture Review should read like an editable sentence:
+Capture Review should read like an editable sentence. Save Intent is optional; when no concrete action is inferable, show `Add intent` in the edit row and use the review cue to ask for a quick look instead of showing a broad fallback label or selectable empty-intent chip.
 
 `Saved as [try this place] in [NYC restaurants]. Reminder idea: [next Saturday afternoon].`
 

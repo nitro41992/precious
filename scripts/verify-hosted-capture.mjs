@@ -306,10 +306,16 @@ async function main() {
   if (!llmRan) {
     throw new Error(`Expected hosted LLM evidence, got analysis_mode=${capture.analysis_mode || "missing"}`);
   }
-  const intent = capture.analysis?.default_intent?.category || capture.default_intent || capture.current_save_intent;
-  if (!intent) {
+  const hasStructuredIntent =
+    capture.analysis &&
+    typeof capture.analysis === "object" &&
+    capture.analysis.default_intent &&
+    typeof capture.analysis.default_intent === "object" &&
+    "category" in capture.analysis.default_intent;
+  if (!hasStructuredIntent) {
     throw new Error("Capture is missing structured default_intent output.");
   }
+  const intent = capture.analysis.default_intent.category || capture.default_intent || capture.current_save_intent || null;
 
   const [runs, assets] = await Promise.all([
     restRows({
@@ -346,7 +352,7 @@ async function main() {
         state: capture.analysis_state,
         analysisMode: capture.analysis_mode,
         model: capture.analysis_model || succeededRuns[0]?.model,
-        intent,
+        intent: intent || null,
         assets: assets.length,
         title: capture.display_title
       },
