@@ -43,6 +43,7 @@ import {
   Info,
   Link2,
   LogOut,
+  Mail,
   MapPin,
   Pencil,
   Plus,
@@ -327,9 +328,8 @@ type SnackbarState = {
   action?: () => void;
 };
 
-type AuthScreenMode = "signin" | "create" | "check-email";
-type AuthLoadingState = "signin" | "magiclink" | "oauth" | "callback" | null;
-type AuthEmailLinkKind = "signin" | "create";
+type AuthScreenMode = "signin" | "check-email";
+type AuthLoadingState = "magiclink" | "oauth" | "callback" | null;
 type AuthCallbackPayload =
   | {
       kind: "session";
@@ -954,7 +954,7 @@ function urlEvidenceMessage(evidence?: UrlEvidence | null) {
 function friendlyError(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : String(error || "");
   if (/anonymous sign-ins are disabled/i.test(message)) {
-    return "Enter an email and password.";
+    return "Choose Google or email link to sign in.";
   }
   if (/signup|signups|registration/i.test(message) && /disabled|not allowed/i.test(message)) {
     return "Account creation is not enabled yet. Turn on email signups in Supabase Auth.";
@@ -992,13 +992,6 @@ function emailInputError(email: string) {
     return "Enter a valid email address.";
   }
   return "";
-}
-
-function passwordSignInInputError(email: string, password: string) {
-  if (!email || !password) {
-    return "Enter your email and password.";
-  }
-  return emailInputError(email);
 }
 
 function authCallbackPayload(url: string | null | undefined): AuthCallbackPayload | null {
@@ -1696,10 +1689,7 @@ export default function App() {
   const [collectionFeedReadyKey, setCollectionFeedReadyKey] = useState("");
   const [authScreen, setAuthScreen] = useState<AuthScreenMode>("signin");
   const [authEmail, setAuthEmail] = useState("");
-  const [authCreateEmail, setAuthCreateEmail] = useState("");
   const [authPendingEmail, setAuthPendingEmail] = useState("");
-  const [authEmailLinkKind, setAuthEmailLinkKind] = useState<AuthEmailLinkKind>("create");
-  const [authPassword, setAuthPassword] = useState("");
   const [authLoading, setAuthLoading] = useState<AuthLoadingState>(null);
   const latestNoteRef = useRef("");
   const capturesRef = useRef<Capture[]>([]);
@@ -4104,46 +4094,6 @@ export default function App() {
     }
   }
 
-  async function submitPasswordSignIn() {
-    if (!config?.supabaseUrl || !config.supabaseAnonKey || !nativeAuth) {
-      setMessage("Supabase URL and anon key are not configured in the Android build.");
-      return;
-    }
-    const email = authEmail.trim();
-    const inputError = passwordSignInInputError(email, authPassword);
-    if (inputError) {
-      setMessage(inputError);
-      return;
-    }
-    setAuthLoading("signin");
-    setMessage("");
-    try {
-      const json = await requestJson<Record<string, any>>(`${config.supabaseUrl}/auth/v1/token?grant_type=password`, {
-        method: "POST",
-        headers: {
-          apikey: config.supabaseAnonKey,
-          "content-type": "application/json"
-        },
-        body: { email, password: authPassword }
-      });
-      const accessToken = json.access_token;
-      const refreshToken = json.refresh_token;
-      const userId = json.user?.id;
-      const expiresAt = Number(json.expires_at || Math.floor(Date.now() / 1000) + Number(json.expires_in || 3600));
-      if (!accessToken || !refreshToken || !userId) {
-        throw new Error("Check your email to confirm the account, then sign in.");
-      }
-      const next = { accessToken, refreshToken, expiresAt, userId };
-      await nativeAuth.persistSession(accessToken, refreshToken, expiresAt, userId);
-      setSession(next);
-      setMessage("");
-    } catch (error) {
-      setMessage(friendlyError(error, "Sign in failed"));
-    } finally {
-      setAuthLoading(null);
-    }
-  }
-
   async function startGoogleSignIn() {
     if (!config?.supabaseUrl || !config.supabaseAnonKey) {
       setMessage("Supabase URL and anon key are not configured in the Android build.");
@@ -4164,7 +4114,7 @@ export default function App() {
     }
   }
 
-  async function sendSupabaseAuthEmailLink(email: string, createUser: boolean) {
+  async function sendSupabaseAuthEmailLink(email: string) {
     if (!config?.supabaseUrl || !config.supabaseAnonKey) {
       throw new Error("Supabase URL and anon key are not configured in the Android build.");
     }
@@ -4177,21 +4127,13 @@ export default function App() {
       body: {
         email,
         data: {},
-        create_user: createUser,
+        create_user: true,
         gotrue_meta_security: {}
       }
     });
   }
 
-  function passwordlessSignInError(error: unknown) {
-    const message = error instanceof Error ? error.message : String(error || "");
-    if (/signups? not allowed|user not found|not found|no user/i.test(message)) {
-      return "No account found for that email. Create an account first.";
-    }
-    return friendlyError(error, "Could not send the sign-in link.");
-  }
-
-  async function sendSignInLink() {
+  async function sendEmailAuthLink() {
     if (!config?.supabaseUrl || !config.supabaseAnonKey) {
       setMessage("Supabase URL and anon key are not configured in the Android build.");
       return;
@@ -4205,48 +4147,15 @@ export default function App() {
     setAuthLoading("magiclink");
     setMessage("");
     try {
-      await sendSupabaseAuthEmailLink(email, false);
+      await sendSupabaseAuthEmailLink(email);
       setAuthPendingEmail(email);
-      setAuthEmailLinkKind("signin");
       setAuthScreen("check-email");
       setMessage("");
     } catch (error) {
-      setMessage(passwordlessSignInError(error));
+      setMessage(friendlyError(error, "Could not send the sign-in link."));
     } finally {
       setAuthLoading(null);
     }
-  }
-
-  async function sendCreateAccountLink() {
-    if (!config?.supabaseUrl || !config.supabaseAnonKey) {
-      setMessage("Supabase URL and anon key are not configured in the Android build.");
-      return;
-    }
-    const email = authCreateEmail.trim();
-    const inputError = emailInputError(email);
-    if (inputError) {
-      setMessage(inputError);
-      return;
-    }
-    setAuthLoading("magiclink");
-    setMessage("");
-    try {
-      await sendSupabaseAuthEmailLink(email, true);
-      setAuthPendingEmail(email);
-      setAuthEmailLinkKind("create");
-      setAuthScreen("check-email");
-      setMessage("");
-    } catch (error) {
-      setMessage(friendlyError(error, "Could not send the confirmation email."));
-    } finally {
-      setAuthLoading(null);
-    }
-  }
-
-  function openCreateAccount() {
-    setAuthCreateEmail(authEmail.trim());
-    setAuthScreen("create");
-    setMessage("");
   }
 
   function backToSignIn() {
@@ -5923,15 +5832,21 @@ export default function App() {
         >
           {authScreen === "signin" ? (
             <>
-              <Text style={styles.kicker}>Sign in</Text>
-              <Text style={styles.title}>Precious Captures</Text>
+              <Text style={[styles.title, styles.authTitle]}>Precious Captures</Text>
               <Pressable
                 disabled={Boolean(authLoading)}
                 onPress={() => void startGoogleSignIn()}
-                style={[styles.secondaryButton, styles.authProviderButton, authLoading && styles.disabledButton]}
+                style={({ pressed }) => [
+                  styles.authGoogleButton,
+                  pressed && !authLoading && styles.authGoogleButtonPressed,
+                  authLoading && styles.disabledButton
+                ]}
                 testID="pc.auth.google"
               >
-                <Text style={styles.secondaryButtonText}>
+                <View style={styles.authGoogleMark}>
+                  <Text style={styles.authGoogleMarkText}>G</Text>
+                </View>
+                <Text style={styles.authGoogleButtonText}>
                   {authLoading === "oauth" ? "Opening Google..." : "Continue with Google"}
                 </Text>
               </Pressable>
@@ -5946,87 +5861,23 @@ export default function App() {
                 onChangeText={setAuthEmail}
                 placeholder="Email"
                 placeholderTextColor={colors.muted}
-                style={styles.search}
+                style={styles.authEmailInput}
                 testID="pc.auth.email"
                 value={authEmail}
               />
-              <TextInput
-                onChangeText={setAuthPassword}
-                placeholder="Password"
-                placeholderTextColor={colors.muted}
-                secureTextEntry
-                style={styles.search}
-                testID="pc.auth.password"
-                value={authPassword}
-              />
               <Pressable
                 disabled={Boolean(authLoading)}
-                onPress={() => void submitPasswordSignIn()}
-                style={[styles.primaryButton, authLoading && styles.disabledButton]}
-                testID="pc.auth.sign-in"
-              >
-                <Text style={styles.primaryButtonText}>
-                  {authLoading === "signin" || authLoading === "callback" ? "Signing in..." : "Sign in"}
-                </Text>
-              </Pressable>
-              <Pressable
-                disabled={Boolean(authLoading)}
-                onPress={() => void sendSignInLink()}
-                style={[styles.secondaryButton, authLoading && styles.disabledButton]}
+                onPress={() => void sendEmailAuthLink()}
+                style={({ pressed }) => [
+                  styles.authEmailButton,
+                  pressed && !authLoading && styles.primaryButtonPressed,
+                  authLoading && styles.disabledButton
+                ]}
                 testID="pc.auth.sign-in-link"
               >
-                <Text style={styles.secondaryButtonText}>
-                  {authLoading === "magiclink" ? "Sending..." : "Email sign-in link"}
-                </Text>
-              </Pressable>
-              <Pressable
-                disabled={Boolean(authLoading)}
-                onPress={openCreateAccount}
-                style={[styles.secondaryButton, authLoading && styles.disabledButton]}
-                testID="pc.auth.create-account"
-              >
-                <Text style={styles.secondaryButtonText}>Create account</Text>
-              </Pressable>
-              {message ? <Text style={styles.errorText}>{message}</Text> : null}
-            </>
-          ) : authScreen === "create" ? (
-            <>
-              <View style={styles.authHeaderRow}>
-                <Pressable
-                  accessibilityLabel="Back to sign in"
-                  hitSlop={10}
-                  onPress={backToSignIn}
-                  style={styles.iconButton}
-                  testID="pc.auth.create.back"
-                >
-                  <ArrowLeft color={colors.ink} size={26} strokeWidth={2.2} />
-                </Pressable>
-                <View style={styles.authHeaderCopy}>
-                  <Text style={styles.kicker}>Create account</Text>
-                  <Text style={styles.title}>Start with email</Text>
-                </View>
-              </View>
-              <Text style={styles.supportingText}>
-                We will send a secure confirmation link. Open it on this phone to finish.
-              </Text>
-              <TextInput
-                autoCapitalize="none"
-                keyboardType="email-address"
-                onChangeText={setAuthCreateEmail}
-                placeholder="Email"
-                placeholderTextColor={colors.muted}
-                style={styles.search}
-                testID="pc.auth.create.email"
-                value={authCreateEmail}
-              />
-              <Pressable
-                disabled={Boolean(authLoading)}
-                onPress={() => void sendCreateAccountLink()}
-                style={[styles.primaryButton, authLoading && styles.disabledButton]}
-                testID="pc.auth.create.send"
-              >
+                <Mail color={colors.onAccent} size={20} strokeWidth={2.4} />
                 <Text style={styles.primaryButtonText}>
-                  {authLoading === "magiclink" ? "Sending..." : "Send confirmation email"}
+                  {authLoading === "magiclink" ? "Sending..." : "Send sign-in link"}
                 </Text>
               </Pressable>
               {message ? <Text style={styles.errorText}>{message}</Text> : null}
@@ -6044,15 +5895,14 @@ export default function App() {
                   <ArrowLeft color={colors.ink} size={26} strokeWidth={2.2} />
                 </Pressable>
                 <View style={styles.authHeaderCopy}>
-                  <Text style={styles.kicker}>{authEmailLinkKind === "create" ? "Create account" : "Sign in"}</Text>
-                  <Text style={styles.title}>Check your email</Text>
+                  <Text style={[styles.title, styles.authTitle]}>Check your email</Text>
                 </View>
               </View>
               <View style={styles.authSuccessMark}>
                 <Check color={colors.onAccent} size={28} strokeWidth={2.5} />
               </View>
-              <Text style={styles.supportingText}>
-                We sent a {authEmailLinkKind === "create" ? "confirmation" : "sign-in"} link to {authPendingEmail || authCreateEmail.trim() || authEmail.trim() || "your email"}. Open it on this phone to {authEmailLinkKind === "create" ? "finish creating your account" : "sign in"}.
+              <Text style={[styles.supportingText, styles.authSupportingText]}>
+                We sent a secure link to {authPendingEmail || authEmail.trim() || "your email"}. Open it on this phone to continue.
               </Text>
               <Pressable
                 disabled={Boolean(authLoading)}
@@ -6064,13 +5914,7 @@ export default function App() {
               </Pressable>
               <Pressable
                 disabled={Boolean(authLoading)}
-                onPress={() => {
-                  if (authEmailLinkKind === "create") {
-                    void sendCreateAccountLink();
-                  } else {
-                    void sendSignInLink();
-                  }
-                }}
+                onPress={() => void sendEmailAuthLink()}
                 style={[styles.secondaryButton, authLoading && styles.disabledButton]}
                 testID="pc.auth.check.resend"
               >
@@ -7855,7 +7699,10 @@ const styles = StyleSheet.create({
     padding: 22
   },
   authDetail: {
-    paddingTop: 44
+    alignItems: "stretch",
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingBottom: 82
   },
   authHeaderRow: {
     alignItems: "center",
@@ -7866,17 +7713,51 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4
   },
+  authTitle: {
+    marginBottom: 8,
+    textAlign: "center"
+  },
   authSuccessMark: {
     alignItems: "center",
-    alignSelf: "flex-start",
+    alignSelf: "center",
     backgroundColor: colors.accent,
     borderRadius: 8,
     height: 52,
     justifyContent: "center",
     width: 52
   },
-  authProviderButton: {
-    marginTop: 4
+  authGoogleButton: {
+    alignItems: "center",
+    backgroundColor: colors.ink,
+    borderRadius: 8,
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "center",
+    minHeight: 58,
+    paddingHorizontal: 16,
+    paddingVertical: 14
+  },
+  authGoogleButtonPressed: {
+    backgroundColor: colors.secondary,
+    transform: [{ scale: 0.99 }]
+  },
+  authGoogleMark: {
+    alignItems: "center",
+    backgroundColor: colors.paper,
+    borderRadius: 8,
+    height: 32,
+    justifyContent: "center",
+    width: 32
+  },
+  authGoogleMarkText: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: "900"
+  },
+  authGoogleButtonText: {
+    color: colors.paper,
+    fontSize: 16,
+    fontWeight: "800"
   },
   authDivider: {
     alignItems: "center",
@@ -7893,6 +7774,31 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 13,
     fontWeight: "700"
+  },
+  authEmailInput: {
+    backgroundColor: colors.surfaceContainer,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    color: colors.ink,
+    fontSize: 16,
+    minHeight: 54,
+    paddingHorizontal: 14,
+    paddingVertical: 12
+  },
+  authEmailButton: {
+    alignItems: "center",
+    backgroundColor: colors.accent,
+    borderRadius: 8,
+    flexDirection: "row",
+    gap: 9,
+    justifyContent: "center",
+    minHeight: 54,
+    paddingHorizontal: 14,
+    paddingVertical: 13
+  },
+  authSupportingText: {
+    textAlign: "center"
   },
   reviewShell: {
     flex: 1

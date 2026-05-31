@@ -24,13 +24,12 @@ Related ADRs: `docs/adr/0001-recent-captures-and-full-screen-search.md`, `docs/a
 
 Authentication must:
 
-- Keep account creation separate from password sign-in.
 - Offer Google sign-in through Supabase browser OAuth when the provider is configured.
-- Let new users start account creation with email only.
-- Send a Supabase email confirmation or magic link, then show a dedicated `Check your email` state.
-- Tell users to open the confirmation link on the phone with Precious Captures installed.
-- Preserve password sign-in for existing accounts.
-- Provide email-link sign-in for accounts created through the email-only flow before a password exists.
+- Let users continue with one email field that sends a Supabase magic link for sign-in or account creation.
+- Send a Supabase email magic link, then show a dedicated `Check your email` state.
+- Tell users to open the email link on the phone with Precious Captures installed.
+- Avoid password fields in the primary consumer auth flow.
+- Explain that using the same email with Google and email links keeps one linked account.
 - Avoid surfacing anonymous-auth or provider-debug messages as primary user copy.
 
 ## Home

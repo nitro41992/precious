@@ -10,22 +10,23 @@ Accepted
 
 The first Android hosted build exposed a combined sign-in and account-creation form. When a user entered only an email and tapped `Create account`, the app asked for a password on the sign-in surface, which made the path feel like a failed sign-in rather than onboarding.
 
-Supabase Auth already has email auth enabled, signups enabled, and email auto-confirm disabled for the hosted project. That supports a confirmation-link flow without introducing a separate backend. Google sign-in can reduce reliance on repeated auth emails, but native Google SDK setup has historically been high-friction for this app.
+Supabase Auth already has email auth enabled, signups enabled, email auto-confirm disabled, and Google provider support configured for the hosted project. That supports a passwordless email-link flow and Google OAuth without introducing a separate backend. Native Google SDK setup has historically been high-friction for this app, so browser-based Supabase OAuth is preferred.
+
+Supabase Auth automatically links OAuth identities with the same verified email address to an existing user. That lets a user start with an email magic link and later sign in with Google using the same email without creating a second account.
 
 ## Decision
 
-Precious Captures will keep password sign-in for existing users and move account creation to a separate email-only screen. Because email-only onboarding does not collect a password, the sign-in screen will also offer an emailed sign-in link for returning accounts. When the hosted Supabase Google provider is configured, the sign-in screen may also offer `Continue with Google` through browser-based Supabase OAuth and the same `preciouscaptures://auth/callback` session persistence path.
+Precious Captures will remove password sign-in from the primary consumer auth screen. The entry screen will offer two methods: `Continue with Google` and one email field that sends a secure email link for sign-in or account creation.
 
-`Create account` sends a Supabase passwordless email link with `create_user: true` and `preciouscaptures://auth/callback` as the redirect target. After sending, the app shows a `Check your email` state. Opening the link on the phone finishes sign-in by persisting the returned Supabase session.
-
-`Email sign-in link` sends a Supabase passwordless email link with `create_user: false` to avoid silently creating a new account from the sign-in screen. It reuses the same redirect target and session persistence path.
+`Send sign-in link` sends a Supabase passwordless email link with `create_user: true` and `preciouscaptures://auth/callback` as the redirect target. Existing users can use the link to sign in, and new users can use it to finish account setup. After sending, the app shows a `Check your email` state. Opening the link on the phone finishes sign-in by persisting the returned Supabase session.
 
 `Continue with Google` opens the hosted Supabase `/auth/v1/authorize?provider=google` flow with the app callback as `redirect_to`. It deliberately avoids native Google SDK integration and Android SHA fingerprint-specific client setup.
 
 ## Consequences
 
 - New users do not create or remember a password during onboarding.
-- Users who created an account without a password can return through email-link sign-in.
+- Existing users return through Google or email-link sign-in.
+- Users who use the same verified email across email link and Google should resolve to one linked Supabase user.
 - Google sign-in requires a Google OAuth web client and Supabase provider configuration, but not native Google SDK wiring in the Android app.
 - The Supabase Auth URL allowlist must include `preciouscaptures://auth/callback`.
 - The Supabase magic-link email template should keep a confirmation link and may also include an OTP later if the product adds code entry.
