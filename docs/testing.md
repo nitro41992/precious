@@ -93,3 +93,18 @@ npm run android:build:hosted
 adb install -r android/app/build/outputs/apk/release/app-release.apk
 adb shell am start -n com.preciouscaptures/.MainActivity
 ```
+
+For Wi-Fi installs, prefer the resilient helper. It rediscovers the current
+Wireless Debugging port, wakes the device best-effort, retries non-streaming
+install, and launches the app:
+
+```sh
+npm run android:push:wifi
+```
+
+If the phone still does not appear, unlock it and keep Android `Wireless
+debugging` open, then run:
+
+```sh
+npm run android:install:wifi
+```

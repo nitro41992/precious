@@ -27,12 +27,18 @@ type StatusCapture = ReviewableCapture & {
 
 type SortableCapture = StatusCapture & {
   id: string;
+  remoteId?: string;
   createdAt: number;
   archivedAt?: number | null;
 };
 
 export const LOCAL_PROCESSING_GRACE_MS: number;
 export const REVIEW_TARGETS: ReviewReason[];
+export function captureIdentityAliases(capture?: { id?: string; remoteId?: string } | null): string[];
+export function capturesShareIdentity(
+  left?: { id?: string; remoteId?: string } | null,
+  right?: { id?: string; remoteId?: string } | null
+): boolean;
 export function confidenceRequiresReview(value?: string): boolean;
 export function displayStatus(capture: StatusCapture): CaptureStatus;
 export function extractHttpUrl(value?: string | null): string;
@@ -47,7 +53,7 @@ export function mergeRemoteCaptures<T extends SortableCapture>(
   listMode: "active" | "archived",
   now?: number
 ): T[];
-export function mergeSearchResults<T extends { id: string }>(
+export function mergeSearchResults<T extends { id?: string; remoteId?: string }>(
   immediateResults: T[],
   rankedResults: T[]
 ): T[];
@@ -62,3 +68,4 @@ export function reviewTargetsForCapture(capture: ReviewableCapture): ReviewReaso
 export function searchCacheKey(scope: "active" | "archived" | "all" | string, query?: string | null): string;
 export function sortCaptures<T extends { createdAt: number }>(captures: T[]): T[];
 export function statusLabel(status: CaptureStatus): string;
+export function uniqueCapturesByIdentity<T extends { id?: string; remoteId?: string }>(captures: T[]): T[];

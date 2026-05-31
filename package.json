@@ -17,6 +17,8 @@
     "android:build:release": "cd android && ./gradlew :app:assembleRelease",
     "android:install:debug": "adb install --no-streaming -r android/app/build/outputs/apk/debug/app-debug.apk",
     "android:install": "adb install -r android/app/build/outputs/apk/release/app-release.apk",
+    "android:install:wifi": "node scripts/install-android-wifi.mjs",
+    "android:push:wifi": "npm run android:build:hosted && npm run android:install:wifi",
     "android:launch": "adb shell am start -n com.preciouscaptures/.MainActivity",
     "android:reverse:metro": "adb reverse tcp:8081 tcp:8081",
     "android:reverse": "adb reverse tcp:3030 tcp:3030",

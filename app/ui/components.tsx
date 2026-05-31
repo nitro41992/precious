@@ -294,6 +294,13 @@ export function StatusGlyph({ capture }: { capture: Capture }) {
         ? AlertTriangle
         : Info;
   const label = archived ? "Archived" : captureStatusLabel(capture);
+  const iconColor = archived
+    ? colors.muted
+    : status === "processing"
+      ? colors.processing
+      : status === "failed"
+        ? colors.danger
+        : colors.review;
   return (
     <View
       accessibilityLabel={label}
@@ -306,19 +313,12 @@ export function StatusGlyph({ capture }: { capture: Capture }) {
         archived && styles.statusGlyphArchived
       ]}
     >
-      <Icon
-        color={
-          archived
-            ? colors.muted
-            : status === "processing"
-              ? colors.processing
-              : status === "failed"
-                ? colors.danger
-                : colors.review
-        }
-        size={15}
-        strokeWidth={2.5}
-      />
+      <Icon color={iconColor} size={15} strokeWidth={2.5} />
+      {status === "processing" ? (
+        <Text numberOfLines={1} style={styles.statusGlyphProcessingText}>
+          Analyzing
+        </Text>
+      ) : null}
     </View>
   );
 }

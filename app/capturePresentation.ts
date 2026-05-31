@@ -31,7 +31,8 @@ import {
   isArchived,
   normalizeIntent as normalizeKnownIntent,
   reviewTargetsForCapture,
-  statusLabel
+  statusLabel,
+  uniqueCapturesByIdentity
 } from "./captureLogic";
 
 type SaveIntentConfig = {
@@ -257,7 +258,7 @@ export function captureDisplayTitle(capture: Capture) {
 export function captureSupportLine(capture: Capture, visibleSummary: string) {
   if (visibleSummary) return "";
   const status = displayStatus(capture);
-  if (status === "processing") return "Checking the source now.";
+  if (status === "processing") return "Saved. Checking the source now.";
   if (status === "failed") return "Saved. Open it to review or try again.";
   if (status === "needs_review") return reviewInsightForCapture(capture).focus;
   const evidence = urlEvidenceMessage(capture.urlEvidence);
@@ -299,13 +300,7 @@ export function groupedCaptureRows(captures: Capture[]) {
 }
 
 export function uniqueCaptures(captures: Capture[]) {
-  const seen = new Set<string>();
-  return captures.filter((capture) => {
-    const key = capture.remoteId || capture.id;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return uniqueCapturesByIdentity(captures);
 }
 
 export function uniqueCollections(collections: Collection[]) {

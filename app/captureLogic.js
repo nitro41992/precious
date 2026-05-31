@@ -163,18 +163,43 @@ function sortCaptures(captures) {
   return [...captures].sort((a, b) => b.createdAt - a.createdAt);
 }
 
+function captureIdentityAliases(capture) {
+  return [capture?.id, capture?.remoteId]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+}
+
+function capturesShareIdentity(left, right) {
+  const leftAliases = new Set(captureIdentityAliases(left));
+  if (!leftAliases.size) return false;
+  return captureIdentityAliases(right).some((alias) => leftAliases.has(alias));
+}
+
+function uniqueCapturesByIdentity(captures) {
+  const seen = new Set();
+  const unique = [];
+  for (const capture of captures) {
+    const aliases = captureIdentityAliases(capture);
+    if (!aliases.length) continue;
+    if (aliases.some((alias) => seen.has(alias))) continue;
+    aliases.forEach((alias) => seen.add(alias));
+    unique.push(capture);
+  }
+  return unique;
+}
+
 function mergeRemoteCaptures(remoteCaptures, currentCaptures, listMode, now = Date.now()) {
   if (listMode === "archived") return sortCaptures(remoteCaptures);
-  const remoteIds = new Set(remoteCaptures.map((capture) => capture.id));
+  const remoteRows = uniqueCapturesByIdentity(remoteCaptures);
   const freshLocalProcessing = currentCaptures.filter((capture) => {
     return (
-      !remoteIds.has(capture.id) &&
+      !remoteRows.some((remote) => capturesShareIdentity(remote, capture)) &&
       !isArchived(capture) &&
       displayStatus(capture) === "processing" &&
       now - capture.createdAt < LOCAL_PROCESSING_GRACE_MS
     );
   });
-  return sortCaptures([...remoteCaptures, ...freshLocalProcessing]);
+  return sortCaptures(uniqueCapturesByIdentity([...remoteRows, ...freshLocalProcessing]));
 }
 
 function normalizeSearchQuery(value) {
@@ -190,9 +215,10 @@ function searchCacheKey(scope, query) {
 function mergeSearchResults(immediateResults, rankedResults) {
   const seen = new Set();
   const merged = [];
-  for (const capture of [...rankedResults, ...immediateResults]) {
-    if (!capture?.id || seen.has(capture.id)) continue;
-    seen.add(capture.id);
+  for (const capture of [...immediateResults, ...rankedResults]) {
+    const aliases = captureIdentityAliases(capture);
+    if (!aliases.length || aliases.some((alias) => seen.has(alias))) continue;
+    aliases.forEach((alias) => seen.add(alias));
     merged.push(capture);
   }
   return merged;
@@ -201,6 +227,8 @@ function mergeSearchResults(immediateResults, rankedResults) {
 module.exports = {
   LOCAL_PROCESSING_GRACE_MS,
   REVIEW_TARGETS,
+  captureIdentityAliases,
+  capturesShareIdentity,
   displayStatus,
   extractHttpUrl,
   confidenceRequiresReview,
@@ -221,5 +249,6 @@ module.exports = {
   reviewTargetsForCapture,
   searchCacheKey,
   sortCaptures,
-  statusLabel
+  statusLabel,
+  uniqueCapturesByIdentity
 };

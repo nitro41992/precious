@@ -583,7 +583,17 @@ export const styles = StyleSheet.create({
     width: 28
   },
   statusGlyphProcessing: {
-    backgroundColor: colors.processingSoft
+    backgroundColor: colors.processingSoft,
+    flexDirection: "row",
+    gap: 5,
+    paddingHorizontal: 8,
+    width: 92
+  },
+  statusGlyphProcessingText: {
+    color: colors.processing,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 16
   },
   statusGlyphReview: {
     backgroundColor: colors.reviewSoft

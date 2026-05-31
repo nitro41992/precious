@@ -3,6 +3,8 @@ const test = require("node:test");
 
 const {
   LOCAL_PROCESSING_GRACE_MS,
+  captureIdentityAliases,
+  capturesShareIdentity,
   displayStatus,
   extractHttpUrl,
   hostFromUrl,
@@ -17,7 +19,8 @@ const {
   reviewReasons,
   reviewTargetsForCapture,
   searchCacheKey,
-  statusLabel
+  statusLabel,
+  uniqueCapturesByIdentity
 } = require("../app/captureLogic");
 
 function capture(overrides = {}) {
@@ -145,6 +148,52 @@ test("mergeRemoteCaptures preserves only fresh local processing rows in the acti
   );
 });
 
+test("capture identity aliases compare local and remote ids without source dedupe", () => {
+  assert.deepEqual(captureIdentityAliases({ id: "client-a", remoteId: "remote-a" }), ["client-a", "remote-a"]);
+  assert.equal(
+    capturesShareIdentity(
+      { id: "client-a", remoteId: "remote-a" },
+      { id: "remote-a", remoteId: "server-row" }
+    ),
+    true
+  );
+  assert.equal(
+    capturesShareIdentity(
+      { id: "client-a", remoteId: "remote-a", sourceUrl: "https://example.com/post" },
+      { id: "client-b", remoteId: "remote-b", sourceUrl: "https://example.com/post" }
+    ),
+    false
+  );
+});
+
+test("mergeRemoteCaptures suppresses matching local processing aliases", () => {
+  const now = 10_000_000;
+  const remote = [
+    capture({ id: "client-key", remoteId: "remote-row", createdAt: now - 1000 }),
+    capture({ id: "remote-cached", remoteId: "remote-id", createdAt: now - 2000 })
+  ];
+  const localSameClientKey = capture({ id: "client-key", status: "processing", createdAt: now - 500 });
+  const localSameRemoteId = capture({ id: "local-cached", remoteId: "remote-id", status: "processing", createdAt: now - 600 });
+  const unrelated = capture({ id: "fresh-local", status: "processing", createdAt: now - 700 });
+
+  assert.deepEqual(
+    mergeRemoteCaptures(remote, [localSameClientKey, localSameRemoteId, unrelated], "active", now).map((item) => item.id),
+    ["fresh-local", "client-key", "remote-cached"]
+  );
+});
+
+test("uniqueCapturesByIdentity keeps the first startup row and suppresses aliases", () => {
+  const cached = capture({ id: "client-key", remoteId: "remote-row", status: "ready", createdAt: 2000 });
+  const localProcessing = capture({ id: "client-key", status: "processing", createdAt: 3000 });
+  const sameRemote = capture({ id: "local-copy", remoteId: "remote-row", status: "processing", createdAt: 2500 });
+  const repeatedSource = capture({ id: "separate-save", remoteId: "remote-other", sourceUrl: "https://example.com/post" });
+
+  assert.deepEqual(
+    uniqueCapturesByIdentity([cached, localProcessing, sameRemote, repeatedSource]).map((item) => item.id),
+    ["client-key", "separate-save"]
+  );
+});
+
 test("search cache keys normalize scope and query whitespace", () => {
   assert.equal(normalizeSearchQuery("  Ramen   Soho  "), "ramen soho");
   assert.equal(searchCacheKey("active", "  Ramen   Soho  "), "active:ramen soho");
@@ -152,7 +201,7 @@ test("search cache keys normalize scope and query whitespace", () => {
   assert.equal(searchCacheKey("all", "  "), "");
 });
 
-test("mergeSearchResults keeps ranked results first and appends local-only matches", () => {
+test("mergeSearchResults keeps visible results first and appends remote-only matches", () => {
   const local = [
     capture({ id: "local-title", title: "Local title" }),
     capture({ id: "shared", title: "Shared local" })
@@ -163,7 +212,26 @@ test("mergeSearchResults keeps ranked results first and appends local-only match
   ];
   assert.deepEqual(
     mergeSearchResults(local, ranked).map((item) => item.id),
-    ["semantic", "shared", "local-title"]
+    ["local-title", "shared", "semantic"]
+  );
+  assert.equal(
+    mergeSearchResults(local, ranked).find((item) => item.id === "shared").title,
+    "Shared local"
+  );
+});
+
+test("mergeSearchResults dedupes aliases without collapsing repeated sources", () => {
+  const local = [
+    capture({ id: "client-a", remoteId: "remote-a", title: "Visible local" }),
+    capture({ id: "same-url-a", remoteId: "remote-url-a", sourceUrl: "https://example.com/post" })
+  ];
+  const ranked = [
+    capture({ id: "remote-a", remoteId: "server-a", title: "Remote alias" }),
+    capture({ id: "same-url-b", remoteId: "remote-url-b", sourceUrl: "https://example.com/post" })
+  ];
+  assert.deepEqual(
+    mergeSearchResults(local, ranked).map((item) => item.id),
+    ["client-a", "same-url-a", "same-url-b"]
   );
 });
 

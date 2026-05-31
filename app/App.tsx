@@ -436,7 +436,7 @@ export default function App() {
     const canSeedActiveRows =
       !currentActiveRows.length || currentActiveRows.every((capture) => isFreshLocalProcessingCapture(capture));
     if (canSeedActiveRows) {
-      commitCaptureRows("active", (current) => sortCaptures(uniqueCaptures([...current, ...rows])));
+      commitCaptureRows("active", (current) => sortCaptures(uniqueCaptures([...rows, ...current])));
       setCapturesNextCursor(page.nextCursor);
       setActiveCapturesLoadedOnce(true);
       return true;
@@ -477,7 +477,7 @@ export default function App() {
     const raw = await nativeStore.getCaptures().catch(() => null);
     const localProcessing = freshLocalProcessingCaptures(raw);
     if (!localProcessing.length) return;
-    commitCaptureRows("active", (current) => sortCaptures(uniqueCaptures([...localProcessing, ...current])));
+    commitCaptureRows("active", (current) => sortCaptures(uniqueCaptures([...current, ...localProcessing])));
   }
 
   function knownCapturesForCollection(collectionId: string) {
@@ -2845,7 +2845,6 @@ export default function App() {
       setCaptures((current) => [localCapture, ...current.filter((item) => item.id !== localCapture.id)]);
       setSourceDraft("");
       closeCaptureComposer();
-      setMessage("Saved. Checking the source now.");
     } catch (error) {
       setMessage(friendlyError(error, "Could not save capture."));
     } finally {
@@ -2868,7 +2867,6 @@ export default function App() {
       const localCapture = JSON.parse(raw) as Capture;
       setCaptures((current) => [localCapture, ...current.filter((item) => item.id !== localCapture.id)]);
       setSourceDraft("");
-      setMessage("Image saved. Checking the source now.");
     } catch (error) {
       if (isCaptureImageCancel(error)) return;
       setMessage(friendlyError(error, "Could not save image."));
