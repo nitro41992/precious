@@ -4,7 +4,7 @@
 
 This artifact records the agreed scope for the current Precious consumer UI revamp. Use it with `docs/precious-style-guide.md`, `docs/requirements/CONTEXT.md`, and `docs/requirements/PRODUCT.md` before implementing or reviewing UI work.
 
-Related ADRs: `docs/adr/0001-recent-captures-and-full-screen-search.md`, `docs/adr/0005-bottom-app-bar-and-top-level-collections.md`, and `docs/adr/0006-existing-only-multi-collection-assignment.md`.
+Related ADRs: `docs/adr/0001-recent-captures-and-full-screen-search.md`, `docs/adr/0005-bottom-app-bar-and-top-level-collections.md`, `docs/adr/0006-existing-only-multi-collection-assignment.md`, and `docs/adr/0008-starter-collections-for-empty-accounts.md`.
 
 ## Product Shape
 
@@ -98,6 +98,7 @@ Collection management must:
 - Provide an independent `Collections` screen for creating, renaming, and managing Collections.
 - Open new Collection creation from the Collections floating `+` as a bottom sheet, not as an inline card.
 - Show existing Collections in a consumer-facing list with useful metadata such as capture count or recent use when available.
+- Seed empty accounts with a small finite set of object-based starter Collections that behave like normal active Collections and can be removed through Collection management.
 - Let Capture Review navigate to collection selection and return without losing edits.
 - Preserve `No collection` as a valid state for any Capture.
 - Allow a Capture to belong to multiple Collections.
@@ -109,7 +110,7 @@ Collection management must:
 - AI output is a suggestion, except high-confidence existing Collection matches may be applied quietly because they are finite and reversible.
 - User-approved output becomes first-class product data.
 - Existing Collection auto-attachment may be quietly applied when high-confidence because it uses only active user-owned Collections.
-- New Collections require explicit user creation from the Collections destination, never AI creation.
+- New Collections require explicit user creation from the Collections destination or product-owned starter seeding for empty accounts, never AI creation.
 - All reminders require explicit user action.
 - Leaving a Capture without a Collection is valid and should not appear as an unresolved task.
 

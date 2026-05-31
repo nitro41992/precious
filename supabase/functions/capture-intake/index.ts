@@ -43,6 +43,34 @@ const CAPTURE_DETAIL_SELECT =
   "*,capture_assets(*)";
 const COLLECTION_LIST_SELECT =
   "id,user_id,title,description,status,created_by,archived_at,created_at,updated_at";
+const STARTER_COLLECTION_CREATED_BY = "starter";
+const STARTER_COLLECTIONS = [
+  {
+    title: "Recipes",
+    description:
+      "Dishes, cooking ideas, restaurant-inspired meals, grocery notes, and kitchen tips you may want to find again.",
+  },
+  {
+    title: "Movies & Shows",
+    description:
+      "Films, series, trailers, reviews, and recommendations saved from friends, articles, or social posts.",
+  },
+  {
+    title: "Restaurants & Cafes",
+    description:
+      "Places to eat or drink, menus, reviews, neighborhood lists, and food spots worth remembering.",
+  },
+  {
+    title: "Products",
+    description:
+      "Clothing, gifts, gear, home items, tools, and comparisons you are considering or want to revisit.",
+  },
+  {
+    title: "Articles & Guides",
+    description:
+      "Long reads, how-tos, explainers, reference pages, and practical guides saved for later use.",
+  },
+] as const;
 
 type CapturePayload = {
   fields: Record<string, string>;
@@ -3617,6 +3645,56 @@ function scheduleCollectionCaptureEmbeddingsRefresh(
   );
 }
 
+function shouldSeedStarterCollections(existingCollectionCount: number | null) {
+  return existingCollectionCount === 0;
+}
+
+function starterCollectionRows(userId: string, now = new Date()) {
+  return STARTER_COLLECTIONS.map((collection, index) => ({
+    user_id: userId,
+    title: collection.title,
+    description: collection.description,
+    created_by: STARTER_COLLECTION_CREATED_BY,
+    created_at: new Date(now.getTime() - index).toISOString(),
+    updated_at: now.toISOString(),
+  }));
+}
+
+async function seedStarterCollectionsIfNeeded(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+) {
+  const existing = await supabase
+    .from("collections")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+  if (existing.error) throw existing.error;
+  if (!shouldSeedStarterCollections(existing.count)) return;
+
+  const { data, error } = await supabase
+    .from("collections")
+    .upsert(starterCollectionRows(userId), {
+      ignoreDuplicates: true,
+      onConflict: "user_id,title",
+    })
+    .select(COLLECTION_LIST_SELECT);
+  if (error) throw error;
+
+  runInBackground(
+    Promise.all(
+      ((data ?? []) as Array<Record<string, unknown>>).map((collection) =>
+        upsertCollectionEmbedding(
+          supabase,
+          userId,
+          String(collection.id),
+          String(collection.title || ""),
+          String(collection.description || ""),
+        )
+      ),
+    ),
+  );
+}
+
 async function retrieveCollectionsForCapture(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
@@ -5936,6 +6014,7 @@ async function handleCollectionsResource(
   url: URL,
 ) {
   if (request.method === "GET") {
+    await seedStarterCollectionsIfNeeded(supabase, userId);
     const archived = url.searchParams.get("archived") === "true";
     const limit = boundedLimit(url.searchParams.get("limit"), 50, 100);
     const before = url.searchParams.get("before");
@@ -6463,6 +6542,9 @@ export const __urlEvidenceTest = {
   shouldRunPreflight,
   shouldAnalyzeAfterCaptureGate,
   shouldUseLinkOnlyUrlEvidenceFallback,
+  shouldSeedStarterCollections,
+  starterCollectionRows,
+  starterCollections: STARTER_COLLECTIONS,
   tier1CanonicalCandidates,
   weaknessReasons,
 };

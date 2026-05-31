@@ -145,7 +145,7 @@ The lightweight network of Captures, Captured Entities, Capture Context, and Sav
 _Avoid_: Knowledge graph, database, collection
 
 **Collection**:
-A user-created grouping of Captures that share an ongoing purpose, such as a trip, purchase decision, research topic, event, recipe queue, or project. A Capture may intentionally have no Collection and may belong to multiple Collections.
+A user-owned grouping of Captures that share a concrete subject or ongoing purpose, such as recipes, movies to watch, restaurants, products, a trip, a research topic, an event, or a project. Collections may be explicitly user-created or product-seeded starter Collections for empty accounts. A Capture may intentionally have no Collection and may belong to multiple Collections.
 _Avoid_: Folder, plan
 
 **Collection Suggestion**:

@@ -854,3 +854,42 @@ Deno.test("capture gate decision fixtures preserve pass and needs-review behavio
     );
   }
 });
+
+Deno.test("starter collections are object-based and seed only empty accounts", () => {
+  assertEqual(
+    urlEvidence.shouldSeedStarterCollections(0),
+    true,
+    "empty accounts should receive starter collections",
+  );
+  assertEqual(
+    urlEvidence.shouldSeedStarterCollections(1),
+    false,
+    "accounts with any collection should not be seeded",
+  );
+  assertEqual(
+    urlEvidence.shouldSeedStarterCollections(null),
+    false,
+    "unknown collection counts should not seed",
+  );
+
+  const rows = urlEvidence.starterCollectionRows(
+    "user-1",
+    new Date("2026-05-31T12:00:00.000Z"),
+  );
+  assertEqual(rows.length, 5, "starter collection count");
+  assertEqual(
+    rows.map((row) => row.title).join("|"),
+    "Recipes|Movies & Shows|Restaurants & Cafes|Products|Articles & Guides",
+    "starter collection names",
+  );
+  assert(
+    rows.every((row) => row.created_by === "starter"),
+    "starter rows should be marked as starter-created",
+  );
+  assert(
+    rows.every((row) =>
+      row.description && !/watch later|buy this|try this place/i.test(row.description)
+    ),
+    "starter descriptions should describe saved objects instead of save intents",
+  );
+});

@@ -291,6 +291,7 @@ Rules:
 
 - Keep Collection management secondary to Recent Captures and Search.
 - Collections may be a top-level management destination, but it should not become the default home module.
+- Empty accounts may start with a finite set of object-based starter Collections, such as recipes, movies and shows, restaurants, products, and articles or guides. They should look and behave like normal Collections, including archive/restore.
 - Let users create, rename, and manage Collections outside an individual Capture.
 - Let Capture Review open collection selection or management and return without losing unsaved edits.
 - Treat `No collection` as a valid choice, not an unresolved state.
