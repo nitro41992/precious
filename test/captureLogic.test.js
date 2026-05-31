@@ -9,10 +9,13 @@ const {
   mapSearchCandidates,
   mapsSearchUrls,
   mergeRemoteCaptures,
+  mergeSearchResults,
   normalizeIntent,
+  normalizeSearchQuery,
   parseCaptureUrl,
   reviewReasonSummary,
   reviewReasons,
+  searchCacheKey,
   statusLabel
 } = require("../app/captureLogic");
 
@@ -119,6 +122,28 @@ test("mergeRemoteCaptures preserves only fresh local processing rows in the acti
   assert.deepEqual(
     mergeRemoteCaptures(remote, [freshLocal], "archived", now).map((item) => item.id),
     ["remote"]
+  );
+});
+
+test("search cache keys normalize scope and query whitespace", () => {
+  assert.equal(normalizeSearchQuery("  Ramen   Soho  "), "ramen soho");
+  assert.equal(searchCacheKey("active", "  Ramen   Soho  "), "active:ramen soho");
+  assert.equal(searchCacheKey("unknown", "products"), "active:products");
+  assert.equal(searchCacheKey("all", "  "), "");
+});
+
+test("mergeSearchResults keeps ranked results first and appends local-only matches", () => {
+  const local = [
+    capture({ id: "local-title", title: "Local title" }),
+    capture({ id: "shared", title: "Shared local" })
+  ];
+  const ranked = [
+    capture({ id: "semantic", title: "Semantic match" }),
+    capture({ id: "shared", title: "Shared semantic" })
+  ];
+  assert.deepEqual(
+    mergeSearchResults(local, ranked).map((item) => item.id),
+    ["semantic", "shared", "local-title"]
   );
 });
 

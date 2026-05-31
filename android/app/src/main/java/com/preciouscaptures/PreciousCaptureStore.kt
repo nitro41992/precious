@@ -9,6 +9,7 @@ private const val STORE_PREFS = "precious_capture_store"
 private const val STORE_KEY = "captures"
 private const val REVIEW_DRAFTS_KEY = "capture_review_drafts"
 private const val CAPTURE_PAGE_CACHE_PREFIX = "capture_page_cache"
+private const val COLLECTION_PAGE_CACHE_PREFIX = "collection_page_cache"
 
 object PreciousCaptureStore {
   @Synchronized
@@ -48,6 +49,37 @@ object PreciousCaptureStore {
       .getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE)
       .edit()
       .putString(capturePageCacheKey(userId, safeMode), page.toString())
+      .apply()
+  }
+
+  @Synchronized
+  fun cachedCollectionPage(context: Context, userId: String, mode: String): String? {
+    if (userId.isBlank()) return null
+    val safeMode = if (mode == "archived") "archived" else "active"
+    return context
+      .getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE)
+      .getString(collectionPageCacheKey(userId, safeMode), null)
+  }
+
+  @Synchronized
+  fun saveCollectionPageCache(
+    context: Context,
+    userId: String,
+    mode: String,
+    collectionsJson: String,
+    nextCursor: String?
+  ) {
+    if (userId.isBlank()) return
+    val safeMode = if (mode == "archived") "archived" else "active"
+    val collections = runCatching { JSONArray(collectionsJson) }.getOrDefault(JSONArray())
+    val page = JSONObject()
+      .put("collections", collections)
+      .put("next_cursor", nextCursor ?: JSONObject.NULL)
+      .put("cached_at", System.currentTimeMillis())
+    context
+      .getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE)
+      .edit()
+      .putString(collectionPageCacheKey(userId, safeMode), page.toString())
       .apply()
   }
 
@@ -330,6 +362,10 @@ object PreciousCaptureStore {
 
   private fun capturePageCacheKey(userId: String, mode: String): String {
     return "$CAPTURE_PAGE_CACHE_PREFIX:$userId:$mode"
+  }
+
+  private fun collectionPageCacheKey(userId: String, mode: String): String {
+    return "$COLLECTION_PAGE_CACHE_PREFIX:$userId:$mode"
   }
 
   private fun enrichmentRequiresReview(enrichment: JSONObject): Boolean {

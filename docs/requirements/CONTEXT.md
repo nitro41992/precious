@@ -45,7 +45,7 @@ The immediate acknowledgement that Sharebook has accepted an Explicit Capture be
 _Avoid_: Processing result, final save state
 
 **Capture Analysis**:
-The background process that uses source data, Platform Evidence, Visual Understanding, and Capture Context to infer Captured Entities and Save Intent.
+The background process that uses content evidence, Platform Evidence, Visual Understanding, and Capture Context to infer Captured Entities and Save Intent. Source app, host, and format are fallback evidence only when content and context are limited.
 _Avoid_: Upload, OCR pass, summary generation
 
 **Analysis State**:
@@ -65,7 +65,7 @@ The focused single-Capture surface opened from a Capture Completion Notification
 _Avoid_: Analysis report, debug view, model score screen
 
 **Review Insight**:
-A concise, user-facing explanation in Capture Review for why Capture Analysis chose the Save Intent, Collection outcome, and Reminder idea. Its visible cue should point to the exact review decision, while its expanded detail may explain that no existing Collection or no concrete Reminder trigger was strong enough. It is evidence/rationale, not hidden model reasoning.
+A concise, user-facing explanation in Capture Review for why Capture Analysis chose the Save Intent, Collection outcome, and Reminder idea. Its visible cue should point to the exact review decision and should reference active Intent Categories, existing Collection names, No intent, No collection, or Reminder idea rather than loose analyzer labels. It is evidence/rationale, not hidden model reasoning.
 _Avoid_: Chain-of-thought, audit report, model trace, confidence percentage
 
 **Retrieval Lens**:
@@ -149,7 +149,7 @@ A user-owned grouping of Captures that share a concrete subject or ongoing purpo
 _Avoid_: Folder, plan
 
 **Collection Suggestion**:
-An internal AI match from a Capture to one or more existing active Collections. High-confidence matches may be quietly applied because they are finite and reversible. AI must not create, name, or surface new Collections, and lower-confidence matches should not become Capture Review work.
+An internal AI match from a Capture to one or more existing active Collections. Collection Suggestions match the Capture's subject or purpose before source app, host, or format; source is fallback evidence only when content and context are limited. High-confidence matches may be quietly applied because they are finite and reversible. AI must not create, name, or surface new Collections, and lower-confidence matches should not become Capture Review work.
 _Avoid_: Required filing, folder audit, automatic new Collection, free-form collection name
 
 **Reminder**:

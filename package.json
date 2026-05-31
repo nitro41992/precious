@@ -7,7 +7,7 @@
     "build": "next build",
     "test": "npm run typecheck && npm run validate:intents && npm run test:unit",
     "test:unit": "node --test test/*.test.js",
-    "test:url-evidence": "deno test --config supabase/functions/capture-intake/deno.json --allow-env supabase/functions/capture-intake/url-evidence.test.ts",
+    "test:url-evidence": "deno test --config supabase/functions/capture-intake/deno.json --allow-env supabase/functions/capture-intake/*.test.ts",
     "test:e2e:maestro": "node scripts/run-maestro-smoke.mjs",
     "test:e2e:android-share": "node scripts/run-android-share-smoke.mjs",
     "test:e2e:hosted": "npm run hosted:verify -- --allow-no-reminder && npm run hosted:verify:review",

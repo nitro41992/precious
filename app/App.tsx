@@ -66,9 +66,11 @@ import {
   isArchived,
   mapSearchCandidates,
   mergeRemoteCaptures,
+  mergeSearchResults,
   normalizeIntent as normalizeKnownIntent,
   parseCaptureUrl,
   reviewReasons,
+  searchCacheKey,
   sortCaptures,
   statusLabel
 } from "./captureLogic";
@@ -249,6 +251,13 @@ type CaptureStore = {
     capturesJson: string,
     nextCursor: string | null
   ) => Promise<boolean>;
+  getCachedCollectionPage?: (userId: string, mode: "active" | "archived") => Promise<string | null>;
+  setCachedCollectionPage?: (
+    userId: string,
+    mode: "active" | "archived",
+    collectionsJson: string,
+    nextCursor: string | null
+  ) => Promise<boolean>;
   updateCapture: (id: string, title: string, note: string, currentSaveIntent: string | null) => Promise<string>;
   confirmCaptureReview?: (id: string, title: string, note: string, currentSaveIntent: string | null) => Promise<string>;
   getReviewDrafts?: () => Promise<string | null>;
@@ -318,8 +327,10 @@ const ADD_INTENT_LABEL = "Add intent";
 type CaptureListMode = "active" | "archived";
 type CollectionListMode = "active" | "archived";
 type CollectionCapturesLoadPhase = "idle" | "initial" | "refresh" | "append";
+type LoadPhase = "idle" | "cold" | "refresh" | "append" | "ready" | "error";
 type CaptureImageLoadState = "loaded" | "failed";
 type SearchScope = "active" | "archived" | "all";
+type SearchRemoteMode = "keyword" | "hybrid";
 type HomeListRow =
   | { type: "section"; id: string; title: string }
   | { type: "capture"; id: string; capture: Capture };
@@ -345,6 +356,9 @@ const PROCESSING_REFRESH_MS = 3000;
 const CAPTURE_PAGE_SIZE = 18;
 const COLLECTION_CAPTURE_PAGE_SIZE = 18;
 const RECENT_FEED_REVEAL_COUNT = 8;
+const INITIAL_SKELETON_DELAY_MS = 180;
+const SEARCH_KEYWORD_DEBOUNCE_MS = 120;
+const SEARCH_HYBRID_DELAY_MS = 520;
 const CAPTURE_LIST_PERF_PROPS = {
   initialNumToRender: 8,
   maxToRenderPerBatch: 8,
@@ -712,6 +726,15 @@ function uniqueCaptures(captures: Capture[]) {
   });
 }
 
+function uniqueCollections(collections: Collection[]) {
+  const seen = new Set<string>();
+  return collections.filter((collection) => {
+    if (!collection.id || seen.has(collection.id)) return false;
+    seen.add(collection.id);
+    return true;
+  });
+}
+
 function uniqueStrings(values: string[]) {
   return [...new Set(values.filter(Boolean))];
 }
@@ -854,7 +877,7 @@ function reviewFocusForCapture(capture: Capture, intentText: string) {
   if (displayStatus(capture) === "failed") return "Review source details";
   if (confidenceRequiresReview(capture.confidenceLabel)) {
     const intentLabel = activeIntentLabel(capture.defaultIntent);
-    return intentLabel ? `Confirm intent: ${intentLabel}` : "Choose an intent";
+    return intentLabel ? `Confirm Save Intent: ${intentLabel}` : "Choose a Save Intent";
   }
   if (capture.needsReview) return "Review the suggested fields";
   return conciseText(intentText, 88) || "Review the suggested fields";
@@ -871,13 +894,13 @@ function reviewInsightForCapture(capture: Capture): ReviewInsight {
   const intentText =
     rationaleLine(rationale.intent) ||
     rationaleLine(capture.intentRationale) ||
-    "The saved content suggested this intent, and you can change it here.";
+    "The saved content supports this Save Intent, and you can change it here.";
   const collectionsText =
     rationaleLine(rationale.collections) ||
     linkedRationales[0] ||
     (capture.linkedCollections?.length
       ? `Matched ${linkedCollectionsLabel(capture.linkedCollections)} from your existing collections.`
-      : "No existing collection looked specific enough to attach automatically.");
+      : "No collection was applied because no existing Collection matched strongly.");
   const reminderText =
     rationaleLine(rationale.reminder) ||
     reminderRationale ||
@@ -886,7 +909,7 @@ function reviewInsightForCapture(capture: Capture): ReviewInsight {
   return {
     focus,
     sections: [
-      { label: "Intent", text: intentText },
+      { label: "Save Intent", text: intentText },
       { label: "Collections", text: collectionsText },
       { label: "Reminder idea", text: reminderText }
     ].filter((section) => Boolean(section.text))
@@ -1249,7 +1272,7 @@ function collectionChoiceOverrideFromRemote(row: Record<string, any>): Collectio
 }
 
 function cachedCapturePageFromRaw(raw: string | null | undefined) {
-  if (!raw) return { captures: [] as Capture[], nextCursor: null as string | null };
+  if (!raw) return { present: false, captures: [] as Capture[], nextCursor: null as string | null };
   try {
     const parsed = JSON.parse(raw) as { captures?: unknown; next_cursor?: unknown; nextCursor?: unknown };
     const captures = Array.isArray(parsed.captures)
@@ -1267,11 +1290,40 @@ function cachedCapturePageFromRaw(raw: string | null | undefined) {
           }))
       : [];
     return {
+      present: true,
       captures,
       nextCursor: nullableValue(parsed.next_cursor || parsed.nextCursor) || null
     };
   } catch {
-    return { captures: [] as Capture[], nextCursor: null as string | null };
+    return { present: false, captures: [] as Capture[], nextCursor: null as string | null };
+  }
+}
+
+function cachedCollectionPageFromRaw(raw: string | null | undefined) {
+  if (!raw) return { present: false, collections: [] as Collection[], nextCursor: null as string | null };
+  try {
+    const parsed = JSON.parse(raw) as { collections?: unknown; next_cursor?: unknown; nextCursor?: unknown };
+    const collections = Array.isArray(parsed.collections)
+      ? parsed.collections
+          .filter((item): item is Collection => {
+            if (!item || typeof item !== "object") return false;
+            const collection = item as Partial<Collection>;
+            return typeof collection.id === "string" && typeof collection.title === "string";
+          })
+          .map((collection): Collection => ({
+            ...collection,
+            description: String(collection.description || ""),
+            status: collection.status === "archived" ? "archived" : "active",
+            captureCount: Number(collection.captureCount || 0)
+          }))
+      : [];
+    return {
+      present: true,
+      collections,
+      nextCursor: nullableValue(parsed.next_cursor || parsed.nextCursor) || null
+    };
+  } catch {
+    return { present: false, collections: [] as Collection[], nextCursor: null as string | null };
   }
 }
 
@@ -1626,9 +1678,12 @@ export default function App() {
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [captureReturnCollectionId, setCaptureReturnCollectionId] = useState<string | null>(null);
   const [capturesLoading, setCapturesLoading] = useState(false);
+  const [capturesLoadPhase, setCapturesLoadPhase] = useState<LoadPhase>("idle");
+  const [homeColdSkeletonVisible, setHomeColdSkeletonVisible] = useState(false);
   const [capturesError, setCapturesError] = useState("");
   const [activeCapturesLoadedOnce, setActiveCapturesLoadedOnce] = useState(false);
   const [archivedCapturesLoading, setArchivedCapturesLoading] = useState(false);
+  const [archivedCapturesLoadPhase, setArchivedCapturesLoadPhase] = useState<LoadPhase>("idle");
   const [archivedCapturesError, setArchivedCapturesError] = useState("");
   const [archivedCapturesLoaded, setArchivedCapturesLoaded] = useState(false);
   const [capturesNextCursor, setCapturesNextCursor] = useState<string | null>(null);
@@ -1639,15 +1694,28 @@ export default function App() {
   const [searchScopeOpen, setSearchScopeOpen] = useState(false);
   const [remoteSearchResults, setRemoteSearchResults] = useState<Capture[]>([]);
   const [remoteSearchLoading, setRemoteSearchLoading] = useState(false);
+  const [remoteSearchEnhancing, setRemoteSearchEnhancing] = useState(false);
+  const [remoteSearchKey, setRemoteSearchKey] = useState("");
   const [remoteSearchError, setRemoteSearchError] = useState("");
   const [collectionsOpen, setCollectionsOpen] = useState(false);
   const [collectionsMode, setCollectionsMode] = useState<CollectionListMode>("active");
   const [collectionsLoading, setCollectionsLoading] = useState(false);
+  const [collectionsLoadPhase, setCollectionsLoadPhase] = useState<LoadPhase>("idle");
+  const [collectionsColdSkeletonVisible, setCollectionsColdSkeletonVisible] = useState(false);
   const [collectionsError, setCollectionsError] = useState("");
+  const [collectionsLoadedOnce, setCollectionsLoadedOnce] = useState<Record<CollectionListMode, boolean>>({
+    active: false,
+    archived: false
+  });
+  const [collectionsNextCursor, setCollectionsNextCursor] = useState<Record<CollectionListMode, string | null>>({
+    active: null,
+    archived: null
+  });
   const [collectionCaptures, setCollectionCaptures] = useState<Capture[]>([]);
   const [collectionCapturesForId, setCollectionCapturesForId] = useState<string | null>(null);
   const [collectionCapturesLoading, setCollectionCapturesLoading] = useState(false);
   const [collectionCapturesLoadPhase, setCollectionCapturesLoadPhase] = useState<CollectionCapturesLoadPhase>("idle");
+  const [collectionCapturesColdSkeletonVisible, setCollectionCapturesColdSkeletonVisible] = useState(false);
   const [collectionCapturesError, setCollectionCapturesError] = useState("");
   const [collectionCapturesNextCursor, setCollectionCapturesNextCursor] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
@@ -1699,8 +1767,14 @@ export default function App() {
   const latestNoteRef = useRef("");
   const capturesRef = useRef<Capture[]>([]);
   const archivedCapturesRef = useRef<Capture[]>([]);
+  const activeCapturesLoadedOnceRef = useRef(false);
+  const archivedCapturesLoadedRef = useRef(false);
   const capturePageCacheHydratedRef = useRef<Record<CaptureListMode, string | null>>({ active: null, archived: null });
+  const collectionPageCacheHydratedRef = useRef<Record<CollectionListMode, string | null>>({ active: null, archived: null });
   const collectionsCacheRef = useRef<Record<CollectionListMode, Collection[]>>({ active: [], archived: [] });
+  const collectionsCursorCacheRef = useRef<Record<CollectionListMode, string | null>>({ active: null, archived: null });
+  const collectionsLoadedOnceRef = useRef<Record<CollectionListMode, boolean>>({ active: false, archived: false });
+  const collectionsModeRef = useRef<CollectionListMode>("active");
   const collectionCapturesCacheRef = useRef<Record<string, Capture[]>>({});
   const collectionCapturesCursorCacheRef = useRef<Record<string, string | null>>({});
   const captureDetailHydrationRef = useRef<Set<string>>(new Set());
@@ -1712,6 +1786,8 @@ export default function App() {
   const collectionTitleInputRef = useRef<TextInput>(null);
   const collectionDetailListRef = useRef<FlatList<Capture>>(null);
   const searchRequestSeqRef = useRef(0);
+  const searchResultsCacheRef = useRef<Record<string, Capture[]>>({});
+  const searchResultsModeRef = useRef<Record<string, SearchRemoteMode>>({});
   const lastKeyboardHeightRef = useRef(0);
   const captureComposerClosingRef = useRef(false);
   const captureImagePickerActiveRef = useRef(false);
@@ -1777,11 +1853,10 @@ export default function App() {
     capturePageCacheHydratedRef.current[mode] = session.userId;
     const raw = await nativeStore.getCachedCapturePage(session.userId, mode).catch(() => null);
     const page = cachedCapturePageFromRaw(raw);
-    if (!page.captures.length) return false;
+    if (!page.present) return false;
     const rows = sortCaptures(
       page.captures.filter((capture) => mode === "archived" ? isArchived(capture) : !isArchived(capture))
     );
-    if (!rows.length) return false;
     if (mode === "archived") {
       if (!archivedCapturesRef.current.length) {
         commitCaptureRows("archived", () => rows);
@@ -1797,9 +1872,38 @@ export default function App() {
     if (canSeedActiveRows) {
       commitCaptureRows("active", (current) => sortCaptures(uniqueCaptures([...current, ...rows])));
       setCapturesNextCursor(page.nextCursor);
+      setActiveCapturesLoadedOnce(true);
       return true;
     }
+    setActiveCapturesLoadedOnce(true);
     return false;
+  }
+
+  function writeCachedCollectionPage(mode: CollectionListMode, rows: Collection[], nextCursor: string | null) {
+    if (!session?.userId || !nativeStore?.setCachedCollectionPage) return;
+    void nativeStore.setCachedCollectionPage(
+      session.userId,
+      mode,
+      JSON.stringify(rows.slice(0, 54)),
+      nextCursor
+    ).catch(() => {
+      // Collection cache only improves first paint; network data remains authoritative.
+    });
+  }
+
+  async function hydrateCachedCollectionPage(mode: CollectionListMode) {
+    if (!session?.userId || !nativeStore?.getCachedCollectionPage) return false;
+    if (collectionPageCacheHydratedRef.current[mode] === session.userId) return false;
+    collectionPageCacheHydratedRef.current[mode] = session.userId;
+    const raw = await nativeStore.getCachedCollectionPage(session.userId, mode).catch(() => null);
+    const page = cachedCollectionPageFromRaw(raw);
+    if (!page.present) return false;
+    collectionsCacheRef.current[mode] = page.collections;
+    collectionsCursorCacheRef.current[mode] = page.nextCursor;
+    setCollectionsLoadedOnce((current) => ({ ...current, [mode]: true }));
+    setCollectionsNextCursor((current) => ({ ...current, [mode]: page.nextCursor }));
+    if (collectionsModeRef.current === mode) setCollections(page.collections);
+    return true;
   }
 
   async function hydrateLocalProcessingCaptures() {
@@ -1841,15 +1945,25 @@ export default function App() {
       setSession(null);
       setCaptures([]);
       setArchivedCaptures([]);
+      setCapturesLoadPhase("idle");
+      setArchivedCapturesLoadPhase("idle");
       setActiveCapturesLoadedOnce(false);
       setArchivedCapturesLoaded(false);
       setCapturesNextCursor(null);
       setArchivedCapturesNextCursor(null);
       capturesRef.current = [];
       archivedCapturesRef.current = [];
+      activeCapturesLoadedOnceRef.current = false;
+      archivedCapturesLoadedRef.current = false;
       capturePageCacheHydratedRef.current = { active: null, archived: null };
       setCollections([]);
       collectionsCacheRef.current = { active: [], archived: [] };
+      collectionsCursorCacheRef.current = { active: null, archived: null };
+      collectionsLoadedOnceRef.current = { active: false, archived: false };
+      collectionPageCacheHydratedRef.current = { active: null, archived: null };
+      setCollectionsLoadedOnce({ active: false, archived: false });
+      setCollectionsNextCursor({ active: null, archived: null });
+      setCollectionsLoadPhase("idle");
       collectionCapturesCacheRef.current = {};
       collectionCapturesCursorCacheRef.current = {};
       captureImageLoadStatesRef.current = {};
@@ -1861,6 +1975,8 @@ export default function App() {
       setCollectionCapturesNextCursor(null);
       setCollectionCapturesLoadPhase("idle");
       setCollectionCapturesError("");
+      searchResultsCacheRef.current = {};
+      searchResultsModeRef.current = {};
       return null;
     }
     const next = JSON.parse(raw) as AuthSession;
@@ -1879,13 +1995,19 @@ export default function App() {
     options: { append?: boolean; before?: string | null } = {}
   ) => {
     const loadingSetter = mode === "archived" ? setArchivedCapturesLoading : setCapturesLoading;
+    const phaseSetter = mode === "archived" ? setArchivedCapturesLoadPhase : setCapturesLoadPhase;
     const errorSetter = mode === "archived" ? setArchivedCapturesError : setCapturesError;
+    const knownLoaded = mode === "archived"
+      ? archivedCapturesLoadedRef.current
+      : activeCapturesLoadedOnceRef.current;
+    phaseSetter(options.append ? "append" : knownLoaded ? "refresh" : "cold");
     loadingSetter(true);
     errorSetter("");
     if (!options.append) {
       await hydrateCachedCapturePage(mode);
       if (mode === "active") await hydrateLocalProcessingCaptures();
     }
+    let succeeded = false;
     if (config?.apiUrl && session?.accessToken) {
       try {
         const activeSession = await getFreshSession();
@@ -1926,11 +2048,14 @@ export default function App() {
           setCapturesNextCursor(json.next_cursor || null);
           if (!options.append) writeCachedCapturePage("active", rows, json.next_cursor || null);
         }
+        succeeded = true;
       } catch (error) {
         errorSetter(friendlyError(error, mode === "archived" ? "Could not load archived captures" : "Could not load captures"));
+        phaseSetter("error");
         throw error;
       } finally {
         loadingSetter(false);
+        if (succeeded) phaseSetter("ready");
         if (mode === "active" && !options.append) setActiveCapturesLoadedOnce(true);
       }
       return;
@@ -1955,13 +2080,16 @@ export default function App() {
         setCapturesNextCursor(null);
         setArchivedCapturesNextCursor(null);
       }
+      succeeded = true;
     } catch (error) {
       const text = friendlyError(error, mode === "archived" ? "Could not load archived captures" : "Could not load captures");
       errorSetter(text);
+      phaseSetter("error");
       setMessage(text);
       throw error;
     } finally {
       loadingSetter(false);
+      if (succeeded) phaseSetter("ready");
       if (mode === "active" && !options.append) setActiveCapturesLoadedOnce(true);
     }
   }, [config, getFreshSession, session]);
@@ -1981,40 +2109,80 @@ export default function App() {
     loadCaptures
   ]);
 
-  const loadCollections = useCallback(async (mode: CollectionListMode = "active") => {
+  const loadCollections = useCallback(async (
+    mode: CollectionListMode = "active",
+    options: { append?: boolean; before?: string | null } = {}
+  ) => {
+    const knownLoaded = collectionsLoadedOnceRef.current[mode] || collectionsCacheRef.current[mode].length > 0;
+    setCollectionsLoadPhase(options.append ? "append" : knownLoaded ? "refresh" : "cold");
+    setCollectionsLoading(true);
+    setCollectionsError("");
+    if (!options.append) await hydrateCachedCollectionPage(mode);
     if (!config?.apiUrl || !session?.accessToken) {
-      setCollections([]);
+      collectionsCacheRef.current[mode] = [];
+      collectionsCursorCacheRef.current[mode] = null;
+      setCollectionsNextCursor((current) => ({ ...current, [mode]: null }));
+      setCollectionsLoadedOnce((current) => ({ ...current, [mode]: true }));
+      if (collectionsModeRef.current === mode) setCollections([]);
+      setCollectionsLoading(false);
+      setCollectionsLoadPhase("ready");
       return;
     }
-    const activeSession = await getFreshSession();
-    if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
-    const loadWithToken = (accessToken: string) =>
-      requestJson<{ collections?: Array<Record<string, any>>; next_cursor?: string | null }>(
-        edgeResourceUrl(config.apiUrl, "collections", {
-          archived: mode === "archived" ? "true" : "false",
-          limit: "50"
-        }),
-        {
-          headers: {
-            accept: "application/json",
-            apikey: config.supabaseAnonKey,
-            authorization: `Bearer ${accessToken}`
-          }
-        }
-      );
-    let json: { collections?: Array<Record<string, any>>; next_cursor?: string | null };
+    let succeeded = false;
     try {
-      json = await loadWithToken(activeSession.accessToken);
+      const activeSession = await getFreshSession();
+      if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
+      const loadWithToken = (accessToken: string) =>
+        requestJson<{ collections?: Array<Record<string, any>>; next_cursor?: string | null }>(
+          edgeResourceUrl(config.apiUrl, "collections", {
+            archived: mode === "archived" ? "true" : "false",
+            limit: "50",
+            ...(options.before ? { before: options.before } : {})
+          }),
+          {
+            headers: {
+              accept: "application/json",
+              apikey: config.supabaseAnonKey,
+              authorization: `Bearer ${accessToken}`
+            }
+          }
+        );
+      let json: { collections?: Array<Record<string, any>>; next_cursor?: string | null };
+      try {
+        json = await loadWithToken(activeSession.accessToken);
+      } catch (error) {
+        if (!isAuthError(error)) throw error;
+        const refreshed = await getFreshSession(true);
+        if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
+        json = await loadWithToken(refreshed.accessToken);
+      }
+      const next = (json.collections ?? []).map(collectionFromRemote);
+      const rows = options.append
+        ? uniqueCollections([...(collectionsCacheRef.current[mode] || []), ...next])
+        : next;
+      collectionsCacheRef.current[mode] = rows;
+      collectionsCursorCacheRef.current[mode] = json.next_cursor || null;
+      setCollectionsNextCursor((current) => ({ ...current, [mode]: json.next_cursor || null }));
+      setCollectionsLoadedOnce((current) => ({ ...current, [mode]: true }));
+      if (collectionsModeRef.current === mode) setCollections(rows);
+      if (!options.append) writeCachedCollectionPage(mode, rows, json.next_cursor || null);
+      succeeded = true;
     } catch (error) {
-      if (!isAuthError(error)) throw error;
-      const refreshed = await getFreshSession(true);
-      if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
-      json = await loadWithToken(refreshed.accessToken);
+      setCollectionsLoadPhase("error");
+      throw error;
+    } finally {
+      setCollectionsLoading(false);
+      if (succeeded) setCollectionsLoadPhase("ready");
     }
-    const next = (json.collections ?? []).map(collectionFromRemote);
-    collectionsCacheRef.current[mode] = next;
-    setCollections(next);
   }, [config, getFreshSession, session]);
+
+  const loadMoreCollections = useCallback(() => {
+    const cursor = collectionsNextCursor[collectionsMode];
+    if (!cursor || collectionsLoading) return;
+    void loadCollections(collectionsMode, { append: true, before: cursor }).catch((error) => {
+      setMessage((current) => current || friendlyError(error, "Could not load more collections"));
+    });
+  }, [collectionsLoading, collectionsMode, collectionsNextCursor, loadCollections]);
 
   const loadCollectionCaptures = useCallback(async (
     collectionId: string,
@@ -2153,8 +2321,13 @@ export default function App() {
   const selectCollection = useCallback((collectionId: string | null) => {
     setCollectionFeedReadyKey("");
     if (collectionId) {
-      setCollectionCapturesLoading(true);
-      setCollectionCapturesLoadPhase(collectionCapturesCacheRef.current[collectionId]?.length ? "refresh" : "initial");
+      const collection = [...collectionsCacheRef.current.active, ...collectionsCacheRef.current.archived]
+        .find((item) => item.id === collectionId);
+      const hasNoCaptures = collection?.captureCount === 0;
+      setCollectionCapturesLoading(!hasNoCaptures);
+      setCollectionCapturesLoadPhase(
+        hasNoCaptures ? "idle" : collectionCapturesCacheRef.current[collectionId]?.length ? "refresh" : "initial"
+      );
       setCollectionCapturesError("");
     }
     setSelectedCollectionId(collectionId);
@@ -2346,9 +2519,8 @@ export default function App() {
     setCollectionsOpen(true);
     setSelectedCollectionId(null);
     const cached = collectionsCacheRef.current[mode];
-    if (cached.length) setCollections(cached);
+    if (cached.length || collectionsLoadedOnceRef.current[mode]) setCollections(cached);
     else setCollections([]);
-    setCollectionsLoading(true);
     setCollectionsError("");
     try {
       await loadCollections(mode);
@@ -2356,8 +2528,6 @@ export default function App() {
       const text = friendlyError(error, "Could not load collections.");
       setCollectionsError(text);
       setMessage(text);
-    } finally {
-      setCollectionsLoading(false);
     }
   }
 
@@ -2454,9 +2624,37 @@ export default function App() {
   }, [archivedCaptures]);
 
   useEffect(() => {
+    activeCapturesLoadedOnceRef.current = activeCapturesLoadedOnce;
+  }, [activeCapturesLoadedOnce]);
+
+  useEffect(() => {
+    archivedCapturesLoadedRef.current = archivedCapturesLoaded;
+  }, [archivedCapturesLoaded]);
+
+  useEffect(() => {
+    collectionsLoadedOnceRef.current = collectionsLoadedOnce;
+  }, [collectionsLoadedOnce]);
+
+  useEffect(() => {
+    collectionsModeRef.current = collectionsMode;
+  }, [collectionsMode]);
+
+  useEffect(() => {
     setActiveCapturesLoadedOnce(false);
+    setCapturesLoadPhase("idle");
+    setArchivedCapturesLoadPhase("idle");
+    setCollectionsLoadedOnce({ active: false, archived: false });
+    setCollectionsNextCursor({ active: null, archived: null });
     setHomeFeedReadyKey("");
     setCollectionFeedReadyKey("");
+    activeCapturesLoadedOnceRef.current = false;
+    archivedCapturesLoadedRef.current = false;
+    capturePageCacheHydratedRef.current = { active: null, archived: null };
+    collectionsLoadedOnceRef.current = { active: false, archived: false };
+    collectionPageCacheHydratedRef.current = { active: null, archived: null };
+    collectionsCursorCacheRef.current = { active: null, archived: null };
+    searchResultsCacheRef.current = {};
+    searchResultsModeRef.current = {};
   }, [session?.userId]);
 
   useEffect(() => {
@@ -2727,8 +2925,19 @@ export default function App() {
 
   const homeCaptures = useMemo(() => captures.filter((capture) => !isArchived(capture)), [captures]);
   const homeRows = useMemo(() => groupedCaptureRows(homeCaptures), [homeCaptures]);
-  const homeInitialLoading = capturesLoading && !activeCapturesLoadedOnce;
+  const homeInitialLoading = (capturesLoadPhase === "cold" || capturesLoadPhase === "idle") &&
+    !activeCapturesLoadedOnce &&
+    !capturesError &&
+    !homeRows.length;
   const visibleHomeRows = homeRows;
+  useEffect(() => {
+    if (!homeInitialLoading) {
+      setHomeColdSkeletonVisible(false);
+      return;
+    }
+    const timer = setTimeout(() => setHomeColdSkeletonVisible(true), INITIAL_SKELETON_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [homeInitialLoading]);
   const homeRevealCaptures = useMemo(
     () =>
       homeRows
@@ -2743,7 +2952,13 @@ export default function App() {
         .join("|"),
     [homeRevealCaptures]
   );
-  const homeFeedRevealPending = Boolean(homeFeedRevealKey && !homeFeedReadyKey);
+  const homeFeedRevealPending = Boolean(
+    homeFeedRevealKey &&
+      !homeFeedReadyKey &&
+      capturesLoadPhase === "cold" &&
+      capturesLoading &&
+      !activeCapturesLoadedOnce
+  );
   const visibleHomeCapturesForReveal = useMemo(
     () => homeCaptures,
     [homeCaptures]
@@ -2771,6 +2986,22 @@ export default function App() {
     () => homeCaptures.filter((capture) => displayStatus(capture) === "needs_review" || displayStatus(capture) === "failed").length,
     [homeCaptures]
   );
+  const collectionsColdLoading = collectionsLoadPhase === "cold" &&
+    collectionsLoading &&
+    !collectionsLoadedOnce[collectionsMode] &&
+    !collections.length;
+  const activeCollectionsColdLoading = collectionsLoadPhase === "cold" &&
+    collectionsLoading &&
+    !collectionsLoadedOnce.active &&
+    !collectionsCacheRef.current.active.length;
+  useEffect(() => {
+    if (!collectionsColdLoading && !activeCollectionsColdLoading) {
+      setCollectionsColdSkeletonVisible(false);
+      return;
+    }
+    const timer = setTimeout(() => setCollectionsColdSkeletonVisible(true), INITIAL_SKELETON_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [activeCollectionsColdLoading, collectionsColdLoading]);
   const collectionRevealCaptures = useMemo(
     () => visibleCollectionCapturesForReveal.slice(0, RECENT_FEED_REVEAL_COUNT),
     [visibleCollectionCapturesForReveal]
@@ -2784,7 +3015,14 @@ export default function App() {
         : "",
     [collectionRevealCaptures, selectedCollectionId]
   );
-  const collectionFeedRevealPending = Boolean(collectionFeedRevealKey && !collectionFeedReadyKey);
+  const collectionFeedRevealPending = Boolean(
+    collectionFeedRevealKey &&
+      !collectionFeedReadyKey &&
+      selectedCollectionId &&
+      collectionCapturesLoading &&
+      collectionCapturesLoadPhase === "initial" &&
+      collectionCapturesForId !== selectedCollectionId
+  );
   useEffect(() => {
     if (capturesLoading && !activeCapturesLoadedOnce && !homeRows.length) {
       homeRowsFade.setValue(0);
@@ -2802,7 +3040,8 @@ export default function App() {
     const blockingCollectionLoad = Boolean(
       selectedCollectionId &&
         collectionCapturesLoading &&
-        collectionCapturesLoadPhase !== "append"
+        collectionCapturesLoadPhase !== "append" &&
+        (!collectionCaptures.length || collectionCapturesForId !== selectedCollectionId)
     );
     if (blockingCollectionLoad || (selectedCollectionId && collectionCapturesForId !== selectedCollectionId)) {
       collectionRowsFade.setValue(0);
@@ -2882,7 +3121,7 @@ export default function App() {
     markCaptureRowsRevealed
   ]);
   useEffect(() => {
-    if (collectionsLoading) {
+    if (collectionsColdLoading || (activeCollectionsColdLoading && !collections.length)) {
       collectionListFade.setValue(0);
       return;
     }
@@ -2892,13 +3131,14 @@ export default function App() {
       toValue: 1,
       useNativeDriver: true
     }).start();
-  }, [collectionListFade, collections.length, collectionsLoading]);
+  }, [activeCollectionsColdLoading, collectionListFade, collections.length, collectionsColdLoading]);
   const searchPool = useMemo(() => {
     if (searchScope === "archived") return archivedCaptures;
     if (searchScope === "all") return uniqueCaptures([...captures, ...archivedCaptures]);
     return captures;
   }, [archivedCaptures, captures, searchScope]);
   const searchTerm = searchQuery.trim();
+  const currentSearchKey = searchCacheKey(searchScope, searchTerm);
   const remoteSearchActive = Boolean(
     searchOpen &&
       searchTerm &&
@@ -2911,25 +3151,43 @@ export default function App() {
     if (!term) return [];
     return searchPool.filter((capture) => searchableCaptureText(capture).includes(term));
   }, [searchPool, searchQuery]);
-  const searchResults = remoteSearchActive && !remoteSearchError
-    ? remoteSearchResults
+  const remoteSearchReadyForQuery = Boolean(
+    remoteSearchActive &&
+      currentSearchKey &&
+      remoteSearchKey === currentSearchKey &&
+      !remoteSearchError
+  );
+  const searchResults = remoteSearchReadyForQuery
+    ? mergeSearchResults(localSearchResults, remoteSearchResults)
     : localSearchResults;
 
   useEffect(() => {
     if (!remoteSearchActive || !config?.apiUrl || !session?.accessToken) {
       searchRequestSeqRef.current += 1;
-      setRemoteSearchResults([]);
       setRemoteSearchLoading(false);
+      setRemoteSearchEnhancing(false);
       setRemoteSearchError("");
+      if (!searchTerm) {
+        setRemoteSearchResults([]);
+        setRemoteSearchKey("");
+      }
       return;
     }
+    if (!currentSearchKey) return;
     const requestId = searchRequestSeqRef.current + 1;
     searchRequestSeqRef.current = requestId;
-    setRemoteSearchLoading(true);
+    const cached = searchResultsCacheRef.current[currentSearchKey];
+    if (cached) {
+      setRemoteSearchResults(cached);
+      setRemoteSearchKey(currentSearchKey);
+      setRemoteSearchLoading(false);
+      setRemoteSearchEnhancing(true);
+    } else {
+      setRemoteSearchLoading(true);
+      setRemoteSearchEnhancing(false);
+    }
     setRemoteSearchError("");
-    setRemoteSearchResults([]);
-    const timer = setTimeout(() => {
-      const run = async () => {
+    const runSearch = async (mode: SearchRemoteMode) => {
         try {
           const activeSession = await getFreshSession();
           if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
@@ -2938,6 +3196,7 @@ export default function App() {
               edgeResourceUrl(config.apiUrl, "search", {
                 q: searchTerm,
                 scope: searchScope,
+                mode,
                 limit: "50"
               }),
               {
@@ -2958,21 +3217,44 @@ export default function App() {
             json = await loadWithToken(refreshed.accessToken);
           }
           if (searchRequestSeqRef.current !== requestId) return;
-          setRemoteSearchResults((json.captures ?? []).map(captureFromRemote));
+          if (mode === "keyword" && searchResultsModeRef.current[currentSearchKey] === "hybrid") return;
+          const rows = (json.captures ?? []).map(captureFromRemote);
+          const existing = searchResultsCacheRef.current[currentSearchKey] || [];
+          const nextRows = mode === "hybrid" ? mergeSearchResults(existing, rows) : rows;
+          searchResultsCacheRef.current[currentSearchKey] = nextRows;
+          searchResultsModeRef.current[currentSearchKey] = mode;
+          setRemoteSearchResults(nextRows);
+          setRemoteSearchKey(currentSearchKey);
+          setRemoteSearchLoading(false);
+          setRemoteSearchEnhancing(mode === "keyword");
         } catch (error) {
           if (searchRequestSeqRef.current !== requestId) return;
-          setRemoteSearchError(friendlyError(error, "Search is using local matches."));
-          setRemoteSearchResults([]);
+          if (mode === "keyword") {
+            setRemoteSearchLoading(false);
+            setRemoteSearchEnhancing(true);
+            return;
+          }
+          if (!searchResultsCacheRef.current[currentSearchKey]?.length) {
+            setRemoteSearchError(friendlyError(error, "Search is using local matches."));
+          }
+          setRemoteSearchEnhancing(false);
+          setRemoteSearchLoading(false);
         } finally {
-          if (searchRequestSeqRef.current === requestId) setRemoteSearchLoading(false);
+          if (searchRequestSeqRef.current === requestId && mode === "hybrid") {
+            setRemoteSearchEnhancing(false);
+          }
         }
       };
-      void run();
-    }, 220);
-    return () => clearTimeout(timer);
+    const keywordTimer = setTimeout(() => void runSearch("keyword"), SEARCH_KEYWORD_DEBOUNCE_MS);
+    const hybridTimer = setTimeout(() => void runSearch("hybrid"), SEARCH_HYBRID_DELAY_MS);
+    return () => {
+      clearTimeout(keywordTimer);
+      clearTimeout(hybridTimer);
+    };
   }, [
     config?.apiUrl,
     config?.supabaseAnonKey,
+    currentSearchKey,
     getFreshSession,
     remoteSearchActive,
     searchScope,
@@ -2990,8 +3272,25 @@ export default function App() {
   const selectedCollection = selectedCollectionId
     ? collections.find((collection) => collection.id === selectedCollectionId) ?? null
     : null;
+  const collectionCapturesColdLoading = Boolean(
+    selectedCollectionId &&
+      selectedCollection?.status === "active" &&
+      selectedCollection.captureCount !== 0 &&
+      collectionCapturesLoading &&
+      collectionCapturesLoadPhase === "initial" &&
+      collectionCapturesForId !== selectedCollectionId
+  );
   const selectedDraftKey = selected ? captureDraftKey(selected) : "";
   const selectedVisitTargetQuery = selected?.visitTarget?.query || "";
+
+  useEffect(() => {
+    if (!collectionCapturesColdLoading) {
+      setCollectionCapturesColdSkeletonVisible(false);
+      return;
+    }
+    const timer = setTimeout(() => setCollectionCapturesColdSkeletonVisible(true), INITIAL_SKELETON_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [collectionCapturesColdLoading]);
 
   useEffect(() => {
     if (!selected) return;
@@ -3182,6 +3481,17 @@ export default function App() {
       setCollectionCapturesError("");
       return;
     }
+    if (selectedCollection?.captureCount === 0) {
+      collectionCapturesCacheRef.current[selectedCollectionId] = [];
+      collectionCapturesCursorCacheRef.current[selectedCollectionId] = null;
+      setCollectionCaptures([]);
+      setCollectionCapturesForId(selectedCollectionId);
+      setCollectionCapturesNextCursor(null);
+      setCollectionCapturesLoading(false);
+      setCollectionCapturesLoadPhase("idle");
+      setCollectionCapturesError("");
+      return;
+    }
     const cached = knownCapturesForCollection(selectedCollectionId);
     if (cached.length) {
       collectionCapturesCacheRef.current[selectedCollectionId] = cached;
@@ -3200,7 +3510,7 @@ export default function App() {
       }
       setMessage((current) => current || text);
     });
-  }, [captureReturnCollectionId, loadCollectionCaptures, selectedCollection?.status, selectedCollectionId]);
+  }, [captureReturnCollectionId, loadCollectionCaptures, selectedCollection?.captureCount, selectedCollection?.status, selectedCollectionId]);
 
   function openReviewInsight(insight: ReviewInsight) {
     if (!insight.focus && !insight.sections.length) return;
@@ -3683,13 +3993,10 @@ export default function App() {
     setCollectionPickerQuery("");
     setCollectionSelectionIds((selected.linkedCollections || []).map((collection) => collection.id));
     setCollectionPickerOpen(true);
-    setCollectionsLoading(!collectionsCacheRef.current.active.length);
     try {
       await loadCollections("active");
     } catch (error) {
       setMessage(friendlyError(error, "Could not load collections."));
-    } finally {
-      setCollectionsLoading(false);
     }
   }
 
@@ -4186,15 +4493,25 @@ export default function App() {
     setSession(null);
     setCaptures([]);
     setArchivedCaptures([]);
+    setCapturesLoadPhase("idle");
+    setArchivedCapturesLoadPhase("idle");
     setActiveCapturesLoadedOnce(false);
     setArchivedCapturesLoaded(false);
     setCapturesNextCursor(null);
     setArchivedCapturesNextCursor(null);
     capturesRef.current = [];
     archivedCapturesRef.current = [];
+    activeCapturesLoadedOnceRef.current = false;
+    archivedCapturesLoadedRef.current = false;
     capturePageCacheHydratedRef.current = { active: null, archived: null };
     setCollections([]);
     collectionsCacheRef.current = { active: [], archived: [] };
+    collectionsCursorCacheRef.current = { active: null, archived: null };
+    collectionsLoadedOnceRef.current = { active: false, archived: false };
+    collectionPageCacheHydratedRef.current = { active: null, archived: null };
+    setCollectionsLoadedOnce({ active: false, archived: false });
+    setCollectionsNextCursor({ active: null, archived: null });
+    setCollectionsLoadPhase("idle");
     collectionCapturesCacheRef.current = {};
     collectionCapturesCursorCacheRef.current = {};
     captureDetailHydrationRef.current.clear();
@@ -4216,6 +4533,10 @@ export default function App() {
     setRemoteSearchResults([]);
     setRemoteSearchError("");
     setRemoteSearchLoading(false);
+    setRemoteSearchEnhancing(false);
+    setRemoteSearchKey("");
+    searchResultsCacheRef.current = {};
+    searchResultsModeRef.current = {};
     selectCapture(null);
     selectCollection(null);
   }
@@ -4240,6 +4561,55 @@ export default function App() {
           ]}
         />
       </Animated.View>
+    );
+  }
+
+  const searchActivityScale = skeletonPulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.72, 1]
+  });
+  const searchActivityOpacity = skeletonPulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.46, 1]
+  });
+
+  function SearchActivityMark() {
+    return (
+      <View
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        pointerEvents="none"
+        style={styles.searchActivityMark}
+      >
+        <Animated.View
+          style={[
+            styles.searchActivityDot,
+            {
+              opacity: searchActivityOpacity,
+              transform: [{ scale: searchActivityScale }]
+            }
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.searchActivityDot,
+            styles.searchActivityDotTrailing,
+            {
+              opacity: skeletonOpacity,
+              transform: [{ scale: skeletonPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.76] }) }]
+            }
+          ]}
+        />
+      </View>
+    );
+  }
+
+  function renderSearchProgress(label: string) {
+    return (
+      <View accessibilityLiveRegion="polite" style={styles.searchProgressRow}>
+        <SearchActivityMark />
+        <Text style={styles.searchProgressText}>{label}</Text>
+      </View>
     );
   }
 
@@ -4955,8 +5325,10 @@ export default function App() {
             }
             ListEmptyComponent={
               activeCollection ? (
-                collectionCapturesInitialLoading ? (
+                collectionCapturesInitialLoading && collectionCapturesColdSkeletonVisible ? (
                   renderCollectionCaptureSkeletonRows(collectionCaptureSkeletonCount)
+                ) : collectionCapturesInitialLoading ? (
+                  <View style={styles.loadingQuietSpace} />
                 ) : collectionCapturesError ? (
                   <View style={styles.collectionEmpty}>
                     <Text style={styles.emptyTitle}>Could not load collection captures.</Text>
@@ -5040,7 +5412,7 @@ export default function App() {
   }
 
   if (collectionsOpen) {
-    const collectionsBlockingLoading = collectionsLoading && !collectionsError;
+    const collectionsBlockingLoading = collectionsColdLoading && !collectionsError;
     const visibleManagedCollections = collectionsBlockingLoading ? [] : collections;
     return (
       <SafeAreaView style={styles.safe}>
@@ -5077,8 +5449,10 @@ export default function App() {
             renderItem={renderCollection}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
             ListEmptyComponent={
-              collectionsBlockingLoading ? (
+              collectionsBlockingLoading && collectionsColdSkeletonVisible ? (
                 renderCollectionSkeletonRows(collections.length ? Math.min(collections.length, 7) : 7, false, collections)
+              ) : collectionsBlockingLoading ? (
+                <View style={styles.loadingQuietSpace} />
               ) : (
                 <View style={styles.collectionsEmpty}>
                   <View
@@ -5137,9 +5511,16 @@ export default function App() {
               )
             }
             contentContainerStyle={
-              visibleManagedCollections.length || collectionsBlockingLoading
+              visibleManagedCollections.length || (collectionsBlockingLoading && collectionsColdSkeletonVisible)
                 ? styles.collectionsListContent
                 : styles.collectionsEmptyContent
+            }
+            onEndReached={loadMoreCollections}
+            onEndReachedThreshold={0.35}
+            ListFooterComponent={
+              visibleManagedCollections.length && collectionsLoading && collectionsLoadPhase === "append"
+                ? renderListLoadingFooter("Loading more collections...")
+                : null
             }
           />
           {message ? <Text style={styles.messageInline}>{message}</Text> : null}
@@ -5158,7 +5539,11 @@ export default function App() {
     const selectionChanged = !sameStringSet(collectionSelectionIds, currentCollectionIds);
     const selectionSaving = collectionChoiceSaving === "set-collections";
     const selectionTerm = collectionPickerQuery.trim().toLowerCase();
-    const visibleCollections = collectionsLoading
+    const collectionSelectorColdLoading = collectionsLoadPhase === "cold" &&
+      collectionsLoading &&
+      !collectionsLoadedOnce.active &&
+      !collections.length;
+    const visibleCollections = collectionSelectorColdLoading
       ? []
       : collections
           .filter((collection) => collection.status === "active")
@@ -5270,8 +5655,10 @@ export default function App() {
               </Pressable>
             }
             ListEmptyComponent={
-              collectionsLoading ? (
+              collectionSelectorColdLoading && collectionsColdSkeletonVisible ? (
                 renderCollectionSkeletonRows(4, true, collections.filter((collection) => collection.status === "active"))
+              ) : collectionSelectorColdLoading ? (
+                <View style={styles.loadingQuietSpace} />
               ) : (
                 <View style={styles.collectionEmpty}>
                   <Text style={styles.emptyTitle}>
@@ -5962,9 +6349,16 @@ export default function App() {
   }
 
   if (searchOpen) {
-    const searchIsLoading = remoteSearchActive && remoteSearchLoading
+    const searchIsLoading = remoteSearchActive && (remoteSearchLoading || remoteSearchEnhancing)
       ? true
       : searchScope !== "active" && archivedCapturesLoading && !archivedCapturesLoaded;
+    const searchProgressLabel = remoteSearchLoading
+      ? "Searching saved things"
+      : remoteSearchEnhancing
+        ? "Refining matches"
+        : searchScope !== "active" && archivedCapturesLoading && !archivedCapturesLoaded
+          ? "Loading archived captures"
+          : "";
     const showSearchScopes = searchScopeOpen || Boolean(searchQuery.trim());
     const emptyTitle = searchQuery.trim()
       ? "No matches yet."
@@ -6064,6 +6458,7 @@ export default function App() {
               {archivedCapturesError && searchScope !== "active" ? (
                 <Text style={styles.errorText}>{archivedCapturesError}</Text>
               ) : null}
+              {searchProgressLabel ? renderSearchProgress(searchProgressLabel) : null}
             </View>
             <FlatList
               {...CAPTURE_LIST_PERF_PROPS}
@@ -6076,8 +6471,11 @@ export default function App() {
               onEndReachedThreshold={0.35}
               ItemSeparatorComponent={() => <View style={styles.separator} />}
               ListEmptyComponent={
-                searchIsLoading ? (
-                  renderLoadingRows()
+                searchIsLoading && searchQuery.trim() ? (
+                  <View style={styles.searchEmpty}>
+                    <Text style={styles.emptyTitle}>Searching saved things...</Text>
+                    <Text style={styles.emptyText}>Checking titles, notes, sources, Collections, and saved details.</Text>
+                  </View>
                 ) : (
                   <View style={styles.searchEmpty}>
                     <Text style={styles.emptyTitle}>{emptyTitle}</Text>
@@ -6172,8 +6570,10 @@ export default function App() {
             leadingItem?.type === "section" ? null : <View style={styles.separator} />
           }
           ListEmptyComponent={
-            homeInitialLoading ? (
+            homeInitialLoading && homeColdSkeletonVisible ? (
               renderCaptureSkeletonRows(5)
+            ) : homeInitialLoading ? (
+              <View style={styles.loadingQuietSpace} />
             ) : capturesError ? (
               <View style={styles.empty}>
                 <Text style={styles.emptyTitle}>Could not load captures.</Text>
@@ -6579,6 +6979,40 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     lineHeight: 15
+  },
+  searchProgressRow: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: colors.processingSoft,
+    borderRadius: 8,
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+    minHeight: 34,
+    paddingHorizontal: 10
+  },
+  searchProgressText: {
+    color: colors.processing,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 16
+  },
+  searchActivityMark: {
+    alignItems: "center",
+    flexDirection: "row",
+    height: 18,
+    justifyContent: "center",
+    width: 24
+  },
+  searchActivityDot: {
+    backgroundColor: colors.processing,
+    borderRadius: 5,
+    height: 10,
+    width: 10
+  },
+  searchActivityDotTrailing: {
+    backgroundColor: colors.accent,
+    marginLeft: -3
   },
   scopeRow: {
     alignItems: "center",
@@ -7319,6 +7753,9 @@ const styles = StyleSheet.create({
   loadingRows: {
     gap: 1,
     paddingTop: 10
+  },
+  loadingQuietSpace: {
+    minHeight: 180
   },
   skeletonRevealFrame: {
     position: "relative"

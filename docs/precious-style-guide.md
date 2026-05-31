@@ -348,6 +348,8 @@ Search is a full-screen retrieval utility, not a chatbot default.
 - Filters should be chips or compact segments.
 - Keep command-like filters optional and discoverable later.
 - Search should match persisted extraction details such as entities, summary, Save Intent, collections, reminder suggestions, source URL, notes, and timestamps.
+- Search should feel immediate: show local or keyword matches while semantic retrieval refines in the background.
+- Use a compact activity cue near the Search input for background refinement; do not replace known results with skeleton rows.
 
 ### Reminders And Agenda
 
@@ -360,6 +362,8 @@ Search is a full-screen retrieval utility, not a chatbot default.
 ### Loading, Offline, And Sync
 
 - Loading should be inline inside the section that is loading.
+- Cached rows and known-empty states should render immediately while fresh data reloads in the background.
+- Skeleton rows are for cold unknown loads only, after a brief delay; they should not flash before an empty state.
 - Preserve drafts during loading, sync, and app backgrounding.
 - Offline states should offer useful local behavior where possible: save locally, retry, or sync later.
 - Error messages should name the operation: `Could not save review`, `Could not load collections`, `Network connection dropped. Try again in a moment.`

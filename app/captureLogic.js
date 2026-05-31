@@ -139,6 +139,27 @@ function mergeRemoteCaptures(remoteCaptures, currentCaptures, listMode, now = Da
   return sortCaptures([...remoteCaptures, ...freshLocalProcessing]);
 }
 
+function normalizeSearchQuery(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function searchCacheKey(scope, query) {
+  const safeScope = scope === "archived" || scope === "all" ? scope : "active";
+  const normalizedQuery = normalizeSearchQuery(query);
+  return normalizedQuery ? `${safeScope}:${normalizedQuery}` : "";
+}
+
+function mergeSearchResults(immediateResults, rankedResults) {
+  const seen = new Set();
+  const merged = [];
+  for (const capture of [...rankedResults, ...immediateResults]) {
+    if (!capture?.id || seen.has(capture.id)) continue;
+    seen.add(capture.id);
+    merged.push(capture);
+  }
+  return merged;
+}
+
 module.exports = {
   LOCAL_PROCESSING_GRACE_MS,
   displayStatus,
@@ -150,11 +171,14 @@ module.exports = {
   mapSearchCandidates,
   mapsSearchUrls,
   mergeRemoteCaptures,
+  mergeSearchResults,
   normalizeIntent,
+  normalizeSearchQuery,
   parseCaptureUrl,
   reviewReasonLabel,
   reviewReasonSummary,
   reviewReasons,
+  searchCacheKey,
   sortCaptures,
   statusLabel
 };

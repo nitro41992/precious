@@ -41,10 +41,16 @@ export function mergeRemoteCaptures<T extends SortableCapture>(
   listMode: "active" | "archived",
   now?: number
 ): T[];
+export function mergeSearchResults<T extends { id: string }>(
+  immediateResults: T[],
+  rankedResults: T[]
+): T[];
 export function normalizeIntent(value: string | undefined, allowedIntents?: string[]): string;
+export function normalizeSearchQuery(value?: string | null): string;
 export function parseCaptureUrl(url?: string | null): string | null;
 export function reviewReasonLabel(reason: ReviewReason): string;
 export function reviewReasonSummary(reasons: ReviewReason[]): string;
 export function reviewReasons(capture: ReviewableCapture): ReviewReason[];
+export function searchCacheKey(scope: "active" | "archived" | "all" | string, query?: string | null): string;
 export function sortCaptures<T extends { createdAt: number }>(captures: T[]): T[];
 export function statusLabel(status: CaptureStatus): string;
