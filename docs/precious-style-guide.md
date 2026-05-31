@@ -207,7 +207,9 @@ Rules:
 ### Authentication
 
 - Authentication is a focused setup flow, not part of the authenticated app shell.
+- Google sign-in may be offered as the first returning-user option through Supabase browser OAuth and the existing app callback link; do not add native Google SDK setup unless the product explicitly needs it.
 - Password sign-in may remain available for existing users, but `Create account` should open a separate email-only screen.
+- Accounts created through email-only onboarding should be able to return with an emailed sign-in link, without setting a password first.
 - Account creation should send a secure Supabase email link and then show a `Check your email` confirmation state.
 - The confirmation state should tell the user to open the link on the phone where Precious Captures is installed.
 - Do not ask for a password during account creation unless the product explicitly reintroduces password setup.
