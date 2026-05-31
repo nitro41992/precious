@@ -5089,19 +5089,67 @@ export default function App() {
               collectionsBlockingLoading ? (
                 renderCollectionSkeletonRows(collections.length ? Math.min(collections.length, 7) : 7, false, collections)
               ) : (
-                <View style={styles.collectionEmpty}>
-                  <Text style={styles.emptyTitle}>
-                    {collectionsMode === "archived" ? "No archived collections." : "No collections yet."}
-                  </Text>
-                  <Text style={styles.emptyText}>
-                    {collectionsMode === "archived"
-                      ? "Archived collections will appear here."
-                      : "Create one when a group of captures starts to have a purpose."}
-                  </Text>
+                <View style={styles.collectionsEmpty}>
+                  <View
+                    accessibilityElementsHidden
+                    importantForAccessibility="no-hide-descendants"
+                    pointerEvents="none"
+                    style={styles.collectionsEmptyVisual}
+                  >
+                    <View style={styles.collectionsEmptyFolderBack} />
+                    <View style={styles.collectionsEmptyFolder}>
+                      <View style={styles.collectionsEmptyFolderTab} />
+                      <Folder
+                        color={collectionsMode === "archived" ? colors.muted : colors.accent}
+                        size={28}
+                        strokeWidth={2.2}
+                      />
+                      <View style={styles.collectionsEmptyLines}>
+                        <View style={styles.collectionsEmptyLineStrong} />
+                        <View style={styles.collectionsEmptyLineSoft} />
+                      </View>
+                    </View>
+                    <View
+                      style={[
+                        styles.collectionsEmptyBadge,
+                        collectionsMode === "archived" && styles.collectionsEmptyBadgeArchived
+                      ]}
+                    >
+                      {collectionsMode === "archived" ? (
+                        <Archive color={colors.muted} size={17} strokeWidth={2.2} />
+                      ) : (
+                        <Plus color={colors.onAccent} size={18} strokeWidth={2.5} />
+                      )}
+                    </View>
+                  </View>
+                  <View style={styles.collectionsEmptyCopy}>
+                    <Text style={[styles.emptyTitle, styles.homeEmptyTitle]}>
+                      {collectionsMode === "archived" ? "No archived collections." : "No collections yet."}
+                    </Text>
+                    <Text style={[styles.emptyText, styles.homeEmptyText]}>
+                      {collectionsMode === "archived"
+                        ? "Archived collections will appear here when you move them out of the active list."
+                        : "Create one when a group of captures starts to have a purpose."}
+                    </Text>
+                  </View>
+                  {collectionsMode === "active" ? (
+                    <Pressable
+                      onPress={openCollectionComposer}
+                      style={({ pressed }) => [styles.homeEmptyPrimary, pressed && styles.homeEmptyPrimaryPressed]}
+                      testID="pc.collections.empty.create"
+                    >
+                      <Plus color={colors.onAccent} size={20} strokeWidth={2.5} />
+                      <Text style={styles.homeEmptyPrimaryText}>Create collection</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               )
             }
-            contentContainerStyle={styles.collectionsListContent}
+            contentContainerStyle={
+              visibleManagedCollections.length || collectionsBlockingLoading
+                ? styles.collectionsListContent
+                : styles.collectionsEmptyContent
+            }
           />
           {message ? <Text style={styles.messageInline}>{message}</Text> : null}
         </View>
@@ -6166,19 +6214,66 @@ export default function App() {
                 </Pressable>
               </View>
             ) : (
-              <View style={styles.empty}>
-                <Text style={styles.emptyTitle}>Share something in.</Text>
-                <Text style={styles.emptyText}>
-                  Use the share sheet from a browser, message, notes app, or photos.
-                </Text>
+              <View style={styles.homeEmpty}>
+                <View
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                  pointerEvents="none"
+                  style={styles.homeEmptyVisual}
+                >
+                  <View style={styles.homeEmptyRail}>
+                    <View style={styles.homeEmptyRailDotActive} />
+                    <View style={styles.homeEmptyRailLine} />
+                    <View style={styles.homeEmptyRailDot} />
+                  </View>
+                  <View style={styles.homeEmptyTileStack}>
+                    <View style={[styles.homeEmptyTile, styles.homeEmptyTilePrimary]}>
+                      <View style={styles.homeEmptyIconMark}>
+                        <Link2 color={colors.accent} size={19} strokeWidth={2.4} />
+                      </View>
+                      <View style={styles.homeEmptyLineGroup}>
+                        <View style={styles.homeEmptyLineStrong} />
+                        <View style={styles.homeEmptyLineSoft} />
+                      </View>
+                    </View>
+                    <View style={styles.homeEmptyTileRow}>
+                      <View style={[styles.homeEmptyTile, styles.homeEmptyTileSmall]}>
+                        <StickyNote color={colors.secondary} size={20} strokeWidth={2.2} />
+                        <View style={styles.homeEmptyMiniLines}>
+                          <View style={styles.homeEmptyMiniLine} />
+                          <View style={styles.homeEmptyMiniLineShort} />
+                        </View>
+                      </View>
+                      <View style={[styles.homeEmptyTile, styles.homeEmptyTileSmall, styles.homeEmptyTileImage]}>
+                        <ImageIcon color={colors.processing} size={20} strokeWidth={2.2} />
+                        <View style={styles.homeEmptyImageFrame} />
+                      </View>
+                    </View>
+                  </View>
+                  <View style={styles.homeEmptySearchHint}>
+                    <Search color={colors.muted} size={16} strokeWidth={2.2} />
+                  </View>
+                </View>
+                <View style={styles.homeEmptyCopy}>
+                  <Text style={[styles.emptyTitle, styles.homeEmptyTitle]}>Share something in.</Text>
+                  <Text style={[styles.emptyText, styles.homeEmptyText]}>
+                    Use the share sheet from a browser, message, notes app, or photos.
+                  </Text>
+                </View>
                 <Pressable
                   onPress={openCaptureComposer}
-                  style={styles.primaryButton}
+                  style={({ pressed }) => [styles.homeEmptyPrimary, pressed && styles.homeEmptyPrimaryPressed]}
                   testID="pc.capture.empty.open"
                 >
-                  <Text style={styles.primaryButtonText}>Paste link or note</Text>
+                  <Plus color={colors.onAccent} size={20} strokeWidth={2.5} />
+                  <Text style={styles.homeEmptyPrimaryText}>Paste link or note</Text>
                 </Pressable>
-                <Text style={styles.emptyCue}>You can review details after the capture is saved.</Text>
+                <View style={styles.homeEmptyCue}>
+                  <Check color={colors.accent} size={16} strokeWidth={2.4} />
+                  <Text style={[styles.emptyCue, styles.homeEmptyCueText]}>
+                    You can review details after the capture is saved.
+                  </Text>
+                </View>
               </View>
             )
           }
@@ -7021,6 +7116,158 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingBottom: 80
   },
+  homeEmpty: {
+    alignItems: "center",
+    flex: 1,
+    gap: 18,
+    justifyContent: "center",
+    paddingBottom: 92,
+    paddingTop: 0
+  },
+  homeEmptyVisual: {
+    alignSelf: "center",
+    height: 210,
+    maxWidth: 342,
+    position: "relative",
+    width: "100%"
+  },
+  homeEmptyRail: {
+    alignItems: "center",
+    bottom: 22,
+    left: 10,
+    position: "absolute",
+    top: 20,
+    width: 24
+  },
+  homeEmptyRailDotActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accentLine,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 16,
+    width: 16
+  },
+  homeEmptyRailLine: {
+    backgroundColor: colors.line,
+    flex: 1,
+    marginVertical: 8,
+    width: StyleSheet.hairlineWidth
+  },
+  homeEmptyRailDot: {
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.line,
+    borderRadius: 7,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 14,
+    width: 14
+  },
+  homeEmptyTileStack: {
+    gap: 10,
+    marginLeft: 34,
+    paddingRight: 2,
+    paddingTop: 8
+  },
+  homeEmptyTile: {
+    backgroundColor: colors.surfaceContainer,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden"
+  },
+  homeEmptyTilePrimary: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 82,
+    paddingHorizontal: 14,
+    paddingVertical: 12
+  },
+  homeEmptyTileRow: {
+    flexDirection: "row",
+    gap: 10
+  },
+  homeEmptyTileSmall: {
+    flex: 1,
+    gap: 10,
+    minHeight: 96,
+    padding: 13
+  },
+  homeEmptyTileImage: {
+    backgroundColor: colors.processingSoft
+  },
+  homeEmptyIconMark: {
+    alignItems: "center",
+    backgroundColor: colors.accentSoft,
+    borderRadius: 8,
+    height: 44,
+    justifyContent: "center",
+    width: 44
+  },
+  homeEmptyLineGroup: {
+    flex: 1,
+    gap: 9,
+    minWidth: 0
+  },
+  homeEmptyLineStrong: {
+    backgroundColor: colors.secondary,
+    borderRadius: 6,
+    height: 13,
+    width: "76%"
+  },
+  homeEmptyLineSoft: {
+    backgroundColor: colors.surfaceContainerHighest,
+    borderRadius: 6,
+    height: 12,
+    width: "52%"
+  },
+  homeEmptyMiniLines: {
+    gap: 7
+  },
+  homeEmptyMiniLine: {
+    backgroundColor: colors.surfaceContainerHighest,
+    borderRadius: 6,
+    height: 12,
+    width: "78%"
+  },
+  homeEmptyMiniLineShort: {
+    backgroundColor: colors.surfaceContainerHighest,
+    borderRadius: 6,
+    height: 12,
+    width: "54%"
+  },
+  homeEmptyImageFrame: {
+    alignSelf: "stretch",
+    backgroundColor: "rgba(159, 198, 227, 0.18)",
+    borderColor: "rgba(159, 198, 227, 0.32)",
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    flex: 1,
+    minHeight: 34
+  },
+  homeEmptySearchHint: {
+    alignItems: "center",
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    bottom: 0,
+    height: 42,
+    justifyContent: "center",
+    position: "absolute",
+    right: 12,
+    width: 42
+  },
+  homeEmptyCopy: {
+    alignItems: "center",
+    gap: 2,
+    maxWidth: 318
+  },
+  homeEmptyTitle: {
+    textAlign: "center"
+  },
+  homeEmptyText: {
+    textAlign: "center"
+  },
   searchEmpty: {
     gap: 8,
     paddingTop: 22
@@ -7061,9 +7308,44 @@ const styles = StyleSheet.create({
   },
   emptyCue: {
     color: colors.muted,
+    flex: 1,
     fontSize: 13,
     lineHeight: 19,
     maxWidth: 280
+  },
+  homeEmptyPrimary: {
+    alignItems: "center",
+    alignSelf: "center",
+    backgroundColor: colors.accent,
+    borderRadius: 8,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    minHeight: 56,
+    maxWidth: 360,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    width: "100%"
+  },
+  homeEmptyPrimaryPressed: {
+    backgroundColor: "#9be6c2",
+    transform: [{ scale: 0.99 }]
+  },
+  homeEmptyPrimaryText: {
+    color: colors.onAccent,
+    fontSize: 16,
+    fontWeight: "800"
+  },
+  homeEmptyCue: {
+    alignItems: "flex-start",
+    alignSelf: "center",
+    flexDirection: "row",
+    gap: 8,
+    maxWidth: 320,
+    paddingTop: 1
+  },
+  homeEmptyCueText: {
+    maxWidth: 260
   },
   loadingRows: {
     gap: 1,
@@ -7291,6 +7573,96 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     paddingTop: 18
   },
+  collectionsEmpty: {
+    alignItems: "center",
+    flex: 1,
+    gap: 18,
+    justifyContent: "center",
+    paddingBottom: 86
+  },
+  collectionsEmptyVisual: {
+    height: 172,
+    position: "relative",
+    width: 238
+  },
+  collectionsEmptyFolderBack: {
+    backgroundColor: colors.surfaceContainer,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    bottom: 20,
+    left: 18,
+    opacity: 0.78,
+    position: "absolute",
+    right: 20,
+    top: 34,
+    transform: [{ rotate: "-4deg" }]
+  },
+  collectionsEmptyFolder: {
+    alignItems: "flex-start",
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    bottom: 10,
+    gap: 16,
+    justifyContent: "center",
+    left: 0,
+    paddingHorizontal: 22,
+    paddingTop: 12,
+    position: "absolute",
+    right: 0,
+    top: 18
+  },
+  collectionsEmptyFolderTab: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accentLine,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 28,
+    left: 22,
+    position: "absolute",
+    top: -14,
+    width: 84
+  },
+  collectionsEmptyLines: {
+    gap: 9,
+    width: "100%"
+  },
+  collectionsEmptyLineStrong: {
+    backgroundColor: colors.secondary,
+    borderRadius: 6,
+    height: 13,
+    width: "74%"
+  },
+  collectionsEmptyLineSoft: {
+    backgroundColor: colors.surfaceContainerHighest,
+    borderRadius: 6,
+    height: 12,
+    width: "52%"
+  },
+  collectionsEmptyBadge: {
+    alignItems: "center",
+    backgroundColor: colors.accent,
+    borderColor: colors.paper,
+    borderRadius: 8,
+    borderWidth: 3,
+    bottom: 0,
+    height: 48,
+    justifyContent: "center",
+    position: "absolute",
+    right: 8,
+    width: 48
+  },
+  collectionsEmptyBadgeArchived: {
+    backgroundColor: colors.surfaceContainerHighest,
+    borderColor: colors.paper
+  },
+  collectionsEmptyCopy: {
+    alignItems: "center",
+    gap: 2,
+    maxWidth: 318
+  },
   collectionSettings: {
     borderTopColor: colors.line,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -7317,6 +7689,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10
   },
   collectionsListContent: {
+    paddingBottom: 132
+  },
+  collectionsEmptyContent: {
+    flexGrow: 1,
     paddingBottom: 132
   },
   collectionSelectorScreen: {
