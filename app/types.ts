@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 
 export type CaptureStatus = "processing" | "ready" | "needs_review" | "failed";
+export type ReviewTarget = "intent" | "collections" | "reminder" | "analysis";
 
 export type UrlEvidence = {
   status?: "extracted" | "partial_evidence" | "needs_client_resolution" | "insufficient_url_evidence" | "failed";
@@ -23,6 +24,7 @@ export type ReviewRationale = {
 
 export type ReviewInsight = {
   focus: string;
+  summary: string;
   sections: Array<{ label: string; text: string }>;
 };
 
@@ -55,6 +57,7 @@ export type Capture = {
   reviewRationale?: ReviewRationale;
   confidenceLabel?: string;
   needsReview?: boolean;
+  reviewTargets?: ReviewTarget[];
   entities?: Array<{ type: string; name: string; evidence: string; confidence: number }>;
   visitTarget?: VisitTarget | null;
   suggestedReminders?: Array<{

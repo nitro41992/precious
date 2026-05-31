@@ -142,6 +142,7 @@ export const analysisSchema = {
     "suggested_reminders",
     "collection_decisions",
     "review_rationale",
+    "review_targets",
     "search_phrases",
     "confidence_label",
     "needs_review",
@@ -231,6 +232,13 @@ export const analysisSchema = {
         intent: { type: "string" },
         collections: { type: "string" },
         reminder: { type: "string" },
+      },
+    },
+    review_targets: {
+      type: "array",
+      items: {
+        type: "string",
+        enum: ["intent", "collections", "reminder", "analysis"],
       },
     },
     search_phrases: { type: "array", items: { type: "string" } },

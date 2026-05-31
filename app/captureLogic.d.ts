@@ -1,5 +1,5 @@
 export type CaptureStatus = "processing" | "ready" | "needs_review" | "failed";
-export type ReviewReason = "intent" | "analysis";
+export type ReviewReason = "intent" | "collections" | "reminder" | "analysis";
 export type MapProvider = "google" | "apple";
 export type MapSearchCandidate = {
   provider: MapProvider;
@@ -12,6 +12,11 @@ type ReviewableCapture = {
   needsReview?: boolean;
   confidenceLabel?: string;
   reviewConfirmedAt?: number | null;
+  reviewTargets?: ReviewReason[];
+  reviewRationale?: {
+    focus?: string;
+  };
+  defaultIntent?: string;
 };
 
 type StatusCapture = ReviewableCapture & {
@@ -27,6 +32,7 @@ type SortableCapture = StatusCapture & {
 };
 
 export const LOCAL_PROCESSING_GRACE_MS: number;
+export const REVIEW_TARGETS: ReviewReason[];
 export function confidenceRequiresReview(value?: string): boolean;
 export function displayStatus(capture: StatusCapture): CaptureStatus;
 export function extractHttpUrl(value?: string | null): string;
@@ -46,11 +52,13 @@ export function mergeSearchResults<T extends { id: string }>(
   rankedResults: T[]
 ): T[];
 export function normalizeIntent(value: string | undefined, allowedIntents?: string[]): string;
+export function normalizeReviewTargets(value?: unknown): ReviewReason[];
 export function normalizeSearchQuery(value?: string | null): string;
 export function parseCaptureUrl(url?: string | null): string | null;
 export function reviewReasonLabel(reason: ReviewReason): string;
 export function reviewReasonSummary(reasons: ReviewReason[]): string;
 export function reviewReasons(capture: ReviewableCapture): ReviewReason[];
+export function reviewTargetsForCapture(capture: ReviewableCapture): ReviewReason[];
 export function searchCacheKey(scope: "active" | "archived" | "all" | string, query?: string | null): string;
 export function sortCaptures<T extends { createdAt: number }>(captures: T[]): T[];
 export function statusLabel(status: CaptureStatus): string;

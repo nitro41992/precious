@@ -27,6 +27,7 @@ import {
   contentEvidenceProfile,
   normalizedReviewAnalysis,
   rationaleForAnalysis,
+  resolveReviewTargets,
   textWithoutUrls,
 } from "./analysis.ts";
 import {
@@ -691,7 +692,14 @@ export async function markCollectionDecisionAccepted(
       !sameCollectionDecision(decision as Record<string, unknown>, accepted),
   );
   const nextAnalysis = normalizedReviewAnalysis(
-    { ...analysis, needs_review: false, collection_decisions: nextDecisions },
+    {
+      ...resolveReviewTargets(
+        analysis,
+        ["collections", "analysis"],
+        data.review_confirmed_at,
+      ),
+      collection_decisions: nextDecisions,
+    },
     data.review_confirmed_at,
   );
   await supabase
@@ -999,8 +1007,11 @@ export async function applyCollectionChoice(
   });
   const nextAnalysis = normalizedReviewAnalysis(
     {
-      ...currentAnalysis,
-      needs_review: false,
+      ...resolveReviewTargets(
+        currentAnalysis,
+        ["collections", "analysis"],
+        capture.review_confirmed_at,
+      ),
       collection_decisions: nextDecisions,
       suggested_collections: [],
       collection_choice_overrides: [],
@@ -1074,8 +1085,11 @@ export async function clearCollectionSuggestion(
   });
   const nextAnalysis = normalizedReviewAnalysis(
     {
-      ...currentAnalysis,
-      needs_review: false,
+      ...resolveReviewTargets(
+        currentAnalysis,
+        ["collections", "analysis"],
+        capture.review_confirmed_at,
+      ),
       collection_decisions: nextDecisions,
       suggested_collections: [],
       collection_choice_overrides: overrides,
@@ -1179,7 +1193,6 @@ export async function undoCollectionChoice(
   const nextAnalysis = normalizedReviewAnalysis(
     {
       ...currentAnalysis,
-      needs_review: false,
       collection_decisions: nextDecisions,
       suggested_collections: [],
       collection_choice_overrides: overrides.filter((item) =>
@@ -1266,8 +1279,11 @@ export async function preserveAiCollectionSuggestionForUnlink(
   });
   const nextAnalysis = normalizedReviewAnalysis(
     {
-      ...currentAnalysis,
-      needs_review: false,
+      ...resolveReviewTargets(
+        currentAnalysis,
+        ["collections", "analysis"],
+        capture.data.review_confirmed_at,
+      ),
       collection_choice_overrides: overrides,
     },
     capture.data.review_confirmed_at,

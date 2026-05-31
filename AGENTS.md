@@ -59,3 +59,7 @@ Only push/deploy Supabase when backend files changed, such as `supabase/function
 ## Extraction Rules
 
 Keep LLM prompts, preflight gates, and policy decisions domain-agnostic. If a specific site needs richer handling, put that logic in a bounded extractor/parser adapter for that site's public URL format or API, and keep the prompt/policy language generic.
+
+Do not make platform-specific or app-specific behavior changes unless the user explicitly asks for that platform/app. When investigating a platform-specific example, first look for a source-agnostic state or capability, such as access-limited content, login-gated pages, weak metadata, missing media, opaque share URLs, or user-provided screenshot evidence. Prefer generic detection, routing, and copy that apply across sources.
+
+Do not add keyword, regex, or substring-search classification/rationale logic to the React Native app. The app should render structured capture fields and product copy; semantic interpretation belongs in `supabase/functions`, bounded extractor/parser adapters, or other backend analysis code with tests.

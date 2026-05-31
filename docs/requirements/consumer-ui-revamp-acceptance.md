@@ -9,7 +9,8 @@ Related ADRs: `docs/adr/0001-recent-captures-and-full-screen-search.md`, `docs/a
 ## Product Shape
 
 - The app should feel like a polished consumer memory surface, not a dogfooding, audit, or extraction-review tool.
-- The consumer shell uses a calm dark Material 3-inspired surface hierarchy by default, not the earlier warm paper shell.
+- The consumer shell uses a calm dark Material 3 Expressive-inspired surface hierarchy by default, not the earlier warm paper shell.
+- Material 3 Expressive emphasis should clarify review decisions through purposeful size, shape, tonal containment, motion, and semantic color while preserving familiar native controls and Precious' calm dark tone.
 - The default screen is `Recent Captures`: active Captures only, ordered by most recently captured.
 - Search is a primary product function and opens as its own full-screen Retrieval Lens.
 - The top-level app shell uses a bottom app bar with `Recent`, `Collections`, and `Settings`, plus a separate contextual floating `+` action.
@@ -89,6 +90,9 @@ Capture Review must:
 - Show an `Open in Maps` action when Capture Analysis has a maps-searchable Visit Target and a native map provider passes an open check. This action opens the available Google Maps or Apple Maps search from the persisted query; Android must not show Apple Maps through a browser fallback, and the action must not imply a verified address, coordinates, place ID, or a first-class Map destination.
 - Include an `Add reminder` flow only when the selected reminder can at least persist as a capture-local or otherwise durable value. Do not imply notification delivery until it exists.
 - Include one consolidated `Review insight` rationale surface for Save Intent, Collections, and Reminder idea decisions, including cases where no Collection or no Reminder idea was applied. Its visible cue should point to the exact review decision rather than repeat a content summary.
+- `Review insight` should explain the AI decision in friendly user language, using active Save Intents and existing Collection names as context rather than merely repeating field values.
+- The expanded `Review insight` sheet should lead with the same friendly insight from the row at readable body scale, then show unframed Save Intent, Collections, and Reminder idea decision rows, including why no Collection or Reminder idea was selected when that is the outcome. The sheet action must leave comfortable space above Android gesture navigation.
+- When Capture Review asks the user to check Save Intent, Collections, or a future Reminder idea, tapping `Looks right` clears that review state. Editing the called-out field also clears that field's review state; `Needs a quick look` remains only if another review target is still unresolved.
 - Keep raw source, destructive archive actions, and detailed rationale visually secondary.
 - Use modality-specific evidence in review copy. Image and note captures without a source URL must not show Link evidence fallback copy or a `Link evidence` module; they should show `Needs review` / `Couldn't tell` language when saved content needs more context.
 

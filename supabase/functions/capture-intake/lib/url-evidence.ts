@@ -1615,12 +1615,23 @@ export function genericTitle(value: string | null | undefined) {
     "not found",
     "error",
     "enable javascript",
+    "this content is unavailable",
   ].includes(normalized);
 }
 
 export function blockPageText(value: string | null | undefined) {
   const text = String(value || "").toLowerCase();
-  return /captcha|cloudflare|enable javascript|access denied|temporarily blocked|sign in to continue|log in to continue|please wait while we check/i
+  return /captcha|cloudflare|enable javascript|access denied|temporarily blocked|sign in to continue|log in to continue|please wait while we check|people under \d+ can't see this content|account has set limits on who can see/i
+    .test(text);
+}
+
+export function accessLimitedPage(evidence: UrlEvidence | null) {
+  const text = [
+    evidence?.title,
+    evidence?.description,
+    evidence?.text,
+  ].filter(Boolean).join(" ");
+  return /people under \d+ can't see this content|account has set limits on who can see/i
     .test(text);
 }
 
@@ -1768,6 +1779,8 @@ export function normalizedUrlEvidence(
       : {};
   const failureReason = status === "needs_client_resolution"
     ? "opaque_or_blocked_url_unresolved"
+    : accessLimitedPage(evidence)
+    ? "age_or_access_limited"
     : evidence?.error ||
       (quality === "none" ? "insufficient_url_evidence" : "");
   return {
@@ -1794,7 +1807,9 @@ export function normalizedUrlEvidence(
     extraction_sources: evidenceSources(evidence),
     failure_reason: failureReason || "",
     missing_evidence: missingEvidence(evidence),
-    user_facing_message: status === "needs_client_resolution"
+    user_facing_message: accessLimitedPage(evidence)
+      ? "The source limited public access to this content."
+      : status === "needs_client_resolution"
       ? CLIENT_RESOLUTION_MESSAGE
       : status === "insufficient_url_evidence"
       ? INSUFFICIENT_URL_MESSAGE

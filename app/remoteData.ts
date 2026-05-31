@@ -12,6 +12,7 @@ import {
   displayStatus,
   hostFromUrl,
   isArchived,
+  normalizeReviewTargets,
   sortCaptures
 } from "./captureLogic";
 import {
@@ -41,6 +42,7 @@ export function captureFromRemote(row: Record<string, any>): Capture {
   const manualCollectionOverrides = Array.isArray(analysis.collection_choice_overrides)
     ? analysis.collection_choice_overrides.map(collectionChoiceOverrideFromRemote).filter(Boolean) as CollectionChoiceOverride[]
     : [];
+  const reviewTargets = normalizeReviewTargets(analysis.review_targets);
   const remoteHasExtractedData = Boolean(
     row.default_intent ||
       row.analysis_provider ||
@@ -71,10 +73,12 @@ export function captureFromRemote(row: Record<string, any>): Capture {
     intentRationale: row.intent_rationale || defaultIntent.rationale || undefined,
     reviewRationale: reviewRationaleFromRemote(analysis.review_rationale),
     confidenceLabel: analysis.confidence_label || undefined,
+    reviewTargets,
     needsReview: Boolean(
       !reviewConfirmedAtValue &&
         (analysis.needs_review ||
           row.analysis_state === "needs_review" ||
+          reviewTargets.length > 0 ||
           confidenceRequiresReview(analysis.confidence_label))
     ),
     entities: analysis.entities || [],
@@ -330,4 +334,3 @@ export function sameStringSet(left: string[], right: string[]) {
   const rightSet = new Set(right);
   return left.every((item) => rightSet.has(item));
 }
-

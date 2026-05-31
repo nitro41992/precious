@@ -15,6 +15,7 @@ const {
   parseCaptureUrl,
   reviewReasonSummary,
   reviewReasons,
+  reviewTargetsForCapture,
   searchCacheKey,
   statusLabel
 } = require("../app/captureLogic");
@@ -90,6 +91,25 @@ test("reviewReasons prioritizes unresolved review causes and confirmed reviews s
   assert.deepEqual(
     reviewReasons(capture({ status: "needs_review", needsReview: true, reviewConfirmedAt: Date.now() })),
     []
+  );
+});
+
+test("review targets drive needs-review state and clear independently", () => {
+  assert.deepEqual(
+    reviewTargetsForCapture(capture({ reviewTargets: ["collections", "intent", "collections"] })),
+    ["collections", "intent"]
+  );
+  assert.equal(
+    displayStatus(capture({ status: "needs_review", reviewTargets: ["collections"] })),
+    "needs_review"
+  );
+  assert.equal(
+    displayStatus(capture({ status: "needs_review", reviewTargets: [] })),
+    "ready"
+  );
+  assert.deepEqual(
+    reviewReasons(capture({ status: "needs_review", reviewTargets: ["reminder"] })),
+    ["reminder"]
   );
 });
 

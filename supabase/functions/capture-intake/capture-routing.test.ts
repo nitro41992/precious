@@ -198,8 +198,108 @@ Deno.test("review rationale drops source-format explanations when source fallbac
   );
   assertEqual(
     normalized.review_rationale.collections,
-    "No collection was applied because no existing Collection matched strongly.",
+    "No Collection was selected because none of your existing Collections matched this capture strongly enough.",
     "sanitized collection rationale should use product fallback language",
+  );
+});
+
+Deno.test("analysis prompt requires evidence-rich review rationale", () => {
+  const prompt = urlEvidence.buildPrompt(
+    captureFixture({
+      display_title: "Saved outfit reel",
+      source_text: "70s style outfit reel saved for later.",
+    }),
+    null,
+    [],
+  );
+
+  assert(
+    prompt.includes("default_intent.rationale must name the concrete capture evidence"),
+    "Save Intent rationale should be analyzer-owned and evidence-specific",
+  );
+  assert(
+    prompt.includes("review_rationale.intent explains the Save Intent"),
+    "review rationale prompt should govern intent explanation",
+  );
+  assert(
+    prompt.includes("Never use generic wording that only says the action is supported"),
+    "prompt should reject generic intent rationale",
+  );
+  assert(
+    prompt.includes("never return only 'No collection'"),
+    "prompt should require explanation for no Collection",
+  );
+  assert(
+    prompt.includes("never return only 'No reminder'"),
+    "prompt should require explanation for no Reminder idea",
+  );
+});
+
+Deno.test("review targets drive review state and allow reviewed blank intent", () => {
+  const collectionReview = urlEvidence.normalizedReviewAnalysis({
+    display_title: "Kettlebell routine",
+    summary: "A kettlebell and dumbbell workout routine.",
+    default_intent: {
+      category: "do",
+      confidence: 0.86,
+      rationale: "The kettlebell and dumbbell routine is an activity to do.",
+    },
+    review_rationale: {
+      focus: "Check Collections: PT",
+      summary:
+        "Looks like a kettlebell routine, so I saved it as Do and matched PT.",
+      intent: "The kettlebell and dumbbell routine is an activity to do.",
+      collections: "The routine matches your PT Collection.",
+      reminder: "No concrete time, place, or event trigger was found.",
+    },
+    linked_collections: [
+      {
+        title: "PT",
+        rationale: "The routine matches your PT Collection.",
+      },
+    ],
+    review_targets: ["collections"],
+    confidence_label: "Looks right",
+    needs_review: true,
+  });
+  assertEqual(
+    collectionReview.needs_review,
+    true,
+    "explicit collection target should keep review state",
+  );
+  assertEqual(
+    collectionReview.review_targets.join("|"),
+    "collections",
+    "explicit review target should be preserved",
+  );
+  assert(
+    /kettlebell routine/i.test(collectionReview.review_rationale.summary) &&
+      /Do/.test(collectionReview.review_rationale.summary) &&
+      /PT/.test(collectionReview.review_rationale.summary),
+    "analyzer rationale summary should be preserved",
+  );
+  assertEqual(
+    collectionReview.review_rationale.collections,
+    "The routine matches your PT Collection.",
+    "collection rationale should come from analyzer output",
+  );
+
+  const reviewedBlank = urlEvidence.normalizedReviewAnalysis({
+    display_title: "Saved note",
+    summary: "Useful but not clearly actionable.",
+    default_intent: {
+      category: null,
+      confidence: 0,
+      rationale: "No clear Save Intent was found.",
+    },
+    review_targets: [],
+    confidence_label: "Looks right",
+    needs_review: false,
+  });
+  assertEqual(
+    reviewedBlank.needs_review,
+    false,
+    "explicitly cleared review targets should allow blank intent",
   );
 });
 

@@ -30,6 +30,7 @@ import {
   hostFromUrl,
   isArchived,
   normalizeIntent as normalizeKnownIntent,
+  reviewTargetsForCapture,
   statusLabel
 } from "./captureLogic";
 
@@ -456,6 +457,14 @@ export function reviewFocusForCapture(capture: Capture, intentText: string) {
   const providedFocus = rationaleLine(rationale.focus);
   if (providedFocus) return conciseText(providedFocus, 88);
   if (displayStatus(capture) === "failed") return "Review source details";
+  const reviewTargets = reviewTargetsForCapture(capture);
+  if (reviewTargets.includes("collections")) {
+    const collectionsLabel = linkedCollectionsLabel(capture.linkedCollections || []);
+    return collectionsLabel === "Add collections"
+      ? "Check Collections"
+      : `Check Collections: ${collectionsLabel}`;
+  }
+  if (reviewTargets.includes("reminder")) return "Confirm Reminder idea";
   if (confidenceRequiresReview(capture.confidenceLabel)) {
     const intentLabel = activeIntentLabel(capture.defaultIntent);
     return intentLabel ? `Confirm Save Intent: ${intentLabel}` : "Choose a Save Intent";
@@ -466,29 +475,28 @@ export function reviewFocusForCapture(capture: Capture, intentText: string) {
 
 export function reviewInsightForCapture(capture: Capture): ReviewInsight {
   const rationale = capture.reviewRationale || {};
-  const linkedRationales = (capture.linkedCollections || [])
+  const collectionRationale = (capture.linkedCollections || [])
     .map((collection) => rationaleLine(collection.rationale))
-    .filter(Boolean);
+    .find(Boolean) || "";
   const reminderRationale = (capture.suggestedReminders || [])
     .map((reminder) => rationaleLine(reminder.rationale))
     .find(Boolean) || "";
   const intentText =
     rationaleLine(rationale.intent) ||
-    rationaleLine(capture.intentRationale) ||
-    "The saved content supports this Save Intent, and you can change it here.";
+    rationaleLine(capture.intentRationale);
   const collectionsText =
     rationaleLine(rationale.collections) ||
-    linkedRationales[0] ||
-    (capture.linkedCollections?.length
-      ? `Matched ${linkedCollectionsLabel(capture.linkedCollections)} from your existing collections.`
-      : "No collection was applied because no existing Collection matched strongly.");
+    collectionRationale;
   const reminderText =
     rationaleLine(rationale.reminder) ||
-    reminderRationale ||
-    "No concrete time, place, or event trigger was found.";
+    reminderRationale;
+  const summary =
+    rationaleLine(rationale.summary) ||
+    conciseText([intentText, collectionsText, reminderText].filter(Boolean).join(" "), 140);
   const focus = reviewFocusForCapture(capture, intentText);
   return {
     focus,
+    summary,
     sections: [
       { label: "Save Intent", text: intentText },
       { label: "Collections", text: collectionsText },
@@ -555,7 +563,7 @@ export function urlEvidenceMessage(evidence?: UrlEvidence | null) {
     return suppliedMessage || "Saved with limited public details.";
   }
   if (evidence.status === "partial_evidence" || evidence.evidence_quality === "low") {
-    return "Saved with partial source details.";
+    return suppliedMessage || "Saved with partial source details.";
   }
   return "";
 }

@@ -1,4 +1,6 @@
 const LOCAL_PROCESSING_GRACE_MS = 30 * 60 * 1000;
+const REVIEW_TARGETS = ["intent", "collections", "reminder", "analysis"];
+const REVIEW_TARGET_SET = new Set(REVIEW_TARGETS);
 
 function hostFromUrl(value) {
   if (!value) return "";
@@ -98,16 +100,51 @@ function confidenceRequiresReview(value) {
   return value === "Maybe" || value === "Not sure" || value === "Couldn't tell";
 }
 
-function reviewReasons(capture) {
+function normalizeReviewTargets(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const targets = [];
+  for (const item of value) {
+    const target = String(item || "").trim();
+    if (!REVIEW_TARGET_SET.has(target) || seen.has(target)) continue;
+    seen.add(target);
+    targets.push(target);
+  }
+  return targets;
+}
+
+function inferredReviewTargets(capture) {
+  const targets = [];
+  const focus = String(capture.reviewRationale?.focus || "").toLowerCase();
+  if (!capture.defaultIntent || confidenceRequiresReview(capture.confidenceLabel)) {
+    targets.push("intent");
+  }
+  if (/\b(collection|collections)\b/.test(focus)) {
+    targets.push("collections");
+  }
+  if (/\b(reminder|remind)\b/.test(focus)) {
+    targets.push("reminder");
+  }
+  if ((capture.needsReview || capture.status === "needs_review") && !targets.length) {
+    targets.push("analysis");
+  }
+  return normalizeReviewTargets(targets);
+}
+
+function reviewTargetsForCapture(capture) {
   if (capture.reviewConfirmedAt || capture.status === "processing" || capture.status === "failed") return [];
-  const reasons = [];
-  if (confidenceRequiresReview(capture.confidenceLabel)) reasons.push("intent");
-  if ((capture.needsReview || capture.status === "needs_review") && !reasons.length) reasons.push("analysis");
-  return reasons;
+  if (Array.isArray(capture.reviewTargets)) return normalizeReviewTargets(capture.reviewTargets);
+  return inferredReviewTargets(capture);
+}
+
+function reviewReasons(capture) {
+  return reviewTargetsForCapture(capture);
 }
 
 function reviewReasonLabel(reason) {
   if (reason === "intent") return "Intent uncertain";
+  if (reason === "collections") return "Collection needs review";
+  if (reason === "reminder") return "Reminder needs review";
   return "Analysis needs review";
 }
 
@@ -117,6 +154,7 @@ function reviewReasonSummary(reasons) {
 
 function displayStatus(capture) {
   if (reviewReasons(capture).length > 0) return "needs_review";
+  if (capture.status === "needs_review" && Array.isArray(capture.reviewTargets)) return "ready";
   if (capture.status === "failed" && hasExtractedData(capture)) return "ready";
   return capture.status;
 }
@@ -162,6 +200,7 @@ function mergeSearchResults(immediateResults, rankedResults) {
 
 module.exports = {
   LOCAL_PROCESSING_GRACE_MS,
+  REVIEW_TARGETS,
   displayStatus,
   extractHttpUrl,
   confidenceRequiresReview,
@@ -174,10 +213,12 @@ module.exports = {
   mergeSearchResults,
   normalizeIntent,
   normalizeSearchQuery,
+  normalizeReviewTargets,
   parseCaptureUrl,
   reviewReasonLabel,
   reviewReasonSummary,
   reviewReasons,
+  reviewTargetsForCapture,
   searchCacheKey,
   sortCaptures,
   statusLabel

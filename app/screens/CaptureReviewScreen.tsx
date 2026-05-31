@@ -84,6 +84,7 @@ type CaptureReviewScreenProps = {
   actions: {
     closeNoteSheet: () => void;
     confirmArchive: () => void;
+    confirmReview: () => void;
     copySource: () => void;
     markFaviconFailed: (host: string) => void;
     openCaptureUrl: (url: string) => void;
@@ -139,6 +140,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const {
     closeNoteSheet,
     confirmArchive,
+    confirmReview,
     copySource,
     markFaviconFailed,
     openCaptureUrl,
@@ -179,16 +181,20 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const reminderSentenceValue = primaryReminder && !primaryReminderRemoved
     ? reminderLabel(primaryReminder)
     : "no reminder";
-  const selectedReviewState = reviewStatusCue(selected, selectedReviewReasons.length > 0);
-  const showReviewStateText = selectedReviewState !== "Ready" && selectedReviewState !== captureStatusLabel(selected);
   const collectionActionPending = collectionChoiceSaving === "set-collections";
   const urlEvidenceNotice = urlEvidenceMessage(selected.urlEvidence);
   const selectedVisitTarget = selected.visitTarget;
   const selectedVisitTargetMapCandidates = selectedVisitTarget ? visitTargetMapCandidates : [];
   const selectedSourceMeta = `${captureSourceLabel(selected)} · ${formatDateTime(selected.createdAt)}`;
   const selectedReviewInsight = reviewInsightForCapture(selected);
+  const selectedNeedsReview = displayStatus(selected) === "needs_review";
+  const selectedReviewState = selectedNeedsReview
+    ? selectedReviewInsight.focus
+    : reviewStatusCue(selected, selectedReviewReasons.length > 0);
+  const showReviewStateText = selectedReviewState !== "Ready" && selectedReviewState !== captureStatusLabel(selected);
   const showReviewInsight = Boolean(
-    selected.reviewRationale ||
+    selectedNeedsReview ||
+      selected.reviewRationale ||
       selected.intentRationale ||
       activeIntentLabel(selected.defaultIntent) ||
       selected.suggestedReminders?.length ||
@@ -211,12 +217,13 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       draftIntentDirty ||
       Object.keys(reminderDrafts).length
   );
+  const reviewConfirmOnly = selectedNeedsReview && !reviewHasPendingChanges && !collectionActionPending;
   const reviewSupportText = draftIntentDirty
     ? aiIntentValue
       ? `Changed from ${activeIntentLabel(aiIntentValue)}`
       : "Added intent"
     : "";
-  const showReviewFooter = reviewHasPendingChanges || collectionActionPending;
+  const showReviewFooter = reviewHasPendingChanges || collectionActionPending || reviewConfirmOnly;
   const noteSheetKeyboardVisible = noteSheetOpen && keyboardHeight > 0;
   const noteWindowAlreadyKeyboardSized =
     noteSheetKeyboardVisible && Math.abs(windowHeight + keyboardHeight - Dimensions.get("screen").height) < 96;
@@ -492,11 +499,15 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                 accessibilityLabel="Review insight"
                 accessibilityRole="button"
                 onPress={() => openReviewInsight(selectedReviewInsight)}
-                style={({ pressed }) => [styles.reviewInsightCard, pressed && styles.subtlePressed]}
+                style={({ pressed }) => [
+                  styles.reviewInsightCard,
+                  selectedNeedsReview && styles.reviewInsightCardReview,
+                  pressed && styles.subtlePressed
+                ]}
                 testID="pc.review.insight"
               >
-                <View style={styles.reviewInsightIcon}>
-                  <Info color={colors.accent} size={17} strokeWidth={2.4} />
+                <View style={[styles.reviewInsightIcon, selectedNeedsReview && styles.reviewInsightIconReview]}>
+                  <Info color={selectedNeedsReview ? colors.review : colors.accent} size={17} strokeWidth={2.4} />
                 </View>
                 <View style={styles.reviewInsightCopy}>
                   <View style={styles.reviewInsightHeader}>
@@ -504,7 +515,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                     <Text style={styles.reviewInsightAction}>Details</Text>
                   </View>
                   <Text numberOfLines={2} style={styles.reviewInsightSummary}>
-                    {selectedReviewInsight.focus}
+                    {selectedReviewInsight.summary}
                   </Text>
                 </View>
                 <ChevronRight color={colors.muted} size={18} strokeWidth={2.4} />
@@ -613,16 +624,20 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
             <View style={styles.reviewFooter}>
               <Pressable
                 disabled={collectionActionPending}
-                onPress={() => void saveReviewDecisions()}
+                onPress={() => {
+                  if (reviewConfirmOnly) confirmReview();
+                  else saveReviewDecisions();
+                }}
                 style={({ pressed }) => [
                   styles.primaryButton,
+                  reviewConfirmOnly && styles.reviewConfirmButton,
                   pressed && !collectionActionPending && styles.primaryButtonPressed,
                   collectionActionPending && styles.disabledButton
                 ]}
-                testID="pc.review.save"
+                testID={reviewConfirmOnly ? "pc.review.confirm" : "pc.review.save"}
               >
                 <Text style={styles.primaryButtonText}>
-                  {collectionActionPending ? "Updating collection..." : "Save review"}
+                  {collectionActionPending ? "Updating collection..." : reviewConfirmOnly ? "Looks right" : "Save review"}
                 </Text>
               </Pressable>
             </View>

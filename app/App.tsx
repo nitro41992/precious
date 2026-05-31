@@ -22,8 +22,12 @@ import {
 } from "react-native";
 import {
   Archive,
+  Bell,
   Check,
+  Folder,
+  Info,
   LogOut,
+  Target,
   X
 } from "lucide-react-native";
 
@@ -206,6 +210,28 @@ const COLLECTION_LIST_PERF_PROPS = {
   updateCellsBatchingPeriod: 40,
   windowSize: 7
 };
+
+function rationaleSectionIcon(label: string): LucideIconComponent {
+  switch (label) {
+    case "Collections":
+      return Folder;
+    case "Reminder idea":
+      return Bell;
+    default:
+      return Target;
+  }
+}
+
+function rationaleSectionIconStyle(label: string) {
+  switch (label) {
+    case "Collections":
+      return styles.rationaleSheetSectionIconCollection;
+    case "Reminder idea":
+      return styles.rationaleSheetSectionIconReminder;
+    default:
+      return styles.rationaleSheetSectionIconIntent;
+  }
+}
 
 export default function App() {
   const { height: windowHeight } = useWindowDimensions();
@@ -2023,10 +2049,11 @@ export default function App() {
   }, [captureReturnCollectionId, loadCollectionCaptures, selectedCollection?.captureCount, selectedCollection?.status, selectedCollectionId]);
 
   function openReviewInsight(insight: ReviewInsight) {
-    if (!insight.focus && !insight.sections.length) return;
+    const text = insight.summary || insight.focus;
+    if (!text) return;
     setRationaleSheet({
       title: "Review insight",
-      text: insight.focus,
+      text,
       sections: insight.sections
     });
   }
@@ -2242,6 +2269,9 @@ export default function App() {
       if (capture.id !== selected.id) return capture;
       return {
         ...capture,
+        needsReview: false,
+        reviewTargets: [],
+        status: "ready" as const,
         suggestedReminders: (capture.suggestedReminders || []).filter((reminder, index) => {
           return reminderDrafts[reminderDraftKey(reminder, index)] !== "remove";
         }),
@@ -3341,25 +3371,37 @@ export default function App() {
             onPress={() => setRationaleSheet(null)}
             style={styles.modalBackdrop}
           />
-          <View style={styles.actionSheet}>
+          <View style={[styles.actionSheet, styles.reviewInsightSheet]}>
             <View style={styles.sheetGrabber} />
-            <View style={styles.sheetHeader}>
-              <View style={styles.sheetHeaderCopy}>
+            <View style={styles.rationaleSheetHeader}>
+              <View style={styles.rationaleSheetHeaderIcon}>
+                <Info color={colors.accent} size={22} strokeWidth={2.4} />
+              </View>
+              <View style={styles.rationaleSheetHeaderCopy}>
                 <Text style={styles.sheetTitle}>{rationaleSheet.title}</Text>
-                {rationaleSheet.sections?.length ? null : (
-                  <Text style={styles.sheetSubtitle}>{rationaleSheet.text}</Text>
-                )}
+                <Text style={styles.rationaleSheetKicker}>How this capture was interpreted</Text>
               </View>
               <IconButton Icon={X} label="Close review insight" onPress={() => setRationaleSheet(null)} />
             </View>
+            {rationaleSheet.text ? (
+              <Text style={styles.rationaleSheetLead}>{rationaleSheet.text}</Text>
+            ) : null}
             {rationaleSheet.sections?.length ? (
               <View style={styles.rationaleSheetSections}>
-                {rationaleSheet.sections.map((section) => (
-                  <View key={section.label} style={styles.rationaleSheetSection}>
-                    <Text style={styles.rationaleSheetLabel}>{section.label}</Text>
-                    <Text style={styles.rationaleSheetText}>{section.text}</Text>
-                  </View>
-                ))}
+                {rationaleSheet.sections.map((section) => {
+                  const SectionIcon = rationaleSectionIcon(section.label);
+                  return (
+                    <View key={section.label} style={styles.rationaleSheetSection}>
+                      <View style={[styles.rationaleSheetSectionIcon, rationaleSectionIconStyle(section.label)]}>
+                        <SectionIcon color={colors.ink} size={18} strokeWidth={2.4} />
+                      </View>
+                      <View style={styles.rationaleSheetSectionCopy}>
+                        <Text style={styles.rationaleSheetLabel}>{section.label}</Text>
+                        <Text style={styles.rationaleSheetText}>{section.text}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
               </View>
             ) : null}
             <Pressable onPress={() => setRationaleSheet(null)} style={styles.primaryButton}>
@@ -3544,6 +3586,7 @@ export default function App() {
         actions={{
           closeNoteSheet,
           confirmArchive,
+          confirmReview: () => void confirmReview(),
           copySource,
           markFaviconFailed,
           openCaptureUrl,

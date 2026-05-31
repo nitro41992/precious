@@ -1589,6 +1589,10 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12
   },
+  reviewInsightCardReview: {
+    backgroundColor: colors.reviewSoft,
+    borderColor: colors.review
+  },
   reviewInsightIcon: {
     alignItems: "center",
     backgroundColor: colors.accentSoft,
@@ -1596,6 +1600,9 @@ export const styles = StyleSheet.create({
     height: 34,
     justifyContent: "center",
     width: 34
+  },
+  reviewInsightIconReview: {
+    backgroundColor: colors.surfaceContainerHigh
   },
   reviewInsightCopy: {
     flex: 1,
@@ -1900,29 +1907,91 @@ export const styles = StyleSheet.create({
     gap: 8,
     paddingTop: 12
   },
+  reviewInsightSheet: {
+    gap: 16,
+    paddingBottom: Platform.OS === "android" ? 36 : 44,
+    paddingTop: 8
+  },
+  rationaleSheetHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12
+  },
+  rationaleSheetHeaderIcon: {
+    alignItems: "center",
+    backgroundColor: colors.accentSoft,
+    borderRadius: 16,
+    height: 52,
+    justifyContent: "center",
+    width: 52
+  },
+  rationaleSheetHeaderCopy: {
+    flex: 1,
+    gap: 3,
+    minWidth: 0
+  },
+  rationaleSheetKicker: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18
+  },
+  rationaleSheetLead: {
+    color: colors.ink,
+    fontSize: 17,
+    fontWeight: "700",
+    lineHeight: 24,
+    paddingHorizontal: 2,
+    paddingTop: 2
+  },
   rationaleSheetSections: {
-    gap: 10
+    borderTopColor: colors.line,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 0,
+    marginTop: 0
   },
   rationaleSheetSection: {
-    backgroundColor: colors.surfaceContainer,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 10
+    alignItems: "flex-start",
+    borderBottomColor: colors.line,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 5,
+    minHeight: 72,
+    paddingVertical: 14
+  },
+  rationaleSheetSectionIcon: {
+    alignItems: "center",
+    borderRadius: 14,
+    height: 42,
+    justifyContent: "center",
+    marginRight: 8,
+    width: 42
+  },
+  rationaleSheetSectionIconIntent: {
+    backgroundColor: colors.accentSoft
+  },
+  rationaleSheetSectionIconCollection: {
+    backgroundColor: colors.processingSoft
+  },
+  rationaleSheetSectionIconReminder: {
+    backgroundColor: colors.reviewSoft
+  },
+  rationaleSheetSectionCopy: {
+    flex: 1,
+    gap: 5,
+    minWidth: 0
   },
   rationaleSheetLabel: {
     color: colors.accent,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "800",
-    lineHeight: 16
+    lineHeight: 17
   },
   rationaleSheetText: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: "500",
-    lineHeight: 20
+    color: colors.secondary,
+    fontSize: 15,
+    fontWeight: "600",
+    lineHeight: 21
   },
   currentChoiceRow: {
     alignItems: "center",
@@ -2224,6 +2293,9 @@ export const styles = StyleSheet.create({
   primaryButtonPressed: {
     backgroundColor: "#9be6c2",
     transform: [{ scale: 0.99 }]
+  },
+  reviewConfirmButton: {
+    minHeight: 56
   },
   disabledButton: {
     opacity: 0.45

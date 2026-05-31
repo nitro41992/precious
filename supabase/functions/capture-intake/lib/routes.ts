@@ -54,6 +54,7 @@ import {
   analysisRequiresReview,
   analysisWithCurrentIntent,
   normalizedReviewAnalysis,
+  resolveReviewTargets,
 } from "./analysis.ts";
 
 export async function handleCollectionsResource(
@@ -417,8 +418,11 @@ export async function setCaptureCollections(
       : {};
   const nextAnalysis = normalizedReviewAnalysis(
     {
-      ...currentAnalysis,
-      needs_review: false,
+      ...resolveReviewTargets(
+        currentAnalysis,
+        ["collections", "analysis"],
+        capture.data.review_confirmed_at,
+      ),
       collection_decisions: [],
       suggested_collections: [],
       collection_choice_overrides: [],
@@ -774,19 +778,25 @@ export async function handleCaptureIntakeRequest(request: Request) {
           currentAnalysis,
         );
         const confirmedAt = new Date().toISOString();
-        const update: Record<string, unknown> = {
-          analysis: {
-            ...analysisWithCurrentIntent(
-              currentAnalysis,
-              body.currentSaveIntent,
+        const confirmedAnalysis = normalizedReviewAnalysis(
+          {
+            ...resolveReviewTargets(
+              analysisWithCurrentIntent(
+                currentAnalysis,
+                body.currentSaveIntent,
+              ),
+              ["intent", "collections", "reminder", "analysis"],
             ),
-            needs_review: false,
             collection_decisions: [],
             suggested_collections: [],
             suggested_reminders: confirmedReminderSuggestions(
               currentAnalysis,
             ),
           },
+          confirmedAt,
+        );
+        const update: Record<string, unknown> = {
+          analysis: confirmedAnalysis,
           analysis_state: "ready",
           review_confirmed_at: confirmedAt,
         };
@@ -859,13 +869,29 @@ export async function handleCaptureIntakeRequest(request: Request) {
           String(existingResult.data.id),
           body.collectionDecisions,
         );
+        const resolvedTargets = new Set<string>();
+        if (
+          typeof body.currentSaveIntent === "string" ||
+          body.currentSaveIntent === null
+        ) {
+          resolvedTargets.add("intent");
+        }
+        if (Array.isArray(body.collectionDecisions)) {
+          resolvedTargets.add("collections");
+        }
+        if (Array.isArray(body.reminderDecisions)) {
+          resolvedTargets.add("reminder");
+        }
+        resolvedTargets.add("analysis");
         const nextAnalysis = normalizedReviewAnalysis(
           {
-            ...analysisWithCurrentIntent(
-              currentAnalysis,
-              body.currentSaveIntent,
+            ...resolveReviewTargets(
+              analysisWithCurrentIntent(
+                currentAnalysis,
+                body.currentSaveIntent,
+              ),
+              [...resolvedTargets],
             ),
-            needs_review: false,
             collection_decisions: [],
             suggested_collections: [],
             suggested_reminders: reviewReminderSuggestions(
@@ -941,16 +967,33 @@ export async function handleCaptureIntakeRequest(request: Request) {
             typeof existingResult.data.analysis === "object"
           ? existingResult.data.analysis as Record<string, unknown>
           : {};
-        const nextAnalysis = {
-          ...currentAnalysis,
-          suggested_reminders: dismissReminderSuggestion(
-            currentAnalysis,
-            body.reminderIndex,
-          ),
-        };
+        const nextAnalysis = normalizedReviewAnalysis(
+          {
+            ...resolveReviewTargets(
+              {
+                ...currentAnalysis,
+                suggested_reminders: dismissReminderSuggestion(
+                  currentAnalysis,
+                  body.reminderIndex,
+                ),
+              },
+              ["reminder"],
+              existingResult.data.review_confirmed_at,
+            ),
+          },
+          existingResult.data.review_confirmed_at,
+        );
         const result = await supabase
           .from("captures")
-          .update({ analysis: nextAnalysis })
+          .update({
+            analysis: nextAnalysis,
+            analysis_state: analysisRequiresReview(
+                nextAnalysis,
+                existingResult.data.review_confirmed_at,
+              )
+              ? "needs_review"
+              : "ready",
+          })
           .eq("user_id", user.id)
           .eq("id", existingResult.data.id)
           .select("*")
@@ -963,7 +1006,30 @@ export async function handleCaptureIntakeRequest(request: Request) {
         );
       }
 
+      const currentAnalysis = existingResult.data.analysis &&
+          typeof existingResult.data.analysis === "object"
+        ? existingResult.data.analysis as Record<string, unknown>
+        : {};
       const update: Record<string, unknown> = {};
+      if (
+        typeof body.currentSaveIntent === "string" ||
+        body.currentSaveIntent === null
+      ) {
+        update.analysis = normalizedReviewAnalysis(
+          resolveReviewTargets(
+            analysisWithCurrentIntent(currentAnalysis, body.currentSaveIntent),
+            ["intent", "analysis"],
+            existingResult.data.review_confirmed_at,
+          ),
+          existingResult.data.review_confirmed_at,
+        );
+        update.analysis_state = analysisRequiresReview(
+            update.analysis as Record<string, unknown>,
+            existingResult.data.review_confirmed_at,
+          )
+          ? "needs_review"
+          : "ready";
+      }
       if (typeof body.title === "string") {
         const title = body.title.trim() || null;
         update.title = title;
