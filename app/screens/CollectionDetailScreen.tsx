@@ -1,0 +1,246 @@
+import type { ReactElement, ReactNode, RefObject } from "react";
+import {
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  StatusBar,
+  Text,
+  TextInput,
+  View
+} from "react-native";
+import type { FlatListProps, ListRenderItemInfo } from "react-native";
+import { ArrowLeft } from "lucide-react-native";
+
+import type { Capture, Collection, CollectionCapturesLoadPhase } from "../types";
+import { colors } from "../ui/theme";
+import { styles } from "../ui/styles";
+import { IconButton } from "../ui/components";
+
+type CollectionDetailScreenProps = {
+  data: {
+    appSheets: ReactNode;
+    collectionCaptures: Capture[];
+    collectionCapturesColdSkeletonVisible: boolean;
+    collectionCapturesError: string;
+    collectionCapturesForId: string | null;
+    collectionCapturesLoadPhase: CollectionCapturesLoadPhase;
+    collectionCapturesLoading: boolean;
+    collectionDetailListRef: RefObject<FlatList<Capture> | null>;
+    keyboardHeight: number;
+    listPerfProps: Partial<FlatListProps<Capture>>;
+    message: string;
+    selectedCollection: Collection;
+    snackbar: ReactNode;
+  };
+  state: {
+    collectionDescription: string;
+    collectionTitle: string;
+  };
+  actions: {
+    confirmArchiveCollection: (collection: Collection) => void;
+    loadMoreCollectionCaptures: () => void;
+    renderCollectionCapture: (input: ListRenderItemInfo<Capture>) => ReactElement | null;
+    renderCollectionCaptureSkeletonRows: (count?: number) => ReactElement | null;
+    renderListLoadingFooter: (label?: string) => ReactElement | null;
+    retryLoadCollectionCaptures: () => void;
+    saveCollection: () => void;
+    scrollCollectionSettingsIntoView: () => void;
+    selectCollection: (id: string | null) => void;
+    setCollectionDescription: (value: string) => void;
+    setCollectionDraftDirty: (value: boolean) => void;
+    setCollectionTitle: (value: string) => void;
+  };
+};
+
+export function CollectionDetailScreen({ actions, data, state }: CollectionDetailScreenProps) {
+  const {
+    appSheets,
+    collectionCaptures,
+    collectionCapturesColdSkeletonVisible,
+    collectionCapturesError,
+    collectionCapturesForId,
+    collectionCapturesLoadPhase,
+    collectionCapturesLoading,
+    collectionDetailListRef,
+    keyboardHeight,
+    listPerfProps,
+    message,
+    selectedCollection,
+    snackbar
+  } = data;
+  const { collectionDescription, collectionTitle } = state;
+  const {
+    confirmArchiveCollection,
+    loadMoreCollectionCaptures,
+    renderCollectionCapture,
+    renderCollectionCaptureSkeletonRows,
+    renderListLoadingFooter,
+    retryLoadCollectionCaptures,
+    saveCollection,
+    scrollCollectionSettingsIntoView,
+    selectCollection,
+    setCollectionDescription,
+    setCollectionDraftDirty,
+    setCollectionTitle
+  } = actions;
+
+  const saveDisabled = !collectionTitle.trim() || !collectionDescription.trim();
+  const activeCollection = selectedCollection.status === "active";
+  const capturesReadyForCollection = collectionCapturesForId === selectedCollection.id;
+  const collectionCapturesBlockingLoading =
+    activeCollection && collectionCapturesLoading && collectionCapturesLoadPhase !== "append";
+  const visibleCollectionCaptures =
+    activeCollection && capturesReadyForCollection && (!collectionCapturesBlockingLoading || collectionCaptures.length)
+      ? collectionCaptures
+      : [];
+  const collectionCapturesInitialLoading =
+    activeCollection &&
+    !collectionCapturesError &&
+    (!capturesReadyForCollection ||
+      collectionCapturesBlockingLoading ||
+      (collectionCapturesLoadPhase === "initial" && !visibleCollectionCaptures.length));
+  const collectionCapturesAppending = activeCollection && collectionCapturesLoadPhase === "append";
+  const collectionCaptureSkeletonCount =
+    selectedCollection.captureCount > 0 ? Math.min(selectedCollection.captureCount, 4) : 2;
+  const collectionDetailBottomPadding =
+    keyboardHeight > 0 ? Math.min(Math.max(keyboardHeight + 72, 180), 380) : 40;
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="light-content" />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0}
+        style={styles.keyboardScreen}
+      >
+        <FlatList
+          {...listPerfProps}
+          data={visibleCollectionCaptures}
+          keyExtractor={(item) => item.id}
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+          keyboardShouldPersistTaps="handled"
+          ref={collectionDetailListRef}
+          renderItem={renderCollectionCapture}
+          onEndReached={loadMoreCollectionCaptures}
+          onEndReachedThreshold={0.35}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListHeaderComponent={
+            <View style={styles.collectionDetailTop}>
+              <View style={styles.detailHeader}>
+                <IconButton Icon={ArrowLeft} label="Back" onPress={() => selectCollection(null)} />
+                <Text style={styles.status}>
+                  {selectedCollection.status === "archived"
+                    ? "Archived"
+                    : `${selectedCollection.captureCount} captures`}
+                </Text>
+              </View>
+              <Text style={styles.kicker}>Collection</Text>
+              <Text style={styles.title}>{selectedCollection.title}</Text>
+              <Text style={styles.sourceText}>{selectedCollection.description}</Text>
+              {activeCollection ? (
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.meta}>Captures</Text>
+                </View>
+              ) : (
+                <View style={styles.sourceBlock}>
+                  <Text style={styles.meta}>Archived collection</Text>
+                  <Text style={styles.supportingText}>
+                    Restore this collection to bring back its archive-time capture links.
+                  </Text>
+                </View>
+              )}
+            </View>
+          }
+          ListEmptyComponent={
+            activeCollection ? (
+              collectionCapturesInitialLoading && collectionCapturesColdSkeletonVisible ? (
+                renderCollectionCaptureSkeletonRows(collectionCaptureSkeletonCount)
+              ) : collectionCapturesInitialLoading ? (
+                <View style={styles.loadingQuietSpace} />
+              ) : collectionCapturesError ? (
+                <View style={styles.collectionEmpty}>
+                  <Text style={styles.emptyTitle}>Could not load collection captures.</Text>
+                  <Text style={styles.emptyText}>{collectionCapturesError}</Text>
+                  <Pressable onPress={retryLoadCollectionCaptures} style={styles.secondaryButton}>
+                    <Text style={styles.secondaryButtonText}>Try again</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <View style={styles.collectionEmpty}>
+                  <Text style={styles.emptyTitle}>No captures in this collection.</Text>
+                  <Text style={styles.emptyText}>Linked captures will appear here.</Text>
+                </View>
+              )
+            ) : null
+          }
+          ListFooterComponent={
+            <>
+              {visibleCollectionCaptures.length && collectionCapturesAppending
+                ? renderListLoadingFooter("Loading more captures...")
+                : null}
+              <View style={styles.collectionSettings}>
+                {activeCollection ? (
+                  <>
+                    <Text style={styles.meta}>Collection settings</Text>
+                    <TextInput
+                      onChangeText={(value) => {
+                        setCollectionDraftDirty(true);
+                        setCollectionTitle(value);
+                      }}
+                      onFocus={scrollCollectionSettingsIntoView}
+                      placeholder="Title"
+                      placeholderTextColor={colors.muted}
+                      style={styles.search}
+                      testID="pc.collection.detail.title"
+                      value={collectionTitle}
+                    />
+                    <TextInput
+                      multiline
+                      onChangeText={(value) => {
+                        setCollectionDraftDirty(true);
+                        setCollectionDescription(value);
+                      }}
+                      onFocus={scrollCollectionSettingsIntoView}
+                      placeholder="What belongs in this collection"
+                      placeholderTextColor={colors.muted}
+                      style={styles.noteInput}
+                      testID="pc.collection.detail.description"
+                      value={collectionDescription}
+                    />
+                    <Pressable
+                      disabled={saveDisabled}
+                      onPress={saveCollection}
+                      style={[styles.primaryButton, saveDisabled && styles.disabledButton]}
+                      testID="pc.collection.detail.save"
+                    >
+                      <Text style={styles.primaryButtonText}>Save collection</Text>
+                    </Pressable>
+                  </>
+                ) : null}
+                <Pressable
+                  onPress={() => confirmArchiveCollection(selectedCollection)}
+                  style={styles.secondaryButton}
+                  testID="pc.collection.archive-toggle"
+                >
+                  <Text
+                    style={
+                      selectedCollection.status === "archived" ? styles.secondaryButtonText : styles.dangerButtonText
+                    }
+                  >
+                    {selectedCollection.status === "archived" ? "Restore collection" : "Archive collection"}
+                  </Text>
+                </Pressable>
+                {message ? <Text style={styles.message}>{message}</Text> : null}
+              </View>
+            </>
+          }
+          contentContainerStyle={[styles.collectionDetailContent, { paddingBottom: collectionDetailBottomPadding }]}
+        />
+      </KeyboardAvoidingView>
+      {appSheets}
+      {snackbar}
+    </SafeAreaView>
+  );
+}
