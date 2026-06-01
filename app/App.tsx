@@ -1,155 +1,72 @@
 import "react-native-url-polyfill/auto";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   AppState,
-  BackHandler,
   Dimensions,
   Easing,
   FlatList,
   InteractionManager,
   Keyboard,
-  KeyboardAvoidingView,
   Linking,
-  PermissionsAndroid,
   Platform,
-  Pressable,
-  ScrollView,
-  Text,
   TextInput,
-  useWindowDimensions,
-  View
+  useWindowDimensions
 } from "react-native";
-import {
-  Archive,
-  Bell,
-  Check,
-  Folder,
-  Info,
-  LogOut,
-  Pencil,
-  Target,
-  X
-} from "lucide-react-native";
 
-import { styles } from "./ui/styles";
-import { colors } from "./ui/theme";
-
-import {
-  BottomAppBar,
-  IconButton,
-  SkeletonRevealFrame,
-  Snackbar
-} from "./ui/components";
-import {
-  CaptureRow,
-  CaptureRowInlineSkeleton,
-  CaptureSkeletonRows,
-  CollectionRow,
-  CollectionSkeletonRows
-} from "./ui/rows";
+import { AppSheets } from "./sheets/AppSheets";
+import { CollectionComposerSheet } from "./sheets/CollectionComposerSheet";
+import { useAppUiEffects } from "./state/useAppUiEffects";
+import { useAuthSession } from "./state/useAuthSession";
+import { useCaptureFeed } from "./state/useCaptureFeed";
+import { useCaptureReview } from "./state/useCaptureReview";
+import { useCaptureSearch } from "./state/useCaptureSearch";
+import { useCollectionsState } from "./state/useCollections";
+import { createAppRenderHelpers } from "./ui/renderHelpers";
 
 import type {
-  AppConfig,
-  AuthCallbackPayload,
-  AuthLoadingState,
-  AuthScreenMode,
-  AuthSession,
   Capture,
   CaptureComposerMode,
   CaptureImageLoadState,
   CaptureListMode,
   CaptureReviewDraft,
-  CaptureStatus,
   Collection,
   CollectionCapturesLoadPhase,
-  CollectionDecision,
   CollectionDraftAction,
   CollectionListMode,
   CollectionReviewDecision,
-  HomeListRow,
   LinkedCollection,
   LoadPhase,
-  LucideIconComponent,
   NoteSaveState,
-  RationaleSheet,
   RemoteCaptureDetail,
   RemoteCapturePage,
   RemoteCollectionPage,
   ReminderDraftAction,
   ReminderReviewDecision,
-  ReminderSuggestion,
   ReviewChecklistTask,
-  ReviewInsight,
   ReviewTarget,
-  SearchRemoteMode,
-  SearchScope,
   SnackbarState,
-  VisitTarget
 } from "./types";
 import { DEFAULT_CAPTURE_COMPOSER_MODE } from "./types";
 import {
-  isAuthError,
-  nativeAuth,
   nativeClipboard,
   nativeStore,
   requestJson
 } from "./nativeBridge";
 
 import {
-  ADD_INTENT_LABEL,
-  AUTH_CALLBACK_URL,
-  INTENT_OPTIONS,
-  activeIntentLabel,
-  auditLikeText,
   authCallbackPayload,
-  captureDisplayTitle,
   captureDraftKey,
-  captureImageLoadKey,
-  captureImageUrl,
-  captureIntentLabel,
-  captureOpenUrl,
-  captureRowRevealKey,
-  captureSourceHost,
-  captureSourceLabel,
-  captureStatusLabel,
-  captureSupportLine,
-  cleanSentence,
   cleanedReviewDraft,
-  collectionChoiceFromDecision,
-  collectionConfidenceLabel,
-  collectionCountLabel,
-  conciseText,
-  consumerSummary,
-  emailInputError,
-  formatDateTime,
   friendlyError,
-  groupedCaptureRows,
-  humanize,
   isCaptureImageCancel,
-  isImageCapture,
-  isMapSource,
   linkedCollectionDraftKey,
-  linkedCollectionsLabel,
-  matchReasonForCapture,
   normalizeIntent,
-  rawTitleLikeSource,
   reminderDraftKey,
-  reminderLabel,
-  reviewChecklistCta,
-  reviewChecklistTasksForCapture,
-  reviewInsightForCapture,
-  reviewStatusCue,
-  searchableCaptureText,
-  shouldGhostSourceMark,
-  sourceFaviconUrl,
-  sourceIconForCapture,
   suggestedCollectionDraftKey,
   uniqueCaptures,
-  uniqueCollections,
-  uniqueStrings,
-  urlEvidenceMessage
+  uniqueCollections
 } from "./capturePresentation";
 
 import {
@@ -166,7 +83,6 @@ import {
   collectionLinkTimestamp,
   edgeResourceUrl,
   freshLocalProcessingCaptures,
-  isEdgeCaptureApi,
   isFreshLocalProcessingCapture,
   sameStringSet,
   sortCollectionCaptures
@@ -182,24 +98,13 @@ import { SearchScreen } from "./screens/SearchScreen";
 import type { MapSearchCandidate } from "./captureLogic";
 import {
   capturesForListMode,
-  capturesForSearchScope,
-  displayStatus,
   extractHttpUrl,
   isArchived,
-  mapSearchCandidates,
   mergeRemoteCaptures,
-  mergeSearchResults,
   parseCaptureUrl,
-  reviewReasons,
-  searchCacheKey,
   sortCaptures
 } from "./captureLogic";
 
-const PROCESSING_REFRESH_MS = 3000;
-const RECENT_FEED_REVEAL_COUNT = 8;
-const INITIAL_SKELETON_DELAY_MS = 180;
-const SEARCH_KEYWORD_DEBOUNCE_MS = 120;
-const SEARCH_HYBRID_DELAY_MS = 520;
 const CAPTURE_LIST_PERF_PROPS = {
   initialNumToRender: 8,
   maxToRenderPerBatch: 8,
@@ -219,89 +124,28 @@ const COLLECTION_LIST_PERF_PROPS = {
   windowSize: 7
 };
 
-function rationaleSectionIcon(label: string): LucideIconComponent {
-  switch (label) {
-    case "Collections":
-      return Folder;
-    case "Reminder idea":
-      return Bell;
-    default:
-      return Target;
-  }
-}
-
-function rationaleSectionIconStyle(label: string) {
-  switch (label) {
-    case "Collections":
-      return styles.rationaleSheetSectionIconCollection;
-    case "Reminder idea":
-      return styles.rationaleSheetSectionIconReminder;
-    default:
-      return styles.rationaleSheetSectionIconIntent;
-  }
-}
-
-function reviewTaskIcon(target: ReviewTarget): LucideIconComponent {
-  switch (target) {
-    case "collections":
-      return Folder;
-    case "reminder":
-      return Bell;
-    case "analysis":
-      return Info;
-    default:
-      return Target;
-  }
-}
-
-function reviewTaskIconStyle(target: ReviewTarget) {
-  switch (target) {
-    case "collections":
-      return styles.rationaleSheetSectionIconCollection;
-    case "reminder":
-      return styles.rationaleSheetSectionIconReminder;
-    case "analysis":
-      return styles.rationaleSheetSectionIconAnalysis;
-    default:
-      return styles.rationaleSheetSectionIconIntent;
-  }
-}
-
 export default function App() {
   const { height: windowHeight } = useWindowDimensions();
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [archivedCaptures, setArchivedCaptures] = useState<Capture[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
-  const [config, setConfig] = useState<AppConfig | null>(null);
-  const [session, setSession] = useState<AuthSession | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [captureReturnCollectionId, setCaptureReturnCollectionId] = useState<string | null>(null);
   const [capturesLoading, setCapturesLoading] = useState(false);
   const [capturesLoadPhase, setCapturesLoadPhase] = useState<LoadPhase>("idle");
-  const [homeColdSkeletonVisible, setHomeColdSkeletonVisible] = useState(false);
   const [capturesError, setCapturesError] = useState("");
   const [activeCapturesLoadedOnce, setActiveCapturesLoadedOnce] = useState(false);
   const [archivedCapturesLoading, setArchivedCapturesLoading] = useState(false);
-  const [archivedCapturesLoadPhase, setArchivedCapturesLoadPhase] = useState<LoadPhase>("idle");
+  const [, setArchivedCapturesLoadPhase] = useState<LoadPhase>("idle");
   const [archivedCapturesError, setArchivedCapturesError] = useState("");
   const [archivedCapturesLoaded, setArchivedCapturesLoaded] = useState(false);
   const [capturesNextCursor, setCapturesNextCursor] = useState<string | null>(null);
   const [archivedCapturesNextCursor, setArchivedCapturesNextCursor] = useState<string | null>(null);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchScope, setSearchScope] = useState<SearchScope>("active");
-  const [searchScopeOpen, setSearchScopeOpen] = useState(false);
-  const [remoteSearchResults, setRemoteSearchResults] = useState<Capture[]>([]);
-  const [remoteSearchLoading, setRemoteSearchLoading] = useState(false);
-  const [remoteSearchEnhancing, setRemoteSearchEnhancing] = useState(false);
-  const [remoteSearchKey, setRemoteSearchKey] = useState("");
-  const [remoteSearchError, setRemoteSearchError] = useState("");
   const [collectionsOpen, setCollectionsOpen] = useState(false);
   const [collectionsMode, setCollectionsMode] = useState<CollectionListMode>("active");
   const [collectionsLoading, setCollectionsLoading] = useState(false);
   const [collectionsLoadPhase, setCollectionsLoadPhase] = useState<LoadPhase>("idle");
-  const [collectionsColdSkeletonVisible, setCollectionsColdSkeletonVisible] = useState(false);
   const [collectionsError, setCollectionsError] = useState("");
   const [collectionsLoadedOnce, setCollectionsLoadedOnce] = useState<Record<CollectionListMode, boolean>>({
     active: false,
@@ -315,7 +159,6 @@ export default function App() {
   const [collectionCapturesForId, setCollectionCapturesForId] = useState<string | null>(null);
   const [collectionCapturesLoading, setCollectionCapturesLoading] = useState(false);
   const [collectionCapturesLoadPhase, setCollectionCapturesLoadPhase] = useState<CollectionCapturesLoadPhase>("idle");
-  const [collectionCapturesColdSkeletonVisible, setCollectionCapturesColdSkeletonVisible] = useState(false);
   const [collectionCapturesError, setCollectionCapturesError] = useState("");
   const [collectionCapturesNextCursor, setCollectionCapturesNextCursor] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
@@ -327,8 +170,6 @@ export default function App() {
   const [collectionPickerOpen, setCollectionPickerOpen] = useState(false);
   const [collectionPickerQuery, setCollectionPickerQuery] = useState("");
   const [collectionSelectionIds, setCollectionSelectionIds] = useState<string[]>([]);
-  const [collectionCreateTitle, setCollectionCreateTitle] = useState("");
-  const [collectionCreateDescription, setCollectionCreateDescription] = useState("");
   const [collectionChoiceSaving, setCollectionChoiceSaving] = useState<string | null>(null);
   const [reviewDraftsByCapture, setReviewDraftsByCapture] = useState<Record<string, CaptureReviewDraft>>({});
   const [reviewDraftsLoaded, setReviewDraftsLoaded] = useState(false);
@@ -342,7 +183,6 @@ export default function App() {
   const [draftIntentDirty, setDraftIntentDirty] = useState(false);
   const [message, setMessage] = useState("");
   const [snackbar, setSnackbar] = useState<SnackbarState | null>(null);
-  const [visitTargetMapCandidates, setVisitTargetMapCandidates] = useState<MapSearchCandidate[]>([]);
   const [sourceDraft, setSourceDraft] = useState("");
   const [captureMode, setCaptureMode] = useState<CaptureComposerMode>(DEFAULT_CAPTURE_COMPOSER_MODE);
   const [showCaptureComposer, setShowCaptureComposer] = useState(false);
@@ -350,8 +190,6 @@ export default function App() {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [noteSheetOpen, setNoteSheetOpen] = useState(false);
   const [accountSheetOpen, setAccountSheetOpen] = useState(false);
-  const [rationaleSheet, setRationaleSheet] = useState<RationaleSheet | null>(null);
-  const [rationaleEditTarget, setRationaleEditTarget] = useState<ReviewTarget | null>(null);
   const [archiveCaptureConfirmOpen, setArchiveCaptureConfirmOpen] = useState(false);
   const [archiveCollectionTarget, setArchiveCollectionTarget] = useState<Collection | null>(null);
   const [faviconFailures, setFaviconFailures] = useState<Record<string, boolean>>({});
@@ -361,10 +199,6 @@ export default function App() {
   const [captureRowRevealStates, setCaptureRowRevealStates] = useState<Record<string, boolean>>({});
   const [homeFeedReadyKey, setHomeFeedReadyKey] = useState("");
   const [collectionFeedReadyKey, setCollectionFeedReadyKey] = useState("");
-  const [authScreen, setAuthScreen] = useState<AuthScreenMode>("signin");
-  const [authEmail, setAuthEmail] = useState("");
-  const [authPendingEmail, setAuthPendingEmail] = useState("");
-  const [authLoading, setAuthLoading] = useState<AuthLoadingState>(null);
   const latestNoteRef = useRef("");
   const capturesRef = useRef<Capture[]>([]);
   const archivedCapturesRef = useRef<Capture[]>([]);
@@ -386,13 +220,9 @@ export default function App() {
   const noteInputRef = useRef<TextInput>(null);
   const collectionTitleInputRef = useRef<TextInput>(null);
   const collectionDetailListRef = useRef<FlatList<Capture>>(null);
-  const searchRequestSeqRef = useRef(0);
-  const searchResultsCacheRef = useRef<Record<string, Capture[]>>({});
-  const searchResultsModeRef = useRef<Record<string, SearchRemoteMode>>({});
   const lastKeyboardHeightRef = useRef(0);
   const captureComposerClosingRef = useRef(false);
   const captureImagePickerActiveRef = useRef(false);
-  const pendingAuthCallbackUrlRef = useRef<string | null>(null);
   const searchMotion = useRef(new Animated.Value(0)).current;
   const reviewMotion = useRef(new Animated.Value(0)).current;
   const captureComposerMotion = useRef(new Animated.Value(0)).current;
@@ -536,8 +366,7 @@ export default function App() {
     }, 260);
   }
 
-  function clearAuthenticatedState() {
-    setSession(null);
+  const clearAuthenticatedState = useCallback(() => {
     setCaptures([]);
     setArchivedCaptures([]);
     setCapturesLoadPhase("idle");
@@ -567,48 +396,52 @@ export default function App() {
     setCaptureRowRevealStates({});
     setHomeFeedReadyKey("");
     setCollectionFeedReadyKey("");
+    setCollectionCaptures([]);
+    setCollectionCapturesForId(null);
     setCollectionCapturesNextCursor(null);
     setCollectionCapturesLoadPhase("idle");
     setCollectionCapturesError("");
-    searchResultsCacheRef.current = {};
-    searchResultsModeRef.current = {};
-  }
+    captureDetailHydrationRef.current.clear();
+    collectionsPrefetchStartedRef.current = false;
+    setCaptureReturnCollectionId(null);
+    setCollectionsOpen(false);
+    setSearchOpen(false);
+    setSearchQuery("");
+    setSelectedId(null);
+    setSelectedCollectionId(null);
+    setCollectionDraftDirty(false);
+    setShowCollectionForm(false);
+    setDraftTitleDirty(false);
+    setDraftNoteDirty(false);
+    setDraftIntentDirty(false);
+    setQuickIntentOpen(false);
+    setReminderDrafts({});
+    setCollectionDrafts({});
+    setNoteSheetOpen(false);
+    setCollectionPickerOpen(false);
+    setCollectionPickerQuery("");
+    setCollectionSelectionIds([]);
+  }, []);
 
-  const getFreshSession = useCallback(async (force = false) => {
-    if (!session) return null;
-    const raw = force && nativeAuth?.forceRefreshSession
-      ? await nativeAuth.forceRefreshSession()
-      : await nativeAuth?.refreshSession();
-    if (!raw) {
-      await nativeAuth?.clearSession();
-      clearAuthenticatedState();
-      return null;
-    }
-    const next = JSON.parse(raw) as AuthSession;
-    if (
-      next.accessToken !== session.accessToken ||
-      next.refreshToken !== session.refreshToken ||
-      next.expiresAt !== session.expiresAt
-    ) {
-      setSession(next);
-    }
-    return next;
-  }, [session]);
+  const {
+    authEmail,
+    authLoading,
+    authPendingEmail,
+    authScreen,
+    backToSignIn,
+    config,
+    handleAuthCallbackUrl,
+    sendEmailAuthLink,
+    session,
+    setAuthEmail,
+    signOut,
+    startGoogleSignIn,
+    withFreshAccessToken
+  } = useAuthSession({
+    onClearAuthenticatedState: clearAuthenticatedState,
+    onMessage: setMessage
+  });
 
-  const withFreshAccessToken = useCallback(async function withFreshAccessToken<T>(
-    send: (accessToken: string) => Promise<T>
-  ): Promise<T> {
-    const activeSession = await getFreshSession();
-    if (!activeSession?.accessToken) throw new Error("Your session expired. Sign in again.");
-    try {
-      return await send(activeSession.accessToken);
-    } catch (error) {
-      if (!isAuthError(error)) throw error;
-      const refreshed = await getFreshSession(true);
-      if (!refreshed?.accessToken) throw new Error("Your session expired. Sign in again.");
-      return await send(refreshed.accessToken);
-    }
-  }, [getFreshSession]);
 
   const loadCaptures = useCallback(async (
     mode: CaptureListMode = "active",
@@ -719,6 +552,37 @@ export default function App() {
     capturesNextCursor,
     loadCaptures
   ]);
+
+  const loadArchivedCapturesForSearch = useCallback(
+    () => loadCaptures("archived"),
+    [loadCaptures]
+  );
+
+  const {
+    remoteSearchActive,
+    remoteSearchEnhancing,
+    remoteSearchLoading,
+    remoteSearchResults,
+    searchOpen,
+    searchQuery,
+    searchResults,
+    searchScope,
+    searchScopeOpen,
+    setSearchOpen,
+    setSearchQuery,
+    setSearchScope,
+    setSearchScopeOpen
+  } = useCaptureSearch({
+    archivedCaptures,
+    archivedCapturesLoaded,
+    archivedCapturesLoading,
+    captures,
+    config,
+    loadArchivedCaptures: loadArchivedCapturesForSearch,
+    onMessage: setMessage,
+    session,
+    withFreshAccessToken
+  });
 
   const loadCollections = useCallback(async (
     mode: CollectionListMode = "active",
@@ -1127,79 +991,15 @@ export default function App() {
     commitCaptureRows("archived", () => sortCaptures(capturesForListMode(next, "archived")));
   }
 
-  async function persistSupabaseSession(accessToken: string, refreshToken: string, expiresAt: number) {
-    if (!config?.supabaseUrl || !config.supabaseAnonKey || !nativeAuth) {
-      throw new Error("Supabase URL and anon key are not configured in the Android build.");
-    }
-    const user = await requestJson<{ id?: string; user?: { id?: string } }>(`${config.supabaseUrl}/auth/v1/user`, {
-      headers: {
-        apikey: config.supabaseAnonKey,
-        authorization: `Bearer ${accessToken}`
-      }
-    });
-    const userId = user.id || user.user?.id;
-    if (!userId) throw new Error("Could not finish sign in.");
-    const next = { accessToken, refreshToken, expiresAt, userId };
-    await nativeAuth.persistSession(accessToken, refreshToken, expiresAt, userId);
-    setSession(next);
-    setMessage("");
-    setAuthScreen("signin");
-  }
 
-  async function handleAuthCallbackUrl(url: string | null | undefined) {
-    const payload = authCallbackPayload(url);
-    if (!payload) return false;
-    if (!config?.supabaseUrl || !config.supabaseAnonKey || !nativeAuth) {
-      pendingAuthCallbackUrlRef.current = url || null;
-      return true;
-    }
-    if (payload.kind === "error") {
-      setAuthScreen("signin");
-      setMessage(payload.message || "The confirmation link could not be used.");
-      return true;
-    }
-    setAuthLoading("callback");
-    setMessage("Finishing sign in...");
-    try {
-      await persistSupabaseSession(payload.accessToken, payload.refreshToken, payload.expiresAt);
-    } catch (error) {
-      setAuthScreen("signin");
-      setMessage(friendlyError(error, "Could not finish sign in."));
-    } finally {
-      setAuthLoading(null);
-    }
-    return true;
-  }
 
   useEffect(() => {
-    nativeAuth?.getConfig().then((raw) => {
-      setConfig(JSON.parse(raw || "{}") as AppConfig);
-    }).catch(() => {
-      setConfig({ apiUrl: "", supabaseUrl: "", supabaseAnonKey: "" });
-    });
-    nativeAuth?.getSession().then((raw) => {
-      if (raw) setSession(JSON.parse(raw) as AuthSession);
-    }).catch(() => setSession(null));
-    if (Platform.OS === "android" && Platform.Version >= 33) {
-      void PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
-    }
-
     Linking.getInitialURL().then((url) => {
-      if (authCallbackPayload(url)) {
-        pendingAuthCallbackUrlRef.current = url;
-        return;
-      }
+      if (authCallbackPayload(url)) return;
       const captureId = parseCaptureUrl(url);
       if (captureId) selectCapture(captureId);
     });
   }, [selectCapture]);
-
-  useEffect(() => {
-    if (!config || !pendingAuthCallbackUrlRef.current) return;
-    const url = pendingAuthCallbackUrlRef.current;
-    pendingAuthCallbackUrlRef.current = null;
-    void handleAuthCallbackUrl(url);
-  }, [config]);
 
   useEffect(() => {
     capturesRef.current = captures;
@@ -1239,8 +1039,6 @@ export default function App() {
     collectionsLoadedOnceRef.current = { active: false, archived: false };
     collectionPageCacheHydratedRef.current = { active: null, archived: null };
     collectionsCursorCacheRef.current = { active: null, archived: null };
-    searchResultsCacheRef.current = {};
-    searchResultsModeRef.current = {};
   }, [session?.userId]);
 
   useEffect(() => {
@@ -1254,7 +1052,7 @@ export default function App() {
       void loadCaptures();
     });
     return () => linkSubscription.remove();
-  }, [loadCaptures, selectCapture]);
+  }, [handleAuthCallbackUrl, loadCaptures, selectCapture]);
 
   useEffect(() => {
     void loadCaptures().catch((error) => {
@@ -1273,578 +1071,6 @@ export default function App() {
     return () => task.cancel();
   }, [config?.apiUrl, loadCollections, session?.accessToken]);
 
-  const hasProcessingCapture = useMemo(
-    () => captures.some((capture) => displayStatus(capture) === "processing"),
-    [captures]
-  );
-
-  useEffect(() => {
-    if (!hasProcessingCapture) return;
-    const timer = setInterval(() => {
-      void loadCaptures().catch(() => {
-        // Keep foreground polling quiet; explicit loads still surface errors.
-      });
-    }, PROCESSING_REFRESH_MS);
-    return () => clearInterval(timer);
-  }, [hasProcessingCapture, loadCaptures]);
-
-  useEffect(() => {
-    if (!searchOpen || searchScope === "active" || archivedCapturesLoaded || archivedCapturesLoading) return;
-    void loadCaptures("archived").catch((error) => {
-      setMessage((current) => current || friendlyError(error, "Could not load archived captures"));
-    });
-  }, [archivedCapturesLoaded, archivedCapturesLoading, loadCaptures, searchOpen, searchScope]);
-
-  useEffect(() => {
-    if (!selectedId) return;
-    const capture = captures.find((item) => item.id === selectedId);
-    if (!capture) return;
-    if (!draftTitleDirty) setDraftTitle(capture.title);
-    if (!draftNoteDirty) setDraftNote(capture.note);
-    if (!draftIntentDirty) setDraftIntent(normalizeIntent(capture.defaultIntent));
-  }, [captures, draftIntentDirty, draftNoteDirty, draftTitleDirty, selectedId]);
-
-  useEffect(() => {
-    if (!selectedCollectionId) return;
-    const collection = collections.find((item) => item.id === selectedCollectionId);
-    if (!collection || collectionDraftDirty) return;
-    setCollectionTitle(collection.title);
-    setCollectionDescription(collection.description);
-  }, [collectionDraftDirty, collections, selectedCollectionId]);
-
-  useEffect(() => {
-    if (
-      !selectedId &&
-      !selectedCollectionId &&
-      !searchOpen &&
-      !showCaptureComposer &&
-      !showCollectionForm &&
-      !noteSheetOpen &&
-      !collectionsOpen &&
-      !accountSheetOpen &&
-      !rationaleSheet &&
-      !archiveCaptureConfirmOpen &&
-      !archiveCollectionTarget
-    ) return;
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (archiveCollectionTarget) {
-        setArchiveCollectionTarget(null);
-        return true;
-      }
-      if (archiveCaptureConfirmOpen) {
-        setArchiveCaptureConfirmOpen(false);
-        return true;
-      }
-      if (rationaleSheet) {
-        setRationaleSheet(null);
-        setRationaleEditTarget(null);
-        return true;
-      }
-      if (accountSheetOpen) {
-        setAccountSheetOpen(false);
-        return true;
-      }
-      if (showCaptureComposer) {
-        closeCaptureComposer();
-        return true;
-      }
-      if (showCollectionForm) {
-        closeCollectionComposer();
-        return true;
-      }
-      if (noteSheetOpen) {
-        closeNoteSheet();
-        return true;
-      }
-      if (searchOpen) {
-        setSearchOpen(false);
-        return true;
-      }
-      if (selectedId && captureReturnCollectionId) {
-        selectCapture(null);
-        selectCollection(captureReturnCollectionId);
-        return true;
-      }
-      if (selectedCollectionId) {
-        selectCollection(null);
-        return true;
-      }
-      if (collectionsOpen) {
-        setCollectionsOpen(false);
-        return true;
-      }
-      selectCapture(null);
-      selectCollection(null);
-      return true;
-    });
-    return () => subscription.remove();
-  }, [
-    accountSheetOpen,
-    archiveCaptureConfirmOpen,
-    archiveCollectionTarget,
-    captureReturnCollectionId,
-    collectionsOpen,
-    rationaleSheet,
-    searchOpen,
-    selectCapture,
-    selectCollection,
-    selectedCollectionId,
-    selectedId,
-    showCaptureComposer,
-    showCollectionForm,
-    noteSheetOpen
-  ]);
-
-  useEffect(() => {
-    if (!searchOpen) return;
-    searchMotion.setValue(0);
-    Animated.spring(searchMotion, {
-      damping: 22,
-      mass: 0.9,
-      stiffness: 260,
-      toValue: 1,
-      useNativeDriver: false
-    }).start();
-  }, [searchMotion, searchOpen]);
-
-  useEffect(() => {
-    if (!selectedId) return;
-    reviewMotion.setValue(0);
-    Animated.spring(reviewMotion, {
-      damping: 22,
-      mass: 0.9,
-      stiffness: 260,
-      toValue: 1,
-      useNativeDriver: false
-    }).start();
-  }, [reviewMotion, selectedId]);
-
-  useEffect(() => {
-    skeletonPulse.setValue(0);
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(skeletonPulse, {
-          duration: 820,
-          easing: Easing.inOut(Easing.cubic),
-          toValue: 1,
-          useNativeDriver: true
-        }),
-        Animated.timing(skeletonPulse, {
-          duration: 820,
-          easing: Easing.inOut(Easing.cubic),
-          toValue: 0,
-          useNativeDriver: true
-        })
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [skeletonPulse]);
-
-  useEffect(() => {
-    if ((!showCaptureComposer && !showCollectionForm && !noteSheetOpen) || captureComposerClosing) return;
-    captureComposerMotion.setValue(0);
-    Animated.spring(captureComposerMotion, {
-      damping: 24,
-      mass: 0.9,
-      stiffness: 300,
-      toValue: 1,
-      useNativeDriver: false
-    }).start();
-  }, [captureComposerClosing, captureComposerMotion, noteSheetOpen, showCaptureComposer, showCollectionForm]);
-
-  useEffect(() => {
-    if (!showCaptureComposer || captureComposerClosing || pickingCaptureImage) return;
-    const frame = requestAnimationFrame(() => {
-      sourceInputRef.current?.focus();
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [captureComposerClosing, captureMode, pickingCaptureImage, showCaptureComposer]);
-
-  useEffect(() => {
-    if (!showCollectionForm) return;
-    const frame = requestAnimationFrame(() => {
-      collectionTitleInputRef.current?.focus();
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [showCollectionForm]);
-
-  useEffect(() => {
-    if (!noteSheetOpen) return;
-    const frame = requestAnimationFrame(() => {
-      noteInputRef.current?.focus();
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [noteSheetOpen]);
-
-  useEffect(() => {
-    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    const showSubscription = Keyboard.addListener(showEvent, (event) => {
-      if (captureComposerClosingRef.current || captureImagePickerActiveRef.current) return;
-      const nextHeight = event.endCoordinates.height;
-      lastKeyboardHeightRef.current = nextHeight;
-      setKeyboardHeight(nextHeight);
-      if (Platform.OS === "ios") Keyboard.scheduleLayoutAnimation(event);
-      Animated.timing(captureKeyboardInset, {
-        duration: Math.max(140, Math.min(event.duration || 240, 340)),
-        easing: Easing.out(Easing.cubic),
-        toValue: nextHeight,
-        useNativeDriver: false
-      }).start();
-    });
-    const hideSubscription = Keyboard.addListener(hideEvent, (event) => {
-      if (captureImagePickerActiveRef.current) return;
-      if (!captureComposerClosingRef.current) setKeyboardHeight(0);
-      if (Platform.OS === "ios") Keyboard.scheduleLayoutAnimation(event);
-      Animated.timing(captureKeyboardInset, {
-        duration: Math.max(120, Math.min(event.duration || 200, 300)),
-        easing: Easing.out(Easing.cubic),
-        toValue: 0,
-        useNativeDriver: false
-      }).start();
-    });
-    return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
-    };
-  }, [captureKeyboardInset]);
-
-  const homeCaptures = useMemo(() => capturesForListMode(captures, "active"), [captures]);
-  const homeRows = useMemo(() => groupedCaptureRows(homeCaptures), [homeCaptures]);
-  const homeInitialLoading = (capturesLoadPhase === "cold" || capturesLoadPhase === "idle") &&
-    !activeCapturesLoadedOnce &&
-    !capturesError &&
-    !homeRows.length;
-  const visibleHomeRows = homeRows;
-  useEffect(() => {
-    if (!homeInitialLoading) {
-      setHomeColdSkeletonVisible(false);
-      return;
-    }
-    const timer = setTimeout(() => setHomeColdSkeletonVisible(true), INITIAL_SKELETON_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [homeInitialLoading]);
-  const homeRevealCaptures = useMemo(
-    () =>
-      homeRows
-        .flatMap((row) => row.type === "capture" ? [row.capture] : [])
-        .slice(0, RECENT_FEED_REVEAL_COUNT),
-    [homeRows]
-  );
-  const homeFeedRevealKey = useMemo(
-    () =>
-      homeRevealCaptures
-        .map(captureRowRevealKey)
-        .join("|"),
-    [homeRevealCaptures]
-  );
-  const homeFeedRevealPending = Boolean(
-    homeFeedRevealKey &&
-      !homeFeedReadyKey &&
-      capturesLoadPhase === "cold" &&
-      capturesLoading &&
-      !activeCapturesLoadedOnce
-  );
-  const visibleHomeCapturesForReveal = useMemo(
-    () => homeCaptures,
-    [homeCaptures]
-  );
-  const collectionCapturesBlockingLoadingForReveal = Boolean(
-    selectedCollectionId &&
-      collectionCapturesLoading &&
-      collectionCapturesLoadPhase !== "append"
-  );
-  const visibleCollectionCapturesForReveal = useMemo(
-    () =>
-      selectedCollectionId &&
-      collectionCapturesForId === selectedCollectionId &&
-      (!collectionCapturesBlockingLoadingForReveal || collectionCaptures.length)
-        ? collectionCaptures
-        : [],
-    [
-      collectionCaptures,
-      collectionCapturesBlockingLoadingForReveal,
-      collectionCapturesForId,
-      selectedCollectionId
-    ]
-  );
-  const quickLookCount = useMemo(
-    () => homeCaptures.filter((capture) => displayStatus(capture) === "needs_review" || displayStatus(capture) === "failed").length,
-    [homeCaptures]
-  );
-  const collectionsColdLoading = collectionsLoadPhase === "cold" &&
-    collectionsLoading &&
-    !collectionsLoadedOnce[collectionsMode] &&
-    !collections.length;
-  const activeCollectionsColdLoading = collectionsLoadPhase === "cold" &&
-    collectionsLoading &&
-    !collectionsLoadedOnce.active &&
-    !collectionsCacheRef.current.active.length;
-  useEffect(() => {
-    if (!collectionsColdLoading && !activeCollectionsColdLoading) {
-      setCollectionsColdSkeletonVisible(false);
-      return;
-    }
-    const timer = setTimeout(() => setCollectionsColdSkeletonVisible(true), INITIAL_SKELETON_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [activeCollectionsColdLoading, collectionsColdLoading]);
-  const collectionRevealCaptures = useMemo(
-    () => visibleCollectionCapturesForReveal.slice(0, RECENT_FEED_REVEAL_COUNT),
-    [visibleCollectionCapturesForReveal]
-  );
-  const collectionFeedRevealKey = useMemo(
-    () =>
-      selectedCollectionId
-        ? `${selectedCollectionId}:${collectionRevealCaptures
-            .map(captureRowRevealKey)
-            .join("|")}`
-        : "",
-    [collectionRevealCaptures, selectedCollectionId]
-  );
-  const collectionFeedRevealPending = Boolean(
-    collectionFeedRevealKey &&
-      !collectionFeedReadyKey &&
-      selectedCollectionId &&
-      collectionCapturesLoading &&
-      collectionCapturesLoadPhase === "initial" &&
-      collectionCapturesForId !== selectedCollectionId
-  );
-  useEffect(() => {
-    if (capturesLoading && !activeCapturesLoadedOnce && !homeRows.length) {
-      homeRowsFade.setValue(0);
-      return;
-    }
-    if (!activeCapturesLoadedOnce && !homeRows.length) return;
-    Animated.timing(homeRowsFade, {
-      duration: 180,
-      easing: Easing.out(Easing.cubic),
-      toValue: 1,
-      useNativeDriver: true
-    }).start();
-  }, [activeCapturesLoadedOnce, capturesLoading, homeRows.length, homeRowsFade]);
-  useEffect(() => {
-    const blockingCollectionLoad = Boolean(
-      selectedCollectionId &&
-        collectionCapturesLoading &&
-        collectionCapturesLoadPhase !== "append" &&
-        (!collectionCaptures.length || collectionCapturesForId !== selectedCollectionId)
-    );
-    if (blockingCollectionLoad || (selectedCollectionId && collectionCapturesForId !== selectedCollectionId)) {
-      collectionRowsFade.setValue(0);
-      return;
-    }
-    if (!selectedCollectionId || collectionCapturesForId !== selectedCollectionId) return;
-    Animated.timing(collectionRowsFade, {
-      duration: 180,
-      easing: Easing.out(Easing.cubic),
-      toValue: 1,
-      useNativeDriver: true
-    }).start();
-  }, [
-    collectionCapturesForId,
-    collectionCapturesLoadPhase,
-    collectionCapturesLoading,
-    collectionCaptures.length,
-    collectionRowsFade,
-    selectedCollectionId
-  ]);
-  useEffect(() => {
-    const revealKeys = uniqueStrings([
-      ...visibleHomeCapturesForReveal,
-      ...visibleCollectionCapturesForReveal
-    ].map(captureRowRevealKey))
-      .filter((key) => !captureRowRevealStatesRef.current[key]);
-    if (!revealKeys.length) return;
-    const timer = setTimeout(() => markCaptureRowsRevealed(revealKeys), 120);
-    return () => clearTimeout(timer);
-  }, [
-    markCaptureRowsRevealed,
-    visibleCollectionCapturesForReveal,
-    visibleHomeCapturesForReveal
-  ]);
-  useEffect(() => {
-    if (!homeFeedRevealKey) {
-      if (homeFeedReadyKey) setHomeFeedReadyKey("");
-      return;
-    }
-    if (homeFeedReadyKey) return;
-    if (!activeCapturesLoadedOnce || capturesLoading) return;
-    const revealKeys = uniqueStrings(homeRevealCaptures.map(captureRowRevealKey));
-    const delay = 100;
-    const timer = setTimeout(() => {
-      markCaptureRowsRevealed(revealKeys);
-      setHomeFeedReadyKey(homeFeedRevealKey);
-    }, delay);
-    return () => clearTimeout(timer);
-  }, [
-    activeCapturesLoadedOnce,
-    capturesLoading,
-    homeFeedReadyKey,
-    homeFeedRevealKey,
-    homeRevealCaptures,
-    markCaptureRowsRevealed
-  ]);
-  useEffect(() => {
-    if (!collectionFeedRevealKey) {
-      if (collectionFeedReadyKey) setCollectionFeedReadyKey("");
-      return;
-    }
-    if (collectionFeedReadyKey) return;
-    if (collectionCapturesLoading && collectionCapturesLoadPhase !== "append") return;
-    const revealKeys = uniqueStrings(collectionRevealCaptures.map(captureRowRevealKey));
-    const delay = 100;
-    const timer = setTimeout(() => {
-      markCaptureRowsRevealed(revealKeys);
-      setCollectionFeedReadyKey(collectionFeedRevealKey);
-    }, delay);
-    return () => clearTimeout(timer);
-  }, [
-    collectionCapturesLoadPhase,
-    collectionCapturesLoading,
-    collectionFeedReadyKey,
-    collectionFeedRevealKey,
-    collectionRevealCaptures,
-    markCaptureRowsRevealed
-  ]);
-  useEffect(() => {
-    if (collectionsColdLoading || (activeCollectionsColdLoading && !collections.length)) {
-      collectionListFade.setValue(0);
-      return;
-    }
-    Animated.timing(collectionListFade, {
-      duration: 180,
-      easing: Easing.out(Easing.cubic),
-      toValue: 1,
-      useNativeDriver: true
-    }).start();
-  }, [activeCollectionsColdLoading, collectionListFade, collections.length, collectionsColdLoading]);
-  const searchPool = useMemo(() => {
-    const activeRows = capturesForListMode(captures, "active");
-    const archivedRows = capturesForListMode(archivedCaptures, "archived");
-    if (searchScope === "archived") return uniqueCaptures(archivedRows);
-    if (searchScope === "all") return uniqueCaptures([...activeRows, ...archivedRows]);
-    return uniqueCaptures(activeRows);
-  }, [archivedCaptures, captures, searchScope]);
-  const searchTerm = searchQuery.trim();
-  const currentSearchKey = searchCacheKey(searchScope, searchTerm);
-  const remoteSearchActive = Boolean(
-    searchOpen &&
-      searchTerm &&
-      config?.apiUrl &&
-      session?.accessToken &&
-      isEdgeCaptureApi(config.apiUrl)
-  );
-  const localSearchResults = useMemo(() => {
-    const term = searchQuery.trim().toLowerCase();
-    if (!term) return [];
-    return searchPool.filter((capture) => searchableCaptureText(capture).includes(term));
-  }, [searchPool, searchQuery]);
-  const remoteSearchReadyForQuery = Boolean(
-    remoteSearchActive &&
-      currentSearchKey &&
-      remoteSearchKey === currentSearchKey &&
-      !remoteSearchError
-  );
-  const scopedRemoteSearchResults = useMemo(
-    () => capturesForSearchScope(remoteSearchResults, searchScope),
-    [remoteSearchResults, searchScope]
-  );
-  const searchResults = remoteSearchReadyForQuery
-    ? mergeSearchResults(localSearchResults, scopedRemoteSearchResults)
-    : localSearchResults;
-
-  useEffect(() => {
-    if (!remoteSearchActive || !config?.apiUrl || !session?.accessToken) {
-      searchRequestSeqRef.current += 1;
-      setRemoteSearchLoading(false);
-      setRemoteSearchEnhancing(false);
-      setRemoteSearchError("");
-      if (!searchTerm) {
-        setRemoteSearchResults([]);
-        setRemoteSearchKey("");
-      }
-      return;
-    }
-    if (!currentSearchKey) return;
-    const requestId = searchRequestSeqRef.current + 1;
-    searchRequestSeqRef.current = requestId;
-    const cached = searchResultsCacheRef.current[currentSearchKey];
-    if (cached) {
-      setRemoteSearchResults(cached);
-      setRemoteSearchKey(currentSearchKey);
-      setRemoteSearchLoading(false);
-      setRemoteSearchEnhancing(true);
-    } else {
-      setRemoteSearchLoading(true);
-      setRemoteSearchEnhancing(false);
-    }
-    setRemoteSearchError("");
-    const runSearch = async (mode: SearchRemoteMode) => {
-        try {
-          const json = await withFreshAccessToken((accessToken) =>
-            requestJson<{ captures?: Array<Record<string, any>> }>(
-              edgeResourceUrl(config.apiUrl, "search", {
-                q: searchTerm,
-                scope: searchScope,
-                mode,
-                limit: "50"
-              }),
-              {
-                headers: {
-                  accept: "application/json",
-                  apikey: config.supabaseAnonKey,
-                  authorization: `Bearer ${accessToken}`
-                }
-              }
-            )
-          );
-          if (searchRequestSeqRef.current !== requestId) return;
-          if (mode === "keyword" && searchResultsModeRef.current[currentSearchKey] === "hybrid") return;
-          const rows = (json.captures ?? []).map(captureFromRemote);
-          const existing = searchResultsCacheRef.current[currentSearchKey] || [];
-          const nextRows = mode === "hybrid" ? mergeSearchResults(existing, rows) : rows;
-          searchResultsCacheRef.current[currentSearchKey] = nextRows;
-          searchResultsModeRef.current[currentSearchKey] = mode;
-          setRemoteSearchResults(nextRows);
-          setRemoteSearchKey(currentSearchKey);
-          setRemoteSearchLoading(false);
-          setRemoteSearchEnhancing(mode === "keyword");
-        } catch (error) {
-          if (searchRequestSeqRef.current !== requestId) return;
-          if (mode === "keyword") {
-            setRemoteSearchLoading(false);
-            setRemoteSearchEnhancing(true);
-            return;
-          }
-          if (!searchResultsCacheRef.current[currentSearchKey]?.length) {
-            setRemoteSearchError(friendlyError(error, "Search is using local matches."));
-          }
-          setRemoteSearchEnhancing(false);
-          setRemoteSearchLoading(false);
-        } finally {
-          if (searchRequestSeqRef.current === requestId && mode === "hybrid") {
-            setRemoteSearchEnhancing(false);
-          }
-        }
-      };
-    const keywordTimer = setTimeout(() => void runSearch("keyword"), SEARCH_KEYWORD_DEBOUNCE_MS);
-    const hybridTimer = setTimeout(() => void runSearch("hybrid"), SEARCH_HYBRID_DELAY_MS);
-    return () => {
-      clearTimeout(keywordTimer);
-      clearTimeout(hybridTimer);
-    };
-  }, [
-    config?.apiUrl,
-    config?.supabaseAnonKey,
-    currentSearchKey,
-    remoteSearchActive,
-    searchScope,
-    searchTerm,
-    session?.accessToken,
-    withFreshAccessToken
-  ]);
-
   const selected = selectedId
     ? captures.find((capture) => capture.id === selectedId) ??
       archivedCaptures.find((capture) => capture.id === selectedId) ??
@@ -1855,25 +1081,119 @@ export default function App() {
   const selectedCollection = selectedCollectionId
     ? collections.find((collection) => collection.id === selectedCollectionId) ?? null
     : null;
-  const collectionCapturesColdLoading = Boolean(
-    selectedCollectionId &&
-      selectedCollection?.status === "active" &&
-      selectedCollection.captureCount !== 0 &&
-      collectionCapturesLoading &&
-      collectionCapturesLoadPhase === "initial" &&
-      collectionCapturesForId !== selectedCollectionId
-  );
-  const selectedDraftKey = selected ? captureDraftKey(selected) : "";
-  const selectedVisitTargetQuery = selected?.visitTarget?.query || "";
 
-  useEffect(() => {
-    if (!collectionCapturesColdLoading) {
-      setCollectionCapturesColdSkeletonVisible(false);
-      return;
-    }
-    const timer = setTimeout(() => setCollectionCapturesColdSkeletonVisible(true), INITIAL_SKELETON_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [collectionCapturesColdLoading]);
+  const {
+    openReviewInsight,
+    rationaleEditTarget,
+    rationaleSheet,
+    refreshRationaleSheet,
+    setRationaleEditTarget,
+    setRationaleSheet,
+    visitTargetMapCandidates
+  } = useCaptureReview({ selected });
+
+  const {
+    homeColdSkeletonVisible,
+    homeFeedRevealPending,
+    homeInitialLoading,
+    homeRows,
+    quickLookCount,
+    visibleHomeCapturesForReveal,
+    visibleHomeRows
+  } = useCaptureFeed({
+    activeCapturesLoadedOnce,
+    captureRowRevealStatesRef,
+    captures,
+    capturesError,
+    capturesLoadPhase,
+    capturesLoading,
+    homeFeedReadyKey,
+    homeRowsFade,
+    loadCaptures,
+    markCaptureRowsRevealed,
+    setHomeFeedReadyKey
+  });
+
+  const {
+    collectionCapturesColdSkeletonVisible,
+    collectionFeedRevealPending,
+    collectionsColdSkeletonVisible
+  } = useCollectionsState({
+    activeCollectionsCacheLength: collectionsCacheRef.current.active.length,
+    collectionCaptures,
+    collectionCapturesForId,
+    collectionCapturesLoadPhase,
+    collectionCapturesLoading,
+    collectionFeedReadyKey,
+    collectionListFade,
+    collectionRowsFade,
+    collections,
+    collectionsLoadedOnce,
+    collectionsLoadPhase,
+    collectionsLoading,
+    collectionsMode,
+    markCaptureRowsRevealed,
+    selectedCollection,
+    selectedCollectionId,
+    setCollectionFeedReadyKey,
+    captureRowRevealStatesRef,
+    visibleHomeCapturesForReveal
+  });
+
+  useAppUiEffects({
+    accountSheetOpen,
+    archiveCaptureConfirmOpen,
+    archiveCollectionTarget,
+    captureComposerClosing,
+    captureComposerClosingRef,
+    captureComposerMotion,
+    captureImagePickerActiveRef,
+    captureKeyboardInset,
+    captureMode,
+    captureReturnCollectionId,
+    captures,
+    closeCaptureComposer,
+    closeCollectionComposer,
+    closeNoteSheet,
+    collectionDraftDirty,
+    collectionTitleInputRef,
+    collections,
+    collectionsOpen,
+    draftIntentDirty,
+    draftNoteDirty,
+    draftTitleDirty,
+    lastKeyboardHeightRef,
+    noteInputRef,
+    noteSheetOpen,
+    pickingCaptureImage,
+    rationaleSheet,
+    reviewMotion,
+    searchMotion,
+    searchOpen,
+    selectCapture,
+    selectCollection,
+    selectedCollectionId,
+    selectedId,
+    setAccountSheetOpen,
+    setArchiveCaptureConfirmOpen,
+    setArchiveCollectionTarget,
+    setCollectionDescription,
+    setCollectionTitle,
+    setCollectionsOpen,
+    setDraftIntent,
+    setDraftNote,
+    setDraftTitle,
+    setKeyboardHeight,
+    setRationaleEditTarget,
+    setRationaleSheet,
+    setSearchOpen,
+    showCaptureComposer,
+    showCollectionForm,
+    skeletonPulse,
+    sourceInputRef
+  });
+
+  const selectedDraftKey = selected ? captureDraftKey(selected) : "";
 
   useEffect(() => {
     if (!selected) return;
@@ -1883,33 +1203,6 @@ export default function App() {
   useEffect(() => {
     latestNoteRef.current = draftNote;
   }, [draftNote]);
-
-  useEffect(() => {
-    const candidates = mapSearchCandidates(selectedVisitTargetQuery, Platform.OS);
-    if (!candidates.length) {
-      setVisitTargetMapCandidates([]);
-      return;
-    }
-    let cancelled = false;
-    setVisitTargetMapCandidates([]);
-    Promise.all(
-      candidates.map(async (candidate) => {
-        try {
-          return await Linking.canOpenURL(candidate.url) ? candidate : null;
-        } catch {
-          return null;
-        }
-      })
-    ).then((availableCandidates) => {
-      if (cancelled) return;
-      setVisitTargetMapCandidates(
-        availableCandidates.filter((candidate): candidate is MapSearchCandidate => Boolean(candidate))
-      );
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedVisitTargetQuery]);
 
   useEffect(() => {
     if (!snackbar) return;
@@ -2017,8 +1310,6 @@ export default function App() {
       setQuickIntentOpen(false);
       setCollectionPickerOpen(false);
       setCollectionPickerQuery("");
-      setCollectionCreateTitle("");
-      setCollectionCreateDescription("");
       setNoteSheetOpen(false);
       return;
     }
@@ -2039,8 +1330,6 @@ export default function App() {
     setQuickIntentOpen(false);
     setCollectionPickerOpen(false);
     setCollectionPickerQuery("");
-    setCollectionCreateTitle("");
-    setCollectionCreateDescription("");
   }, [reviewDraftsByCapture, selectedDraftKey]);
 
   useEffect(() => {
@@ -2094,28 +1383,6 @@ export default function App() {
       setMessage((current) => current || text);
     });
   }, [captureReturnCollectionId, loadCollectionCaptures, selectedCollection?.captureCount, selectedCollection?.status, selectedCollectionId]);
-
-  function rationaleSheetForCapture(capture: Capture): RationaleSheet | null {
-    const insight = reviewInsightForCapture(capture);
-    const text = insight.summary || insight.focus;
-    if (!text) return null;
-    const tasks = reviewChecklistTasksForCapture(capture);
-    return {
-      title: tasks.length ? reviewChecklistCta(tasks) : "Review insight",
-      text,
-      sections: insight.sections,
-      tasks
-    };
-  }
-
-  function openReviewInsight(_insight: ReviewInsight) {
-    if (!selected) return;
-    const sheet = rationaleSheetForCapture(selected);
-    if (sheet) {
-      setRationaleEditTarget(null);
-      setRationaleSheet(sheet);
-    }
-  }
 
   function applyUpdatedCapture(updatedCapture: Capture, previousId: string) {
     const matchesCapture = (item: Capture) =>
@@ -2185,64 +1452,6 @@ export default function App() {
     } catch (error) {
       setNoteSaveState("error");
     }
-  }
-
-  async function saveQuickEdit(nextIntent?: string) {
-    if (!selected) return;
-    const intentOverride =
-      nextIntent === ""
-        ? null
-        : nextIntent && normalizeIntent(nextIntent)
-          ? nextIntent
-          : undefined;
-    const currentSaveIntent =
-      intentOverride !== undefined
-        ? intentOverride
-        : draftIntentDirty
-          ? draftIntent || null
-          : undefined;
-    if (config?.apiUrl && session?.accessToken) {
-      try {
-        const json = await withFreshAccessToken((accessToken) =>
-          requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
-            method: "PATCH",
-            headers: {
-              apikey: config.supabaseAnonKey,
-              authorization: `Bearer ${accessToken}`,
-              "content-type": "application/json"
-            },
-            body: {
-              captureId: selected.remoteId || selected.id,
-              title: draftTitle.trim(),
-              note: draftNote.trim(),
-              currentSaveIntent
-            }
-          })
-        );
-        const updatedCapture = captureFromRemote(json.capture);
-        applyUpdatedCapture(updatedCapture, selected.id);
-        setDraftTitleDirty(false);
-        setDraftNoteDirty(false);
-        setDraftIntentDirty(false);
-        setMessage("Applied.");
-      } catch (error) {
-        setMessage(friendlyError(error, "Could not save."));
-      }
-      return;
-    }
-    if (!nativeStore) return;
-    const raw = await nativeStore.updateCapture(
-      selected.id,
-      draftTitle.trim(),
-      draftNote.trim(),
-      currentSaveIntent === undefined ? null : currentSaveIntent
-    );
-    const next = JSON.parse(raw || "[]") as Capture[];
-    replaceLocalCaptureLists(next);
-    setDraftTitleDirty(false);
-    setDraftNoteDirty(false);
-    setDraftIntentDirty(false);
-    setMessage("Applied.");
   }
 
   async function saveReviewDecisions() {
@@ -2354,16 +1563,6 @@ export default function App() {
     setMessage("Saved.");
   }
 
-  function refreshRationaleSheet(updatedCapture: Capture) {
-    const sheet = rationaleSheetForCapture(updatedCapture);
-    if (sheet?.tasks?.length) {
-      setRationaleSheet(sheet);
-      return;
-    }
-    setRationaleSheet(null);
-    setRationaleEditTarget(null);
-  }
-
   async function resolveReviewTargets(
     targets: ReviewTarget[],
     options: { currentSaveIntent?: string | null } = {}
@@ -2464,58 +1663,6 @@ export default function App() {
     );
   }
 
-  async function sendCaptureCollectionChoice(input: {
-    choice: { type: "existing"; collectionId: string } | { type: "new"; title: string; description: string };
-    source: "manual" | "analysis";
-    suggestionIndex?: number;
-    dismissCurrentCollectionSuggestions?: boolean;
-    rationale?: string | null;
-    confidence?: number | null;
-    savingKey: string;
-  }) {
-    if (!selected) return;
-    if (!config?.apiUrl || !session?.accessToken) {
-      setMessage("Sign in to manage collections.");
-      return;
-    }
-    const previousId = selected.id;
-    setCollectionChoiceSaving(input.savingKey);
-    try {
-      const json = await withFreshAccessToken((accessToken) =>
-        requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
-          method: "PATCH",
-          headers: {
-            apikey: config.supabaseAnonKey,
-            authorization: `Bearer ${accessToken}`,
-            "content-type": "application/json"
-          },
-          body: {
-            captureId: selected.remoteId || selected.id,
-            action: "apply_collection_choice",
-            choice: input.choice,
-            source: input.source,
-            suggestionIndex: input.suggestionIndex,
-            dismissCurrentCollectionSuggestions: input.dismissCurrentCollectionSuggestions,
-            rationale: input.rationale,
-            confidence: input.confidence
-          }
-        })
-      );
-      const updatedCapture = captureFromRemote(json.capture);
-      applyUpdatedCapture(updatedCapture, previousId);
-      setCollectionPickerOpen(false);
-      setCollectionPickerQuery("");
-      setCollectionCreateTitle("");
-      setCollectionCreateDescription("");
-      await loadCollections("active");
-      setMessage("Collection updated.");
-    } catch (error) {
-      setMessage(friendlyError(error, "Could not update collection."));
-    } finally {
-      setCollectionChoiceSaving(null);
-    }
-  }
-
   function closeCollectionPicker() {
     setCollectionPickerOpen(false);
     setCollectionPickerQuery("");
@@ -2583,22 +1730,6 @@ export default function App() {
     } catch (error) {
       setMessage(friendlyError(error, "Could not load collections."));
     }
-  }
-
-  async function openCollectionSettings(collectionId: string) {
-    setCollectionPickerOpen(false);
-    setCollectionPickerQuery("");
-    setCollectionCreateTitle("");
-    setCollectionCreateDescription("");
-    if (!selected) setCollectionsOpen(true);
-    if (!collections.some((collection) => collection.id === collectionId)) {
-      try {
-        await loadCollections("active");
-      } catch (error) {
-        setMessage(friendlyError(error, "Could not load collection."));
-      }
-    }
-    selectCollection(collectionId);
   }
 
   async function saveCollection() {
@@ -2765,38 +1896,6 @@ export default function App() {
       await loadCaptures();
     } catch (error) {
       setMessage(friendlyError(error, "Could not restore collection."));
-    }
-  }
-
-  async function unlinkCollectionFromCapture(collectionId: string) {
-    if (!selected) return;
-    await unlinkCaptureFromCollection(collectionId, selected);
-  }
-
-  async function autosaveCollectionDecision(decision: CollectionDecision, index: number) {
-    const choice = collectionChoiceFromDecision(decision);
-    if (!choice) return;
-    await sendCaptureCollectionChoice({
-      choice,
-      source: "analysis",
-      suggestionIndex: index,
-      rationale: decision.rationale,
-      confidence: decision.confidence,
-      savingKey: `suggestion:${index}`
-    });
-  }
-
-  async function undoAddedCollection(collection: LinkedCollection) {
-    if (!selected) return;
-    const key = linkedCollectionDraftKey(collection.id);
-    try {
-      await unlinkCaptureFromCollection(collection.id, selected);
-      const nextDrafts = { ...collectionDrafts };
-      delete nextDrafts[key];
-      setCollectionDrafts(nextDrafts);
-      updateSelectedReviewDraft({ collections: nextDrafts });
-    } catch {
-      // unlinkCaptureFromCollection already reports the error.
     }
   }
 
@@ -2986,709 +2085,97 @@ export default function App() {
     }
   }
 
-  async function startGoogleSignIn() {
-    if (!config?.supabaseUrl || !config.supabaseAnonKey) {
-      setMessage("Supabase URL and anon key are not configured in the Android build.");
-      return;
-    }
-    setAuthLoading("oauth");
-    setMessage("");
-    try {
-      const params = new URLSearchParams({
-        provider: "google",
-        redirect_to: AUTH_CALLBACK_URL
-      });
-      await Linking.openURL(`${config.supabaseUrl}/auth/v1/authorize?${params.toString()}`);
-    } catch (error) {
-      setMessage(friendlyError(error, "Could not open Google sign in."));
-    } finally {
-      setAuthLoading(null);
-    }
-  }
 
-  async function sendSupabaseAuthEmailLink(email: string) {
-    if (!config?.supabaseUrl || !config.supabaseAnonKey) {
-      throw new Error("Supabase URL and anon key are not configured in the Android build.");
-    }
-    await requestJson<Record<string, any>>(`${config.supabaseUrl}/auth/v1/otp?redirect_to=${encodeURIComponent(AUTH_CALLBACK_URL)}`, {
-      method: "POST",
-      headers: {
-        apikey: config.supabaseAnonKey,
-        "content-type": "application/json"
-      },
-      body: {
-        email,
-        data: {},
-        create_user: true,
-        gotrue_meta_security: {}
-      }
-    });
-  }
 
-  async function sendEmailAuthLink() {
-    if (!config?.supabaseUrl || !config.supabaseAnonKey) {
-      setMessage("Supabase URL and anon key are not configured in the Android build.");
-      return;
-    }
-    const email = authEmail.trim();
-    const inputError = emailInputError(email);
-    if (inputError) {
-      setMessage(inputError);
-      return;
-    }
-    setAuthLoading("magiclink");
-    setMessage("");
-    try {
-      await sendSupabaseAuthEmailLink(email);
-      setAuthPendingEmail(email);
-      setAuthScreen("check-email");
-      setMessage("");
-    } catch (error) {
-      setMessage(friendlyError(error, "Could not send the sign-in link."));
-    } finally {
-      setAuthLoading(null);
-    }
-  }
-
-  function backToSignIn() {
-    setAuthScreen("signin");
-    setMessage("");
-  }
-
-  async function signOut() {
-    await nativeAuth?.clearSession();
-    setSession(null);
-    setCaptures([]);
-    setArchivedCaptures([]);
-    setCapturesLoadPhase("idle");
-    setArchivedCapturesLoadPhase("idle");
-    setActiveCapturesLoadedOnce(false);
-    setArchivedCapturesLoaded(false);
-    setCapturesNextCursor(null);
-    setArchivedCapturesNextCursor(null);
-    capturesRef.current = [];
-    archivedCapturesRef.current = [];
-    activeCapturesLoadedOnceRef.current = false;
-    archivedCapturesLoadedRef.current = false;
-    capturePageCacheHydratedRef.current = { active: null, archived: null };
-    setCollections([]);
-    collectionsCacheRef.current = { active: [], archived: [] };
-    collectionsCursorCacheRef.current = { active: null, archived: null };
-    collectionsLoadedOnceRef.current = { active: false, archived: false };
-    collectionPageCacheHydratedRef.current = { active: null, archived: null };
-    setCollectionsLoadedOnce({ active: false, archived: false });
-    setCollectionsNextCursor({ active: null, archived: null });
-    setCollectionsLoadPhase("idle");
-    collectionCapturesCacheRef.current = {};
-    collectionCapturesCursorCacheRef.current = {};
-    captureDetailHydrationRef.current.clear();
-    captureImageLoadStatesRef.current = {};
-    captureRowRevealStatesRef.current = {};
-    setCaptureImageLoadStates({});
-    setCaptureRowRevealStates({});
-    setHomeFeedReadyKey("");
-    collectionsPrefetchStartedRef.current = false;
-    setCollectionCaptures([]);
-    setCollectionCapturesNextCursor(null);
-    setCollectionCapturesForId(null);
-    setCollectionCapturesLoadPhase("idle");
-    setCollectionCapturesError("");
-    setCaptureReturnCollectionId(null);
-    setCollectionsOpen(false);
-    setSearchOpen(false);
-    setSearchQuery("");
-    setRemoteSearchResults([]);
-    setRemoteSearchError("");
-    setRemoteSearchLoading(false);
-    setRemoteSearchEnhancing(false);
-    setRemoteSearchKey("");
-    searchResultsCacheRef.current = {};
-    searchResultsModeRef.current = {};
-    selectCapture(null);
-    selectCollection(null);
-  }
-
-  const skeletonOpacity = skeletonPulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.48, 0.9]
+  const {
+    renderBottomAppBar,
+    renderCaptureSkeletonRows,
+    renderCollection,
+    renderCollectionCapture,
+    renderCollectionCaptureSkeletonRows,
+    renderCollectionSkeletonRows,
+    renderHomeRow,
+    renderListLoadingFooter,
+    renderSearchProgress,
+    renderSearchResult,
+    renderSnackbar
+  } = createAppRenderHelpers({
+    activeCapturesLoadedOnce,
+    captureImageLoadStates,
+    captureRowRevealStates,
+    capturesLoading,
+    collectionFeedRevealPending,
+    collectionListFade,
+    collectionRowsFade,
+    failedFavicons: faviconFailures,
+    homeFeedRevealPending,
+    homeRowsFade,
+    onAccountActionsPress: openAccountActions,
+    onCaptureImageLoadState: markCaptureImageLoadState,
+    onCollectionComposerOpen: openCollectionComposer,
+    onCollectionDescriptionChange: setCollectionDescription,
+    onCollectionPress: selectCollection,
+    onCollectionTitleChange: setCollectionTitle,
+    onCollectionsScreenOpen: (mode) => void openCollectionsScreen(mode),
+    onFaviconFailure: markFaviconFailed,
+    onOpenCapture: openCapture,
+    onOpenCaptureFromCollection: openCaptureFromCollection,
+    onRecentComposerOpen: openCaptureComposer,
+    onRecentHomePress: openRecentHome,
+    onUnlinkCaptureFromCollection: (collectionId, capture) => void unlinkCaptureFromCollection(collectionId, capture),
+    searchQuery,
+    selectedCollection,
+    skeletonPulse,
+    snackbar
   });
-  const skeletonSheenTranslate = skeletonPulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-74, 132]
-  });
-
-  function SkeletonBlock({ style }: { style?: any }) {
-    return (
-      <Animated.View style={[style, styles.skeletonBlock, { opacity: skeletonOpacity }]}>
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.skeletonSheen,
-            { transform: [{ translateX: skeletonSheenTranslate }, { rotate: "18deg" }] }
-          ]}
-        />
-      </Animated.View>
-    );
-  }
-
-  const searchActivityScale = skeletonPulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.72, 1]
-  });
-  const searchActivityOpacity = skeletonPulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.46, 1]
-  });
-
-  function SearchActivityMark() {
-    return (
-      <View
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-        pointerEvents="none"
-        style={styles.searchActivityMark}
-      >
-        <Animated.View
-          style={[
-            styles.searchActivityDot,
-            {
-              opacity: searchActivityOpacity,
-              transform: [{ scale: searchActivityScale }]
-            }
-          ]}
-        />
-        <Animated.View
-          style={[
-            styles.searchActivityDot,
-            styles.searchActivityDotTrailing,
-            {
-              opacity: skeletonOpacity,
-              transform: [{ scale: skeletonPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.76] }) }]
-            }
-          ]}
-        />
-      </View>
-    );
-  }
-
-  function renderSearchProgress(label: string) {
-    return (
-      <View accessibilityLiveRegion="polite" style={styles.searchProgressRow}>
-        <SearchActivityMark />
-        <Text style={styles.searchProgressText}>{label}</Text>
-      </View>
-    );
-  }
-
-  function renderCaptureRow(input: {
-    item: Capture;
-    onPress: () => void;
-    testID?: string;
-    matchReason?: string;
-    showCollectionToken?: boolean;
-    deferFallbackIcon?: boolean;
-    deferMediaUntilLoaded?: boolean;
-    forceSkeleton?: boolean;
-  }) {
-    return (
-      <CaptureRow
-        {...input}
-        captureImageLoadStates={captureImageLoadStates}
-        captureRowRevealStates={captureRowRevealStates}
-        failedFavicons={faviconFailures}
-        onFaviconFailure={markFaviconFailed}
-        onImageLoadState={markCaptureImageLoadState}
-        renderInlineSkeleton={() => renderCaptureRowInlineSkeleton()}
-        SkeletonBlock={SkeletonBlock}
-      />
-    );
-  }
-
-  function renderCollectionCapture({ item }: { item: Capture }) {
-    const imageLoadKey = captureImageLoadKey(item);
-    const imageLoadState = imageLoadKey ? captureImageLoadStates[imageLoadKey] : undefined;
-    const revealKey = captureRowRevealKey(item);
-    const rowRevealed = Boolean(captureRowRevealStates[revealKey]);
-    const deferRowUntilImageReady = Boolean(
-      collectionFeedRevealPending ||
-        (!rowRevealed &&
-          (imageLoadKey ? !imageLoadState : true))
-    );
-    return (
-      <SkeletonRevealFrame pending={deferRowUntilImageReady} skeleton={renderCaptureRowInlineSkeleton(true)}>
-        <Animated.View style={[styles.collectionCaptureRow, { opacity: collectionRowsFade }]}>
-          <View style={styles.collectionCaptureMain}>
-            {renderCaptureRow({
-              showCollectionToken: false,
-              item,
-              onPress: () => {
-                if (selectedCollection) openCaptureFromCollection(item, selectedCollection.id);
-              }
-            })}
-          </View>
-          <Pressable
-            onPress={() => {
-              if (selectedCollection) void unlinkCaptureFromCollection(selectedCollection.id, item);
-            }}
-            style={styles.removeButton}
-          >
-            <Text style={styles.inlineAction}>Remove</Text>
-          </Pressable>
-        </Animated.View>
-      </SkeletonRevealFrame>
-    );
-  }
-
-  function renderCollection({ item }: { item: Collection }) {
-    return (
-      <CollectionRow
-        collectionListFade={collectionListFade}
-        item={item}
-        onPress={() => {
-          selectCollection(item.id);
-          setCollectionTitle(item.title);
-          setCollectionDescription(item.description);
-        }}
-      />
-    );
-  }
-
-  function renderHomeRow({ item }: { item: HomeListRow }) {
-    if (item.type === "section") {
-      return (
-        <Animated.Text style={[styles.groupHeader, { opacity: homeFeedRevealPending ? 0 : homeRowsFade }]}>
-          {item.title}
-        </Animated.Text>
-      );
-    }
-    return (
-      <Animated.View style={{ opacity: homeRowsFade }}>
-        {renderCaptureRow({
-          item: item.capture,
-          deferFallbackIcon: capturesLoading && !activeCapturesLoadedOnce,
-          deferMediaUntilLoaded: true,
-          forceSkeleton: homeFeedRevealPending,
-          onPress: () => openCapture(item.capture.id),
-          testID: `pc.capture.row.${item.capture.id}`
-        })}
-      </Animated.View>
-    );
-  }
-
-  function renderSearchResult({ item }: { item: Capture }) {
-    return renderCaptureRow({
-      item,
-      matchReason: matchReasonForCapture(item, searchQuery),
-      onPress: () => openCapture(item.id),
-      testID: `pc.search.result.${item.id}`
-    });
-  }
-
-  function renderCaptureRowInlineSkeleton(withRemoveAction = false) {
-    return <CaptureRowInlineSkeleton SkeletonBlock={SkeletonBlock} withRemoveAction={withRemoveAction} />;
-  }
-
-  function renderCaptureSkeletonRows(count = 3, withRemoveAction = false) {
-    return <CaptureSkeletonRows count={count} SkeletonBlock={SkeletonBlock} withRemoveAction={withRemoveAction} />;
-  }
-
-  function renderCollectionSkeletonRows(count = 7, withSelectionControl = false, skeletonCollections: Collection[] = []) {
-    return (
-      <CollectionSkeletonRows
-        count={count}
-        SkeletonBlock={SkeletonBlock}
-        skeletonCollections={skeletonCollections}
-        withSelectionControl={withSelectionControl}
-      />
-    );
-  }
-
-  function renderLoadingRows() {
-    return renderCaptureSkeletonRows(3);
-  }
-
-  function renderCollectionCaptureSkeletonRows(count = 4) {
-    return renderCaptureSkeletonRows(count, true);
-  }
-
-  function renderListLoadingFooter(label = "Loading more captures...") {
-    return (
-      <View style={styles.listLoadingFooter}>
-        <Text style={styles.meta}>{label}</Text>
-      </View>
-    );
-  }
-
-  function renderSnackbar(withBottomNav = false) {
-    return <Snackbar snackbar={snackbar} withBottomNav={withBottomNav} />;
-  }
-
-  function renderBottomAppBar(active: "recent" | "collections") {
-    return (
-      <BottomAppBar
-        active={active}
-        onCollectionsPress={() => void openCollectionsScreen("active")}
-        onFabPress={active === "collections" ? openCollectionComposer : openCaptureComposer}
-        onRecentPress={openRecentHome}
-        onSettingsPress={openAccountActions}
-      />
-    );
-  }
 
   function renderCollectionComposerSheet() {
-    if (!showCollectionForm || selectedCollection) return null;
-    const keyboardVisible = keyboardHeight > 0;
-    const screenHeight = Dimensions.get("screen").height;
-    const windowAlreadyKeyboardSized = keyboardVisible && Math.abs(windowHeight + keyboardHeight - screenHeight) < 96;
-    const visibleHeight = keyboardVisible && !windowAlreadyKeyboardSized
-      ? windowHeight - keyboardHeight
-      : windowHeight;
-    const sheetMaxHeight = keyboardVisible
-      ? Math.min(430, Math.max(320, visibleHeight - 24))
-      : Math.min(440, Math.max(340, windowHeight * 0.62));
-    const sheetBottomInset = windowAlreadyKeyboardSized ? 0 : captureKeyboardInset;
-    const saveDisabled = !collectionTitle.trim() || !collectionDescription.trim();
-
     return (
-      <View style={styles.sheetLayer} pointerEvents="box-none">
-        <Pressable
-          accessibilityLabel="Close collection composer"
-          onPress={closeCollectionComposer}
-          style={styles.sheetBackdrop}
-        />
-        <KeyboardAvoidingView pointerEvents="box-none" style={styles.sheetKeyboard}>
-          <Animated.View
-            style={[
-              styles.captureSheet,
-              keyboardVisible && styles.captureSheetCompact,
-              {
-                marginBottom: sheetBottomInset,
-                maxHeight: sheetMaxHeight,
-                opacity: captureComposerMotion,
-                transform: [
-                  {
-                    translateY: captureComposerMotion.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [28, 0]
-                    })
-                  }
-                ]
-              }
-            ]}
-          >
-            <View style={styles.sheetGrabber} />
-            <View style={styles.captureSheetHeader}>
-              <View style={styles.sheetHeaderCopy}>
-                <Text style={styles.sheetTitle}>New collection</Text>
-              </View>
-              <View style={styles.sheetActions}>
-                <IconButton Icon={X} label="Close" onPress={closeCollectionComposer} />
-                <IconButton
-                  Icon={Check}
-                  label="Create collection"
-                  disabled={saveDisabled}
-                  onPress={() => void saveCollection()}
-                  tone="primary"
-                  testID="pc.collections.create.save"
-                />
-              </View>
-            </View>
-            <View
-              style={[
-                styles.captureSheetBody,
-                styles.captureSheetBodyContent,
-                keyboardVisible && styles.captureSheetBodyContentCompact
-              ]}
-            >
-              <TextInput
-                onChangeText={(value) => {
-                  setCollectionDraftDirty(true);
-                  setCollectionTitle(value);
-                }}
-                placeholder="Title"
-                placeholderTextColor={colors.muted}
-                ref={collectionTitleInputRef}
-                returnKeyType="next"
-                style={[styles.captureInput, styles.collectionSheetTitleInput]}
-                testID="pc.collections.create.title"
-                value={collectionTitle}
-              />
-              <TextInput
-                multiline
-                onChangeText={(value) => {
-                  setCollectionDraftDirty(true);
-                  setCollectionDescription(value);
-                }}
-                placeholder="What belongs here"
-                placeholderTextColor={colors.muted}
-                style={[styles.captureInput, styles.collectionSheetDescriptionInput]}
-                testID="pc.collections.create.description"
-                value={collectionDescription}
-              />
-            </View>
-          </Animated.View>
-        </KeyboardAvoidingView>
-      </View>
+      <CollectionComposerSheet
+        captureComposerMotion={captureComposerMotion}
+        captureKeyboardInset={captureKeyboardInset}
+        collectionDescription={collectionDescription}
+        collectionTitle={collectionTitle}
+        collectionTitleInputRef={collectionTitleInputRef}
+        keyboardHeight={keyboardHeight}
+        onClose={closeCollectionComposer}
+        onCollectionDescriptionChange={(value) => {
+          setCollectionDraftDirty(true);
+          setCollectionDescription(value);
+        }}
+        onCollectionTitleChange={(value) => {
+          setCollectionDraftDirty(true);
+          setCollectionTitle(value);
+        }}
+        onSave={() => void saveCollection()}
+        selectedCollection={selectedCollection}
+        showCollectionForm={showCollectionForm}
+        windowHeight={windowHeight}
+      />
     );
   }
 
   function renderAppSheets() {
-    if (accountSheetOpen) {
-      return (
-        <View style={styles.modalLayer} pointerEvents="box-none">
-          <Pressable
-            accessibilityLabel="Close account actions"
-            onPress={() => setAccountSheetOpen(false)}
-            style={styles.modalBackdrop}
-          />
-          <View style={styles.actionSheet}>
-            <View style={styles.sheetGrabber} />
-            <View style={styles.sheetHeader}>
-              <View style={styles.sheetHeaderCopy}>
-                <Text style={styles.sheetTitle}>Settings</Text>
-                <Text style={styles.sheetSubtitle}>Manage this device session.</Text>
-              </View>
-              <IconButton Icon={X} label="Close account actions" onPress={() => setAccountSheetOpen(false)} />
-            </View>
-            <Pressable
-              onPress={() => {
-                setAccountSheetOpen(false);
-                void signOut();
-              }}
-              style={({ pressed }) => [styles.sheetActionRow, pressed && styles.subtlePressed]}
-            >
-              <LogOut color={colors.danger} size={20} strokeWidth={2.3} />
-              <View style={styles.sheetActionCopy}>
-                <Text style={[styles.sheetActionTitle, styles.sheetActionDanger]}>Sign out</Text>
-                <Text style={styles.sheetActionText}>Remove this session from the phone.</Text>
-              </View>
-            </Pressable>
-          </View>
-        </View>
-      );
-    }
-
-    if (rationaleSheet) {
-      return (
-        <View style={styles.modalLayer} pointerEvents="box-none">
-          <Pressable
-            accessibilityLabel="Close review insight"
-            onPress={() => {
-              setRationaleSheet(null);
-              setRationaleEditTarget(null);
-            }}
-            style={styles.modalBackdrop}
-          />
-          <View style={[styles.actionSheet, styles.reviewInsightSheet]}>
-            <View style={styles.sheetGrabber} />
-            <View style={styles.rationaleSheetHeader}>
-              <View style={styles.rationaleSheetHeaderIcon}>
-                <Info color={colors.accent} size={22} strokeWidth={2.4} />
-              </View>
-              <View style={styles.rationaleSheetHeaderCopy}>
-                <Text style={styles.sheetTitle}>{rationaleSheet.title}</Text>
-                <Text style={styles.rationaleSheetKicker}>How this capture was interpreted</Text>
-              </View>
-              <IconButton
-                Icon={X}
-                label="Close review insight"
-                onPress={() => {
-                  setRationaleSheet(null);
-                  setRationaleEditTarget(null);
-                }}
-              />
-            </View>
-            <ScrollView
-              contentContainerStyle={styles.reviewInsightScrollContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              style={styles.reviewInsightScroll}
-            >
-              {rationaleSheet.text ? (
-                <Text style={styles.rationaleSheetLead}>{rationaleSheet.text}</Text>
-              ) : null}
-              {rationaleSheet.tasks?.length ? (
-                <View style={styles.reviewChecklist}>
-                  <View style={styles.reviewChecklistHeader}>
-                    <Text style={styles.reviewChecklistLabel}>Needs review</Text>
-                    <View style={styles.reviewChecklistCount}>
-                      <Text style={styles.reviewChecklistCountText}>{rationaleSheet.tasks.length}</Text>
-                    </View>
-                  </View>
-                  {rationaleSheet.tasks.map((task) => {
-                    const TaskIcon = reviewTaskIcon(task.target);
-                    const showIntentPicker = task.target === "intent" && rationaleEditTarget === "intent";
-                    return (
-                      <View key={task.target} style={styles.reviewChecklistTask}>
-                        <View style={[styles.rationaleSheetSectionIcon, reviewTaskIconStyle(task.target)]}>
-                          <TaskIcon color={colors.ink} size={18} strokeWidth={2.4} />
-                        </View>
-                        <View style={styles.reviewChecklistCopy}>
-                          <View style={styles.reviewChecklistTaskTop}>
-                            <View style={styles.reviewChecklistTaskText}>
-                              <Text style={styles.rationaleSheetLabel}>{task.title}</Text>
-                              <Text style={styles.reviewChecklistValue}>{task.value}</Text>
-                            </View>
-                            <View style={styles.reviewChecklistActions}>
-                              {task.editLabel ? (
-                                <IconButton
-                                  Icon={task.target === "reminder" ? X : Pencil}
-                                  label={task.editLabel}
-                                  onPress={() => editReviewTask(task)}
-                                />
-                              ) : null}
-                              <IconButton
-                                Icon={Check}
-                                label={task.confirmLabel}
-                                onPress={() => void resolveReviewTargets([task.target])}
-                                tone="primary"
-                              />
-                            </View>
-                          </View>
-                          <Text style={styles.rationaleSheetText}>{task.rationale}</Text>
-                          {showIntentPicker ? (
-                            <View style={styles.rationaleIntentOptions}>
-                              {INTENT_OPTIONS.map((intent) => (
-                                <Pressable
-                                  accessibilityRole="button"
-                                  key={intent}
-                                  onPress={() => void resolveReviewTargets(["intent"], { currentSaveIntent: intent })}
-                                  style={({ pressed }) => [
-                                    styles.rationaleIntentOption,
-                                    selected?.defaultIntent === intent && styles.rationaleIntentOptionSelected,
-                                    pressed && styles.subtlePressed
-                                  ]}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.rationaleIntentOptionText,
-                                      selected?.defaultIntent === intent && styles.rationaleIntentOptionTextSelected
-                                    ]}
-                                  >
-                                    {activeIntentLabel(intent)}
-                                  </Text>
-                                </Pressable>
-                              ))}
-                              <Pressable
-                                accessibilityRole="button"
-                                onPress={() => void resolveReviewTargets(["intent"], { currentSaveIntent: null })}
-                                style={({ pressed }) => [
-                                  styles.rationaleIntentOption,
-                                  !selected?.defaultIntent && styles.rationaleIntentOptionSelected,
-                                  pressed && styles.subtlePressed
-                                ]}
-                              >
-                                <Text
-                                  style={[
-                                    styles.rationaleIntentOptionText,
-                                    !selected?.defaultIntent && styles.rationaleIntentOptionTextSelected
-                                  ]}
-                                >
-                                  No intent
-                                </Text>
-                              </Pressable>
-                            </View>
-                          ) : null}
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              ) : null}
-              {rationaleSheet.sections?.length ? (
-                <View style={styles.rationaleSheetSections}>
-                  {rationaleSheet.sections.map((section) => {
-                    const SectionIcon = rationaleSectionIcon(section.label);
-                    return (
-                      <View key={section.label} style={styles.rationaleSheetSection}>
-                        <View style={[styles.rationaleSheetSectionIcon, rationaleSectionIconStyle(section.label)]}>
-                          <SectionIcon color={colors.ink} size={18} strokeWidth={2.4} />
-                        </View>
-                        <View style={styles.rationaleSheetSectionCopy}>
-                          <Text style={styles.rationaleSheetLabel}>{section.label}</Text>
-                          <Text style={styles.rationaleSheetText}>{section.text}</Text>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              ) : null}
-            </ScrollView>
-            <Pressable
-              onPress={() => {
-                setRationaleSheet(null);
-                setRationaleEditTarget(null);
-              }}
-              style={styles.primaryButton}
-            >
-              <Text style={styles.primaryButtonText}>Done</Text>
-            </Pressable>
-          </View>
-        </View>
-      );
-    }
-
-    if (archiveCaptureConfirmOpen && selected) {
-      return (
-        <View style={styles.modalLayer} pointerEvents="box-none">
-          <Pressable
-            accessibilityLabel="Cancel archive"
-            onPress={() => setArchiveCaptureConfirmOpen(false)}
-            style={styles.modalBackdrop}
-          />
-          <View style={styles.actionSheet}>
-            <View style={styles.sheetGrabber} />
-            <View style={styles.destructiveSheetIcon}>
-              <Archive color={colors.danger} size={22} strokeWidth={2.4} />
-            </View>
-            <Text style={styles.sheetTitle}>Archive this capture?</Text>
-            <Text style={styles.sheetSubtitle}>It leaves Recent Captures but stays searchable from Archived.</Text>
-            <Pressable
-              onPress={() => void setArchiveState(true)}
-              style={[styles.primaryButton, styles.destructiveButton]}
-              testID="pc.capture.archive-confirm"
-            >
-              <Text style={styles.destructiveButtonText}>Archive capture</Text>
-            </Pressable>
-            <Pressable onPress={() => setArchiveCaptureConfirmOpen(false)} style={styles.secondaryButton}>
-              <Text style={styles.secondaryButtonText}>Cancel</Text>
-            </Pressable>
-          </View>
-        </View>
-      );
-    }
-
-    if (archiveCollectionTarget) {
-      return (
-        <View style={styles.modalLayer} pointerEvents="box-none">
-          <Pressable
-            accessibilityLabel="Cancel archive collection"
-            onPress={() => setArchiveCollectionTarget(null)}
-            style={styles.modalBackdrop}
-          />
-          <View style={styles.actionSheet}>
-            <View style={styles.sheetGrabber} />
-            <View style={styles.destructiveSheetIcon}>
-              <Archive color={colors.danger} size={22} strokeWidth={2.4} />
-            </View>
-            <Text style={styles.sheetTitle}>Archive this collection?</Text>
-            <Text style={styles.sheetSubtitle}>Current captures will be removed from it. Restoring brings back only this snapshot.</Text>
-            <Pressable
-              onPress={() => void setCollectionArchiveState(archiveCollectionTarget, true)}
-              style={[styles.primaryButton, styles.destructiveButton]}
-              testID="pc.collection.archive-confirm"
-            >
-              <Text style={styles.destructiveButtonText}>Archive collection</Text>
-            </Pressable>
-            <Pressable onPress={() => setArchiveCollectionTarget(null)} style={styles.secondaryButton}>
-              <Text style={styles.secondaryButtonText}>Cancel</Text>
-            </Pressable>
-          </View>
-        </View>
-      );
-    }
-
-    return null;
+    return (
+      <AppSheets
+        accountSheetOpen={accountSheetOpen}
+        archiveCaptureConfirmOpen={archiveCaptureConfirmOpen}
+        archiveCollectionTarget={archiveCollectionTarget}
+        editReviewTask={editReviewTask}
+        onSignOut={() => void signOut()}
+        rationaleEditTarget={rationaleEditTarget}
+        rationaleSheet={rationaleSheet}
+        resolveReviewTargets={resolveReviewTargets}
+        selected={selected}
+        setAccountSheetOpen={setAccountSheetOpen}
+        setArchiveCaptureConfirmOpen={setArchiveCaptureConfirmOpen}
+        setArchiveCollectionTarget={setArchiveCollectionTarget}
+        setArchiveState={setArchiveState}
+        setCollectionArchiveState={setCollectionArchiveState}
+        setRationaleEditTarget={setRationaleEditTarget}
+        setRationaleSheet={setRationaleSheet}
+      />
+    );
   }
 
 
@@ -3926,8 +2413,6 @@ export default function App() {
           snackbar: renderSnackbar()
         }}
         state={{
-          archivedCapturesLoaded,
-          archivedCapturesLoading,
           remoteSearchActive,
           searchQuery,
           searchScope,

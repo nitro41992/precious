@@ -35,8 +35,6 @@ type SearchScreenProps = {
     snackbar: ReactNode;
   };
   state: {
-    archivedCapturesLoaded: boolean;
-    archivedCapturesLoading: boolean;
     remoteSearchActive: boolean;
     searchQuery: string;
     searchScope: SearchScope;
@@ -68,8 +66,6 @@ export function SearchScreen({ actions, data, state }: SearchScreenProps) {
     snackbar
   } = data;
   const {
-    archivedCapturesLoaded,
-    archivedCapturesLoading,
     remoteSearchActive,
     searchQuery,
     searchScope,

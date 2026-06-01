@@ -116,7 +116,7 @@ export async function persistCaptureGateNeedsReview(
     urlEvidence,
   );
   const normalizedAnalysis = normalizedReviewAnalysis(analysis);
-  await supabase.from("analysis_runs").insert({
+  const { error: runError } = await supabase.from("analysis_runs").insert({
     user_id: userId,
     capture_id: capture.id,
     provider: "openai",
@@ -243,7 +243,7 @@ export async function rejectContextlessLinkCapture(
     rejection_reason: reason,
   });
 
-  await supabase.from("analysis_runs").insert({
+  const { error: runError } = await supabase.from("analysis_runs").insert({
     user_id: userId,
     capture_id: capture.id,
     provider: "system",
