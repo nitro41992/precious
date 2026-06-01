@@ -161,7 +161,7 @@ An AI-proposed future resurfacing idea for a Capture. Reminder Suggestions are n
 _Avoid_: Automatic reminder, scheduled obligation, AI nudge
 
 **Confirmed Reminder**:
-A Reminder that the user explicitly created or accepted from a suggestion. A Confirmed Reminder has a user-approved trigger and should be persisted even before notification delivery or Agenda is implemented.
+A Reminder that the user explicitly created or accepted from a suggestion. A Confirmed Reminder has a user-approved trigger and should be persisted even before notification delivery or Agenda is implemented. Capture-local Confirmed Reminders store a structured interval: start date, end date, optional start time, optional end time, timezone, date precision, time precision, and a derived duration for compatibility. If only a time range is present, the start and end date are the same.
 _Avoid_: AI nudge, automatic notification
 
 **Reminder Rationale**:

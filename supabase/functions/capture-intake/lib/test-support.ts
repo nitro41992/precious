@@ -40,6 +40,10 @@ import {
   shouldSeedStarterCollections,
   starterCollectionRows,
 } from "./collections.ts";
+import {
+  confirmedReminderFromInput,
+  saveConfirmedReminderSuggestion,
+} from "./collections/review-decisions.ts";
 
 export const __urlEvidenceTest = {
   activeSaveIntentKeys,
@@ -48,6 +52,7 @@ export const __urlEvidenceTest = {
   buildPrompt,
   captureGateMetadata,
   captureGateNeedsReviewAnalysis,
+  confirmedReminderFromInput,
   contentEvidenceProfile,
   captureGatePrompt,
   compactUrlEvidence,
@@ -72,6 +77,7 @@ export const __urlEvidenceTest = {
   shouldAnalyzeAfterCaptureGate,
   shouldUseLinkOnlyUrlEvidenceFallback,
   shouldSeedStarterCollections,
+  saveConfirmedReminderSuggestion,
   starterCollectionRows,
   starterCollections: STARTER_COLLECTIONS,
   tier1CanonicalCandidates,

@@ -273,9 +273,9 @@ Each chip can expand into a small picker. Keep concise rationale visible only wh
 
 `Because the post mentions a SoHo ramen shop.`
 
-Capture Review should use one `Review insight` surface for AI rationale across Save Intent, Collections, and Reminder idea. The row should show a very short review cue that names the exact thing to check, such as `Confirm intent: visit or menu reference`, then open a native-feeling sheet led by one friendly because-style insight at body scale. When review targets are unresolved, the sheet should show an icon-led checklist for the exact targets that need a decision and let the user confirm or change each target from that surface. Follow the checklist with unframed rationale rows for Save Intent, Collections, and Reminder idea. Do not use nested cards, hero-sized rationale text, generic field-level fallback blocks, hidden-only long presses, duplicate blurbs, or model traces. Keep the primary sheet action clear of Android gesture navigation.
+Capture Review should use one `Review insight` surface for AI rationale across Save Intent, Collections, and Reminder idea. The row should show a very short review cue that names the exact thing to check, such as `Confirm intent: visit or menu reference`, then open a native-feeling sheet led by one friendly because-style insight at body scale. When review targets are unresolved, the sheet should show an icon-led checklist for the exact targets that need a decision and let the user confirm or change each target from that surface. Follow the checklist with unframed rationale rows for Save Intent, Collections, and Reminder idea. Reminder editing should open the same start/end date and optional start/end time editor as the main Reminder row. Do not use nested cards, hero-sized rationale text, generic field-level fallback blocks, hidden-only long presses, duplicate blurbs, or model traces. Keep the primary sheet action clear of Android gesture navigation.
 
-When reminders are not fully implemented, use `Reminder idea: [before Saturday]` rather than copy that implies notification delivery.
+When reminders are not fully implemented, use `Reminder idea: [before Saturday]` for AI proposals and `Reminder` for the user-approved editor. Do not use copy that implies notification delivery.
 
 When a Capture has a maps-searchable Visit Target, Capture Review may show `Open in Maps` actions for Google Maps and Apple Maps. Treat this as a Maps search action from persisted evidence, not a verified address, place ID, or top-level Map lens.
 
@@ -356,7 +356,9 @@ Search is a full-screen retrieval utility, not a chatbot default.
 
 - Confirmed reminders are user-approved resurfacing triggers and should be first-class data when implemented.
 - Suggested reminders are review items, not scheduled obligations.
+- Capture Review should always offer `Add reminder` when a capture can be edited, even when Capture Analysis found no Reminder idea.
 - Use review language until the user accepts: `Reminder idea`, `Add reminder`, `Choose date and time`.
+- A capture-local Confirmed Reminder should store a structured interval: start date, end date, optional start time, optional end time, timezone, date precision, time precision, and derived duration. Date ranges cover days or weeks; time ranges cover minutes or hours; if only time duration is present, start date and end date are the same.
 - Do not imply notification delivery until notification delivery exists.
 - Agenda is deferred until Confirmed Reminders function.
 

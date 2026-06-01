@@ -38,8 +38,8 @@ export const STARTER_COLLECTIONS = [
   },
 ] as const;
 
-export const PROMPT_VERSION = "precious-capture-analysis-v8";
-export const SCHEMA_VERSION = "precious-capture-analysis-v7";
+export const PROMPT_VERSION = "precious-capture-analysis-v9";
+export const SCHEMA_VERSION = "precious-capture-analysis-v8";
 export const PREFLIGHT_PROMPT_VERSION = "precious-capture-preflight-v1";
 export const CAPTURE_GATE_PROMPT_VERSION = "precious-capture-gate-v1";
 export const CLIENT_EVENT_RETENTION_DAYS = 90;
@@ -192,10 +192,63 @@ export const analysisSchema = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["trigger_type", "trigger_value", "rationale", "confidence"],
+        required: [
+          "trigger_type",
+          "trigger_value",
+          "trigger_text",
+          "start_date",
+          "end_date",
+          "start_time",
+          "end_time",
+          "trigger_date",
+          "date_window_start",
+          "date_window_end",
+          "date_precision",
+          "trigger_time",
+          "time_precision",
+          "timezone",
+          "duration",
+          "duration_unit",
+          "rationale",
+          "confidence",
+        ],
         properties: {
-          trigger_type: { type: "string", enum: ["time", "place", "none"] },
+          trigger_type: {
+            type: "string",
+            enum: ["time", "place", "event", "none"],
+          },
           trigger_value: { type: "string" },
+          trigger_text: { type: ["string", "null"] },
+          start_date: { type: ["string", "null"] },
+          end_date: { type: ["string", "null"] },
+          start_time: { type: ["string", "null"] },
+          end_time: { type: ["string", "null"] },
+          trigger_date: { type: ["string", "null"] },
+          date_window_start: { type: ["string", "null"] },
+          date_window_end: { type: ["string", "null"] },
+          date_precision: {
+            type: "string",
+            enum: [
+              "exact",
+              "day",
+              "date_range",
+              "week",
+              "month_window",
+              "month",
+              "unknown",
+            ],
+          },
+          trigger_time: { type: ["string", "null"] },
+          time_precision: {
+            type: "string",
+            enum: ["exact", "time_range", "unknown"],
+          },
+          timezone: { type: ["string", "null"] },
+          duration: { type: ["number", "null"] },
+          duration_unit: {
+            type: ["string", "null"],
+            enum: ["minutes", "hours", "days", "weeks", null],
+          },
           rationale: { type: "string" },
           confidence: { type: "number" },
         },

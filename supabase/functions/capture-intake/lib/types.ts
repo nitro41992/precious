@@ -13,6 +13,7 @@ export type CaptureRow = {
   source_text: string | null;
   context_note?: string | null;
   source_app: string | null;
+  created_at?: string | null;
   asset_url?: string;
   asset_mime_type?: string | null;
   capture_assets?: CaptureAssetRow[];

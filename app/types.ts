@@ -73,8 +73,23 @@ export type Capture = {
   suggestedReminders?: Array<{
     trigger_type: string;
     trigger_value: string;
+    trigger_text?: string | null;
+    start_date?: string | null;
+    end_date?: string | null;
+    start_time?: string | null;
+    end_time?: string | null;
+    trigger_date?: string | null;
+    date_window_start?: string | null;
+    date_window_end?: string | null;
+    date_precision?: ReminderDatePrecision | null;
+    trigger_time?: string | null;
+    time_precision?: ReminderTimePrecision | null;
+    timezone?: string | null;
+    duration?: number | null;
+    duration_unit?: ReminderDurationUnit | null;
     rationale: string;
     confidence: number;
+    source?: string;
     status?: string;
   }>;
   linkedCollections?: LinkedCollection[];
@@ -137,6 +152,24 @@ export type Collection = {
 };
 
 export type ReminderSuggestion = NonNullable<Capture["suggestedReminders"]>[number];
+export type ReminderDurationUnit = "minutes" | "hours" | "days" | "weeks";
+export type ReminderDatePrecision = "exact" | "day" | "date_range" | "week" | "month_window" | "month" | "unknown";
+export type ReminderTimePrecision = "exact" | "time_range" | "unknown";
+export type ReminderSource = "analysis" | "ai_prefill" | "manual";
+export type ReminderScheduleDraft = {
+  startDate: string;
+  endDate: string;
+  startTime: string;
+  endTime: string;
+  timezone: string;
+  datePrecision: ReminderDatePrecision;
+  timePrecision: ReminderTimePrecision;
+  duration: number;
+  durationUnit: ReminderDurationUnit;
+  triggerText?: string;
+  rationale?: string;
+  source: ReminderSource;
+};
 export type ReminderDraftAction = "keep" | "remove";
 export type CollectionDraftAction = "keep" | "remove" | "ignore" | "link" | "create" | "added";
 export type NoteSaveState = "idle" | "saving" | "saved" | "error";

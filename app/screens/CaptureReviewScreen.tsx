@@ -29,7 +29,14 @@ import {
 
 import type { MapSearchCandidate } from "../captureLogic";
 import { displayStatus, isArchived, reviewReasons } from "../captureLogic";
-import type { Capture, CaptureReviewDraft, NoteSaveState, ReminderDraftAction, ReviewInsight } from "../types";
+import type {
+  Capture,
+  CaptureReviewDraft,
+  NoteSaveState,
+  ReminderDraftAction,
+  ReminderScheduleDraft,
+  ReviewInsight
+} from "../types";
 import {
   ADD_INTENT_LABEL,
   INTENT_OPTIONS,
@@ -50,6 +57,7 @@ import {
   reviewStatusCue,
   urlEvidenceMessage
 } from "../capturePresentation";
+import { ReminderEditorSheet } from "../sheets/ReminderEditorSheet";
 import { colors } from "../ui/theme";
 import { styles } from "../ui/styles";
 import { IconButton, SourceMark } from "../ui/components";
@@ -82,6 +90,7 @@ type CaptureReviewScreenProps = {
     noteSheetOpen: boolean;
     quickIntentOpen: boolean;
     reminderDrafts: Record<string, ReminderDraftAction>;
+    reminderSheetOpen: boolean;
   };
   actions: {
     closeNoteSheet: () => void;
@@ -95,6 +104,8 @@ type CaptureReviewScreenProps = {
     openReviewInsight: (insight: ReviewInsight) => void;
     openVisitTargetMaps: (candidate: MapSearchCandidate) => void;
     pasteExpandedUrl: () => void;
+    removeReminder: (reminderIndex: number) => void;
+    saveReminder: (draft: ReminderScheduleDraft, reminderIndex: number | null) => void;
     saveReviewDecisions: () => void;
     selectCapture: (captureId: string | null) => void;
     selectCollection: (collectionId: string | null) => void;
@@ -105,7 +116,7 @@ type CaptureReviewScreenProps = {
     setDraftTitle: (value: string) => void;
     setDraftTitleDirty: (value: boolean) => void;
     setQuickIntentOpen: Dispatch<SetStateAction<boolean>>;
-    setReminderDrafts: (value: Record<string, ReminderDraftAction>) => void;
+    setReminderSheetOpen: Dispatch<SetStateAction<boolean>>;
     updateSelectedReviewDraft: (patch: Partial<CaptureReviewDraft>) => void;
   };
 };
@@ -136,7 +147,8 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     noteSaveState,
     noteSheetOpen,
     quickIntentOpen,
-    reminderDrafts
+    reminderDrafts,
+    reminderSheetOpen
   } = state;
   const {
     closeNoteSheet,
@@ -150,6 +162,8 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     openReviewInsight,
     openVisitTargetMaps,
     pasteExpandedUrl,
+    removeReminder,
+    saveReminder,
     saveReviewDecisions,
     selectCapture,
     selectCollection,
@@ -160,7 +174,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     setDraftTitle,
     setDraftTitleDirty,
     setQuickIntentOpen,
-    setReminderDrafts,
+    setReminderSheetOpen,
     updateSelectedReviewDraft
   } = actions;
 
@@ -175,12 +189,13 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const reminderRows = selected.suggestedReminders || [];
   const collectionRows = selected.linkedCollections || [];
   const collectionRowLabel = linkedCollectionsLabel(collectionRows);
-  const primaryReminder = reminderRows[0];
-  const primaryReminderKey = primaryReminder ? reminderDraftKey(primaryReminder, 0) : "";
-  const primaryReminderRemoved = primaryReminder ? reminderDrafts[primaryReminderKey] === "remove" : false;
-  const reminderSentenceValue = primaryReminder && !primaryReminderRemoved
+  const primaryReminderIndex = reminderRows.findIndex((reminder, index) => {
+    return reminderDrafts[reminderDraftKey(reminder, index)] !== "remove";
+  });
+  const primaryReminder = primaryReminderIndex >= 0 ? reminderRows[primaryReminderIndex] : undefined;
+  const reminderSentenceValue = primaryReminder
     ? reminderLabel(primaryReminder)
-    : "no reminder";
+    : "Add reminder";
   const collectionActionPending = collectionChoiceSaving === "set-collections";
   const urlEvidenceNotice = urlEvidenceMessage(selected.urlEvidence);
   const selectedVisitTarget = selected.visitTarget;
@@ -422,31 +437,29 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                     </Text>
                   </Pressable>
                 </View>
-                {primaryReminder ? (
-                  <View style={styles.reviewEditRow}>
-                    <Text style={styles.editRowLabel}>Reminder idea</Text>
-                    <Pressable
-                      android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
-                      onLongPress={() => openReviewInsight(selectedReviewInsight)}
-                      onPress={() => {
-                        const next = { ...reminderDrafts };
-                        if (primaryReminderRemoved) delete next[primaryReminderKey];
-                        else next[primaryReminderKey] = "remove";
-                        setReminderDrafts(next);
-                        updateSelectedReviewDraft({ reminders: next });
-                      }}
-                      style={({ pressed }) => [
-                        styles.editRowValue,
-                        primaryReminderRemoved && styles.sentenceChipMuted,
-                        pressed && styles.subtlePressed
+                <View style={styles.reviewEditRow}>
+                  <Text style={styles.editRowLabel}>Reminder</Text>
+                  <Pressable
+                    android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
+                    onLongPress={() => openReviewInsight(selectedReviewInsight)}
+                    onPress={() => setReminderSheetOpen(true)}
+                    style={({ pressed }) => [
+                      styles.editRowValue,
+                      pressed && styles.subtlePressed
+                    ]}
+                    testID="pc.review.reminder.open"
+                  >
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.editRowValueText,
+                        !primaryReminder && styles.editRowPlaceholderText
                       ]}
                     >
-                      <Text numberOfLines={1} style={[styles.editRowValueText, primaryReminderRemoved && styles.suggestionTextMuted]}>
-                        {reminderSentenceValue}
-                      </Text>
-                    </Pressable>
-                  </View>
-                ) : null}
+                      {reminderSentenceValue}
+                    </Text>
+                  </Pressable>
+                </View>
               </View>
               {reviewSupportText ? (
                 <Text style={styles.reviewSentenceSubtext}>{reviewSupportText}</Text>
@@ -723,6 +736,20 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
           </KeyboardAvoidingView>
         </View>
       ) : null}
+      <ReminderEditorSheet
+        onClose={() => setReminderSheetOpen(false)}
+        onRemove={(reminderIndex) => {
+          setReminderSheetOpen(false);
+          removeReminder(reminderIndex);
+        }}
+        onSave={(draft, reminderIndex) => {
+          setReminderSheetOpen(false);
+          saveReminder(draft, reminderIndex);
+        }}
+        reminder={primaryReminder}
+        reminderIndex={primaryReminder ? primaryReminderIndex : null}
+        visible={reminderSheetOpen}
+      />
       {appSheets}
       {snackbar}
     </SafeAreaView>

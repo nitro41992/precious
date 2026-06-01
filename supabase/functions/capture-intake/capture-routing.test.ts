@@ -382,6 +382,86 @@ Deno.test("review target resolution preserves unresolved checklist items", () =>
   );
 });
 
+Deno.test("confirmed reminder input accepts date and time intervals", () => {
+  const reminder = urlEvidence.confirmedReminderFromInput({
+    start_date: "2026-07-01",
+    end_date: "2026-07-10",
+    timezone: "America/New_York",
+    trigger_text: "Early July",
+  });
+  assert(reminder, "valid structured reminder should normalize");
+  assertEqual(reminder.duration, 10, "date ranges should derive inclusive day duration");
+  assertEqual(reminder.duration_unit, "days", "date ranges should derive days");
+  assertEqual(reminder.start_date, "2026-07-01", "start date should be canonical");
+  assertEqual(reminder.end_date, "2026-07-10", "end date should be canonical");
+  assertEqual(reminder.status, "confirmed", "manual save should confirm reminder");
+
+  const timed = urlEvidence.confirmedReminderFromInput({
+    start_date: "2026-06-06",
+    end_date: "2026-06-06",
+    start_time: "19:00",
+    end_time: "22:00",
+  });
+  assert(timed, "same-day time range should normalize");
+  assertEqual(timed.end_date, "2026-06-06", "time-only duration should keep dates equal");
+  assertEqual(timed.duration, 3, "time range should derive duration");
+  assertEqual(timed.duration_unit, "hours", "time range should derive hours");
+
+  assertEqual(
+    urlEvidence.confirmedReminderFromInput({
+      start_date: "2026-06-06",
+      end_date: "2026-06-06",
+      start_time: "14:30",
+      end_time: "15:30",
+      duration: 2,
+      duration_unit: "months",
+    }),
+    null,
+    "unsupported duration units should be rejected",
+  );
+});
+
+Deno.test("saving a confirmed reminder replaces existing suggestions or inserts a manual one", () => {
+  const analysis = {
+    suggested_reminders: [
+      {
+        trigger_type: "time",
+        trigger_value: "Saturday",
+        rationale: "The market is open Saturday.",
+        confidence: 0.7,
+      },
+    ],
+  };
+  const replaced = urlEvidence.saveConfirmedReminderSuggestion(
+    analysis,
+    {
+      start_date: "2026-06-06",
+      end_date: "2026-06-08",
+    },
+    0,
+  );
+  assert(replaced, "valid reminder should save");
+  assertEqual(replaced.length, 1, "existing reminder should be replaced");
+  assertEqual(
+    (replaced[0] as Record<string, unknown>).end_date,
+    "2026-06-08",
+    "replacement should preserve selected end date",
+  );
+
+  const inserted = urlEvidence.saveConfirmedReminderSuggestion(
+    { suggested_reminders: [] },
+    {
+      start_date: "2026-06-07",
+      end_date: "2026-06-07",
+      start_time: "18:15",
+      end_time: "22:15",
+    },
+    null,
+  );
+  assert(inserted, "manual reminder should save without an existing suggestion");
+  assertEqual(inserted.length, 1, "manual reminder should be inserted");
+});
+
 Deno.test("capture gate prompt treats capture text and image text as untrusted", () => {
   const prompt = urlEvidence.captureGatePrompt(
     captureFixture({

@@ -39,6 +39,7 @@
     "hosted:reset": "node scripts/reset-hosted-project.mjs --yes"
   },
   "dependencies": {
+    "@expo/ui": "^56.0.15",
     "@supabase/supabase-js": "^2.106.2",
     "expo": "^56.0.4",
     "expo-image": "^56.0.9",

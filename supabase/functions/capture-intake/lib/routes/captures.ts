@@ -5,7 +5,14 @@ import { json } from "../http.ts";
 import { archivedFilter, mergeAnalysisPatch, readCapturePayload, withCaptureState, withCaptureStates, withSignedCaptureAssetRows } from "../capture-records.ts";
 import { createOrGetCaptureFromFields, createOrGetCaptureWithAsset, processCapture } from "../captures.ts";
 import { analysisRequiresReview, analysisWithCurrentIntent, normalizedReviewAnalysis, normalizedReviewTargets, resolveReviewTargets, reviewTargetsForAnalysis } from "../analysis/review-normalization.ts";
-import { acceptPendingCollectionDecisions, applyCollectionReviewDecisions, confirmedReminderSuggestions, dismissReminderSuggestion, reviewReminderSuggestions } from "../collections/review-decisions.ts";
+import {
+  acceptPendingCollectionDecisions,
+  applyCollectionReviewDecisions,
+  confirmedReminderSuggestions,
+  dismissReminderSuggestion,
+  reviewReminderSuggestions,
+  saveConfirmedReminderSuggestion,
+} from "../collections/review-decisions.ts";
 import { applyCollectionChoice, captureResponse, clearCollectionSuggestion, undoCollectionChoice } from "../collections/responses.ts";
 import { attachLinkedCollections } from "../collections/links.ts";
 
@@ -449,6 +456,78 @@ export async function handleCapturesResource(
         result = await supabase
           .from("captures")
           .update(update)
+          .eq("user_id", userId)
+          .eq("id", existingResult.data.id)
+          .select("*")
+          .single();
+      }
+      if (result.error) throw result.error;
+      return await captureResponse(
+        supabase,
+        userId,
+        String(existingResult.data.id),
+      );
+    }
+
+    if (body.action === "save_reminder") {
+      const currentAnalysis = existingResult.data.analysis &&
+          typeof existingResult.data.analysis === "object"
+        ? existingResult.data.analysis as Record<string, unknown>
+        : {};
+      const suggestedReminders = saveConfirmedReminderSuggestion(
+        currentAnalysis,
+        body.reminder,
+        body.reminderIndex,
+      );
+      if (!suggestedReminders) {
+        return json({ error: "Choose a valid start and end for the reminder." }, 400);
+      }
+      const withResolvedTargets = resolveReviewTargets(
+        {
+          ...currentAnalysis,
+          suggested_reminders: suggestedReminders,
+        },
+        ["reminder"],
+        existingResult.data.review_confirmed_at,
+      );
+      const remainingTargets = reviewTargetsForAnalysis(
+        withResolvedTargets,
+        existingResult.data.review_confirmed_at,
+      );
+      const confirmedAt = remainingTargets.length
+        ? existingResult.data.review_confirmed_at
+        : existingResult.data.review_confirmed_at || new Date().toISOString();
+      const nextAnalysis = normalizedReviewAnalysis(
+        withResolvedTargets,
+        confirmedAt,
+      );
+      const update: Record<string, unknown> = {
+        analysis: nextAnalysis,
+        analysis_state: analysisRequiresReview(nextAnalysis, confirmedAt)
+          ? "needs_review"
+          : "ready",
+      };
+      if (!remainingTargets.length && confirmedAt) {
+        update.review_confirmed_at = confirmedAt;
+      }
+      let result = await supabase
+        .from("captures")
+        .update(update)
+        .eq("user_id", userId)
+        .eq("id", existingResult.data.id)
+        .select("*")
+        .single();
+      if (
+        result.error &&
+        /review_confirmed_at|schema cache|column/i.test(
+          String(result.error.message || result.error.details || ""),
+        )
+      ) {
+        const fallbackUpdate = { ...update };
+        delete fallbackUpdate.review_confirmed_at;
+        result = await supabase
+          .from("captures")
+          .update(fallbackUpdate)
           .eq("user_id", userId)
           .eq("id", existingResult.data.id)
           .select("*")

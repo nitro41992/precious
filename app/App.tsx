@@ -43,6 +43,7 @@ import type {
   RemoteCapturePage,
   RemoteCollectionPage,
   ReminderDraftAction,
+  ReminderScheduleDraft,
   ReminderReviewDecision,
   ReviewChecklistTask,
   ReviewTarget,
@@ -64,6 +65,7 @@ import {
   linkedCollectionDraftKey,
   normalizeIntent,
   reminderDraftKey,
+  reminderSuggestionFromSchedule,
   suggestedCollectionDraftKey,
   uniqueCaptures,
   uniqueCollections
@@ -189,6 +191,7 @@ export default function App() {
   const [captureComposerClosing, setCaptureComposerClosing] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [noteSheetOpen, setNoteSheetOpen] = useState(false);
+  const [reminderSheetOpen, setReminderSheetOpen] = useState(false);
   const [accountSheetOpen, setAccountSheetOpen] = useState(false);
   const [archiveCaptureConfirmOpen, setArchiveCaptureConfirmOpen] = useState(false);
   const [archiveCollectionTarget, setArchiveCollectionTarget] = useState<Collection | null>(null);
@@ -421,6 +424,7 @@ export default function App() {
     setCollectionPickerOpen(false);
     setCollectionPickerQuery("");
     setCollectionSelectionIds([]);
+    setReminderSheetOpen(false);
   }, []);
 
   const {
@@ -758,6 +762,7 @@ export default function App() {
     setDraftIntentDirty(false);
     setQuickIntentOpen(false);
     setReminderDrafts({});
+    setReminderSheetOpen(false);
     setCollectionDrafts({});
     setNoteSheetOpen(false);
     setCollectionPickerOpen(false);
@@ -1641,7 +1646,7 @@ export default function App() {
     if (task.target === "reminder") {
       setRationaleSheet(null);
       setRationaleEditTarget(null);
-      void dismissReminder(0);
+      setReminderSheetOpen(true);
     }
   }
 
@@ -1926,17 +1931,101 @@ export default function App() {
       }
       return;
     }
-    const removeReminder = (capture: Capture) =>
-      capture.id === selected.id
-        ? {
-            ...capture,
-            suggestedReminders: (capture.suggestedReminders || []).filter((_, index) => index !== reminderIndex)
-          }
-        : capture;
+    const removeReminder = (capture: Capture) => {
+      if (capture.id !== selected.id) return capture;
+      const reviewTargets = (capture.reviewTargets || []).filter((target) => target !== "reminder");
+      const stillNeedsReview = reviewTargets.length > 0;
+      return {
+        ...capture,
+        suggestedReminders: (capture.suggestedReminders || []).filter((_, index) => index !== reminderIndex),
+        reviewTargets,
+        needsReview: stillNeedsReview,
+        status: stillNeedsReview ? capture.status : ("ready" as const),
+        reviewConfirmedAt: stillNeedsReview ? capture.reviewConfirmedAt : capture.reviewConfirmedAt || Date.now()
+      };
+    };
     setCaptures((current) => capturesForListMode(current.map(removeReminder), "active"));
     setArchivedCaptures((current) => capturesForListMode(current.map(removeReminder), "archived"));
     setCollectionCaptures((current) => capturesForListMode(current.map(removeReminder), "active"));
+    setReminderDrafts({});
     setMessage("Reminder removed.");
+  }
+
+  async function saveReminder(draft: ReminderScheduleDraft, reminderIndex: number | null) {
+    if (!selected) return;
+    if (config?.apiUrl && session?.accessToken) {
+      try {
+        const json = await withFreshAccessToken((accessToken) =>
+          requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
+            method: "PATCH",
+            headers: {
+              apikey: config.supabaseAnonKey,
+              authorization: `Bearer ${accessToken}`,
+              "content-type": "application/json"
+            },
+            body: {
+              captureId: selected.remoteId || selected.id,
+              action: "save_reminder",
+              reminderIndex,
+              reminder: {
+                start_date: draft.startDate,
+                end_date: draft.endDate,
+                start_time: draft.startTime,
+                end_time: draft.endTime,
+                trigger_date: draft.startDate,
+                trigger_time: draft.startTime,
+                date_window_start: draft.startDate,
+                date_window_end: draft.endDate,
+                date_precision: draft.datePrecision,
+                time_precision: draft.timePrecision,
+                timezone: draft.timezone,
+                duration: draft.duration,
+                duration_unit: draft.durationUnit,
+                trigger_text: draft.triggerText || "",
+                rationale: draft.rationale || "",
+                source: draft.source
+              }
+            }
+          })
+        );
+        const updatedCapture = captureFromRemote(json.capture);
+        applyUpdatedCapture(updatedCapture, selected.id);
+        setReminderDrafts({});
+        setMessage("Reminder saved.");
+      } catch (error) {
+        setMessage(friendlyError(error, "Could not save reminder."));
+      }
+      return;
+    }
+
+    const existingReminders = selected.suggestedReminders || [];
+    const existingReminder = typeof reminderIndex === "number"
+      ? existingReminders[reminderIndex]
+      : undefined;
+    const nextReminder = reminderSuggestionFromSchedule(draft, existingReminder);
+    const nextReminders = [...existingReminders];
+    if (
+      typeof reminderIndex === "number" &&
+      reminderIndex >= 0 &&
+      reminderIndex < nextReminders.length
+    ) {
+      nextReminders[reminderIndex] = nextReminder;
+    } else {
+      nextReminders.unshift(nextReminder);
+    }
+    const reviewTargets = (selected.reviewTargets || []).filter((target) => target !== "reminder");
+    const stillNeedsReview = reviewTargets.length > 0;
+    const updatedCapture: Capture = {
+      ...selected,
+      suggestedReminders: nextReminders,
+      reviewTargets,
+      needsReview: stillNeedsReview,
+      status: stillNeedsReview ? selected.status : "ready",
+      reviewConfirmedAt: stillNeedsReview ? selected.reviewConfirmedAt : selected.reviewConfirmedAt || Date.now()
+    };
+    applyUpdatedCapture(updatedCapture, selected.id);
+    setReminderDrafts({});
+    setMessage("Reminder saved.");
   }
 
   async function copySource() {
@@ -2298,6 +2387,8 @@ export default function App() {
           openReviewInsight,
           openVisitTargetMaps: (candidate) => void openVisitTargetMaps(candidate),
           pasteExpandedUrl: () => void pasteExpandedUrl(),
+          removeReminder: (reminderIndex) => void dismissReminder(reminderIndex),
+          saveReminder: (draft, reminderIndex) => void saveReminder(draft, reminderIndex),
           saveReviewDecisions: () => void saveReviewDecisions(),
           selectCapture,
           selectCollection,
@@ -2308,7 +2399,7 @@ export default function App() {
           setDraftTitle,
           setDraftTitleDirty,
           setQuickIntentOpen,
-          setReminderDrafts,
+          setReminderSheetOpen,
           updateSelectedReviewDraft
         }}
         data={{
@@ -2337,7 +2428,8 @@ export default function App() {
           noteSaveState,
           noteSheetOpen,
           quickIntentOpen,
-          reminderDrafts
+          reminderDrafts,
+          reminderSheetOpen
         }}
       />
     );

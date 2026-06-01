@@ -209,7 +209,7 @@ export function AppSheets({
                           <View style={styles.reviewChecklistActions}>
                             {task.editLabel ? (
                               <IconButton
-                                Icon={task.target === "reminder" ? X : Pencil}
+                                Icon={Pencil}
                                 label={task.editLabel}
                                 onPress={() => editReviewTask(task)}
                               />

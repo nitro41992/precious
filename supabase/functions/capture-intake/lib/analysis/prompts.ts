@@ -37,6 +37,11 @@ export function buildPrompt(
     "This is a maps-searchable candidate, not verified place resolution. Never invent or return an address, latitude, longitude, phone number, hours, or place ID. verified_place must always be false.",
     "When there is no real-world visit target, set visit_target_name and visit_target_query to null, visit_target_confidence to none, visit_target_evidence to [], and verified_place to false.",
     "Suggest a reminder only when the evidence has a useful future trigger. Do not invent events, places, or deadlines.",
+    "For each suggested_reminders item, keep trigger_value human-readable and fill the canonical interval fields: start_date and end_date as YYYY-MM-DD or null, start_time and end_time as HH:mm 24-hour or null, timezone as an IANA name or null, date_precision as exact, date_range, week, month_window, month, or unknown, and time_precision as exact, time_range, or unknown.",
+    "Also fill the legacy compatibility fields from the same interval: trigger_date equals start_date, trigger_time equals start_time, date_window_start equals start_date, date_window_end equals end_date, duration is the derived interval length when it is explicit, and duration_unit is minutes, hours, days, or weeks.",
+    "For vague date phrases, return structured date windows instead of leaving only prose: early July means start_date July 1 and end_date July 10 with date_precision month_window; mid July means July 11-20; late July means July 21 through month end. Use captured_at as the reference date for year selection.",
+    "If evidence gives a date range such as June 4-7, set start_date to June 4, end_date to June 7, and date_precision date_range. If evidence gives a time range such as 7-10pm without a date range, set start_time 19:00, end_time 22:00, time_precision time_range, and set start_date and end_date to the same date when a date is known.",
+    "Use null when evidence does not provide that part; do not invent an exact date, time, or duration beyond mapping explicit vague phrases into their structured interval.",
     "You may choose from only the retrieved active collections listed below. If one fits strongly, return an existing collection decision with its exact collection_id and title.",
     "Collection matching is subject/purpose-first. Do not match to media or entertainment Collections merely because a capture is a reel, short, video, or social post; match only when the content itself is about that Collection subject.",
     "Practical advice, recommendations, explanations, and how-tos should match the Collection that describes that subject. Source format alone is never enough when content evidence is available.",
@@ -64,6 +69,7 @@ export function buildPrompt(
             ? capture.source_text
             : textWithoutUrls(capture.source_text),
           context_note: capture.context_note || null,
+          captured_at: capture.created_at || null,
           url_evidence: llmUrlEvidence,
           asset: capture.asset_url
             ? {

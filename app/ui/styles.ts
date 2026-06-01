@@ -1940,6 +1940,149 @@ export const styles = StyleSheet.create({
     paddingBottom: Platform.OS === "android" ? 36 : 44,
     paddingTop: 8
   },
+  reminderSheet: {
+    gap: 14,
+    maxHeight: "92%",
+    paddingBottom: Platform.OS === "android" ? 34 : 42,
+    paddingTop: 8
+  },
+  reminderSheetHeaderIcon: {
+    backgroundColor: colors.accentSoft
+  },
+  reminderSheetScrollContent: {
+    gap: 14,
+    paddingBottom: 2
+  },
+  reminderFieldGroup: {
+    borderTopColor: colors.line,
+    borderTopWidth: StyleSheet.hairlineWidth
+  },
+  reminderFieldSectionHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 9,
+    minHeight: 44,
+    paddingTop: 10,
+    paddingBottom: 6
+  },
+  reminderFieldRow: {
+    alignItems: "center",
+    borderBottomColor: colors.line,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 64,
+    paddingVertical: 12
+  },
+  reminderFieldCopy: {
+    flex: 1,
+    gap: 3,
+    minWidth: 0
+  },
+  reminderFieldLabel: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 17
+  },
+  reminderFieldValue: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "800",
+    lineHeight: 21
+  },
+  reminderInlineAction: {
+    color: colors.accent,
+    fontSize: 13,
+    fontWeight: "800",
+    marginLeft: "auto"
+  },
+  reminderNativePickerWrap: {
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 10,
+    overflow: "hidden",
+    padding: 10
+  },
+  reminderSummaryBlock: {
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 4,
+    padding: 12
+  },
+  reminderSummaryText: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "800",
+    lineHeight: 21
+  },
+  reminderDurationBlock: {
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 12,
+    padding: 12
+  },
+  reminderDurationHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 9
+  },
+  reminderDurationControls: {
+    alignItems: "stretch",
+    flexDirection: "row",
+    gap: 10
+  },
+  reminderDurationInput: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: "800",
+    minHeight: 48,
+    minWidth: 74,
+    paddingHorizontal: 12,
+    textAlign: "center"
+  },
+  reminderUnitGrid: {
+    flex: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    minWidth: 0
+  },
+  reminderUnitChip: {
+    alignItems: "center",
+    backgroundColor: colors.surfaceContainer,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexGrow: 1,
+    justifyContent: "center",
+    minHeight: 48,
+    minWidth: 82,
+    paddingHorizontal: 10
+  },
+  reminderUnitChipSelected: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent
+  },
+  reminderUnitText: {
+    color: colors.secondary,
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 17
+  },
+  reminderUnitTextSelected: {
+    color: colors.accent
+  },
   reviewInsightScroll: {
     flexGrow: 0
   },
