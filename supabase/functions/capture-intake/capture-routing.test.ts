@@ -303,6 +303,56 @@ Deno.test("review targets drive review state and allow reviewed blank intent", (
   );
 });
 
+Deno.test("review target resolution preserves unresolved checklist items", () => {
+  const analysis = urlEvidence.normalizedReviewAnalysis({
+    display_title: "Weekend market",
+    summary: "A weekend market with hours and a location.",
+    default_intent: {
+      category: "visit",
+      confidence: 0.78,
+      rationale: "The market has public hours and a real-world location.",
+    },
+    review_rationale: {
+      focus: "Confirm Save Intent: Visit",
+      summary: "Looks like a local market, so I saved it as Visit.",
+      intent: "The market has public hours and a real-world location.",
+      collections: "No Collection matched strongly enough.",
+      reminder: "The weekend hours support a Reminder idea.",
+    },
+    review_targets: ["intent", "reminder"],
+    suggested_reminders: [{ trigger_type: "time", trigger_value: "Saturday 9 AM" }],
+    confidence_label: "Maybe",
+    needs_review: true,
+  });
+  const intentResolved = urlEvidence.normalizedReviewAnalysis(
+    urlEvidence.resolveReviewTargets(analysis, ["intent"]),
+  );
+  assertEqual(
+    intentResolved.review_targets.join("|"),
+    "reminder",
+    "resolving one checklist item should preserve the other target",
+  );
+  assertEqual(
+    urlEvidence.reviewTargetsForAnalysis(intentResolved).join("|"),
+    "reminder",
+    "remaining review target should still drive needs-review state",
+  );
+  const fullyResolved = urlEvidence.normalizedReviewAnalysis(
+    urlEvidence.resolveReviewTargets(intentResolved, ["reminder"]),
+    "2026-05-31T12:00:00.000Z",
+  );
+  assertEqual(
+    fullyResolved.needs_review,
+    false,
+    "clearing the final checklist item should make analysis ready",
+  );
+  assertEqual(
+    fullyResolved.review_targets.length,
+    0,
+    "confirmed review should have no unresolved targets",
+  );
+});
+
 Deno.test("capture gate prompt treats capture text and image text as untrusted", () => {
   const prompt = urlEvidence.captureGatePrompt(
     captureFixture({

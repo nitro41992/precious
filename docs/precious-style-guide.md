@@ -272,7 +272,7 @@ Each chip can expand into a small picker. Keep concise rationale visible only wh
 
 `Because the post mentions a SoHo ramen shop.`
 
-Capture Review should use one `Review insight` surface for AI rationale across Save Intent, Collections, and Reminder idea. The row should show a very short review cue that names the exact thing to check, such as `Confirm intent: visit or menu reference`, then open a native-feeling sheet led by one friendly because-style insight at body scale and followed by unframed decision rows for Save Intent, Collections, and Reminder idea. Do not use nested cards, hero-sized rationale text, generic field-level fallback blocks, hidden-only long presses, duplicate blurbs, or model traces. Keep the primary sheet action clear of Android gesture navigation.
+Capture Review should use one `Review insight` surface for AI rationale across Save Intent, Collections, and Reminder idea. The row should show a very short review cue that names the exact thing to check, such as `Confirm intent: visit or menu reference`, then open a native-feeling sheet led by one friendly because-style insight at body scale. When review targets are unresolved, the sheet should show an icon-led checklist for the exact targets that need a decision and let the user confirm or change each target from that surface. Follow the checklist with unframed rationale rows for Save Intent, Collections, and Reminder idea. Do not use nested cards, hero-sized rationale text, generic field-level fallback blocks, hidden-only long presses, duplicate blurbs, or model traces. Keep the primary sheet action clear of Android gesture navigation.
 
 When reminders are not fully implemented, use `Reminder idea: [before Saturday]` rather than copy that implies notification delivery.
 

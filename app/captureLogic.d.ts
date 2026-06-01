@@ -35,6 +35,14 @@ type SortableCapture = StatusCapture & {
 export const LOCAL_PROCESSING_GRACE_MS: number;
 export const REVIEW_TARGETS: ReviewReason[];
 export function captureIdentityAliases(capture?: { id?: string; remoteId?: string } | null): string[];
+export function capturesForListMode<T extends { archivedAt?: number | null }>(
+  captures: T[] | null | undefined,
+  listMode: "active" | "archived"
+): T[];
+export function capturesForSearchScope<T extends { archivedAt?: number | null }>(
+  captures: T[] | null | undefined,
+  scope: "active" | "archived" | "all" | string
+): T[];
 export function capturesShareIdentity(
   left?: { id?: string; remoteId?: string } | null,
   right?: { id?: string; remoteId?: string } | null

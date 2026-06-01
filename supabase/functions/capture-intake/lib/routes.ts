@@ -53,8 +53,10 @@ import {
 import {
   analysisRequiresReview,
   analysisWithCurrentIntent,
+  normalizedReviewTargets,
   normalizedReviewAnalysis,
   resolveReviewTargets,
+  reviewTargetsForAnalysis,
 } from "./analysis.ts";
 
 export async function handleCollectionsResource(
@@ -753,6 +755,116 @@ export async function handleCaptureIntakeRequest(request: Request) {
           result = await supabase
             .from("captures")
             .update({ analysis })
+            .eq("user_id", user.id)
+            .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
+            .select("*")
+            .single();
+        }
+        if (result.error) throw result.error;
+        return await captureResponse(
+          supabase,
+          user.id,
+          String(existingResult.data.id),
+        );
+      }
+
+      if (body.action === "resolve_review_targets") {
+        const currentAnalysis = existingResult.data.analysis &&
+            typeof existingResult.data.analysis === "object"
+          ? existingResult.data.analysis as Record<string, unknown>
+          : {};
+        const resolvedTargets = normalizedReviewTargets(body.resolvedTargets);
+        if (!resolvedTargets.length) {
+          return json({ error: "resolvedTargets is required" }, 400);
+        }
+        if (
+          typeof body.currentSaveIntent === "string" &&
+          !activeSaveIntentKeySet.has(body.currentSaveIntent)
+        ) {
+          return json({
+            error: "currentSaveIntent is not an active save intent",
+          }, 400);
+        }
+        if (resolvedTargets.includes("collections")) {
+          await acceptPendingCollectionDecisions(
+            supabase,
+            user.id,
+            String(existingResult.data.id),
+            currentAnalysis,
+          );
+        }
+        const resolvedBase: Record<string, unknown> = {
+          ...analysisWithCurrentIntent(
+            currentAnalysis,
+            body.currentSaveIntent,
+          ),
+        };
+        if (resolvedTargets.includes("collections")) {
+          resolvedBase.collection_decisions = [];
+          resolvedBase.suggested_collections = [];
+        }
+        if (resolvedTargets.includes("reminder")) {
+          resolvedBase.suggested_reminders = confirmedReminderSuggestions(
+            currentAnalysis,
+          );
+        }
+        const withResolvedTargets = resolveReviewTargets(
+          resolvedBase,
+          resolvedTargets,
+          existingResult.data.review_confirmed_at,
+        );
+        const remainingTargets = reviewTargetsForAnalysis(
+          withResolvedTargets,
+          existingResult.data.review_confirmed_at,
+        );
+        const confirmedAt = remainingTargets.length
+          ? existingResult.data.review_confirmed_at
+          : existingResult.data.review_confirmed_at || new Date().toISOString();
+        const nextAnalysis = normalizedReviewAnalysis(
+          withResolvedTargets,
+          confirmedAt,
+        );
+        const update: Record<string, unknown> = {
+          analysis: nextAnalysis,
+          analysis_state: analysisRequiresReview(nextAnalysis, confirmedAt)
+            ? "needs_review"
+            : "ready",
+        };
+        if (!remainingTargets.length && confirmedAt) {
+          update.review_confirmed_at = confirmedAt;
+        }
+        if (typeof body.currentSaveIntent === "string") {
+          update.current_save_intent = body.currentSaveIntent;
+          update.intent_corrected_at = new Date().toISOString();
+        } else if (body.currentSaveIntent === null) {
+          update.current_save_intent = null;
+          update.intent_corrected_at = new Date().toISOString();
+        }
+        let result = await supabase
+          .from("captures")
+          .update(update)
+          .eq("user_id", user.id)
+          .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
+          .select("*")
+          .single();
+        if (
+          result.error &&
+          /review_confirmed_at|intent_corrected_at|schema cache|column/i.test(
+            String(result.error.message || result.error.details || ""),
+          )
+        ) {
+          const fallbackUpdate = { ...update };
+          delete fallbackUpdate.review_confirmed_at;
+          if (
+            /intent_corrected_at/i.test(
+              String(result.error.message || result.error.details || ""),
+            )
+          ) {
+            delete fallbackUpdate.intent_corrected_at;
+          }
+          result = await supabase
+            .from("captures")
+            .update(fallbackUpdate)
             .eq("user_id", user.id)
             .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
             .select("*")

@@ -44,6 +44,8 @@ import {
   normalizeIntent,
   reminderDraftKey,
   reminderLabel,
+  reviewChecklistCta,
+  reviewChecklistTasksForCapture,
   reviewInsightForCapture,
   reviewStatusCue,
   urlEvidenceMessage
@@ -84,7 +86,6 @@ type CaptureReviewScreenProps = {
   actions: {
     closeNoteSheet: () => void;
     confirmArchive: () => void;
-    confirmReview: () => void;
     copySource: () => void;
     markFaviconFailed: (host: string) => void;
     openCaptureUrl: (url: string) => void;
@@ -140,7 +141,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const {
     closeNoteSheet,
     confirmArchive,
-    confirmReview,
     copySource,
     markFaviconFailed,
     openCaptureUrl,
@@ -187,6 +187,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const selectedVisitTargetMapCandidates = selectedVisitTarget ? visitTargetMapCandidates : [];
   const selectedSourceMeta = `${captureSourceLabel(selected)} · ${formatDateTime(selected.createdAt)}`;
   const selectedReviewInsight = reviewInsightForCapture(selected);
+  const selectedReviewTasks = reviewChecklistTasksForCapture(selected);
   const selectedNeedsReview = displayStatus(selected) === "needs_review";
   const selectedReviewState = selectedNeedsReview
     ? selectedReviewInsight.focus
@@ -218,6 +219,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       Object.keys(reminderDrafts).length
   );
   const reviewConfirmOnly = selectedNeedsReview && !reviewHasPendingChanges && !collectionActionPending;
+  const reviewChecklistLabel = reviewChecklistCta(selectedReviewTasks);
   const reviewSupportText = draftIntentDirty
     ? aiIntentValue
       ? `Changed from ${activeIntentLabel(aiIntentValue)}`
@@ -511,11 +513,20 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                 </View>
                 <View style={styles.reviewInsightCopy}>
                   <View style={styles.reviewInsightHeader}>
-                    <Text style={styles.reviewInsightTitle}>Review insight</Text>
-                    <Text style={styles.reviewInsightAction}>Details</Text>
+                    <Text style={styles.reviewInsightTitle}>
+                      {selectedReviewTasks.length ? reviewChecklistLabel : "Review insight"}
+                    </Text>
+                    {selectedReviewTasks.length ? (
+                      <View style={styles.reviewInsightCountBadge}>
+                        <Text style={styles.reviewInsightCountText}>{selectedReviewTasks.length}</Text>
+                      </View>
+                    ) : null}
+                    <Text style={styles.reviewInsightAction}>
+                      {selectedReviewTasks.length ? "Open" : "Details"}
+                    </Text>
                   </View>
                   <Text numberOfLines={2} style={styles.reviewInsightSummary}>
-                    {selectedReviewInsight.summary}
+                    {selectedReviewTasks.length ? selectedReviewInsight.focus : selectedReviewInsight.summary}
                   </Text>
                 </View>
                 <ChevronRight color={colors.muted} size={18} strokeWidth={2.4} />
@@ -625,7 +636,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
               <Pressable
                 disabled={collectionActionPending}
                 onPress={() => {
-                  if (reviewConfirmOnly) confirmReview();
+                  if (reviewConfirmOnly) openReviewInsight(selectedReviewInsight);
                   else saveReviewDecisions();
                 }}
                 style={({ pressed }) => [
@@ -634,10 +645,10 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                   pressed && !collectionActionPending && styles.primaryButtonPressed,
                   collectionActionPending && styles.disabledButton
                 ]}
-                testID={reviewConfirmOnly ? "pc.review.confirm" : "pc.review.save"}
+                testID={reviewConfirmOnly ? "pc.review.checklist.open" : "pc.review.save"}
               >
                 <Text style={styles.primaryButtonText}>
-                  {collectionActionPending ? "Updating collection..." : reviewConfirmOnly ? "Looks right" : "Save review"}
+                  {collectionActionPending ? "Updating collection..." : reviewConfirmOnly ? reviewChecklistLabel : "Save review"}
                 </Text>
               </Pressable>
             </View>

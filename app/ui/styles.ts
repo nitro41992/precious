@@ -1638,6 +1638,23 @@ export const styles = StyleSheet.create({
     fontWeight: "800",
     lineHeight: 16
   },
+  reviewInsightCountBadge: {
+    alignItems: "center",
+    backgroundColor: colors.reviewSoft,
+    borderColor: colors.review,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: "center",
+    minHeight: 24,
+    minWidth: 24,
+    paddingHorizontal: 7
+  },
+  reviewInsightCountText: {
+    color: colors.review,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 16
+  },
   reviewInsightSummary: {
     color: colors.muted,
     fontSize: 13,
@@ -1919,8 +1936,118 @@ export const styles = StyleSheet.create({
   },
   reviewInsightSheet: {
     gap: 16,
+    maxHeight: "90%",
     paddingBottom: Platform.OS === "android" ? 36 : 44,
     paddingTop: 8
+  },
+  reviewInsightScroll: {
+    flexGrow: 0
+  },
+  reviewInsightScrollContent: {
+    gap: 16,
+    paddingBottom: 2
+  },
+  reviewChecklist: {
+    backgroundColor: colors.reviewSoft,
+    borderColor: colors.review,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 0,
+    paddingHorizontal: 12,
+    paddingTop: 10
+  },
+  reviewChecklistHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingBottom: 8
+  },
+  reviewChecklistLabel: {
+    color: colors.review,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 16
+  },
+  reviewChecklistCount: {
+    alignItems: "center",
+    backgroundColor: colors.surfaceContainer,
+    borderRadius: 8,
+    justifyContent: "center",
+    minHeight: 24,
+    minWidth: 24,
+    paddingHorizontal: 7
+  },
+  reviewChecklistCountText: {
+    color: colors.review,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 16
+  },
+  reviewChecklistTask: {
+    alignItems: "flex-start",
+    borderTopColor: "rgba(226, 189, 118, 0.34)",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 5,
+    minHeight: 84,
+    paddingVertical: 13
+  },
+  reviewChecklistCopy: {
+    flex: 1,
+    gap: 6,
+    minWidth: 0
+  },
+  reviewChecklistTaskTop: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between"
+  },
+  reviewChecklistTaskText: {
+    flex: 1,
+    gap: 3,
+    minWidth: 0
+  },
+  reviewChecklistValue: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "800",
+    lineHeight: 21
+  },
+  reviewChecklistActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 4
+  },
+  rationaleIntentOptions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingTop: 4
+  },
+  rationaleIntentOption: {
+    alignItems: "center",
+    backgroundColor: colors.surfaceContainer,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: "center",
+    minHeight: 40,
+    paddingHorizontal: 11,
+    paddingVertical: 7
+  },
+  rationaleIntentOptionSelected: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent
+  },
+  rationaleIntentOptionText: {
+    color: colors.secondary,
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 17
+  },
+  rationaleIntentOptionTextSelected: {
+    color: colors.accent
   },
   rationaleSheetHeader: {
     alignItems: "center",
@@ -1985,6 +2112,9 @@ export const styles = StyleSheet.create({
   },
   rationaleSheetSectionIconReminder: {
     backgroundColor: colors.reviewSoft
+  },
+  rationaleSheetSectionIconAnalysis: {
+    backgroundColor: colors.surfaceContainerHigh
   },
   rationaleSheetSectionCopy: {
     flex: 1,

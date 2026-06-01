@@ -19,8 +19,10 @@ import type {
   LinkedCollection,
   LucideIconComponent,
   ReminderSuggestion,
+  ReviewChecklistTask,
   ReviewInsight,
   ReviewRationale,
+  ReviewTarget,
   UrlEvidence
 } from "./types";
 import {
@@ -466,6 +468,77 @@ export function reviewFocusForCapture(capture: Capture, intentText: string) {
   }
   if (capture.needsReview) return "Review the suggested fields";
   return conciseText(intentText, 88) || "Review the suggested fields";
+}
+
+const REVIEW_CHECKLIST_ORDER: ReviewTarget[] = ["intent", "collections", "reminder", "analysis"];
+
+export function reviewChecklistCta(tasks: ReviewChecklistTask[]) {
+  if (!tasks.length) return "Review insight";
+  return tasks.length === 1 ? "Review 1 item" : `Review ${tasks.length} items`;
+}
+
+export function reviewChecklistTasksForCapture(capture: Capture): ReviewChecklistTask[] {
+  const targets = new Set(reviewTargetsForCapture(capture));
+  if (!targets.size) return [];
+  const rationale = capture.reviewRationale || {};
+  const primaryReminder = (capture.suggestedReminders || [])[0];
+  const collectionsLabel = linkedCollectionsLabel(capture.linkedCollections || []);
+  const intentValue = activeIntentLabel(capture.defaultIntent);
+  const intentTask: ReviewChecklistTask = {
+    target: "intent",
+    title: "Save Intent",
+    value: intentValue || "No intent",
+    rationale:
+      rationaleLine(rationale.intent) ||
+      rationaleLine(capture.intentRationale) ||
+      (intentValue
+        ? `Confirm ${intentValue} is the right action for this capture.`
+        : "Choose an action only if the saved content clearly supports one."),
+    confirmLabel: intentValue ? `Keep ${intentValue}` : "Keep no intent",
+    editLabel: intentValue ? "Change Save Intent" : "Choose Save Intent"
+  };
+  const collectionsTask: ReviewChecklistTask = {
+    target: "collections",
+    title: "Collections",
+    value: collectionsLabel === "Add collections" ? "No collection" : collectionsLabel,
+    rationale:
+      rationaleLine(rationale.collections) ||
+      (capture.linkedCollections || [])
+        .map((collection) => rationaleLine(collection.rationale))
+        .find(Boolean) ||
+      "Keep it unfiled unless one of your existing Collections fits.",
+    confirmLabel: collectionsLabel === "Add collections" ? "Keep no collection" : `Keep ${collectionsLabel}`,
+    editLabel: "Change Collections"
+  };
+  const reminderTask: ReviewChecklistTask = {
+    target: "reminder",
+    title: "Reminder idea",
+    value: primaryReminder ? reminderLabel(primaryReminder) : "No reminder",
+    rationale:
+      rationaleLine(rationale.reminder) ||
+      rationaleLine(primaryReminder?.rationale) ||
+      "Confirm this only if the idea should stay with the capture.",
+    confirmLabel: primaryReminder ? `Keep ${reminderLabel(primaryReminder)}` : "Keep no reminder",
+    editLabel: primaryReminder ? "Remove Reminder idea" : undefined
+  };
+  const analysisTask: ReviewChecklistTask = {
+    target: "analysis",
+    title: "Analysis",
+    value: "Source details",
+    rationale:
+      rationaleLine(rationale.summary) ||
+      "Confirm the extracted details look usable, or edit the title and note before saving.",
+    confirmLabel: "Mark analysis reviewed"
+  };
+  const byTarget: Record<ReviewTarget, ReviewChecklistTask> = {
+    intent: intentTask,
+    collections: collectionsTask,
+    reminder: reminderTask,
+    analysis: analysisTask
+  };
+  return REVIEW_CHECKLIST_ORDER
+    .filter((target) => targets.has(target))
+    .map((target) => byTarget[target]);
 }
 
 export function reviewInsightForCapture(capture: Capture): ReviewInsight {

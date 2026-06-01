@@ -28,10 +28,20 @@ export type ReviewInsight = {
   sections: Array<{ label: string; text: string }>;
 };
 
+export type ReviewChecklistTask = {
+  target: ReviewTarget;
+  title: string;
+  value: string;
+  rationale: string;
+  confirmLabel: string;
+  editLabel?: string;
+};
+
 export type RationaleSheet = {
   title: string;
   text?: string;
   sections?: Array<{ label: string; text: string }>;
+  tasks?: ReviewChecklistTask[];
 };
 
 export type Capture = {

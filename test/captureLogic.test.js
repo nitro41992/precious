@@ -4,6 +4,8 @@ const test = require("node:test");
 const {
   LOCAL_PROCESSING_GRACE_MS,
   captureIdentityAliases,
+  capturesForListMode,
+  capturesForSearchScope,
   capturesShareIdentity,
   displayStatus,
   extractHttpUrl,
@@ -124,7 +126,10 @@ test("displayStatus keeps extracted failed captures visible as ready but blocks 
 
 test("mergeRemoteCaptures preserves only fresh local processing rows in the active list", () => {
   const now = 10_000_000;
-  const remote = [capture({ id: "remote", createdAt: now - 1000 })];
+  const remote = [
+    capture({ id: "remote", createdAt: now - 1000 }),
+    capture({ id: "archived-remote", archivedAt: now - 900, createdAt: now - 900 })
+  ];
   const freshLocal = capture({ id: "fresh-local", status: "processing", createdAt: now - 5000 });
   const staleLocal = capture({
     id: "stale-local",
@@ -144,8 +149,20 @@ test("mergeRemoteCaptures preserves only fresh local processing rows in the acti
   );
   assert.deepEqual(
     mergeRemoteCaptures(remote, [freshLocal], "archived", now).map((item) => item.id),
-    ["remote"]
+    ["archived-remote"]
   );
+});
+
+test("capture scope helpers keep active and archived surfaces partitioned", () => {
+  const active = capture({ id: "active", archivedAt: null });
+  const archived = capture({ id: "archived", archivedAt: 1234 });
+  const rows = [active, archived];
+
+  assert.deepEqual(capturesForListMode(rows, "active").map((item) => item.id), ["active"]);
+  assert.deepEqual(capturesForListMode(rows, "archived").map((item) => item.id), ["archived"]);
+  assert.deepEqual(capturesForSearchScope(rows, "active").map((item) => item.id), ["active"]);
+  assert.deepEqual(capturesForSearchScope(rows, "archived").map((item) => item.id), ["archived"]);
+  assert.deepEqual(capturesForSearchScope(rows, "all").map((item) => item.id), ["active", "archived"]);
 });
 
 test("capture identity aliases compare local and remote ids without source dedupe", () => {

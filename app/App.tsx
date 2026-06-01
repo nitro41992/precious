@@ -15,6 +15,7 @@ import {
   PermissionsAndroid,
   Platform,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   useWindowDimensions,
@@ -27,6 +28,7 @@ import {
   Folder,
   Info,
   LogOut,
+  Pencil,
   Target,
   X
 } from "lucide-react-native";
@@ -78,7 +80,9 @@ import type {
   ReminderDraftAction,
   ReminderReviewDecision,
   ReminderSuggestion,
+  ReviewChecklistTask,
   ReviewInsight,
+  ReviewTarget,
   SearchRemoteMode,
   SearchScope,
   SnackbarState,
@@ -133,6 +137,8 @@ import {
   rawTitleLikeSource,
   reminderDraftKey,
   reminderLabel,
+  reviewChecklistCta,
+  reviewChecklistTasksForCapture,
   reviewInsightForCapture,
   reviewStatusCue,
   searchableCaptureText,
@@ -175,6 +181,8 @@ import { SearchScreen } from "./screens/SearchScreen";
 
 import type { MapSearchCandidate } from "./captureLogic";
 import {
+  capturesForListMode,
+  capturesForSearchScope,
   displayStatus,
   extractHttpUrl,
   isArchived,
@@ -228,6 +236,32 @@ function rationaleSectionIconStyle(label: string) {
       return styles.rationaleSheetSectionIconCollection;
     case "Reminder idea":
       return styles.rationaleSheetSectionIconReminder;
+    default:
+      return styles.rationaleSheetSectionIconIntent;
+  }
+}
+
+function reviewTaskIcon(target: ReviewTarget): LucideIconComponent {
+  switch (target) {
+    case "collections":
+      return Folder;
+    case "reminder":
+      return Bell;
+    case "analysis":
+      return Info;
+    default:
+      return Target;
+  }
+}
+
+function reviewTaskIconStyle(target: ReviewTarget) {
+  switch (target) {
+    case "collections":
+      return styles.rationaleSheetSectionIconCollection;
+    case "reminder":
+      return styles.rationaleSheetSectionIconReminder;
+    case "analysis":
+      return styles.rationaleSheetSectionIconAnalysis;
     default:
       return styles.rationaleSheetSectionIconIntent;
   }
@@ -317,6 +351,7 @@ export default function App() {
   const [noteSheetOpen, setNoteSheetOpen] = useState(false);
   const [accountSheetOpen, setAccountSheetOpen] = useState(false);
   const [rationaleSheet, setRationaleSheet] = useState<RationaleSheet | null>(null);
+  const [rationaleEditTarget, setRationaleEditTarget] = useState<ReviewTarget | null>(null);
   const [archiveCaptureConfirmOpen, setArchiveCaptureConfirmOpen] = useState(false);
   const [archiveCollectionTarget, setArchiveCollectionTarget] = useState<Collection | null>(null);
   const [faviconFailures, setFaviconFailures] = useState<Record<string, boolean>>({});
@@ -390,12 +425,14 @@ export default function App() {
     updater: (current: Capture[]) => Capture[]
   ) {
     if (mode === "archived") {
-      const next = updater(archivedCapturesRef.current);
+      const current = capturesForListMode(archivedCapturesRef.current, "archived");
+      const next = capturesForListMode(updater(current), "archived");
       archivedCapturesRef.current = next;
       setArchivedCaptures(next);
       return next;
     }
-    const next = updater(capturesRef.current);
+    const current = capturesForListMode(capturesRef.current, "active");
+    const next = capturesForListMode(updater(current), "active");
     capturesRef.current = next;
     setCaptures(next);
     return next;
@@ -420,9 +457,7 @@ export default function App() {
     const raw = await nativeStore.getCachedCapturePage(session.userId, mode).catch(() => null);
     const page = cachedCapturePageFromRaw(raw);
     if (!page.present) return false;
-    const rows = sortCaptures(
-      page.captures.filter((capture) => mode === "archived" ? isArchived(capture) : !isArchived(capture))
-    );
+    const rows = sortCaptures(capturesForListMode(page.captures, mode));
     if (mode === "archived") {
       if (!archivedCapturesRef.current.length) {
         commitCaptureRows("archived", () => rows);
@@ -432,7 +467,7 @@ export default function App() {
       }
       return false;
     }
-    const currentActiveRows = capturesRef.current;
+    const currentActiveRows = capturesForListMode(capturesRef.current, "active");
     const canSeedActiveRows =
       !currentActiveRows.length || currentActiveRows.every((capture) => isFreshLocalProcessingCapture(capture));
     if (canSeedActiveRows) {
@@ -481,11 +516,11 @@ export default function App() {
   }
 
   function knownCapturesForCollection(collectionId: string) {
-    const cached = collectionCapturesCacheRef.current[collectionId] || [];
+    const cached = capturesForListMode(collectionCapturesCacheRef.current[collectionId] || [], "active");
     if (cached.length) return uniqueCaptures(cached);
     const known = uniqueCaptures([
-      ...capturesRef.current.filter((capture) => captureBelongsToCollection(capture, collectionId)),
-      ...archivedCapturesRef.current.filter((capture) => captureBelongsToCollection(capture, collectionId))
+      ...capturesForListMode(capturesRef.current, "active")
+        .filter((capture) => captureBelongsToCollection(capture, collectionId))
     ]);
     if (!known.length) return [];
     const hasCollectionOrder = known.every((capture) => collectionLinkTimestamp(capture, collectionId));
@@ -643,8 +678,8 @@ export default function App() {
       }
       const raw = await nativeStore.getCaptures();
       const next = JSON.parse(raw || "[]") as Capture[];
-      const active = next.filter((capture) => !isArchived(capture));
-      const archived = next.filter(isArchived);
+      const active = capturesForListMode(next, "active");
+      const archived = capturesForListMode(next, "archived");
       if (mode === "archived") {
         commitCaptureRows("archived", () => sortCaptures(archived));
         setArchivedCapturesLoaded(true);
@@ -783,9 +818,12 @@ export default function App() {
           }
         ) as RemoteCapturePage;
       });
-      const next = (json.captures ?? []).map(captureFromRemote);
+      const next = capturesForListMode((json.captures ?? []).map(captureFromRemote), "active");
       const merged = options.append
-        ? uniqueCaptures([...(collectionCapturesCacheRef.current[collectionId] || []), ...next])
+        ? capturesForListMode(
+            uniqueCaptures([...(collectionCapturesCacheRef.current[collectionId] || []), ...next]),
+            "active"
+          )
         : next;
       collectionCapturesCacheRef.current[collectionId] = merged;
       collectionCapturesCursorCacheRef.current[collectionId] = json.next_cursor || null;
@@ -870,9 +908,11 @@ export default function App() {
       const collection = [...collectionsCacheRef.current.active, ...collectionsCacheRef.current.archived]
         .find((item) => item.id === collectionId);
       const hasNoCaptures = collection?.captureCount === 0;
+      const hasCachedActiveCaptures =
+        capturesForListMode(collectionCapturesCacheRef.current[collectionId] || [], "active").length > 0;
       setCollectionCapturesLoading(!hasNoCaptures);
       setCollectionCapturesLoadPhase(
-        hasNoCaptures ? "idle" : collectionCapturesCacheRef.current[collectionId]?.length ? "refresh" : "initial"
+        hasNoCaptures ? "idle" : hasCachedActiveCaptures ? "refresh" : "initial"
       );
       setCollectionCapturesError("");
     }
@@ -1083,8 +1123,8 @@ export default function App() {
   }
 
   function replaceLocalCaptureLists(next: Capture[]) {
-    setCaptures(sortCaptures(next.filter((capture) => !isArchived(capture))));
-    setArchivedCaptures(sortCaptures(next.filter(isArchived)));
+    commitCaptureRows("active", () => sortCaptures(capturesForListMode(next, "active")));
+    commitCaptureRows("archived", () => sortCaptures(capturesForListMode(next, "archived")));
   }
 
   async function persistSupabaseSession(accessToken: string, refreshToken: string, expiresAt: number) {
@@ -1297,6 +1337,7 @@ export default function App() {
       }
       if (rationaleSheet) {
         setRationaleSheet(null);
+        setRationaleEditTarget(null);
         return true;
       }
       if (accountSheetOpen) {
@@ -1469,7 +1510,7 @@ export default function App() {
     };
   }, [captureKeyboardInset]);
 
-  const homeCaptures = useMemo(() => captures.filter((capture) => !isArchived(capture)), [captures]);
+  const homeCaptures = useMemo(() => capturesForListMode(captures, "active"), [captures]);
   const homeRows = useMemo(() => groupedCaptureRows(homeCaptures), [homeCaptures]);
   const homeInitialLoading = (capturesLoadPhase === "cold" || capturesLoadPhase === "idle") &&
     !activeCapturesLoadedOnce &&
@@ -1679,9 +1720,11 @@ export default function App() {
     }).start();
   }, [activeCollectionsColdLoading, collectionListFade, collections.length, collectionsColdLoading]);
   const searchPool = useMemo(() => {
-    if (searchScope === "archived") return archivedCaptures;
-    if (searchScope === "all") return uniqueCaptures([...captures, ...archivedCaptures]);
-    return captures;
+    const activeRows = capturesForListMode(captures, "active");
+    const archivedRows = capturesForListMode(archivedCaptures, "archived");
+    if (searchScope === "archived") return uniqueCaptures(archivedRows);
+    if (searchScope === "all") return uniqueCaptures([...activeRows, ...archivedRows]);
+    return uniqueCaptures(activeRows);
   }, [archivedCaptures, captures, searchScope]);
   const searchTerm = searchQuery.trim();
   const currentSearchKey = searchCacheKey(searchScope, searchTerm);
@@ -1703,8 +1746,12 @@ export default function App() {
       remoteSearchKey === currentSearchKey &&
       !remoteSearchError
   );
+  const scopedRemoteSearchResults = useMemo(
+    () => capturesForSearchScope(remoteSearchResults, searchScope),
+    [remoteSearchResults, searchScope]
+  );
   const searchResults = remoteSearchReadyForQuery
-    ? mergeSearchResults(localSearchResults, remoteSearchResults)
+    ? mergeSearchResults(localSearchResults, scopedRemoteSearchResults)
     : localSearchResults;
 
   useEffect(() => {
@@ -2048,14 +2095,26 @@ export default function App() {
     });
   }, [captureReturnCollectionId, loadCollectionCaptures, selectedCollection?.captureCount, selectedCollection?.status, selectedCollectionId]);
 
-  function openReviewInsight(insight: ReviewInsight) {
+  function rationaleSheetForCapture(capture: Capture): RationaleSheet | null {
+    const insight = reviewInsightForCapture(capture);
     const text = insight.summary || insight.focus;
-    if (!text) return;
-    setRationaleSheet({
-      title: "Review insight",
+    if (!text) return null;
+    const tasks = reviewChecklistTasksForCapture(capture);
+    return {
+      title: tasks.length ? reviewChecklistCta(tasks) : "Review insight",
       text,
-      sections: insight.sections
-    });
+      sections: insight.sections,
+      tasks
+    };
+  }
+
+  function openReviewInsight(_insight: ReviewInsight) {
+    if (!selected) return;
+    const sheet = rationaleSheetForCapture(selected);
+    if (sheet) {
+      setRationaleEditTarget(null);
+      setRationaleSheet(sheet);
+    }
   }
 
   function applyUpdatedCapture(updatedCapture: Capture, previousId: string) {
@@ -2065,18 +2124,19 @@ export default function App() {
       item.id === updatedCapture.id ||
       Boolean(updatedCapture.remoteId && item.remoteId === updatedCapture.remoteId);
     for (const [collectionId, rows] of Object.entries(collectionCapturesCacheRef.current)) {
-      collectionCapturesCacheRef.current[collectionId] = rows.map((item) =>
-        matchesCapture(item) ? updatedCapture : item
+      collectionCapturesCacheRef.current[collectionId] = capturesForListMode(
+        rows.map((item) => matchesCapture(item) ? updatedCapture : item),
+        "active"
       );
     }
     setCaptures((current) =>
-      current.map((item) => (matchesCapture(item) ? updatedCapture : item))
+      capturesForListMode(current.map((item) => (matchesCapture(item) ? updatedCapture : item)), "active")
     );
     setArchivedCaptures((current) =>
-      current.map((item) => (matchesCapture(item) ? updatedCapture : item))
+      capturesForListMode(current.map((item) => (matchesCapture(item) ? updatedCapture : item)), "archived")
     );
     setCollectionCaptures((current) =>
-      current.map((item) => (matchesCapture(item) ? updatedCapture : item))
+      capturesForListMode(current.map((item) => (matchesCapture(item) ? updatedCapture : item)), "active")
     );
   }
 
@@ -2294,11 +2354,35 @@ export default function App() {
     setMessage("Saved.");
   }
 
-  async function confirmReview() {
+  function refreshRationaleSheet(updatedCapture: Capture) {
+    const sheet = rationaleSheetForCapture(updatedCapture);
+    if (sheet?.tasks?.length) {
+      setRationaleSheet(sheet);
+      return;
+    }
+    setRationaleSheet(null);
+    setRationaleEditTarget(null);
+  }
+
+  async function resolveReviewTargets(
+    targets: ReviewTarget[],
+    options: { currentSaveIntent?: string | null } = {}
+  ) {
     if (!selected) return;
+    const resolvedTargets = [...new Set(targets)].filter((target): target is ReviewTarget =>
+      target === "intent" || target === "collections" || target === "reminder" || target === "analysis"
+    );
+    if (!resolvedTargets.length) return;
     if (config?.apiUrl && session?.accessToken) {
       try {
-        const currentSaveIntent = draftIntentDirty ? draftIntent || null : undefined;
+        const body: Record<string, unknown> = {
+          captureId: selected.remoteId || selected.id,
+          action: "resolve_review_targets",
+          resolvedTargets
+        };
+        if (Object.prototype.hasOwnProperty.call(options, "currentSaveIntent")) {
+          body.currentSaveIntent = options.currentSaveIntent ?? null;
+        }
         const json = await withFreshAccessToken((accessToken) =>
           requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
             method: "PATCH",
@@ -2307,42 +2391,59 @@ export default function App() {
               authorization: `Bearer ${accessToken}`,
               "content-type": "application/json"
             },
-            body: {
-              captureId: selected.remoteId || selected.id,
-              action: "confirm_review",
-              title: draftTitle.trim(),
-              note: draftNote.trim(),
-              currentSaveIntent
-            }
+            body
           })
         );
         const updatedCapture = captureFromRemote(json.capture);
         applyUpdatedCapture(updatedCapture, selected.id);
-        setDraftTitleDirty(false);
-        setDraftNoteDirty(false);
         setDraftIntentDirty(false);
-        setMessage("Review confirmed.");
+        setRationaleEditTarget(null);
+        refreshRationaleSheet(updatedCapture);
+        setMessage("Review updated.");
       } catch (error) {
-        setMessage(friendlyError(error, "Could not confirm review."));
+        setMessage(friendlyError(error, "Could not update review."));
       }
       return;
     }
-    if (!nativeStore?.confirmCaptureReview) return;
-    const raw = await nativeStore.confirmCaptureReview(
-      selected.id,
-      draftTitle.trim(),
-      draftNote.trim(),
-      draftIntentDirty && draftIntent ? draftIntent : null
-    );
-    const next = JSON.parse(raw || "[]") as Capture[];
-    replaceLocalCaptureLists(next);
-    setCollectionCaptures((current) =>
-      current.map((item) => next.find((capture) => capture.id === item.id) ?? item)
-    );
-    setDraftTitleDirty(false);
-    setDraftNoteDirty(false);
+
+    const resolved = new Set(resolvedTargets);
+    const updatedCapture: Capture = {
+      ...selected,
+      defaultIntent: Object.prototype.hasOwnProperty.call(options, "currentSaveIntent")
+        ? options.currentSaveIntent || undefined
+        : selected.defaultIntent,
+      reviewTargets: (selected.reviewTargets || []).filter((target) => !resolved.has(target)),
+      suggestedReminders: resolved.has("reminder")
+        ? (selected.suggestedReminders || []).map((reminder) => ({ ...reminder, status: "confirmed" }))
+        : selected.suggestedReminders
+    };
+    const stillNeedsReview = Boolean(updatedCapture.reviewTargets?.length);
+    updatedCapture.needsReview = stillNeedsReview;
+    updatedCapture.status = stillNeedsReview ? selected.status : "ready";
+    updatedCapture.reviewConfirmedAt = stillNeedsReview ? selected.reviewConfirmedAt : Date.now();
+    applyUpdatedCapture(updatedCapture, selected.id);
     setDraftIntentDirty(false);
-    setMessage("Review confirmed.");
+    setRationaleEditTarget(null);
+    refreshRationaleSheet(updatedCapture);
+    setMessage("Review updated.");
+  }
+
+  function editReviewTask(task: ReviewChecklistTask) {
+    if (task.target === "intent") {
+      setRationaleEditTarget((current) => (current === "intent" ? null : "intent"));
+      return;
+    }
+    if (task.target === "collections") {
+      setRationaleSheet(null);
+      setRationaleEditTarget(null);
+      void openCollectionPicker();
+      return;
+    }
+    if (task.target === "reminder") {
+      setRationaleSheet(null);
+      setRationaleEditTarget(null);
+      void dismissReminder(0);
+    }
   }
 
   async function collectionRequest<T>(
@@ -2455,8 +2556,11 @@ export default function App() {
       applyUpdatedCapture(updatedCapture, previousId);
       collectionCapturesCacheRef.current = {};
       setCollectionCaptures((current) =>
-        current.map((item) =>
-          item.id === previousId || item.remoteId === previousId ? updatedCapture : item
+        capturesForListMode(
+          current.map((item) =>
+            item.id === previousId || item.remoteId === previousId ? updatedCapture : item
+          ),
+          "active"
         )
       );
       closeCollectionPicker();
@@ -2589,13 +2693,16 @@ export default function App() {
         )
       );
       setCaptures((current) =>
-        current.map((capture) =>
-          capture.id === captureId || capture.remoteId === captureId
-            ? {
-                ...capture,
-                linkedCollections: (capture.linkedCollections || []).filter((collection) => collection.id !== collectionId)
-              }
-            : capture
+        capturesForListMode(
+          current.map((capture) =>
+            capture.id === captureId || capture.remoteId === captureId
+              ? {
+                  ...capture,
+                  linkedCollections: (capture.linkedCollections || []).filter((collection) => collection.id !== collectionId)
+                }
+              : capture
+          ),
+          "active"
         )
       );
       setMessage("");
@@ -2641,18 +2748,18 @@ export default function App() {
       collectionCapturesCacheRef.current[collectionId] = [
         addCollection(capture),
         ...(collectionCapturesCacheRef.current[collectionId] || []).filter((item) => item.id !== capture.id)
-      ];
+      ].filter((item) => !isArchived(item));
       collectionsCacheRef.current.active = collectionsCacheRef.current.active.map((item) =>
         item.id === collectionId ? { ...item, captureCount: item.captureCount + 1 } : item
       );
       setCollections((current) =>
         current.map((item) => item.id === collectionId ? { ...item, captureCount: item.captureCount + 1 } : item)
       );
-      setCaptures((current) => current.map(addCollection));
+      setCaptures((current) => capturesForListMode(current.map(addCollection), "active"));
       setCollectionCaptures((current) => [
         addCollection(capture),
         ...current.filter((item) => item.id !== capture.id)
-      ]);
+      ].filter((item) => !isArchived(item)));
       setSnackbar(null);
       setMessage("Collection restored.");
       await loadCaptures();
@@ -2727,9 +2834,9 @@ export default function App() {
             suggestedReminders: (capture.suggestedReminders || []).filter((_, index) => index !== reminderIndex)
           }
         : capture;
-    setCaptures((current) => current.map(removeReminder));
-    setArchivedCaptures((current) => current.map(removeReminder));
-    setCollectionCaptures((current) => current.map(removeReminder));
+    setCaptures((current) => capturesForListMode(current.map(removeReminder), "active"));
+    setArchivedCaptures((current) => capturesForListMode(current.map(removeReminder), "archived"));
+    setCollectionCaptures((current) => capturesForListMode(current.map(removeReminder), "active"));
     setMessage("Reminder removed.");
   }
 
@@ -2842,7 +2949,7 @@ export default function App() {
     try {
       const raw = await nativeStore.captureSource(source);
       const localCapture = JSON.parse(raw) as Capture;
-      setCaptures((current) => [localCapture, ...current.filter((item) => item.id !== localCapture.id)]);
+      commitCaptureRows("active", (current) => [localCapture, ...current.filter((item) => item.id !== localCapture.id)]);
       setSourceDraft("");
       closeCaptureComposer();
     } catch (error) {
@@ -2865,7 +2972,7 @@ export default function App() {
       const raw = await nativeStore.captureImage();
       if (!raw) return;
       const localCapture = JSON.parse(raw) as Capture;
-      setCaptures((current) => [localCapture, ...current.filter((item) => item.id !== localCapture.id)]);
+      commitCaptureRows("active", (current) => [localCapture, ...current.filter((item) => item.id !== localCapture.id)]);
       setSourceDraft("");
     } catch (error) {
       if (isCaptureImageCancel(error)) return;
@@ -3366,7 +3473,10 @@ export default function App() {
         <View style={styles.modalLayer} pointerEvents="box-none">
           <Pressable
             accessibilityLabel="Close review insight"
-            onPress={() => setRationaleSheet(null)}
+            onPress={() => {
+              setRationaleSheet(null);
+              setRationaleEditTarget(null);
+            }}
             style={styles.modalBackdrop}
           />
           <View style={[styles.actionSheet, styles.reviewInsightSheet]}>
@@ -3379,30 +3489,138 @@ export default function App() {
                 <Text style={styles.sheetTitle}>{rationaleSheet.title}</Text>
                 <Text style={styles.rationaleSheetKicker}>How this capture was interpreted</Text>
               </View>
-              <IconButton Icon={X} label="Close review insight" onPress={() => setRationaleSheet(null)} />
+              <IconButton
+                Icon={X}
+                label="Close review insight"
+                onPress={() => {
+                  setRationaleSheet(null);
+                  setRationaleEditTarget(null);
+                }}
+              />
             </View>
-            {rationaleSheet.text ? (
-              <Text style={styles.rationaleSheetLead}>{rationaleSheet.text}</Text>
-            ) : null}
-            {rationaleSheet.sections?.length ? (
-              <View style={styles.rationaleSheetSections}>
-                {rationaleSheet.sections.map((section) => {
-                  const SectionIcon = rationaleSectionIcon(section.label);
-                  return (
-                    <View key={section.label} style={styles.rationaleSheetSection}>
-                      <View style={[styles.rationaleSheetSectionIcon, rationaleSectionIconStyle(section.label)]}>
-                        <SectionIcon color={colors.ink} size={18} strokeWidth={2.4} />
-                      </View>
-                      <View style={styles.rationaleSheetSectionCopy}>
-                        <Text style={styles.rationaleSheetLabel}>{section.label}</Text>
-                        <Text style={styles.rationaleSheetText}>{section.text}</Text>
-                      </View>
+            <ScrollView
+              contentContainerStyle={styles.reviewInsightScrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              style={styles.reviewInsightScroll}
+            >
+              {rationaleSheet.text ? (
+                <Text style={styles.rationaleSheetLead}>{rationaleSheet.text}</Text>
+              ) : null}
+              {rationaleSheet.tasks?.length ? (
+                <View style={styles.reviewChecklist}>
+                  <View style={styles.reviewChecklistHeader}>
+                    <Text style={styles.reviewChecklistLabel}>Needs review</Text>
+                    <View style={styles.reviewChecklistCount}>
+                      <Text style={styles.reviewChecklistCountText}>{rationaleSheet.tasks.length}</Text>
                     </View>
-                  );
-                })}
-              </View>
-            ) : null}
-            <Pressable onPress={() => setRationaleSheet(null)} style={styles.primaryButton}>
+                  </View>
+                  {rationaleSheet.tasks.map((task) => {
+                    const TaskIcon = reviewTaskIcon(task.target);
+                    const showIntentPicker = task.target === "intent" && rationaleEditTarget === "intent";
+                    return (
+                      <View key={task.target} style={styles.reviewChecklistTask}>
+                        <View style={[styles.rationaleSheetSectionIcon, reviewTaskIconStyle(task.target)]}>
+                          <TaskIcon color={colors.ink} size={18} strokeWidth={2.4} />
+                        </View>
+                        <View style={styles.reviewChecklistCopy}>
+                          <View style={styles.reviewChecklistTaskTop}>
+                            <View style={styles.reviewChecklistTaskText}>
+                              <Text style={styles.rationaleSheetLabel}>{task.title}</Text>
+                              <Text style={styles.reviewChecklistValue}>{task.value}</Text>
+                            </View>
+                            <View style={styles.reviewChecklistActions}>
+                              {task.editLabel ? (
+                                <IconButton
+                                  Icon={task.target === "reminder" ? X : Pencil}
+                                  label={task.editLabel}
+                                  onPress={() => editReviewTask(task)}
+                                />
+                              ) : null}
+                              <IconButton
+                                Icon={Check}
+                                label={task.confirmLabel}
+                                onPress={() => void resolveReviewTargets([task.target])}
+                                tone="primary"
+                              />
+                            </View>
+                          </View>
+                          <Text style={styles.rationaleSheetText}>{task.rationale}</Text>
+                          {showIntentPicker ? (
+                            <View style={styles.rationaleIntentOptions}>
+                              {INTENT_OPTIONS.map((intent) => (
+                                <Pressable
+                                  accessibilityRole="button"
+                                  key={intent}
+                                  onPress={() => void resolveReviewTargets(["intent"], { currentSaveIntent: intent })}
+                                  style={({ pressed }) => [
+                                    styles.rationaleIntentOption,
+                                    selected?.defaultIntent === intent && styles.rationaleIntentOptionSelected,
+                                    pressed && styles.subtlePressed
+                                  ]}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.rationaleIntentOptionText,
+                                      selected?.defaultIntent === intent && styles.rationaleIntentOptionTextSelected
+                                    ]}
+                                  >
+                                    {activeIntentLabel(intent)}
+                                  </Text>
+                                </Pressable>
+                              ))}
+                              <Pressable
+                                accessibilityRole="button"
+                                onPress={() => void resolveReviewTargets(["intent"], { currentSaveIntent: null })}
+                                style={({ pressed }) => [
+                                  styles.rationaleIntentOption,
+                                  !selected?.defaultIntent && styles.rationaleIntentOptionSelected,
+                                  pressed && styles.subtlePressed
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.rationaleIntentOptionText,
+                                    !selected?.defaultIntent && styles.rationaleIntentOptionTextSelected
+                                  ]}
+                                >
+                                  No intent
+                                </Text>
+                              </Pressable>
+                            </View>
+                          ) : null}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : null}
+              {rationaleSheet.sections?.length ? (
+                <View style={styles.rationaleSheetSections}>
+                  {rationaleSheet.sections.map((section) => {
+                    const SectionIcon = rationaleSectionIcon(section.label);
+                    return (
+                      <View key={section.label} style={styles.rationaleSheetSection}>
+                        <View style={[styles.rationaleSheetSectionIcon, rationaleSectionIconStyle(section.label)]}>
+                          <SectionIcon color={colors.ink} size={18} strokeWidth={2.4} />
+                        </View>
+                        <View style={styles.rationaleSheetSectionCopy}>
+                          <Text style={styles.rationaleSheetLabel}>{section.label}</Text>
+                          <Text style={styles.rationaleSheetText}>{section.text}</Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : null}
+            </ScrollView>
+            <Pressable
+              onPress={() => {
+                setRationaleSheet(null);
+                setRationaleEditTarget(null);
+              }}
+              style={styles.primaryButton}
+            >
               <Text style={styles.primaryButtonText}>Done</Text>
             </Pressable>
           </View>
@@ -3584,7 +3802,6 @@ export default function App() {
         actions={{
           closeNoteSheet,
           confirmArchive,
-          confirmReview: () => void confirmReview(),
           copySource,
           markFaviconFailed,
           openCaptureUrl,

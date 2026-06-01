@@ -81,6 +81,17 @@ function isArchived(capture) {
   return Boolean(capture.archivedAt);
 }
 
+function capturesForListMode(captures, listMode) {
+  const archived = listMode === "archived";
+  return (captures || []).filter((capture) => archived ? isArchived(capture) : !isArchived(capture));
+}
+
+function capturesForSearchScope(captures, scope) {
+  if (scope === "archived") return capturesForListMode(captures, "archived");
+  if (scope === "all") return [...(captures || [])];
+  return capturesForListMode(captures, "active");
+}
+
 function statusLabel(status) {
   if (status === "processing") return "Processing";
   if (status === "needs_review") return "Needs review";
@@ -189,8 +200,8 @@ function uniqueCapturesByIdentity(captures) {
 }
 
 function mergeRemoteCaptures(remoteCaptures, currentCaptures, listMode, now = Date.now()) {
-  if (listMode === "archived") return sortCaptures(remoteCaptures);
-  const remoteRows = uniqueCapturesByIdentity(remoteCaptures);
+  const remoteRows = uniqueCapturesByIdentity(capturesForListMode(remoteCaptures, listMode));
+  if (listMode === "archived") return sortCaptures(remoteRows);
   const freshLocalProcessing = currentCaptures.filter((capture) => {
     return (
       !remoteRows.some((remote) => capturesShareIdentity(remote, capture)) &&
@@ -228,6 +239,8 @@ module.exports = {
   LOCAL_PROCESSING_GRACE_MS,
   REVIEW_TARGETS,
   captureIdentityAliases,
+  capturesForListMode,
+  capturesForSearchScope,
   capturesShareIdentity,
   displayStatus,
   extractHttpUrl,
