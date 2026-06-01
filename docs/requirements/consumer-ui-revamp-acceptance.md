@@ -71,7 +71,7 @@ New Capture must:
 - Open with one upward sheet motion; keyboard focus must not make the sheet appear to pull down or jump against its entrance.
 - Present exactly one capture mode at a time: `Link`, `Note`, or `Image`.
 - Offer an explicit in-app image upload action that uses existing image capture processing and opens the platform photo picker directly from the Image control, without adding new extraction rules. Cancelling the picker returns to Recent Captures with the New Capture sheet closed.
-- Route Link captures through public URL evidence and preflight. Route Note, Image, Screenshot, and mixed image captures through modality-specific note/visual evidence so weak URL evidence does not decide whether non-link analysis is useful.
+- Route Link captures through public URL evidence and preflight. Link-only captures with no useful public or user-provided context should not remain in Recent Captures; notify the user that the capture was not saved and suggest adding a screenshot or note. Route Note, Image, Screenshot, and mixed image captures through modality-specific note/visual evidence so weak URL evidence does not decide whether non-link analysis is useful.
 
 ## Capture Review
 

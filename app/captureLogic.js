@@ -81,14 +81,20 @@ function isArchived(capture) {
   return Boolean(capture.archivedAt);
 }
 
+function isRejected(capture) {
+  return Boolean(capture.rejectedAt || capture.analysisMode === "contextless_rejected");
+}
+
 function capturesForListMode(captures, listMode) {
   const archived = listMode === "archived";
-  return (captures || []).filter((capture) => archived ? isArchived(capture) : !isArchived(capture));
+  return (captures || []).filter((capture) =>
+    !isRejected(capture) && (archived ? isArchived(capture) : !isArchived(capture))
+  );
 }
 
 function capturesForSearchScope(captures, scope) {
   if (scope === "archived") return capturesForListMode(captures, "archived");
-  if (scope === "all") return [...(captures || [])];
+  if (scope === "all") return [...(captures || [])].filter((capture) => !isRejected(capture));
   return capturesForListMode(captures, "active");
 }
 
@@ -200,11 +206,19 @@ function uniqueCapturesByIdentity(captures) {
 }
 
 function mergeRemoteCaptures(remoteCaptures, currentCaptures, listMode, now = Date.now()) {
+  const rejectedAliases = new Set();
+  for (const capture of remoteCaptures || []) {
+    if (isRejected(capture)) {
+      captureIdentityAliases(capture).forEach((alias) => rejectedAliases.add(alias));
+    }
+  }
   const remoteRows = uniqueCapturesByIdentity(capturesForListMode(remoteCaptures, listMode));
   if (listMode === "archived") return sortCaptures(remoteRows);
   const freshLocalProcessing = currentCaptures.filter((capture) => {
+    const aliases = captureIdentityAliases(capture);
     return (
       !remoteRows.some((remote) => capturesShareIdentity(remote, capture)) &&
+      !aliases.some((alias) => rejectedAliases.has(alias)) &&
       !isArchived(capture) &&
       displayStatus(capture) === "processing" &&
       now - capture.createdAt < LOCAL_PROCESSING_GRACE_MS
@@ -248,6 +262,7 @@ module.exports = {
   hasExtractedData,
   hostFromUrl,
   isArchived,
+  isRejected,
   mapSearchCandidates,
   mapsSearchUrls,
   mergeRemoteCaptures,

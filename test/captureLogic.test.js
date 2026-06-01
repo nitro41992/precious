@@ -156,7 +156,8 @@ test("mergeRemoteCaptures preserves only fresh local processing rows in the acti
 test("capture scope helpers keep active and archived surfaces partitioned", () => {
   const active = capture({ id: "active", archivedAt: null });
   const archived = capture({ id: "archived", archivedAt: 1234 });
-  const rows = [active, archived];
+  const rejected = capture({ id: "rejected", rejectedAt: 5678, analysisMode: "contextless_rejected" });
+  const rows = [active, archived, rejected];
 
   assert.deepEqual(capturesForListMode(rows, "active").map((item) => item.id), ["active"]);
   assert.deepEqual(capturesForListMode(rows, "archived").map((item) => item.id), ["archived"]);
@@ -196,6 +197,30 @@ test("mergeRemoteCaptures suppresses matching local processing aliases", () => {
   assert.deepEqual(
     mergeRemoteCaptures(remote, [localSameClientKey, localSameRemoteId, unrelated], "active", now).map((item) => item.id),
     ["fresh-local", "client-key", "remote-cached"]
+  );
+});
+
+test("rejected remote tombstones hide matching local processing rows", () => {
+  const now = 10_000_000;
+  const rejected = capture({
+    id: "client-key",
+    remoteId: "remote-row",
+    status: "failed",
+    analysisMode: "contextless_rejected",
+    rejectedAt: now - 1000,
+    createdAt: now - 1000
+  });
+  const localSameClientKey = capture({ id: "client-key", status: "processing", createdAt: now - 500 });
+  const localSameRemoteId = capture({ id: "local-cached", remoteId: "remote-row", status: "processing", createdAt: now - 600 });
+  const unrelated = capture({ id: "fresh-local", status: "processing", createdAt: now - 700 });
+
+  assert.deepEqual(
+    capturesForListMode([rejected, unrelated], "active").map((item) => item.id),
+    ["fresh-local"]
+  );
+  assert.deepEqual(
+    mergeRemoteCaptures([rejected], [localSameClientKey, localSameRemoteId, unrelated], "active", now).map((item) => item.id),
+    ["fresh-local"]
   );
 });
 

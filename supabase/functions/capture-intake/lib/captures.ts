@@ -1,6 +1,7 @@
 import { adminClient } from "./supabase.ts";
 import {
   CAPTURE_GATE_PROMPT_VERSION,
+  CONTEXTLESS_LINK_REJECTED_MESSAGE,
   PREFLIGHT_PROMPT_VERSION,
   PROMPT_VERSION,
   SCHEMA_VERSION,
@@ -24,7 +25,6 @@ import {
 import {
   analysisRequiresReview,
   applyPreflightPolicy,
-  broadLowEvidenceAnalysis,
   captureGateMetadata,
   captureGateNeedsReviewAnalysis,
   contentEvidenceProfile,
@@ -40,7 +40,7 @@ import {
   shouldAttachUrlEvidence,
   shouldRunCaptureGate,
   shouldRunPreflight,
-  shouldUseLinkOnlyUrlEvidenceFallback,
+  shouldRejectContextlessLinkCapture,
 } from "./analysis.ts";
 import {
   autoLinkCollectionDecisions,
@@ -62,7 +62,7 @@ export async function persistDeterministicAnalysis(
   mode: string,
 ) {
   const normalizedAnalysis = normalizedReviewAnalysis(analysis);
-  await supabase.from("analysis_runs").insert({
+  const { error: runError } = await supabase.from("analysis_runs").insert({
     user_id: userId,
     capture_id: capture.id,
     provider: "system",
@@ -208,6 +208,78 @@ export async function rejectCapturePreflight(
   );
 }
 
+export async function rejectContextlessLinkCapture(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  capture: CaptureRow,
+  urlEvidence: UrlEvidence | null,
+  reason: string,
+  runDetails: Record<string, unknown> = {},
+) {
+  const now = new Date().toISOString();
+  const analysis = normalizedReviewAnalysis({
+    display_title: titleFallback(capture.source_text, capture.source_url),
+    summary: CONTEXTLESS_LINK_REJECTED_MESSAGE,
+    default_intent: {
+      category: null,
+      confidence: 0,
+      rationale: "The saved link did not provide enough context.",
+    },
+    entities: [],
+    visit_target_name: null,
+    visit_target_query: null,
+    visit_target_confidence: "none",
+    visit_target_evidence: [],
+    verified_place: false,
+    suggested_reminders: [],
+    collection_decisions: [],
+    search_phrases: [],
+    confidence_label: "Couldn't tell",
+    review_targets: ["analysis", "intent"],
+    needs_review: true,
+    content_evidence_profile: contentEvidenceProfile(capture, urlEvidence),
+    url_evidence: normalizedUrlEvidenceForCapture(capture, urlEvidence),
+    capture_state: "rejected",
+    rejection_reason: reason,
+  });
+
+  await supabase.from("analysis_runs").insert({
+    user_id: userId,
+    capture_id: capture.id,
+    provider: "system",
+    model: "deterministic",
+    status: "failed",
+    prompt_version: "contextless_link_rejection",
+    schema_version: SCHEMA_VERSION,
+    latency_ms: 0,
+    usage: {},
+    raw_output: { reason, ...runDetails },
+    raw_model_output: JSON.stringify({
+      reason,
+      url_evidence: urlEvidence,
+      ...runDetails,
+    }),
+    error_message: CONTEXTLESS_LINK_REJECTED_MESSAGE,
+  });
+  if (runError) throw runError;
+
+  const { error: updateError } = await supabase
+    .from("captures")
+    .update({
+      analysis_state: "failed",
+      analysis_error: CONTEXTLESS_LINK_REJECTED_MESSAGE,
+      analysis,
+      analysis_provider: "system",
+      analysis_model: "deterministic",
+      analysis_mode: "contextless_rejected",
+      rejected_at: now,
+      processed_at: now,
+    })
+    .eq("id", capture.id)
+    .eq("user_id", userId);
+  if (updateError) throw updateError;
+}
+
 export async function processCapture(captureId: string, userId: string) {
   const supabase = adminClient();
   const { data: capture, error: captureError } = await supabase
@@ -270,20 +342,16 @@ export async function processCapture(captureId: string, userId: string) {
     }
     if (
       !captureGateResult &&
-      shouldUseLinkOnlyUrlEvidenceFallback(capture, asset) &&
-      (urlEvidenceStatus === "needs_client_resolution" ||
-        urlEvidenceStatus === "insufficient_url_evidence")
+      shouldRejectContextlessLinkCapture(capture, asset, urlEvidence)
     ) {
-      logUrlIngest(
-        urlEvidence,
-        urlEvidenceStatus === "needs_client_resolution" ? 0.35 : 0.2,
-      );
-      await persistDeterministicAnalysis(
+      logUrlIngest(urlEvidence, 0);
+      await rejectContextlessLinkCapture(
         supabase,
         userId,
         capture,
-        broadLowEvidenceAnalysis(capture, urlEvidence),
-        urlEvidenceStatus,
+        urlEvidence,
+        "contextless_link_evidence",
+        { url_evidence_status: urlEvidenceStatus },
       );
       return;
     }
@@ -297,13 +365,28 @@ export async function processCapture(captureId: string, userId: string) {
       );
       if (preflightResult.preflight.decision === "invalid") {
         logUrlIngest(urlEvidence, 0);
-        await rejectCapturePreflight(
-          supabase,
-          userId,
-          capture,
-          urlEvidence,
-          preflightResult,
-        );
+        if (shouldRejectContextlessLinkCapture(capture, asset, urlEvidence)) {
+          await rejectContextlessLinkCapture(
+            supabase,
+            userId,
+            capture,
+            urlEvidence,
+            preflightResult.preflight.rationale_code ||
+              "preflight_invalid_contextless_link",
+            {
+              preflight: preflightResult.preflight,
+              model: preflightResult.model,
+            },
+          );
+        } else {
+          await rejectCapturePreflight(
+            supabase,
+            userId,
+            capture,
+            urlEvidence,
+            preflightResult,
+          );
+        }
         return;
       }
     }

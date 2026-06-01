@@ -291,6 +291,7 @@ export async function handleSearchResource(
     .from("captures")
     .select(CAPTURE_LIST_SELECT)
     .eq("user_id", userId)
+    .is("rejected_at", null)
     .in("id", ids);
   if (captureError) throw captureError;
   const byId = new Map(
@@ -585,7 +586,7 @@ export async function handleCollectionCapturesResource(
   );
   return json({
     captures: withCaptureStates(signedRows).filter((row) =>
-      archivedFilter(row, false)
+      !row.rejected_at && archivedFilter(row, false)
     ),
     next_cursor: fetchedLinks.length > limit
       ? linkRows[linkRows.length - 1]?.linked_at || null
@@ -633,6 +634,8 @@ export async function handleCaptureIntakeRequest(request: Request) {
     if (request.method === "GET") {
       const clientCaptureKey = url.searchParams.get("clientCaptureKey");
       const archived = url.searchParams.get("archived") === "true";
+      const includeRejectedTombstones =
+        url.searchParams.get("includeRejectedTombstones") === "true";
       const limit = boundedLimit(url.searchParams.get("limit"), 30, 100);
       const before = url.searchParams.get("before");
       let query = supabase
@@ -651,6 +654,7 @@ export async function handleCaptureIntakeRequest(request: Request) {
         query = archived
           ? query.not("archived_at", "is", null)
           : query.is("archived_at", null);
+        if (!includeRejectedTombstones) query = query.is("rejected_at", null);
         if (before) query = query.lt("created_at", before);
         query = query.limit(limit + 1);
       }

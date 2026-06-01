@@ -1621,7 +1621,7 @@ export function genericTitle(value: string | null | undefined) {
 
 export function blockPageText(value: string | null | undefined) {
   const text = String(value || "").toLowerCase();
-  return /captcha|cloudflare|enable javascript|access denied|temporarily blocked|sign in to continue|log in to continue|please wait while we check|people under \d+ can't see this content|account has set limits on who can see/i
+  return /captcha|cloudflare|enable javascript|access denied|temporarily blocked|sign in to continue|log in to continue|please wait while we check|content is unavailable|people under \d+ can't see this content|can't see this content|cannot see this content|account has set limits on who can see|limits on who can see this content/i
     .test(text);
 }
 
@@ -1631,7 +1631,7 @@ export function accessLimitedPage(evidence: UrlEvidence | null) {
     evidence?.description,
     evidence?.text,
   ].filter(Boolean).join(" ");
-  return /people under \d+ can't see this content|account has set limits on who can see/i
+  return /content is unavailable|people under \d+ can't see this content|can't see this content|cannot see this content|account has set limits on who can see|limits on who can see this content/i
     .test(text);
 }
 

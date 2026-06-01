@@ -429,6 +429,15 @@ Deno.test("domain evidence profiles mark platform shell metadata per domain", ()
       text:
         "Create an account or log in to Instagram. Sign up to see photos and videos from friends, family and interests around the world.",
     },
+    {
+      name: "Access-limited shell",
+      sourceUrl: "https://example.com/post/age-limited",
+      title: "This content is unavailable",
+      description:
+        "This account has set limits on who can see their profile and content.",
+      text:
+        "People under 21 can't see this content. This account has set limits on who can see their profile and content.",
+    },
   ];
 
   for (const shell of shells) {
@@ -457,11 +466,20 @@ Deno.test("domain evidence profiles mark platform shell metadata per domain", ()
       raw: {},
       error: null,
     };
-    assertIncludes(
-      urlEvidence.weaknessReasons(evidence as any),
-      "generic_platform_metadata",
-      `${shell.name} should be marked generic`,
-    );
+    if (shell.name !== "Access-limited shell") {
+      assertIncludes(
+        urlEvidence.weaknessReasons(evidence as any),
+        "generic_platform_metadata",
+        `${shell.name} should be marked generic`,
+      );
+    }
+    if (shell.name === "Access-limited shell") {
+      assertIncludes(
+        urlEvidence.weaknessReasons(evidence as any),
+        "blocked_or_login_page",
+        `${shell.name} should be marked blocked`,
+      );
+    }
     assertEqual(
       urlEvidence.productEvidenceStatus(evidence as any),
       "partial_evidence",

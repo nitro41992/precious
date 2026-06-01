@@ -30,16 +30,18 @@ type SortableCapture = StatusCapture & {
   remoteId?: string;
   createdAt: number;
   archivedAt?: number | null;
+  rejectedAt?: number | null;
+  analysisMode?: string;
 };
 
 export const LOCAL_PROCESSING_GRACE_MS: number;
 export const REVIEW_TARGETS: ReviewReason[];
 export function captureIdentityAliases(capture?: { id?: string; remoteId?: string } | null): string[];
-export function capturesForListMode<T extends { archivedAt?: number | null }>(
+export function capturesForListMode<T extends { archivedAt?: number | null; rejectedAt?: number | null; analysisMode?: string }>(
   captures: T[] | null | undefined,
   listMode: "active" | "archived"
 ): T[];
-export function capturesForSearchScope<T extends { archivedAt?: number | null }>(
+export function capturesForSearchScope<T extends { archivedAt?: number | null; rejectedAt?: number | null; analysisMode?: string }>(
   captures: T[] | null | undefined,
   scope: "active" | "archived" | "all" | string
 ): T[];
@@ -53,6 +55,7 @@ export function extractHttpUrl(value?: string | null): string;
 export function hasExtractedData(capture: StatusCapture): boolean;
 export function hostFromUrl(value?: string | null): string;
 export function isArchived(capture: { archivedAt?: number | null }): boolean;
+export function isRejected(capture: { rejectedAt?: number | null; analysisMode?: string }): boolean;
 export function mapSearchCandidates(query?: string | null, platform?: string): MapSearchCandidate[];
 export function mapsSearchUrls(query?: string | null): { google: string; apple: string };
 export function mergeRemoteCaptures<T extends SortableCapture>(

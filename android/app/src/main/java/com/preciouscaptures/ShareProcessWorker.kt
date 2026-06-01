@@ -46,6 +46,17 @@ class ShareProcessWorker(
     if (!assetPath.isNullOrBlank()) {
       runCatching { File(assetPath).delete() }
     }
+    if (enrichment.optString("analysisMode") == "contextless_rejected") {
+      PreciousCaptureStore.remove(applicationContext, captureId)
+      CaptureNotifications.showNotSaved(
+        applicationContext,
+        captureId,
+        enrichment.optString("analysisError").ifBlank {
+          "The link did not provide enough context. Add a screenshot or note and try again."
+        }
+      )
+      return Result.success()
+    }
     val capture = PreciousCaptureStore.complete(applicationContext, captureId, enrichment)
     val title = capture?.optString("title", "Capture saved") ?: "Capture saved"
     when (capture?.optString("status")) {

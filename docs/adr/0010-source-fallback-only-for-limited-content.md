@@ -24,5 +24,5 @@ Review Insight should explain decisions using product language and enumerated va
 
 - Collection retrieval and analyzer prompting must avoid source-first matches when meaningful content exists.
 - Source metadata remains searchable and useful for exact-link recovery.
-- Low-evidence captures may still use source fallback, but with low confidence and review when appropriate.
+- Low-evidence link-only captures may use source fallback only when there is still useful context. If the saved link provides no useful public or user-provided context, it should be rejected and hidden instead of becoming review work.
 - Practical advice shared as social video can match a subject Collection such as `Articles & Guides` instead of a media-format Collection.

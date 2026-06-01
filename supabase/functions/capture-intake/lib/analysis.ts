@@ -31,6 +31,7 @@ import {
   genericTitle,
   normalizedUrlEvidence,
   platformForUrl,
+  productEvidenceStatus,
   shouldUseWebSearch,
   substantiveDescription,
   substantiveText,
@@ -727,6 +728,23 @@ export function shouldUseLinkOnlyUrlEvidenceFallback(
   return isLinkCaptureType(capture);
 }
 
+export function shouldRejectContextlessLinkCapture(
+  capture: CaptureRow,
+  asset: CaptureAssetRow | null,
+  urlEvidence: UrlEvidence | null,
+) {
+  if (!shouldUseLinkOnlyUrlEvidenceFallback(capture, asset)) return false;
+  if (!contentEvidenceProfile(capture, urlEvidence).content_limited) {
+    return false;
+  }
+  return [
+    "needs_client_resolution",
+    "insufficient_url_evidence",
+    "partial_evidence",
+    "failed",
+  ].includes(productEvidenceStatus(urlEvidence));
+}
+
 export function shouldRunCaptureGate(
   capture: CaptureRow,
   asset: CaptureAssetRow | null,
@@ -825,6 +843,7 @@ export function usefulContentText(value: string | null | undefined) {
   if (text.length < 12) return false;
   if (!/[a-z]{3,}/i.test(text)) return false;
   if (genericTitle(text) || blockPageText(text)) return false;
+  if (/^(?:www\.)?[a-z0-9.-]+\.[a-z]{2,}$/i.test(text)) return false;
   if (looksLikeFileOrGeneratedMarker(text)) return false;
   return true;
 }

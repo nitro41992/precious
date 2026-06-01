@@ -49,6 +49,7 @@ Deno.test("capture routing keeps URL evidence fallback link-only", () => {
 
   const linkOnly = captureFixture({
     capture_type: "link",
+    display_title: "example.com",
     source_url: "https://example.com/post/abc123",
     original_url: "https://example.com/post/abc123",
     source_text: "https://example.com/post/abc123",
@@ -64,6 +65,26 @@ Deno.test("capture routing keeps URL evidence fallback link-only", () => {
   assert(
     urlEvidence.shouldRunPreflight(linkOnly, null),
     "link-only capture should retain public-link preflight",
+  );
+  assert(
+    urlEvidence.shouldRejectContextlessLinkCapture(linkOnly, null, null),
+    "link-only capture without useful context should be rejected",
+  );
+
+  const linkWithSharedText = captureFixture({
+    capture_type: "link",
+    source_url: "https://example.com/private/share",
+    original_url: "https://example.com/private/share",
+    source_text:
+      "https://example.com/private/share This is a useful note about a ramen spot near the station.",
+  });
+  assert(
+    !urlEvidence.shouldRejectContextlessLinkCapture(
+      linkWithSharedText,
+      null,
+      null,
+    ),
+    "meaningful shared text should keep a weak link capture analyzable",
   );
 
   const linkWithImage = captureFixture({
@@ -87,6 +108,14 @@ Deno.test("capture routing keeps URL evidence fallback link-only", () => {
   assert(
     !urlEvidence.shouldRunPreflight(linkWithImage, imageAsset),
     "link plus image should skip link-only preflight",
+  );
+  assert(
+    !urlEvidence.shouldRejectContextlessLinkCapture(
+      linkWithImage,
+      imageAsset,
+      null,
+    ),
+    "link plus image should not be rejected by link-only context rules",
   );
 });
 

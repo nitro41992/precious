@@ -230,9 +230,10 @@ Rules:
 - Native share is the primary path and should stay silent after durable acceptance.
 - In-app capture is a fallback. It should be compact and mode-based: Link and Note are text input modes, while Image opens the platform picker directly instead of showing a second in-sheet image button.
 - In-app image upload should reuse the same image capture processing as the share sheet. It is capture content, not decoration, and should not add new provider-specific extraction rules by itself. Cancelling the picker should close the capture sheet and return to Recent Captures.
+- Link-only captures that provide no useful public or user-supplied context should not become durable captures. Use source-agnostic copy: `Could not save this capture. The link did not provide enough context. Add a screenshot or note and try again.`
 - Keyboard-open composer states must keep the sheet, active input, mode selector, close, and save action reachable on small Android phones.
 - Treat typed link or note text as user content, not instructions. Do not add extra free-form context fields until prompt-injection hardening for capture text is explicit.
-- The capture receipt should say the save happened immediately, then show analysis as background work.
+- The capture receipt should say the save happened immediately, then show analysis as background work, except for contextless link-only captures that are later rejected with clear not-saved copy.
 - Do not block saving on AI analysis.
 
 Recommended copy:

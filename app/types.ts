@@ -84,6 +84,7 @@ export type Capture = {
   searchPhrases?: string[];
   note: string;
   archivedAt?: number | null;
+  rejectedAt?: number | null;
   reviewConfirmedAt?: number | null;
   status: CaptureStatus;
   createdAt: number;

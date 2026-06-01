@@ -4,7 +4,7 @@ import type { RetrievedCollection } from "./types.ts";
 export const CAPTURE_ASSET_SELECT =
   "id,user_id,capture_id,storage_path,public_url,mime_type,byte_size,created_at";
 export const CAPTURE_LIST_SELECT =
-  "id,user_id,client_capture_key,source_url,source_text,source_app,display_title,title,context_note,analysis_state,analysis_error,analysis,analysis_provider,analysis_mode,default_intent,current_save_intent,intent_rationale,thumbnail_url,capture_type,created_at,updated_at,processed_at,archived_at," +
+  "id,user_id,client_capture_key,source_url,source_text,source_app,display_title,title,context_note,analysis_state,analysis_error,analysis,analysis_provider,analysis_mode,default_intent,current_save_intent,intent_rationale,thumbnail_url,capture_type,created_at,updated_at,processed_at,archived_at,rejected_at," +
   `capture_assets(${CAPTURE_ASSET_SELECT})`;
 export const CAPTURE_DETAIL_SELECT = "*,capture_assets(*)";
 export const COLLECTION_LIST_SELECT =
@@ -92,6 +92,8 @@ export const CLIENT_RESOLUTION_MESSAGE =
   "We couldn't access the exact content from this shared link. Open it once so we can categorize it accurately.";
 export const INSUFFICIENT_URL_MESSAGE =
   "We couldn't verify enough public information to categorize this exact link.";
+export const CONTEXTLESS_LINK_REJECTED_MESSAGE =
+  "Could not save this capture. The link did not provide enough context. Add a screenshot or note and try again.";
 export const activeSaveIntents = (saveIntents as Array<{
   key: string;
   label: string;

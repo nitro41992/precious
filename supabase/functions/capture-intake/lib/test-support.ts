@@ -33,6 +33,7 @@ import {
   shouldAttachUrlEvidence,
   shouldRunCaptureGate,
   shouldRunPreflight,
+  shouldRejectContextlessLinkCapture,
   shouldUseLinkOnlyUrlEvidenceFallback,
 } from "./analysis.ts";
 import {
@@ -67,6 +68,7 @@ export const __urlEvidenceTest = {
   shouldAttachUrlEvidence,
   shouldRunCaptureGate,
   shouldRunPreflight,
+  shouldRejectContextlessLinkCapture,
   shouldAnalyzeAfterCaptureGate,
   shouldUseLinkOnlyUrlEvidenceFallback,
   shouldSeedStarterCollections,

@@ -32,6 +32,7 @@ export function captureFromRemote(row: Record<string, any>): Capture {
     ? nullableValue(imageAsset.signed_url || imageAsset.signedUrl || imageAsset.public_url || imageAsset.publicUrl)
     : undefined;
   const archivedAtValue = row.archived_at || analysis.archived_at || null;
+  const rejectedAtValue = row.rejected_at || analysis.rejected_at || null;
   const reviewConfirmedAtValue = row.review_confirmed_at || analysis.review_confirmed_at || null;
   const analysisMode = nullableValue(row.analysis_mode) || (nullableValue(row.analysis_provider) ? "llm" : undefined);
   const collectionDecisions = Array.isArray(analysis.collection_decisions)
@@ -104,6 +105,16 @@ export function captureFromRemote(row: Record<string, any>): Capture {
             ? Date.parse(row.updated_at)
             : Date.now()
           : null,
+    rejectedAt:
+      rejectedAtValue || analysis.capture_state === "rejected" || row.capture_state === "rejected"
+        ? typeof rejectedAtValue === "number"
+          ? rejectedAtValue
+          : rejectedAtValue
+            ? Date.parse(String(rejectedAtValue))
+            : row.updated_at
+              ? Date.parse(row.updated_at)
+              : Date.now()
+        : null,
     reviewConfirmedAt:
       reviewConfirmedAtValue
         ? typeof reviewConfirmedAtValue === "number"
@@ -164,6 +175,7 @@ export function captureListUrl(apiUrl: string, archived = false, params: { limit
   if (!isEdgeCaptureApi(apiUrl)) url.searchParams.set("view", "summary");
   url.searchParams.set("limit", String(params.limit || CAPTURE_PAGE_SIZE));
   url.searchParams.set("archived", archived ? "true" : "false");
+  url.searchParams.set("includeRejectedTombstones", "true");
   if (params.before) url.searchParams.set("before", params.before);
   return url.toString();
 }

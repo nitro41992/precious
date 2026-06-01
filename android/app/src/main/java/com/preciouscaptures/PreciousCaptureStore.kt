@@ -155,6 +155,23 @@ object PreciousCaptureStore {
   }
 
   @Synchronized
+  fun remove(context: Context, id: String): Boolean {
+    val captures = list(context)
+    val next = JSONArray()
+    var removed = false
+    for (index in 0 until captures.length()) {
+      val capture = captures.getJSONObject(index)
+      if (capture.optString("id") == id) {
+        removed = true
+      } else {
+        next.put(capture)
+      }
+    }
+    if (removed) save(context, next)
+    return removed
+  }
+
+  @Synchronized
   fun incrementClientResolutionAttempt(context: Context, id: String): Int {
     val captures = list(context)
     val now = System.currentTimeMillis()
