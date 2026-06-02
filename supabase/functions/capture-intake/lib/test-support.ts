@@ -21,6 +21,7 @@ import {
 } from "./url-evidence.ts";
 import {
   buildPrompt,
+  buildOpenAiUserContent,
   captureGateMetadata,
   captureGateNeedsReviewAnalysis,
   captureGatePrompt,
@@ -49,6 +50,7 @@ export const __urlEvidenceTest = {
   activeSaveIntentKeys,
   analysisSchemaForCollections,
   bestEvidence,
+  buildOpenAiUserContent,
   buildPrompt,
   captureGateMetadata,
   captureGateNeedsReviewAnalysis,

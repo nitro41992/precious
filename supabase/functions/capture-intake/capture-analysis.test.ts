@@ -140,6 +140,190 @@ Deno.test("source fallback is allowed only when content evidence is limited", ()
   );
 });
 
+Deno.test("URL preview images are passed as analyzer visual evidence", () => {
+  const evidence = urlEvidence.oembedMetadata(
+    {
+      title: "Event roundup",
+      thumbnail_url: "https://cdn.example.com/reel-preview.jpg",
+    },
+    "https://example.com/reel/abc123",
+  );
+  const capture = captureFixture({
+    source_url: "https://example.com/reel/abc123",
+    source_text: "https://example.com/reel/abc123",
+  });
+
+  const profile = urlEvidence.contentEvidenceProfile(capture, evidence);
+  assertIncludes(
+    profile.content_signals,
+    "url_image_evidence",
+    "URL thumbnail should count as visual content evidence",
+  );
+  assertEqual(
+    profile.source_fallback_allowed,
+    false,
+    "URL thumbnail evidence should prevent source-only classification",
+  );
+
+  const content = urlEvidence.buildOpenAiUserContent(capture, evidence, []);
+  assertEqual(content.length, 2, "prompt plus preview image should be sent");
+  assertEqual(
+    content[1].type,
+    "input_image",
+    "URL preview should be an image input",
+  );
+  assertEqual(
+    content[1].image_url,
+    "https://cdn.example.com/reel-preview.jpg",
+    "URL preview image should be passed to OpenAI",
+  );
+  assert(
+    String(content[0].text || "").includes('"source_image"') &&
+      String(content[0].text || "").includes(
+        "Optional visual evidence from the source URL thumbnail or preview image",
+      ),
+    "prompt should identify the source preview as visual evidence",
+  );
+});
+
+Deno.test("URL preview visual evidence only accepts HTTPS images", () => {
+  const evidence = urlEvidence.oembedMetadata(
+    {
+      title: "Event roundup",
+      thumbnail_url: "http://cdn.example.com/reel-preview.jpg",
+    },
+    "https://example.com/reel/abc123",
+  );
+  const capture = captureFixture({
+    source_url: "https://example.com/reel/abc123",
+    source_text: "https://example.com/reel/abc123",
+  });
+
+  const content = urlEvidence.buildOpenAiUserContent(capture, evidence, []);
+  assertEqual(content.length, 1, "HTTP preview images should not be attached");
+});
+
+Deno.test("reminder prompt prefers enclosing period for dated roundups", () => {
+  const prompt = urlEvidence.buildPrompt(
+    captureFixture({
+      created_at: "2026-06-01T12:00:00.000Z",
+      source_text:
+        "July Edition: things to do. July 4 fireworks. July 12 night market. July 19 outdoor films.",
+    }),
+    null,
+    [],
+  );
+
+  assert(
+    prompt.includes(
+      "multi-item list, roundup, calendar, itinerary, guide, or 'things to do'",
+    ),
+    "prompt should identify source-agnostic roundup/list captures",
+  );
+  assert(
+    prompt.includes(
+      "use the enclosing period rather than one arbitrary listed item",
+    ),
+    "prompt should prefer the overall period over an arbitrary event",
+  );
+  assert(
+    prompt.includes(
+      "For a month-level enclosing period such as July, set start_date to the first day of that month",
+    ) && prompt.includes("date_precision month"),
+    "prompt should map month-level scopes to month intervals",
+  );
+  assert(
+    prompt.includes(
+      "Only choose a single listed event when the evidence or user note clearly emphasizes that item",
+    ),
+    "prompt should avoid arbitrary single-event reminder selection",
+  );
+  assert(
+    prompt.includes(
+      "July things to do: July 4 fireworks; July 12 night market; July 19 outdoor film",
+    ) && prompt.includes("July 1 through July 31"),
+    "prompt should include a generic month-roundup example",
+  );
+  assert(
+    prompt.includes("July Edition: things to do") &&
+      prompt.includes("July 12 night market"),
+    "prompt should pass dated roundup evidence through",
+  );
+});
+
+Deno.test("reminder prompt derives a list-level window from many dated entries", () => {
+  const prompt = urlEvidence.buildPrompt(
+    captureFixture({
+      created_at: "2026-06-01T12:00:00.000Z",
+      source_text:
+        "Things to do: June 1 rooftop film. June 4-7 carnival. June 9 museum festival. June 19 holiday event.",
+    }),
+    null,
+    [],
+  );
+
+  assert(
+    prompt.includes(
+      "create one list-level Reminder idea from the earliest explicit listed date through the latest explicit listed date",
+    ),
+    "prompt should derive a single list-level interval",
+  );
+  assert(
+    prompt.includes(
+      "explicit enclosing period that agrees with the listed dates, then coherent earliest-to-latest list window",
+    ),
+    "prompt should prioritize list windows before single events",
+  );
+  assert(
+    prompt.includes(
+      "June 1 rooftop film; June 4-7 carnival; June 9 museum festival; June 19 holiday event",
+    ) && prompt.includes("June 1 through June 19") &&
+      prompt.includes("not a Reminder idea for only June 4-7"),
+    "prompt should include a generic multi-date list example",
+  );
+  assert(
+    prompt.includes("June 4-7 carnival") &&
+      prompt.includes("June 19 holiday event"),
+    "prompt should pass multi-date list evidence through",
+  );
+});
+
+Deno.test("reminder prompt resolves conflicting edition text with explicit listed dates", () => {
+  const prompt = urlEvidence.buildPrompt(
+    captureFixture({
+      created_at: "2026-06-01T12:00:00.000Z",
+      source_text:
+        "July edition coming soon. Listed entries: June 1 rooftop film. June 4-7 carnival. June 19 holiday event.",
+    }),
+    null,
+    [],
+  );
+
+  assert(
+    prompt.includes(
+      "caption, title, headline, label, edition name, teaser, or promotional phrase names one period",
+    ),
+    "prompt should handle conflicting period wording generically",
+  );
+  assert(
+    prompt.includes(
+      "anchor the Reminder idea to the explicit listed dates rather than the conflicting phrase",
+    ),
+    "prompt should anchor reminders to explicit dated entries",
+  );
+  assert(
+    prompt.includes("July edition coming soon") &&
+      prompt.includes("June 1 through June 19") &&
+      prompt.includes("not a July Reminder idea"),
+    "prompt should include a generic conflict-resolution example",
+  );
+  assert(
+    prompt.includes("June 4-7 carnival") &&
+      prompt.includes("June 19 holiday event"),
+    "prompt should pass conflicting-period evidence through",
+  );
+});
+
 Deno.test("analysis schema restricts collection decisions to retrieved active collections", () => {
   const schema = urlEvidence.analysisSchemaForCollections([
     { id: "articles-id", title: "Articles & Guides", description: "" },

@@ -11,18 +11,11 @@ export async function runOpenAi(
 ) {
   const started = Date.now();
   const model = Deno.env.get("OPENAI_MODEL") || "gpt-5-mini";
-  const userContent: Array<Record<string, unknown>> = [
-    {
-      type: "input_text",
-      text: buildPrompt(capture, urlEvidence, retrievedCollections),
-    },
-  ];
-  if (
-    capture.asset_url &&
-    String(capture.asset_mime_type || "").startsWith("image/")
-  ) {
-    userContent.push({ type: "input_image", image_url: capture.asset_url });
-  }
+  const userContent = buildOpenAiUserContent(
+    capture,
+    urlEvidence,
+    retrievedCollections,
+  );
   const requestBody: Record<string, unknown> = {
     model,
     reasoning: { effort: "low" },
@@ -75,4 +68,46 @@ export async function runOpenAi(
     urlEvidence,
     retrievedCollections,
   };
+}
+
+export function buildOpenAiUserContent(
+  capture: CaptureRow,
+  urlEvidence: UrlEvidence | null,
+  retrievedCollections: RetrievedCollection[],
+) {
+  const userContent: Array<Record<string, unknown>> = [
+    {
+      type: "input_text",
+      text: buildPrompt(capture, urlEvidence, retrievedCollections),
+    },
+  ];
+  for (const imageUrl of visualInputImageUrls(capture, urlEvidence)) {
+    userContent.push({ type: "input_image", image_url: imageUrl });
+  }
+  return userContent;
+}
+
+export function visualInputImageUrls(
+  capture: CaptureRow,
+  urlEvidence: UrlEvidence | null,
+) {
+  const urls = [
+    capture.asset_url &&
+        String(capture.asset_mime_type || "").startsWith("image/")
+      ? capture.asset_url
+      : null,
+    sourceImageUrl(urlEvidence),
+  ];
+  return Array.from(new Set(urls.filter(Boolean) as string[]));
+}
+
+export function sourceImageUrl(urlEvidence: UrlEvidence | null) {
+  const value = String(urlEvidence?.image || "").trim();
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }

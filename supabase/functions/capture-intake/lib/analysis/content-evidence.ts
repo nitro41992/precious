@@ -171,6 +171,16 @@ export function hasImageEvidenceAvailable(capture: CaptureRow) {
   );
 }
 
+export function hasUrlImageEvidence(evidence: UrlEvidence | null) {
+  const value = String(evidence?.image || "").trim();
+  if (!value) return false;
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export function contentEvidenceProfile(
   capture: CaptureRow,
   evidence: UrlEvidence | null,
@@ -194,6 +204,7 @@ export function contentEvidenceProfile(
   if (evidence && substantiveText(evidence)) signals.add("readable_text");
   if (evidence?.entities.length) signals.add("parsed_entities");
   if (hasImageEvidenceAvailable(capture)) signals.add("image_evidence");
+  if (hasUrlImageEvidence(evidence)) signals.add("url_image_evidence");
 
   const contentSignals = Array.from(signals);
   const contentLimited = contentSignals.length === 0;
