@@ -8,6 +8,19 @@ export const styles = StyleSheet.create({
     flex: 1,
     paddingTop: Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0
   },
+  screenStack: {
+    backgroundColor: colors.paper,
+    flex: 1
+  },
+  screenOverlay: {
+    backgroundColor: colors.paper,
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    zIndex: 40
+  },
   container: {
     flex: 1,
     paddingHorizontal: 22,

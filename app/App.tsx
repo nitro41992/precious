@@ -1,5 +1,6 @@
 import "react-native-url-polyfill/auto";
 
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -12,6 +13,7 @@ import {
   Linking,
   Platform,
   TextInput,
+  View,
   useWindowDimensions
 } from "react-native";
 
@@ -24,6 +26,7 @@ import { useCaptureReview } from "./state/useCaptureReview";
 import { useCaptureSearch } from "./state/useCaptureSearch";
 import { useCollectionsState } from "./state/useCollections";
 import { createAppRenderHelpers } from "./ui/renderHelpers";
+import { styles } from "./ui/styles";
 
 import type {
   Capture,
@@ -134,6 +137,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [captureReturnCollectionId, setCaptureReturnCollectionId] = useState<string | null>(null);
+  const [captureReviewOrigin, setCaptureReviewOrigin] = useState<"recent" | "collection" | "other" | null>(null);
   const [capturesLoading, setCapturesLoading] = useState(false);
   const [capturesLoadPhase, setCapturesLoadPhase] = useState<LoadPhase>("idle");
   const [capturesError, setCapturesError] = useState("");
@@ -407,6 +411,7 @@ export default function App() {
     captureDetailHydrationRef.current.clear();
     collectionsPrefetchStartedRef.current = false;
     setCaptureReturnCollectionId(null);
+    setCaptureReviewOrigin(null);
     setCollectionsOpen(false);
     setSearchOpen(false);
     setSearchQuery("");
@@ -797,6 +802,7 @@ export default function App() {
       setSearchOpen(false);
       setCollectionsOpen(false);
       setCaptureReturnCollectionId(null);
+      setCaptureReviewOrigin("other");
       const capture =
         captures.find((item) => item.id === captureId) ??
         archivedCaptures.find((item) => item.id === captureId) ??
@@ -813,11 +819,20 @@ export default function App() {
     [archivedCaptures, captures, remoteSearchResults, selectCapture]
   );
 
+  const openRecentCapture = useCallback(
+    (captureId: string) => {
+      openCapture(captureId);
+      setCaptureReviewOrigin("recent");
+    },
+    [openCapture]
+  );
+
   const openCaptureFromCollection = useCallback((capture: Capture, collectionId: string) => {
     setSearchOpen(false);
     setCollectionsOpen(false);
     setSelectedCollectionId(null);
     setCaptureReturnCollectionId(collectionId);
+    setCaptureReviewOrigin("collection");
     selectCapture(capture.id);
     setDraftTitle(capture.title);
     setDraftNote(capture.note);
@@ -1021,6 +1036,10 @@ export default function App() {
   useEffect(() => {
     archivedCapturesLoadedRef.current = archivedCapturesLoaded;
   }, [archivedCapturesLoaded]);
+
+  useEffect(() => {
+    if (!selectedId) setCaptureReviewOrigin(null);
+  }, [selectedId]);
 
   useEffect(() => {
     collectionsLoadedOnceRef.current = collectionsLoadedOnce;
@@ -2209,6 +2228,7 @@ export default function App() {
     onFaviconFailure: markFaviconFailed,
     onOpenCapture: openCapture,
     onOpenCaptureFromCollection: openCaptureFromCollection,
+    onOpenRecentCapture: openRecentCapture,
     onRecentComposerOpen: openCaptureComposer,
     onRecentHomePress: openRecentHome,
     onUnlinkCaptureFromCollection: (collectionId, capture) => void unlinkCaptureFromCollection(collectionId, capture),
@@ -2264,6 +2284,131 @@ export default function App() {
         setRationaleEditTarget={setRationaleEditTarget}
         setRationaleSheet={setRationaleSheet}
       />
+    );
+  }
+
+  function renderCaptureReviewScreen(capture: Capture) {
+    return (
+      <CaptureReviewScreen
+        actions={{
+          closeNoteSheet,
+          confirmArchive,
+          copySource,
+          markFaviconFailed,
+          openCaptureUrl,
+          openCollectionPicker: () => void openCollectionPicker(),
+          openExternalUrl: (url) => void Linking.openURL(url),
+          openNoteSheet,
+          openReviewInsight,
+          openVisitTargetMaps: (candidate) => void openVisitTargetMaps(candidate),
+          pasteExpandedUrl: () => void pasteExpandedUrl(),
+          removeReminder: (reminderIndex) => void dismissReminder(reminderIndex),
+          saveReminder: (draft, reminderIndex) => void saveReminder(draft, reminderIndex),
+          saveReviewDecisions: () => void saveReviewDecisions(),
+          selectCapture,
+          selectCollection,
+          setDraftIntent,
+          setDraftIntentDirty,
+          setDraftNote,
+          setDraftNoteDirty,
+          setDraftTitle,
+          setDraftTitleDirty,
+          setQuickIntentOpen,
+          setReminderSheetOpen,
+          updateSelectedReviewDraft
+        }}
+        data={{
+          appSheets: renderAppSheets(),
+          captureComposerMotion,
+          captureKeyboardInset,
+          captureReturnCollectionId,
+          faviconFailures,
+          keyboardHeight,
+          message,
+          noteInputRef,
+          reviewMotion,
+          selected: capture,
+          snackbar: renderSnackbar(),
+          visitTargetMapCandidates,
+          windowHeight
+        }}
+        state={{
+          collectionChoiceSaving,
+          draftIntent,
+          draftIntentDirty,
+          draftNote,
+          draftNoteDirty,
+          draftTitle,
+          draftTitleDirty,
+          noteSaveState,
+          noteSheetOpen,
+          quickIntentOpen,
+          reminderDrafts,
+          reminderSheetOpen
+        }}
+      />
+    );
+  }
+
+  function renderHomeScreen({ includeChrome = true }: { includeChrome?: boolean } = {}) {
+    return (
+      <HomeScreen
+        actions={{
+          chooseCaptureMode,
+          closeCaptureComposer,
+          loadCaptures: () => void loadCaptures(),
+          loadMoreActiveCaptures: () => loadMoreCaptures("active"),
+          openCapture: openRecentCapture,
+          openCaptureComposer,
+          openSearch,
+          renderCaptureSkeletonRows,
+          renderHomeRow,
+          renderListLoadingFooter,
+          saveCaptureSource: () => void saveCaptureSource(),
+          setSourceDraft
+        }}
+        data={{
+          appSheets: includeChrome ? renderAppSheets() : null,
+          bottomAppBar: includeChrome && !showCaptureComposer ? renderBottomAppBar("recent") : null,
+          captureComposerMotion,
+          captureKeyboardInset,
+          homeCaptures: homeRows,
+          listPerfProps: CAPTURE_LIST_PERF_PROPS,
+          snackbar: includeChrome ? renderSnackbar(!showCaptureComposer) : null,
+          sourceInputRef,
+          visibleHomeRows,
+          windowHeight
+        }}
+        state={{
+          captureMode,
+          capturesError,
+          capturesLoading,
+          capturesNextCursor,
+          homeColdSkeletonVisible,
+          homeInitialLoading,
+          keyboardHeight,
+          message,
+          pickingCaptureImage,
+          quickLookCount,
+          savingCapture,
+          sessionActive: Boolean(session),
+          showCaptureComposer,
+          sourceDraft
+        }}
+      />
+    );
+  }
+
+  function renderRecentStack(overlay?: ReactNode) {
+    return (
+      <View style={styles.screenStack}>
+        {renderHomeScreen({ includeChrome: !overlay })}
+        {overlay ? (
+          <View style={styles.screenOverlay}>
+            {overlay}
+          </View>
+        ) : null}
+      </View>
     );
   }
 
@@ -2373,66 +2518,10 @@ export default function App() {
   }
 
   if (selected) {
-    return (
-      <CaptureReviewScreen
-        actions={{
-          closeNoteSheet,
-          confirmArchive,
-          copySource,
-          markFaviconFailed,
-          openCaptureUrl,
-          openCollectionPicker: () => void openCollectionPicker(),
-          openExternalUrl: (url) => void Linking.openURL(url),
-          openNoteSheet,
-          openReviewInsight,
-          openVisitTargetMaps: (candidate) => void openVisitTargetMaps(candidate),
-          pasteExpandedUrl: () => void pasteExpandedUrl(),
-          removeReminder: (reminderIndex) => void dismissReminder(reminderIndex),
-          saveReminder: (draft, reminderIndex) => void saveReminder(draft, reminderIndex),
-          saveReviewDecisions: () => void saveReviewDecisions(),
-          selectCapture,
-          selectCollection,
-          setDraftIntent,
-          setDraftIntentDirty,
-          setDraftNote,
-          setDraftNoteDirty,
-          setDraftTitle,
-          setDraftTitleDirty,
-          setQuickIntentOpen,
-          setReminderSheetOpen,
-          updateSelectedReviewDraft
-        }}
-        data={{
-          appSheets: renderAppSheets(),
-          captureComposerMotion,
-          captureKeyboardInset,
-          captureReturnCollectionId,
-          faviconFailures,
-          keyboardHeight,
-          message,
-          noteInputRef,
-          reviewMotion,
-          selected,
-          snackbar: renderSnackbar(),
-          visitTargetMapCandidates,
-          windowHeight
-        }}
-        state={{
-          collectionChoiceSaving,
-          draftIntent,
-          draftIntentDirty,
-          draftNote,
-          draftNoteDirty,
-          draftTitle,
-          draftTitleDirty,
-          noteSaveState,
-          noteSheetOpen,
-          quickIntentOpen,
-          reminderDrafts,
-          reminderSheetOpen
-        }}
-      />
-    );
+    if (captureReviewOrigin === "recent") {
+      return renderRecentStack(renderCaptureReviewScreen(selected));
+    }
+    return renderCaptureReviewScreen(selected);
   }
 
   if (config?.apiUrl && !session) {
@@ -2514,51 +2603,6 @@ export default function App() {
     );
   }
 
-  return (
-    <HomeScreen
-      actions={{
-        chooseCaptureMode,
-        closeCaptureComposer,
-        loadCaptures: () => void loadCaptures(),
-        loadMoreActiveCaptures: () => loadMoreCaptures("active"),
-        openCapture,
-        openCaptureComposer,
-        openSearch,
-        renderCaptureSkeletonRows,
-        renderHomeRow,
-        renderListLoadingFooter,
-        saveCaptureSource: () => void saveCaptureSource(),
-        setSourceDraft
-      }}
-      data={{
-        appSheets: renderAppSheets(),
-        bottomAppBar: !showCaptureComposer ? renderBottomAppBar("recent") : null,
-        captureComposerMotion,
-        captureKeyboardInset,
-        homeCaptures: homeRows,
-        listPerfProps: CAPTURE_LIST_PERF_PROPS,
-        snackbar: renderSnackbar(!showCaptureComposer),
-        sourceInputRef,
-        visibleHomeRows,
-        windowHeight
-      }}
-      state={{
-        captureMode,
-        capturesError,
-        capturesLoading,
-        capturesNextCursor,
-        homeColdSkeletonVisible,
-        homeInitialLoading,
-        keyboardHeight,
-        message,
-        pickingCaptureImage,
-        quickLookCount,
-        savingCapture,
-        sessionActive: Boolean(session),
-        showCaptureComposer,
-        sourceDraft
-      }}
-    />
-  );
+  return renderRecentStack();
 
 }

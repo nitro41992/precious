@@ -43,6 +43,7 @@ Home must:
 - Indicate when a Capture belongs to more than one Collection without making the row noisy, for example by showing the first Collection with a compact additional-count marker.
 - Hide audit-like extraction details from rows, including model/provider names, analysis mode, confidence percentages, generic `Analyzed` labels, and debug state.
 - Keep extraction details persisted and searchable.
+- Preserve the Recent Captures scroll position when a user opens Capture Review from a Recent row and returns by in-screen, hardware, or gesture back.
 - Provide designed loading, empty, error, long-content, processing, failed, and archived/filter states.
 
 Home must not:

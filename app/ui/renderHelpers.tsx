@@ -49,6 +49,7 @@ export type AppRenderHelpersInput = {
   onFaviconFailure: (host: string) => void;
   onOpenCapture: (captureId: string) => void;
   onOpenCaptureFromCollection: (capture: Capture, collectionId: string) => void;
+  onOpenRecentCapture: (captureId: string) => void;
   onRecentHomePress: () => void;
   onRecentComposerOpen: () => void;
   onUnlinkCaptureFromCollection: (collectionId: string, capture: Capture) => void;
@@ -219,7 +220,7 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
           deferFallbackIcon: input.capturesLoading && !input.activeCapturesLoadedOnce,
           deferMediaUntilLoaded: true,
           forceSkeleton: input.homeFeedRevealPending,
-          onPress: () => input.onOpenCapture(item.capture.id),
+          onPress: () => input.onOpenRecentCapture(item.capture.id),
           testID: `pc.capture.row.${item.capture.id}`
         })}
       </Animated.View>
