@@ -295,14 +295,14 @@ export function CollectionRow({
       >
         <View style={styles.collectionRowTop}>
           <View style={styles.collectionIconMark}>
-            <Folder color={item.status === "archived" ? colors.muted : colors.accent} size={18} strokeWidth={2.2} />
+            <Folder color={colors.accent} size={18} strokeWidth={2.2} />
           </View>
           <View style={styles.collectionRowCopy}>
             <Text numberOfLines={1} style={styles.captureTitle}>
               {item.title}
             </Text>
             <Text style={styles.meta}>
-              {item.status === "archived" ? "Archived" : `${item.captureCount} captures`}
+              {item.captureCount} captures
             </Text>
           </View>
         </View>

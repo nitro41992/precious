@@ -110,6 +110,8 @@ object PreciousCaptureStore {
       .put("searchPhrases", JSONArray())
       .put("note", "")
       .put("archivedAt", JSONObject.NULL)
+      .put("deletedAt", JSONObject.NULL)
+      .put("deletePurgeAfter", JSONObject.NULL)
       .put("reviewConfirmedAt", JSONObject.NULL)
       .put("status", "processing")
       .put("createdAt", now)
@@ -352,6 +354,12 @@ object PreciousCaptureStore {
   @Synchronized
   fun restore(context: Context, id: String): JSONArray = setArchived(context, id, false)
 
+  @Synchronized
+  fun delete(context: Context, id: String): JSONArray = setDeleted(context, id, true)
+
+  @Synchronized
+  fun undoDelete(context: Context, id: String): JSONArray = setDeleted(context, id, false)
+
   private fun setArchived(context: Context, id: String, archived: Boolean): JSONArray {
     val captures = list(context)
     val now = System.currentTimeMillis()
@@ -361,6 +369,25 @@ object PreciousCaptureStore {
       if (capture.optString("id") == id) {
         capture
           .put("archivedAt", if (archived) now else JSONObject.NULL)
+          .put("updatedAt", now)
+      }
+      next.put(capture)
+    }
+    save(context, next)
+    return next
+  }
+
+  private fun setDeleted(context: Context, id: String, deleted: Boolean): JSONArray {
+    val captures = list(context)
+    val now = System.currentTimeMillis()
+    val next = JSONArray()
+    for (index in 0 until captures.length()) {
+      val capture = captures.getJSONObject(index)
+      if (capture.optString("id") == id) {
+        capture
+          .put("deletedAt", if (deleted) now else JSONObject.NULL)
+          .put("deletePurgeAfter", if (deleted) now + 8000 else JSONObject.NULL)
+          .put("archivedAt", JSONObject.NULL)
           .put("updatedAt", now)
       }
       next.put(capture)

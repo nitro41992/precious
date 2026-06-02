@@ -20,8 +20,6 @@ import type {
 
 export function useAppUiEffects({
   accountSheetOpen,
-  archiveCaptureConfirmOpen,
-  archiveCollectionTarget,
   captureComposerClosing,
   captureComposerClosingRef,
   captureComposerMotion,
@@ -53,8 +51,6 @@ export function useAppUiEffects({
   selectedCollectionId,
   selectedId,
   setAccountSheetOpen,
-  setArchiveCaptureConfirmOpen,
-  setArchiveCollectionTarget,
   setCollectionDescription,
   setCollectionTitle,
   setCollectionsOpen,
@@ -71,8 +67,6 @@ export function useAppUiEffects({
   sourceInputRef
 }: {
   accountSheetOpen: boolean;
-  archiveCaptureConfirmOpen: boolean;
-  archiveCollectionTarget: Collection | null;
   captureComposerClosing: boolean;
   captureComposerClosingRef: MutableRefObject<boolean>;
   captureComposerMotion: Animated.Value;
@@ -104,8 +98,6 @@ export function useAppUiEffects({
   selectedCollectionId: string | null;
   selectedId: string | null;
   setAccountSheetOpen: (value: boolean) => void;
-  setArchiveCaptureConfirmOpen: (value: boolean) => void;
-  setArchiveCollectionTarget: (value: Collection | null) => void;
   setCollectionDescription: (value: string) => void;
   setCollectionTitle: (value: string) => void;
   setCollectionsOpen: (value: boolean) => void;
@@ -163,19 +155,9 @@ export function useAppUiEffects({
       !noteSheetOpen &&
       !collectionsOpen &&
       !accountSheetOpen &&
-      !rationaleSheet &&
-      !archiveCaptureConfirmOpen &&
-      !archiveCollectionTarget
+      !rationaleSheet
     ) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (archiveCollectionTarget) {
-        setArchiveCollectionTarget(null);
-        return true;
-      }
-      if (archiveCaptureConfirmOpen) {
-        setArchiveCaptureConfirmOpen(false);
-        return true;
-      }
       if (rationaleSheet) {
         setRationaleSheet(null);
         setRationaleEditTarget(null);
@@ -221,8 +203,6 @@ export function useAppUiEffects({
     return () => subscription.remove();
   }, [
     accountSheetOpen,
-    archiveCaptureConfirmOpen,
-    archiveCollectionTarget,
     captureReturnCollectionId,
     closeCaptureComposer,
     closeCollectionComposer,
@@ -236,8 +216,6 @@ export function useAppUiEffects({
     selectedCollectionId,
     selectedId,
     setAccountSheetOpen,
-    setArchiveCaptureConfirmOpen,
-    setArchiveCollectionTarget,
     setCollectionsOpen,
     setRationaleEditTarget,
     setRationaleSheet,

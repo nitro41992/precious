@@ -14,7 +14,6 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import {
-  Archive,
   ArrowLeft,
   Check,
   ChevronRight,
@@ -24,11 +23,12 @@ import {
   MapPin,
   Pencil,
   StickyNote,
+  Trash2,
   X
 } from "lucide-react-native";
 
 import type { MapSearchCandidate } from "../captureLogic";
-import { displayStatus, isArchived, reviewReasons } from "../captureLogic";
+import { displayStatus, reviewReasons } from "../captureLogic";
 import type {
   Capture,
   CaptureReviewDraft,
@@ -94,7 +94,7 @@ type CaptureReviewScreenProps = {
   };
   actions: {
     closeNoteSheet: () => void;
-    confirmArchive: () => void;
+    deleteCapture: () => void;
     copySource: () => void;
     markFaviconFailed: (host: string) => void;
     openCaptureUrl: (url: string) => void;
@@ -152,7 +152,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   } = state;
   const {
     closeNoteSheet,
-    confirmArchive,
+    deleteCapture,
     copySource,
     markFaviconFailed,
     openCaptureUrl,
@@ -178,7 +178,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     updateSelectedReviewDraft
   } = actions;
 
-  const selectedArchived = isArchived(selected);
   const sourceValue = selected.sourceUrl || selected.sourceText;
   const selectedOpenUrl = captureOpenUrl(selected);
   const selectedImageUrl = captureImageUrl(selected);
@@ -251,7 +250,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     ? Math.min(440, Math.max(320, noteVisibleHeight - 24))
     : Math.min(500, Math.max(340, windowHeight * 0.64));
   const noteSheetBottomInset = noteWindowAlreadyKeyboardSized ? 0 : captureKeyboardInset;
-  const showStatus = selectedArchived || displayStatus(selected) !== "ready";
+  const showStatus = displayStatus(selected) !== "ready";
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -633,14 +632,12 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
               </View>
             </View>
             <Pressable
-              onPress={confirmArchive}
+              onPress={deleteCapture}
               style={({ pressed }) => [styles.destructiveRow, pressed && styles.subtlePressed]}
-              testID="pc.capture.archive-toggle"
+              testID="pc.capture.delete"
             >
-              <Archive color={selectedArchived ? colors.ink : colors.danger} size={18} strokeWidth={2.2} />
-              <Text style={selectedArchived ? styles.secondaryButtonText : styles.dangerButtonText}>
-                {selectedArchived ? "Restore capture" : "Archive capture"}
-              </Text>
+              <Trash2 color={colors.danger} size={18} strokeWidth={2.2} />
+              <Text style={styles.dangerButtonText}>Delete capture</Text>
             </Pressable>
             {message ? <Text style={styles.message}>{message}</Text> : null}
           </ScrollView>

@@ -104,11 +104,13 @@ import type { MapSearchCandidate } from "./captureLogic";
 import {
   capturesForListMode,
   extractHttpUrl,
-  isArchived,
+  isDeleted,
   mergeRemoteCaptures,
   parseCaptureUrl,
   sortCaptures
 } from "./captureLogic";
+
+const DELETE_UNDO_MS = 8000;
 
 const CAPTURE_LIST_PERF_PROPS = {
   initialNumToRender: 8,
@@ -197,8 +199,6 @@ export default function App() {
   const [noteSheetOpen, setNoteSheetOpen] = useState(false);
   const [reminderSheetOpen, setReminderSheetOpen] = useState(false);
   const [accountSheetOpen, setAccountSheetOpen] = useState(false);
-  const [archiveCaptureConfirmOpen, setArchiveCaptureConfirmOpen] = useState(false);
-  const [archiveCollectionTarget, setArchiveCollectionTarget] = useState<Collection | null>(null);
   const [faviconFailures, setFaviconFailures] = useState<Record<string, boolean>>({});
   const [savingCapture, setSavingCapture] = useState(false);
   const [pickingCaptureImage, setPickingCaptureImage] = useState(false);
@@ -578,17 +578,10 @@ export default function App() {
     searchScope,
     searchScopeOpen,
     setSearchOpen,
-    setSearchQuery,
-    setSearchScope,
-    setSearchScopeOpen
+    setSearchQuery
   } = useCaptureSearch({
-    archivedCaptures,
-    archivedCapturesLoaded,
-    archivedCapturesLoading,
     captures,
     config,
-    loadArchivedCaptures: loadArchivedCapturesForSearch,
-    onMessage: setMessage,
     session,
     withFreshAccessToken
   });
@@ -853,7 +846,6 @@ export default function App() {
     selectCollection(null);
     setCollectionsOpen(false);
     setMessage("");
-    setSearchScopeOpen(false);
     setSearchOpen(true);
   }
 
@@ -1166,8 +1158,6 @@ export default function App() {
 
   useAppUiEffects({
     accountSheetOpen,
-    archiveCaptureConfirmOpen,
-    archiveCollectionTarget,
     captureComposerClosing,
     captureComposerClosingRef,
     captureComposerMotion,
@@ -1199,8 +1189,6 @@ export default function App() {
     selectedCollectionId,
     selectedId,
     setAccountSheetOpen,
-    setArchiveCaptureConfirmOpen,
-    setArchiveCollectionTarget,
     setCollectionDescription,
     setCollectionTitle,
     setCollectionsOpen,
@@ -1230,7 +1218,7 @@ export default function App() {
 
   useEffect(() => {
     if (!snackbar) return;
-    const timer = setTimeout(() => setSnackbar(null), 6000);
+    const timer = setTimeout(() => setSnackbar(null), snackbar.durationMs ?? 6000);
     return () => clearTimeout(timer);
   }, [snackbar]);
 
@@ -1429,6 +1417,39 @@ export default function App() {
     setCollectionCaptures((current) =>
       capturesForListMode(current.map((item) => (matchesCapture(item) ? updatedCapture : item)), "active")
     );
+  }
+
+  function removeCaptureFromVisibleLists(capture: Capture) {
+    const matchesCapture = (item: Capture) =>
+      item.id === capture.id ||
+      item.remoteId === capture.id ||
+      item.id === capture.remoteId ||
+      Boolean(capture.remoteId && item.remoteId === capture.remoteId);
+    commitCaptureRows("active", (current) => current.filter((item) => !matchesCapture(item)));
+    commitCaptureRows("archived", (current) => current.filter((item) => !matchesCapture(item)));
+    for (const [collectionId, rows] of Object.entries(collectionCapturesCacheRef.current)) {
+      collectionCapturesCacheRef.current[collectionId] = rows.filter((item) => !matchesCapture(item));
+    }
+    setCollectionCaptures((current) => current.filter((item) => !matchesCapture(item)));
+  }
+
+  function upsertActiveCapture(capture: Capture) {
+    commitCaptureRows("active", (current) =>
+      sortCaptures(uniqueCaptures([capture, ...current.filter((item) => item.id !== capture.id && item.remoteId !== capture.remoteId)]))
+    );
+  }
+
+  function removeCollectionFromKnownCaptures(collectionId: string) {
+    const removeCollection = (capture: Capture): Capture => ({
+      ...capture,
+      linkedCollections: (capture.linkedCollections || []).filter((collection) => collection.id !== collectionId)
+    });
+    commitCaptureRows("active", (current) => current.map(removeCollection));
+    commitCaptureRows("archived", (current) => current.map(removeCollection));
+    for (const [cachedCollectionId, rows] of Object.entries(collectionCapturesCacheRef.current)) {
+      collectionCapturesCacheRef.current[cachedCollectionId] = rows.map(removeCollection);
+    }
+    setCollectionCaptures((current) => current.map(removeCollection));
   }
 
   async function saveContextNote(capture: Capture, noteValue: string) {
@@ -1797,29 +1818,56 @@ export default function App() {
     }
   }
 
-  async function setCollectionArchiveState(collection: Collection, archived: boolean) {
+  async function undoDeleteCollection(collection: Collection) {
     try {
-      setArchiveCollectionTarget(null);
-      await collectionRequest<{ collection: Record<string, any> }>("collections", {
+      const json = await collectionRequest<{ collection: Record<string, any> }>("collections", {
         method: "PATCH",
-        body: { collectionId: collection.id, action: archived ? "archive" : "restore" }
+        body: { collectionId: collection.id, action: "undo_delete" }
       });
-      selectCollection(null);
-      collectionCapturesCacheRef.current[collection.id] = [];
-      setMessage(archived ? "Collection archived." : "Collection restored.");
-      await loadCollections(collectionsMode);
+      const restored = collectionFromRemote(json.collection);
+      collectionsCacheRef.current.active = uniqueCollections([restored, ...collectionsCacheRef.current.active]);
+      setCollections((current) => uniqueCollections([restored, ...current]));
+      setSnackbar(null);
+      setMessage("");
+      await loadCollections("active");
       await loadCaptures();
     } catch (error) {
-      setMessage(friendlyError(error, archived ? "Could not archive collection." : "Could not restore collection."));
+      setMessage(friendlyError(error, "Could not undo delete."));
     }
   }
 
-  function confirmArchiveCollection(collection: Collection) {
-    if (collection.status === "archived") {
-      void setCollectionArchiveState(collection, false);
-      return;
+  async function deleteCollection(collection: Collection) {
+    const previousCollections = collections;
+    const previousCache = {
+      active: collectionsCacheRef.current.active,
+      archived: collectionsCacheRef.current.archived
+    };
+    selectCollection(null);
+    collectionsCacheRef.current.active = collectionsCacheRef.current.active.filter((item) => item.id !== collection.id);
+    collectionsCacheRef.current.archived = collectionsCacheRef.current.archived.filter((item) => item.id !== collection.id);
+    setCollections((current) => current.filter((item) => item.id !== collection.id));
+    collectionCapturesCacheRef.current[collection.id] = [];
+    removeCollectionFromKnownCaptures(collection.id);
+    setMessage("");
+    setSnackbar({
+      text: "Collection deleted.",
+      tone: "destructive",
+      durationMs: DELETE_UNDO_MS,
+      actionLabel: "Undo",
+      action: () => void undoDeleteCollection(collection)
+    });
+    try {
+      await collectionRequest<{ collection: Record<string, any> }>("collections", {
+        method: "PATCH",
+        body: { collectionId: collection.id, action: "delete" }
+      });
+      await loadCollections("active");
+      await loadCaptures();
+    } catch (error) {
+      collectionsCacheRef.current = previousCache;
+      setCollections(previousCollections);
+      setMessage(friendlyError(error, "Could not delete collection."));
     }
-    setArchiveCollectionTarget(collection);
   }
 
   async function unlinkCaptureFromCollection(collectionId: string, capture: Capture) {
@@ -1903,7 +1951,7 @@ export default function App() {
       collectionCapturesCacheRef.current[collectionId] = [
         addCollection(capture),
         ...(collectionCapturesCacheRef.current[collectionId] || []).filter((item) => item.id !== capture.id)
-      ].filter((item) => !isArchived(item));
+      ].filter((item) => !isDeleted(item));
       collectionsCacheRef.current.active = collectionsCacheRef.current.active.map((item) =>
         item.id === collectionId ? { ...item, captureCount: item.captureCount + 1 } : item
       );
@@ -1914,7 +1962,7 @@ export default function App() {
       setCollectionCaptures((current) => [
         addCollection(capture),
         ...current.filter((item) => item.id !== capture.id)
-      ].filter((item) => !isArchived(item)));
+      ].filter((item) => !isDeleted(item)));
       setSnackbar(null);
       setMessage("Collection restored.");
       await loadCaptures();
@@ -2090,9 +2138,65 @@ export default function App() {
     }
   }
 
-  async function setArchiveState(archived: boolean) {
+  async function undoDeleteCapture(capture: Capture, returnCollectionId: string | null = null) {
+    const captureRef = capture.remoteId || capture.id;
+    if (config?.apiUrl && session?.accessToken) {
+      try {
+        const json = await withFreshAccessToken((accessToken) =>
+          requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
+            method: "PATCH",
+            headers: {
+              apikey: config.supabaseAnonKey,
+              authorization: `Bearer ${accessToken}`,
+              "content-type": "application/json"
+            },
+            body: {
+              captureId: captureRef,
+              action: "undo_delete"
+            }
+          })
+        );
+        const restoredCapture = captureFromRemote(json.capture);
+        upsertActiveCapture(restoredCapture);
+        if (returnCollectionId) {
+          collectionCapturesCacheRef.current[returnCollectionId] = [];
+          void loadCollectionCaptures(returnCollectionId, { phase: "refresh" }).catch(() => {});
+        }
+        setSnackbar(null);
+        setMessage("");
+        collectionCapturesCacheRef.current = {};
+        collectionCapturesCursorCacheRef.current = {};
+        await loadCaptures();
+        if (collectionsOpen || selectedCollectionId || returnCollectionId) await loadCollections("active");
+      } catch (error) {
+        setMessage(friendlyError(error, "Could not undo delete."));
+      }
+      return;
+    }
+    if (!nativeStore) return;
+    const raw = nativeStore.undoDeleteCapture
+      ? await nativeStore.undoDeleteCapture(capture.id)
+      : await nativeStore.restoreCapture(capture.id);
+    replaceLocalCaptureLists(JSON.parse(raw || "[]") as Capture[]);
+    setSnackbar(null);
+    setMessage("");
+  }
+
+  async function deleteSelectedCapture() {
     if (!selected) return;
-    setArchiveCaptureConfirmOpen(false);
+    const capture = selected;
+    const returnCollectionId = captureReturnCollectionId;
+    removeCaptureFromVisibleLists(capture);
+    selectCapture(null);
+    if (returnCollectionId) selectCollection(returnCollectionId);
+    setMessage("");
+    setSnackbar({
+      text: "Capture deleted.",
+      tone: "destructive",
+      durationMs: DELETE_UNDO_MS,
+      actionLabel: "Undo",
+      action: () => void undoDeleteCapture(capture, returnCollectionId)
+    });
     if (config?.apiUrl && session?.accessToken) {
       try {
         await withFreshAccessToken((accessToken) =>
@@ -2104,44 +2208,31 @@ export default function App() {
               "content-type": "application/json"
             },
             body: {
-              captureId: selected.remoteId || selected.id,
-              action: archived ? "archive" : "restore"
+              captureId: capture.remoteId || capture.id,
+              action: "delete"
             }
           })
         );
-        const returnCollectionId = captureReturnCollectionId;
-        selectCapture(null);
-        if (returnCollectionId) selectCollection(returnCollectionId);
-        setMessage(archived ? "Archived." : "Restored.");
-        setArchivedCapturesLoaded(false);
         collectionCapturesCacheRef.current = {};
         collectionCapturesCursorCacheRef.current = {};
         await loadCaptures();
-        if (collectionsOpen || selectedCollectionId) await loadCollections(collectionsMode);
+        if (collectionsOpen || selectedCollectionId || returnCollectionId) await loadCollections("active");
       } catch (error) {
-        setMessage(friendlyError(error, archived ? "Could not archive." : "Could not restore."));
+        upsertActiveCapture(capture);
+        setMessage(friendlyError(error, "Could not delete."));
       }
       return;
     }
     if (!nativeStore) return;
-    const raw = archived
-      ? await nativeStore.archiveCapture(selected.id)
-      : await nativeStore.restoreCapture(selected.id);
-    const next = JSON.parse(raw || "[]") as Capture[];
-    replaceLocalCaptureLists(next);
-    const returnCollectionId = captureReturnCollectionId;
-    selectCapture(null);
-    if (returnCollectionId) selectCollection(returnCollectionId);
-    setMessage(archived ? "Archived." : "Restored.");
-  }
-
-  function confirmArchive() {
-    if (!selected) return;
-    if (isArchived(selected)) {
-      void setArchiveState(false);
-      return;
+    try {
+      const raw = nativeStore.deleteCapture
+        ? await nativeStore.deleteCapture(capture.id)
+        : await nativeStore.archiveCapture(capture.id);
+      replaceLocalCaptureLists(JSON.parse(raw || "[]") as Capture[]);
+    } catch (error) {
+      upsertActiveCapture(capture);
+      setMessage(friendlyError(error, "Could not delete."));
     }
-    setArchiveCaptureConfirmOpen(true);
   }
 
   async function saveCaptureSource() {
@@ -2268,8 +2359,6 @@ export default function App() {
     return (
       <AppSheets
         accountSheetOpen={accountSheetOpen}
-        archiveCaptureConfirmOpen={archiveCaptureConfirmOpen}
-        archiveCollectionTarget={archiveCollectionTarget}
         editReviewTask={editReviewTask}
         onSignOut={() => void signOut()}
         rationaleEditTarget={rationaleEditTarget}
@@ -2277,10 +2366,6 @@ export default function App() {
         resolveReviewTargets={resolveReviewTargets}
         selected={selected}
         setAccountSheetOpen={setAccountSheetOpen}
-        setArchiveCaptureConfirmOpen={setArchiveCaptureConfirmOpen}
-        setArchiveCollectionTarget={setArchiveCollectionTarget}
-        setArchiveState={setArchiveState}
-        setCollectionArchiveState={setCollectionArchiveState}
         setRationaleEditTarget={setRationaleEditTarget}
         setRationaleSheet={setRationaleSheet}
       />
@@ -2292,8 +2377,8 @@ export default function App() {
       <CaptureReviewScreen
         actions={{
           closeNoteSheet,
-          confirmArchive,
           copySource,
+          deleteCapture: () => void deleteSelectedCapture(),
           markFaviconFailed,
           openCaptureUrl,
           openCollectionPicker: () => void openCollectionPicker(),
@@ -2417,7 +2502,7 @@ export default function App() {
     return (
       <CollectionDetailScreen
         actions={{
-          confirmArchiveCollection,
+          deleteCollection: (collection) => void deleteCollection(collection),
           loadMoreCollectionCaptures,
           renderCollectionCapture,
           renderCollectionCaptureSkeletonRows,
@@ -2459,7 +2544,6 @@ export default function App() {
         actions={{
           loadMoreCollections,
           openCollectionComposer,
-          openCollectionsScreen: (mode) => void openCollectionsScreen(mode),
           renderCollection,
           renderCollectionSkeletonRows,
           renderListLoadingFooter
@@ -2478,7 +2562,6 @@ export default function App() {
         state={{
           collectionsLoadPhase,
           collectionsLoading,
-          collectionsMode,
           showCollectionForm
         }}
       />
@@ -2548,41 +2631,28 @@ export default function App() {
   }
 
   if (searchOpen) {
-    const searchIsLoading = remoteSearchActive && (remoteSearchLoading || remoteSearchEnhancing)
-      ? true
-      : searchScope !== "active" && archivedCapturesLoading && !archivedCapturesLoaded;
+    const searchIsLoading = remoteSearchActive && (remoteSearchLoading || remoteSearchEnhancing);
     const searchProgressLabel = remoteSearchLoading
       ? "Searching saved things"
       : remoteSearchEnhancing
         ? "Refining matches"
-        : searchScope !== "active" && archivedCapturesLoading && !archivedCapturesLoaded
-          ? "Loading archived captures"
-          : "";
-    const showSearchScopes = searchScopeOpen || Boolean(searchQuery.trim());
+        : "";
     const emptyTitle = searchQuery.trim()
       ? "No matches yet."
-      : searchScope === "archived"
-        ? "No archived captures."
-        : "What do you remember?";
+      : "What do you remember?";
     const emptyText = searchQuery.trim()
       ? "Try a place, product, source, collection, note, date, or why you saved it."
-      : searchScope === "archived"
-        ? "Archived captures stay searchable here after you move them out of Recent Captures."
-        : "Search looks across titles, notes, sources, collections, reminders, and saved details.";
+      : "Search looks across titles, notes, sources, collections, reminders, and saved details.";
     return (
       <SearchScreen
         actions={{
           closeSearch: () => setSearchOpen(false),
-          loadMoreArchivedCaptures: () => loadMoreCaptures("archived"),
           renderSearchProgress,
           renderSearchResult,
-          setSearchQuery,
-          setSearchScope,
-          toggleSearchScopeOpen: () => setSearchScopeOpen((current) => !current)
+          setSearchQuery
         }}
         data={{
           appSheets: renderAppSheets(),
-          archivedCapturesError,
           emptyText,
           emptyTitle,
           listPerfProps: CAPTURE_LIST_PERF_PROPS,
@@ -2590,14 +2660,11 @@ export default function App() {
           searchMotion,
           searchProgressLabel,
           searchResults,
-          showSearchScopes,
           snackbar: renderSnackbar()
         }}
         state={{
           remoteSearchActive,
-          searchQuery,
-          searchScope,
-          searchScopeOpen
+          searchQuery
         }}
       />
     );

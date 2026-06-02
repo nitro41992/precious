@@ -29,11 +29,11 @@ export type CaptureImageVariant = "thumb" | "detail";
 export const CAPTURE_ASSET_SELECT =
   "id,user_id,capture_id,storage_path,public_url,mime_type,byte_size,created_at";
 export const CAPTURE_LIST_SELECT =
-  "id,user_id,client_capture_key,source_url,source_text,source_app,display_title,title,context_note,analysis_state,analysis_error,analysis,analysis_provider,analysis_mode,default_intent,current_save_intent,intent_rationale,thumbnail_url,capture_type,created_at,updated_at,processed_at,archived_at,rejected_at," +
+  "id,user_id,client_capture_key,source_url,source_text,source_app,display_title,title,context_note,analysis_state,analysis_error,analysis,analysis_provider,analysis_mode,default_intent,current_save_intent,intent_rationale,thumbnail_url,capture_type,created_at,updated_at,processed_at,archived_at,deleted_at,delete_purge_after,rejected_at," +
   `capture_assets(${CAPTURE_ASSET_SELECT})`;
 export const CAPTURE_DETAIL_SELECT = "*,capture_assets(*)";
 export const COLLECTION_LIST_SELECT =
-  "id,user_id,title,description,status,created_by,archived_at,created_at,updated_at";
+  "id,user_id,title,description,status,created_by,archived_at,deleted_at,delete_purge_after,created_at,updated_at";
 export const STARTER_COLLECTION_CREATED_BY = "starter";
 export const STARTER_COLLECTIONS = [
   {

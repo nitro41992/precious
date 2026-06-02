@@ -15,13 +15,15 @@ export async function handleCollectionCapturesResource(
 
   const collection = await supabase
     .from("collections")
-    .select("id,status")
+    .select("id,title,description,status,deleted_at")
     .eq("user_id", userId)
     .eq("id", collectionId)
     .maybeSingle();
   if (collection.error) throw collection.error;
   if (!collection.data) return json({ error: "Collection not found" }, 404);
-  if (collection.data.status === "archived") return json({ captures: [] });
+  if (collection.data.status === "archived" || collection.data.deleted_at) {
+    return json({ captures: [] });
+  }
   const collectionRow = collection.data as Record<string, unknown>;
 
   const limit = Math.max(
@@ -71,7 +73,7 @@ export async function handleCollectionCapturesResource(
   );
   return json({
     captures: withCaptureStates(signedRows).filter((row) =>
-      !row.rejected_at && archivedFilter(row, false)
+      !row.rejected_at && !row.deleted_at && archivedFilter(row, false)
     ),
     next_cursor: fetchedLinks.length > limit
       ? linkRows[linkRows.length - 1]?.linked_at || null

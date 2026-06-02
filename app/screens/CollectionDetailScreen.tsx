@@ -39,7 +39,7 @@ type CollectionDetailScreenProps = {
     collectionTitle: string;
   };
   actions: {
-    confirmArchiveCollection: (collection: Collection) => void;
+    deleteCollection: (collection: Collection) => void;
     loadMoreCollectionCaptures: () => void;
     renderCollectionCapture: (input: ListRenderItemInfo<Capture>) => ReactElement | null;
     renderCollectionCaptureSkeletonRows: (count?: number) => ReactElement | null;
@@ -72,7 +72,7 @@ export function CollectionDetailScreen({ actions, data, state }: CollectionDetai
   } = data;
   const { collectionDescription, collectionTitle } = state;
   const {
-    confirmArchiveCollection,
+    deleteCollection,
     loadMoreCollectionCaptures,
     renderCollectionCapture,
     renderCollectionCaptureSkeletonRows,
@@ -87,21 +87,19 @@ export function CollectionDetailScreen({ actions, data, state }: CollectionDetai
   } = actions;
 
   const saveDisabled = !collectionTitle.trim() || !collectionDescription.trim();
-  const activeCollection = selectedCollection.status === "active";
   const capturesReadyForCollection = collectionCapturesForId === selectedCollection.id;
   const collectionCapturesBlockingLoading =
-    activeCollection && collectionCapturesLoading && collectionCapturesLoadPhase !== "append";
+    collectionCapturesLoading && collectionCapturesLoadPhase !== "append";
   const visibleCollectionCaptures =
-    activeCollection && capturesReadyForCollection && (!collectionCapturesBlockingLoading || collectionCaptures.length)
+    capturesReadyForCollection && (!collectionCapturesBlockingLoading || collectionCaptures.length)
       ? collectionCaptures
       : [];
   const collectionCapturesInitialLoading =
-    activeCollection &&
     !collectionCapturesError &&
     (!capturesReadyForCollection ||
       collectionCapturesBlockingLoading ||
       (collectionCapturesLoadPhase === "initial" && !visibleCollectionCaptures.length));
-  const collectionCapturesAppending = activeCollection && collectionCapturesLoadPhase === "append";
+  const collectionCapturesAppending = collectionCapturesLoadPhase === "append";
   const collectionCaptureSkeletonCount =
     selectedCollection.captureCount > 0 ? Math.min(selectedCollection.captureCount, 4) : 2;
   const collectionDetailBottomPadding =
@@ -130,50 +128,35 @@ export function CollectionDetailScreen({ actions, data, state }: CollectionDetai
             <View style={styles.collectionDetailTop}>
               <View style={styles.detailHeader}>
                 <IconButton Icon={ArrowLeft} label="Back" onPress={() => selectCollection(null)} />
-                <Text style={styles.status}>
-                  {selectedCollection.status === "archived"
-                    ? "Archived"
-                    : `${selectedCollection.captureCount} captures`}
-                </Text>
+                <Text style={styles.status}>{selectedCollection.captureCount} captures</Text>
               </View>
               <Text style={styles.kicker}>Collection</Text>
               <Text style={styles.title}>{selectedCollection.title}</Text>
               <Text style={styles.sourceText}>{selectedCollection.description}</Text>
-              {activeCollection ? (
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.meta}>Captures</Text>
-                </View>
-              ) : (
-                <View style={styles.sourceBlock}>
-                  <Text style={styles.meta}>Archived collection</Text>
-                  <Text style={styles.supportingText}>
-                    Restore this collection to bring back its archive-time capture links.
-                  </Text>
-                </View>
-              )}
+              <View style={styles.sectionHeader}>
+                <Text style={styles.meta}>Captures</Text>
+              </View>
             </View>
           }
           ListEmptyComponent={
-            activeCollection ? (
-              collectionCapturesInitialLoading && collectionCapturesColdSkeletonVisible ? (
-                renderCollectionCaptureSkeletonRows(collectionCaptureSkeletonCount)
-              ) : collectionCapturesInitialLoading ? (
-                <View style={styles.loadingQuietSpace} />
-              ) : collectionCapturesError ? (
-                <View style={styles.collectionEmpty}>
-                  <Text style={styles.emptyTitle}>Could not load collection captures.</Text>
-                  <Text style={styles.emptyText}>{collectionCapturesError}</Text>
-                  <Pressable onPress={retryLoadCollectionCaptures} style={styles.secondaryButton}>
-                    <Text style={styles.secondaryButtonText}>Try again</Text>
-                  </Pressable>
-                </View>
-              ) : (
-                <View style={styles.collectionEmpty}>
-                  <Text style={styles.emptyTitle}>No captures in this collection.</Text>
-                  <Text style={styles.emptyText}>Linked captures will appear here.</Text>
-                </View>
-              )
-            ) : null
+            collectionCapturesInitialLoading && collectionCapturesColdSkeletonVisible ? (
+              renderCollectionCaptureSkeletonRows(collectionCaptureSkeletonCount)
+            ) : collectionCapturesInitialLoading ? (
+              <View style={styles.loadingQuietSpace} />
+            ) : collectionCapturesError ? (
+              <View style={styles.collectionEmpty}>
+                <Text style={styles.emptyTitle}>Could not load collection captures.</Text>
+                <Text style={styles.emptyText}>{collectionCapturesError}</Text>
+                <Pressable onPress={retryLoadCollectionCaptures} style={styles.secondaryButton}>
+                  <Text style={styles.secondaryButtonText}>Try again</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.collectionEmpty}>
+                <Text style={styles.emptyTitle}>No captures in this collection.</Text>
+                <Text style={styles.emptyText}>Linked captures will appear here.</Text>
+              </View>
+            )
           }
           ListFooterComponent={
             <>
@@ -181,56 +164,46 @@ export function CollectionDetailScreen({ actions, data, state }: CollectionDetai
                 ? renderListLoadingFooter("Loading more captures...")
                 : null}
               <View style={styles.collectionSettings}>
-                {activeCollection ? (
-                  <>
-                    <Text style={styles.meta}>Collection settings</Text>
-                    <TextInput
-                      onChangeText={(value) => {
-                        setCollectionDraftDirty(true);
-                        setCollectionTitle(value);
-                      }}
-                      onFocus={scrollCollectionSettingsIntoView}
-                      placeholder="Title"
-                      placeholderTextColor={colors.muted}
-                      style={styles.search}
-                      testID="pc.collection.detail.title"
-                      value={collectionTitle}
-                    />
-                    <TextInput
-                      multiline
-                      onChangeText={(value) => {
-                        setCollectionDraftDirty(true);
-                        setCollectionDescription(value);
-                      }}
-                      onFocus={scrollCollectionSettingsIntoView}
-                      placeholder="What belongs in this collection"
-                      placeholderTextColor={colors.muted}
-                      style={styles.noteInput}
-                      testID="pc.collection.detail.description"
-                      value={collectionDescription}
-                    />
-                    <Pressable
-                      disabled={saveDisabled}
-                      onPress={saveCollection}
-                      style={[styles.primaryButton, saveDisabled && styles.disabledButton]}
-                      testID="pc.collection.detail.save"
-                    >
-                      <Text style={styles.primaryButtonText}>Save collection</Text>
-                    </Pressable>
-                  </>
-                ) : null}
+                <Text style={styles.meta}>Collection settings</Text>
+                <TextInput
+                  onChangeText={(value) => {
+                    setCollectionDraftDirty(true);
+                    setCollectionTitle(value);
+                  }}
+                  onFocus={scrollCollectionSettingsIntoView}
+                  placeholder="Title"
+                  placeholderTextColor={colors.muted}
+                  style={styles.search}
+                  testID="pc.collection.detail.title"
+                  value={collectionTitle}
+                />
+                <TextInput
+                  multiline
+                  onChangeText={(value) => {
+                    setCollectionDraftDirty(true);
+                    setCollectionDescription(value);
+                  }}
+                  onFocus={scrollCollectionSettingsIntoView}
+                  placeholder="What belongs in this collection"
+                  placeholderTextColor={colors.muted}
+                  style={styles.noteInput}
+                  testID="pc.collection.detail.description"
+                  value={collectionDescription}
+                />
                 <Pressable
-                  onPress={() => confirmArchiveCollection(selectedCollection)}
-                  style={styles.secondaryButton}
-                  testID="pc.collection.archive-toggle"
+                  disabled={saveDisabled}
+                  onPress={saveCollection}
+                  style={[styles.primaryButton, saveDisabled && styles.disabledButton]}
+                  testID="pc.collection.detail.save"
                 >
-                  <Text
-                    style={
-                      selectedCollection.status === "archived" ? styles.secondaryButtonText : styles.dangerButtonText
-                    }
-                  >
-                    {selectedCollection.status === "archived" ? "Restore collection" : "Archive collection"}
-                  </Text>
+                  <Text style={styles.primaryButtonText}>Save collection</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => deleteCollection(selectedCollection)}
+                  style={styles.secondaryButton}
+                  testID="pc.collection.delete"
+                >
+                  <Text style={styles.dangerButtonText}>Delete collection</Text>
                 </Pressable>
                 {message ? <Text style={styles.message}>{message}</Text> : null}
               </View>

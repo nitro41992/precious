@@ -1,6 +1,5 @@
 import { Pressable, ScrollView, Text, View } from "react-native";
 import {
-  Archive,
   Bell,
   Check,
   Folder,
@@ -17,7 +16,6 @@ import {
 } from "../capturePresentation";
 import type {
   Capture,
-  Collection,
   LucideIconComponent,
   RationaleSheet,
   ReviewChecklistTask,
@@ -77,8 +75,6 @@ function reviewTaskIconStyle(target: ReviewTarget) {
 
 export function AppSheets({
   accountSheetOpen,
-  archiveCaptureConfirmOpen,
-  archiveCollectionTarget,
   editReviewTask,
   onSignOut,
   rationaleEditTarget,
@@ -86,16 +82,10 @@ export function AppSheets({
   resolveReviewTargets,
   selected,
   setAccountSheetOpen,
-  setArchiveCaptureConfirmOpen,
-  setArchiveCollectionTarget,
-  setArchiveState,
-  setCollectionArchiveState,
   setRationaleEditTarget,
   setRationaleSheet
 }: {
   accountSheetOpen: boolean;
-  archiveCaptureConfirmOpen: boolean;
-  archiveCollectionTarget: Collection | null;
   editReviewTask: (task: ReviewChecklistTask) => void;
   onSignOut: () => void;
   rationaleEditTarget: ReviewTarget | null;
@@ -103,10 +93,6 @@ export function AppSheets({
   resolveReviewTargets: (targets: ReviewTarget[], options?: { currentSaveIntent?: string | null }) => Promise<void> | void;
   selected: Capture | null;
   setAccountSheetOpen: (value: boolean) => void;
-  setArchiveCaptureConfirmOpen: (value: boolean) => void;
-  setArchiveCollectionTarget: (value: Collection | null) => void;
-  setArchiveState: (archived: boolean) => Promise<void> | void;
-  setCollectionArchiveState: (collection: Collection, archived: boolean) => Promise<void> | void;
   setRationaleEditTarget: (value: ReviewTarget | null) => void;
   setRationaleSheet: (value: RationaleSheet | null) => void;
 }) {
@@ -299,66 +285,6 @@ export function AppSheets({
             style={styles.primaryButton}
           >
             <Text style={styles.primaryButtonText}>Done</Text>
-          </Pressable>
-        </View>
-      </View>
-    );
-  }
-
-  if (archiveCaptureConfirmOpen && selected) {
-    return (
-      <View style={styles.modalLayer} pointerEvents="box-none">
-        <Pressable
-          accessibilityLabel="Cancel archive"
-          onPress={() => setArchiveCaptureConfirmOpen(false)}
-          style={styles.modalBackdrop}
-        />
-        <View style={styles.actionSheet}>
-          <View style={styles.sheetGrabber} />
-          <View style={styles.destructiveSheetIcon}>
-            <Archive color={colors.danger} size={22} strokeWidth={2.4} />
-          </View>
-          <Text style={styles.sheetTitle}>Archive this capture?</Text>
-          <Text style={styles.sheetSubtitle}>It leaves Recent Captures but stays searchable from Archived.</Text>
-          <Pressable
-            onPress={() => void setArchiveState(true)}
-            style={[styles.primaryButton, styles.destructiveButton]}
-            testID="pc.capture.archive-confirm"
-          >
-            <Text style={styles.destructiveButtonText}>Archive capture</Text>
-          </Pressable>
-          <Pressable onPress={() => setArchiveCaptureConfirmOpen(false)} style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Cancel</Text>
-          </Pressable>
-        </View>
-      </View>
-    );
-  }
-
-  if (archiveCollectionTarget) {
-    return (
-      <View style={styles.modalLayer} pointerEvents="box-none">
-        <Pressable
-          accessibilityLabel="Cancel archive collection"
-          onPress={() => setArchiveCollectionTarget(null)}
-          style={styles.modalBackdrop}
-        />
-        <View style={styles.actionSheet}>
-          <View style={styles.sheetGrabber} />
-          <View style={styles.destructiveSheetIcon}>
-            <Archive color={colors.danger} size={22} strokeWidth={2.4} />
-          </View>
-          <Text style={styles.sheetTitle}>Archive this collection?</Text>
-          <Text style={styles.sheetSubtitle}>Current captures will be removed from it. Restoring brings back only this snapshot.</Text>
-          <Pressable
-            onPress={() => void setCollectionArchiveState(archiveCollectionTarget, true)}
-            style={[styles.primaryButton, styles.destructiveButton]}
-            testID="pc.collection.archive-confirm"
-          >
-            <Text style={styles.destructiveButtonText}>Archive collection</Text>
-          </Pressable>
-          <Pressable onPress={() => setArchiveCollectionTarget(null)} style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Cancel</Text>
           </Pressable>
         </View>
       </View>

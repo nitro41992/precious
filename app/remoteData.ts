@@ -11,7 +11,7 @@ import {
   confidenceRequiresReview,
   displayStatus,
   hostFromUrl,
-  isArchived,
+  isDeleted,
   normalizeReviewTargets,
   sortCaptures
 } from "./captureLogic";
@@ -32,6 +32,14 @@ export function captureFromRemote(row: Record<string, any>): Capture {
     ? nullableValue(imageAsset.signed_url || imageAsset.signedUrl || imageAsset.public_url || imageAsset.publicUrl)
     : undefined;
   const archivedAtValue = row.archived_at || analysis.archived_at || null;
+  const deletedAtValue =
+    row.deleted_at ||
+    analysis.deleted_at ||
+    (analysis.capture_state === "deleted" || row.capture_state === "deleted" ? row.updated_at || Date.now() : null) ||
+    (archivedAtValue || analysis.capture_state === "archived" || row.capture_state === "archived"
+      ? archivedAtValue || row.updated_at || Date.now()
+      : null);
+  const deletePurgeAfterValue = row.delete_purge_after || analysis.delete_purge_after || null;
   const rejectedAtValue = row.rejected_at || analysis.rejected_at || null;
   const reviewConfirmedAtValue = row.review_confirmed_at || analysis.review_confirmed_at || null;
   const analysisMode = nullableValue(row.analysis_mode) || (nullableValue(row.analysis_provider) ? "llm" : undefined);
@@ -102,9 +110,21 @@ export function captureFromRemote(row: Record<string, any>): Capture {
           : Date.parse(String(archivedAtValue))
         : analysis.capture_state === "archived" || row.capture_state === "archived"
           ? row.updated_at
-            ? Date.parse(row.updated_at)
-            : Date.now()
+              ? Date.parse(row.updated_at)
+              : Date.now()
           : null,
+    deletedAt:
+      deletedAtValue
+        ? typeof deletedAtValue === "number"
+          ? deletedAtValue
+          : Date.parse(String(deletedAtValue))
+        : null,
+    deletePurgeAfter:
+      deletePurgeAfterValue
+        ? typeof deletePurgeAfterValue === "number"
+          ? deletePurgeAfterValue
+          : Date.parse(String(deletePurgeAfterValue))
+        : null,
     rejectedAt:
       rejectedAtValue || analysis.capture_state === "rejected" || row.capture_state === "rejected"
         ? typeof rejectedAtValue === "number"
@@ -205,6 +225,8 @@ export function collectionFromRemote(row: Record<string, any>): Collection {
     status: row.status === "archived" ? "archived" : "active",
     captureCount: Number(row.capture_count || row.captureCount || 0),
     archivedAt: nullableValue(row.archived_at),
+    deletedAt: nullableValue(row.deleted_at),
+    deletePurgeAfter: nullableValue(row.delete_purge_after),
     createdAt: nullableValue(row.created_at),
     updatedAt: nullableValue(row.updated_at)
   };
@@ -263,6 +285,9 @@ export function cachedCapturePageFromRaw(raw: string | null | undefined) {
             ...capture,
             createdAt: Number(capture.createdAt),
             updatedAt: Number(capture.updatedAt || capture.createdAt),
+            archivedAt: capture.archivedAt ? Number(capture.archivedAt) : null,
+            deletedAt: capture.deletedAt ? Number(capture.deletedAt) : null,
+            deletePurgeAfter: capture.deletePurgeAfter ? Number(capture.deletePurgeAfter) : null,
             processedAt: capture.processedAt ? Number(capture.processedAt) : null
           }))
       : [];
@@ -317,7 +342,7 @@ export function freshLocalProcessingCaptures(raw: string | null | undefined) {
 
 export function isFreshLocalProcessingCapture(capture: Capture, now = Date.now()) {
   return (
-    !isArchived(capture) &&
+    !isDeleted(capture) &&
     displayStatus(capture) === "processing" &&
     now - capture.createdAt < LOCAL_PROCESSING_GRACE_MS
   );

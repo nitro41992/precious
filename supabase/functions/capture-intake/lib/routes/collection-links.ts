@@ -30,24 +30,28 @@ export async function setCaptureCollections(
 
   const capture = await supabase
     .from("captures")
-    .select("id, analysis, review_confirmed_at")
+    .select("id, analysis, review_confirmed_at, archived_at, deleted_at")
     .eq("user_id", userId)
     .or(`id.eq.${captureRef},client_capture_key.eq.${captureRef}`)
     .maybeSingle();
   if (capture.error) throw capture.error;
   if (!capture.data) return json({ error: "Capture not found" }, 404);
+  if (capture.data.deleted_at || capture.data.archived_at) {
+    return json({ error: "Deleted captures cannot be linked" }, 400);
+  }
   const captureId = String(capture.data.id);
 
   if (collectionIds.length) {
     const collections = await supabase
       .from("collections")
-      .select("id,status")
+      .select("id,status,deleted_at")
       .eq("user_id", userId)
       .in("id", collectionIds);
     if (collections.error) throw collections.error;
     const activeIds = new Set(
       (collections.data ?? [])
         .filter((collection) => collection.status === "active")
+        .filter((collection) => !collection.deleted_at)
         .map((collection) => String(collection.id)),
     );
     const missingIds = collectionIds.filter((id) => !activeIds.has(id));
@@ -151,7 +155,7 @@ export async function handleCollectionLinksResource(
 
   const collection = await supabase
     .from("collections")
-    .select("id,title,description,status")
+    .select("id,title,description,status,deleted_at")
     .eq("user_id", userId)
     .eq("id", collectionId)
     .maybeSingle();
@@ -159,8 +163,19 @@ export async function handleCollectionLinksResource(
   if (!collection.data) return json({ error: "Collection not found" }, 404);
 
   if (request.method === "POST") {
-    if (collection.data.status === "archived") {
-      return json({ error: "Archived collections cannot be linked" }, 400);
+    if (collection.data.status === "archived" || collection.data.deleted_at) {
+      return json({ error: "Deleted collections cannot be linked" }, 400);
+    }
+    const capture = await supabase
+      .from("captures")
+      .select("id,archived_at,deleted_at")
+      .eq("user_id", userId)
+      .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
+      .maybeSingle();
+    if (capture.error) throw capture.error;
+    if (!capture.data) return json({ error: "Capture not found" }, 404);
+    if (capture.data.archived_at || capture.data.deleted_at) {
+      return json({ error: "Deleted captures cannot be linked" }, 400);
     }
     await linkCaptureToCollection(supabase, userId, collectionId, captureId, {
       createdBy: body.createdBy === "analysis" ? "analysis" : "user",

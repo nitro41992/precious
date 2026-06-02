@@ -509,12 +509,12 @@ export async function applyCollectionReviewDecisions(
     if (!collectionId) continue;
     const collection = await supabase
       .from("collections")
-      .select("id,status")
+      .select("id,status,deleted_at")
       .eq("user_id", userId)
       .eq("id", collectionId)
       .maybeSingle();
     if (collection.error) throw collection.error;
-    if (!collection.data || collection.data.status === "archived") continue;
+    if (!collection.data || collection.data.status === "archived" || collection.data.deleted_at) continue;
     await linkCaptureToCollection(supabase, userId, collectionId, captureId, {
       createdBy: "analysis",
       rationale,

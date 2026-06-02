@@ -99,6 +99,8 @@ export type Capture = {
   searchPhrases?: string[];
   note: string;
   archivedAt?: number | null;
+  deletedAt?: number | null;
+  deletePurgeAfter?: number | null;
   rejectedAt?: number | null;
   reviewConfirmedAt?: number | null;
   status: CaptureStatus;
@@ -147,6 +149,8 @@ export type Collection = {
   status: "active" | "archived";
   captureCount: number;
   archivedAt?: string | null;
+  deletedAt?: string | null;
+  deletePurgeAfter?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 };
@@ -236,6 +240,8 @@ export type CaptureStore = {
   setReviewDrafts?: (draftsJson: string) => Promise<boolean>;
   archiveCapture: (id: string) => Promise<string>;
   restoreCapture: (id: string) => Promise<string>;
+  deleteCapture?: (id: string) => Promise<string>;
+  undoDeleteCapture?: (id: string) => Promise<string>;
 };
 
 export type AuthSession = {
@@ -291,6 +297,8 @@ export type HomeListRow =
   | { type: "capture"; id: string; capture: Capture };
 export type SnackbarState = {
   text: string;
+  tone?: "neutral" | "success" | "error" | "destructive";
+  durationMs?: number;
   actionLabel?: string;
   action?: () => void;
 };

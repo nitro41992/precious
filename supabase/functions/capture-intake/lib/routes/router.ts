@@ -7,6 +7,7 @@ import { handleCapturesResource } from "./captures.ts";
 import { handleCollectionCapturesResource } from "./collection-captures.ts";
 import { handleCollectionLinksResource } from "./collection-links.ts";
 import { handleCollectionsResource } from "./collections.ts";
+import { handlePurgeDeletedResource } from "./purge-deleted.ts";
 import { handleSearchResource } from "./search.ts";
 
 export async function handleCaptureIntakeRequest(request: Request) {
@@ -44,6 +45,10 @@ export async function handleCaptureIntakeRequest(request: Request) {
         user.id,
         url,
       );
+    }
+
+    if (resource === "purge-deleted") {
+      return await handlePurgeDeletedResource(request, supabase, user.id, url);
     }
 
     return await handleCapturesResource(request, supabase, user.id, url);

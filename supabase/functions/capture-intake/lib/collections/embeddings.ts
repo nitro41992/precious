@@ -130,7 +130,7 @@ async function captureWithLinkedCollections(
   const { data, error } = await supabase
     .from("collection_capture_links")
     .select(
-      "collection_id, created_by, rationale, confidence, linked_at, collections(id,title,description,status)",
+      "collection_id, created_by, rationale, confidence, linked_at, collections(id,title,description,status,deleted_at)",
     )
     .eq("user_id", userId)
     .eq("capture_id", captureId)
@@ -140,7 +140,7 @@ async function captureWithLinkedCollections(
     .map((link) => {
       const record = link as Record<string, unknown>;
       const collection = record.collections as Record<string, unknown> | null;
-      if (!collection || collection.status === "archived") return null;
+      if (!collection || collection.status === "archived" || collection.deleted_at) return null;
       return {
         id: String(collection.id),
         title: String(collection.title || ""),

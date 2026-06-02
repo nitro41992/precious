@@ -80,8 +80,15 @@ export function captureState(row: any) {
   const analysis = row?.analysis && typeof row.analysis === "object"
     ? row.analysis
     : {};
+  if (
+    row?.deleted_at ||
+    analysis.deleted_at ||
+    analysis.capture_state === "deleted"
+  ) {
+    return "deleted";
+  }
   if (row?.archived_at || analysis.capture_state === "archived") {
-    return "archived";
+    return "deleted";
   }
   return "active";
 }
@@ -178,8 +185,8 @@ export async function withSignedCaptureAssetRows(
 
 export function archivedFilter(row: any, archived: boolean) {
   return archived
-    ? captureState(row) === "archived"
-    : captureState(row) !== "archived";
+    ? false
+    : captureState(row) === "active";
 }
 
 export function mergeAnalysisPatch(row: any, patch: Record<string, unknown>) {

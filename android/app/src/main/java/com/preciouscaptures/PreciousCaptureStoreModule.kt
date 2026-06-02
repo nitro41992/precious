@@ -260,6 +260,24 @@ class PreciousCaptureStoreModule(
     }
   }
 
+  @ReactMethod
+  fun deleteCapture(id: String, promise: Promise) {
+    try {
+      promise.resolve(PreciousCaptureStore.delete(reactContext, id).toString())
+    } catch (error: Exception) {
+      promise.reject("capture_store_delete_failed", error)
+    }
+  }
+
+  @ReactMethod
+  fun undoDeleteCapture(id: String, promise: Promise) {
+    try {
+      promise.resolve(PreciousCaptureStore.undoDelete(reactContext, id).toString())
+    } catch (error: Exception) {
+      promise.reject("capture_store_undo_delete_failed", error)
+    }
+  }
+
   private fun imagePickerIntent(): Intent {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
       Intent(MediaStore.ACTION_PICK_IMAGES).apply {

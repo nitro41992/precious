@@ -11,7 +11,7 @@ Sharebook preserves why something was saved so it can be found, reviewed, and ac
 Current Architecture:
 The mobile product path is Supabase-only for now. Android share intake sends links,
 notes, screenshots, and images to the `capture-intake` Supabase Edge Function. The
-function writes captures, image assets, analysis runs, reminder suggestions, collections, and archive state to
+function writes captures, image assets, analysis runs, reminder suggestions, collections, and delete-pending state to
 Supabase and calls OpenAI from server-side code. Vercel/Next routes may exist as legacy
 or development harnesses, but they should not be treated as a second mobile capture API.
 

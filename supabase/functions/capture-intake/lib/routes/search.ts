@@ -17,10 +17,7 @@ export async function handleSearchResource(
     url.searchParams.get("q") || url.searchParams.get("query") || "",
   ).trim();
   if (!queryText) return json({ captures: [] });
-  const rawScope = url.searchParams.get("scope") || "active";
-  const scope = rawScope === "archived" || rawScope === "all"
-    ? rawScope
-    : "active";
+  const scope = "active";
   const limit = boundedLimit(url.searchParams.get("limit"), 30, 100);
   const mode = url.searchParams.get("mode") === "keyword"
     ? "keyword"
@@ -52,6 +49,8 @@ export async function handleSearchResource(
     .select(CAPTURE_LIST_SELECT)
     .eq("user_id", userId)
     .is("rejected_at", null)
+    .is("archived_at", null)
+    .is("deleted_at", null)
     .in("id", ids);
   if (captureError) throw captureError;
   const byId = new Map(
@@ -86,7 +85,7 @@ export async function handleSearchResource(
   return json({
     mode,
     captures: withCaptureStates(signedRows).filter((row) =>
-      scope === "all" ? true : archivedFilter(row, scope === "archived")
+      archivedFilter(row, false)
     ),
   });
 }

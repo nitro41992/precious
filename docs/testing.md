@@ -53,7 +53,7 @@ PRECIOUS_E2E_EMAIL=...
 PRECIOUS_E2E_PASSWORD=...
 ```
 
-Keep Maestro coverage focused on user-critical flows: sign-in, manual capture, review/edit, collection creation, archive/restore, and Android share intake. Prefer visible text for stable user-facing assertions and `testID` only for controls whose labels or placement may change during design iteration.
+Keep Maestro coverage focused on user-critical flows: sign-in, manual capture, review/edit, collection creation, delete/undo, and Android share intake. Prefer visible text for stable user-facing assertions and `testID` only for controls whose labels or placement may change during design iteration.
 
 ## Android phone dev loop
 

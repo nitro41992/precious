@@ -1,9 +1,9 @@
 import type { ReactElement, ReactNode } from "react";
 import { FlatList, Pressable, SafeAreaView, StatusBar, Text, View } from "react-native";
 import type { FlatListProps, ListRenderItemInfo } from "react-native";
-import { Archive, Folder, Plus } from "lucide-react-native";
+import { Folder, Plus } from "lucide-react-native";
 
-import type { Collection, CollectionListMode, LoadPhase } from "../types";
+import type { Collection, LoadPhase } from "../types";
 import { colors } from "../ui/theme";
 import { styles } from "../ui/styles";
 
@@ -22,13 +22,11 @@ type CollectionsScreenProps = {
   state: {
     collectionsLoadPhase: LoadPhase;
     collectionsLoading: boolean;
-    collectionsMode: CollectionListMode;
     showCollectionForm: boolean;
   };
   actions: {
     loadMoreCollections: () => void;
     openCollectionComposer: () => void;
-    openCollectionsScreen: (mode: CollectionListMode) => void;
     renderCollection: (input: ListRenderItemInfo<Collection>) => ReactElement | null;
     renderCollectionSkeletonRows: (
       count?: number,
@@ -51,11 +49,10 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
     message,
     snackbar
   } = data;
-  const { collectionsLoadPhase, collectionsLoading, collectionsMode } = state;
+  const { collectionsLoadPhase, collectionsLoading } = state;
   const {
     loadMoreCollections,
     openCollectionComposer,
-    openCollectionsScreen,
     renderCollection,
     renderCollectionSkeletonRows,
     renderListLoadingFooter
@@ -73,23 +70,6 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
           <Text style={styles.sourceText}>
             Keep projects, trips, recipes, and purchase decisions tidy without making them the main way to browse.
           </Text>
-        </View>
-        <View style={styles.collectionModeRow}>
-          {(["active", "archived"] as const).map((mode) => (
-            <Pressable
-              key={mode}
-              onPress={() => openCollectionsScreen(mode)}
-              style={[
-                styles.scopeChip,
-                styles.collectionModeChip,
-                collectionsMode === mode && styles.scopeChipSelected
-              ]}
-            >
-              <Text style={[styles.scopeChipText, collectionsMode === mode && styles.scopeChipTextSelected]}>
-                {mode === "active" ? "Active" : "Archived"}
-              </Text>
-            </Pressable>
-          ))}
         </View>
         {collectionsError ? <Text style={styles.errorText}>{collectionsError}</Text> : null}
         <FlatList
@@ -115,7 +95,7 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
                   <View style={styles.collectionsEmptyFolder}>
                     <View style={styles.collectionsEmptyFolderTab} />
                     <Folder
-                      color={collectionsMode === "archived" ? colors.muted : colors.accent}
+                      color={colors.accent}
                       size={28}
                       strokeWidth={2.2}
                     />
@@ -124,39 +104,24 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
                       <View style={styles.collectionsEmptyLineSoft} />
                     </View>
                   </View>
-                  <View
-                    style={[
-                      styles.collectionsEmptyBadge,
-                      collectionsMode === "archived" && styles.collectionsEmptyBadgeArchived
-                    ]}
-                  >
-                    {collectionsMode === "archived" ? (
-                      <Archive color={colors.muted} size={17} strokeWidth={2.2} />
-                    ) : (
-                      <Plus color={colors.onAccent} size={18} strokeWidth={2.5} />
-                    )}
+                  <View style={styles.collectionsEmptyBadge}>
+                    <Plus color={colors.onAccent} size={18} strokeWidth={2.5} />
                   </View>
                 </View>
                 <View style={styles.collectionsEmptyCopy}>
-                  <Text style={[styles.emptyTitle, styles.homeEmptyTitle]}>
-                    {collectionsMode === "archived" ? "No archived collections." : "No collections yet."}
-                  </Text>
+                  <Text style={[styles.emptyTitle, styles.homeEmptyTitle]}>No collections yet.</Text>
                   <Text style={[styles.emptyText, styles.homeEmptyText]}>
-                    {collectionsMode === "archived"
-                      ? "Archived collections will appear here when you move them out of the active list."
-                      : "Create one when a group of captures starts to have a purpose."}
+                    Create one when a group of captures starts to have a purpose.
                   </Text>
                 </View>
-                {collectionsMode === "active" ? (
-                  <Pressable
-                    onPress={openCollectionComposer}
-                    style={({ pressed }) => [styles.homeEmptyPrimary, pressed && styles.homeEmptyPrimaryPressed]}
-                    testID="pc.collections.empty.create"
-                  >
-                    <Plus color={colors.onAccent} size={20} strokeWidth={2.5} />
-                    <Text style={styles.homeEmptyPrimaryText}>Create collection</Text>
-                  </Pressable>
-                ) : null}
+                <Pressable
+                  onPress={openCollectionComposer}
+                  style={({ pressed }) => [styles.homeEmptyPrimary, pressed && styles.homeEmptyPrimaryPressed]}
+                  testID="pc.collections.empty.create"
+                >
+                  <Plus color={colors.onAccent} size={20} strokeWidth={2.5} />
+                  <Text style={styles.homeEmptyPrimaryText}>Create collection</Text>
+                </Pressable>
               </View>
             )
           }

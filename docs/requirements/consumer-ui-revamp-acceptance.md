@@ -16,7 +16,7 @@ Related ADRs: `docs/adr/0001-recent-captures-and-full-screen-search.md`, `docs/a
 - The top-level app shell uses a bottom app bar with `Recent`, `Collections`, and `Settings`, plus a separate contextual floating `+` action.
 - Search opens from a compact top action on `Recent Captures`, replacing the prior top-right Settings affordance.
 - Settings/account actions stay small and contextual, opening a bottom sheet rather than a primary screen in this pass.
-- Collections is a top-level management destination, while Map, Agenda, Library, Upcoming, and Archived are not top-level destinations in this pass.
+- Collections is a top-level management destination, while Map, Agenda, Library, Upcoming, and deleted-item browsing are not top-level destinations in this pass.
 - Collection management should exist as an independent screen outside Capture Review, without turning Collections into the default home mode.
 - Map and Agenda are deferred. Agenda depends on functioning Confirmed Reminders.
 - This pass focuses on UI and workflow. Do not add a broad first-class reminder backend unless the scope is explicitly reopened.
@@ -44,7 +44,7 @@ Home must:
 - Hide audit-like extraction details from rows, including model/provider names, analysis mode, confidence percentages, generic `Analyzed` labels, and debug state.
 - Keep extraction details persisted and searchable.
 - Preserve the Recent Captures scroll position when a user opens Capture Review from a Recent row and returns by in-screen, hardware, or gesture back.
-- Provide designed loading, empty, error, long-content, processing, failed, and archived/filter states.
+- Provide designed loading, empty, error, long-content, processing, failed, and delete-undo states.
 
 Home must not:
 
@@ -86,7 +86,7 @@ Capture Review must:
 - Show `Add collections` when no Collection is linked. A Capture may intentionally have no Collection.
 - Tapping Collections opens a focused full-screen selector for existing active Collections, including `No collection` as a valid clearing state.
 - Do not show AI Collection suggestions, `Use suggestion`, inline Collection creation, or per-row `Manage` actions inside Capture Review.
-- Offer snackbar undo for immediate collection removal when feasible.
+- Offer toast undo for immediate collection removal when feasible.
 - Use `Reminder idea: [before Saturday]` for AI reminder suggestions. Use the `Reminder` row for user-approved scheduling edits.
 - Always show the `Reminder` row in Capture Review when the capture can be edited. When Capture Analysis found no Reminder idea, tapping the row opens the same manual reminder editor.
 - Show an `Open in Maps` action when Capture Analysis has a maps-searchable Visit Target and a native map provider passes an open check. This action opens the available Google Maps or Apple Maps search from the persisted query; Android must not show Apple Maps through a browser fallback, and the action must not imply a verified address, coordinates, place ID, or a first-class Map destination.
@@ -96,7 +96,7 @@ Capture Review must:
 - `Review insight` should explain the AI decision in friendly user language, using active Save Intents and existing Collection names as context rather than merely repeating field values.
 - The expanded `Review insight` sheet should lead with the same friendly insight from the row at readable body scale, then show a visually prominent but calm checklist for unresolved Save Intent, Collections, Reminder idea, or analysis targets. Below the checklist it may show unframed rationale rows, including why no Collection or Reminder idea was selected when that is the outcome. The sheet action must leave comfortable space above Android gesture navigation.
 - When Capture Review asks the user to check Save Intent, Collections, or a future Reminder idea, confirming that checklist row clears that review target. Editing the called-out field also clears that field's review state; Reminder edits open the capture-local reminder editor rather than removing the suggestion. `Needs a quick look` remains only if another review target is still unresolved.
-- Keep raw source, destructive archive actions, and detailed rationale visually secondary.
+- Keep raw source, destructive delete actions, and detailed rationale visually secondary.
 - Use modality-specific evidence in review copy. Image and note captures without a source URL must not show Link evidence fallback copy or a `Link evidence` module; they should show `Needs review` / `Couldn't tell` language when saved content needs more context.
 
 ## Collection Management
@@ -112,7 +112,7 @@ Collection management must:
 - Preserve `No collection` as a valid state for any Capture.
 - Allow a Capture to belong to multiple Collections.
 - Avoid making Collection browsing the default retrieval surface; Search remains the primary retrieval lens.
-- Use snackbar undo or confirmation for reversible/destructive collection changes where feasible.
+- Use toast undo for reversible/destructive collection changes where feasible.
 
 ## Trust Rules
 
@@ -129,7 +129,7 @@ Collection management must:
 - Use press feedback on rows, buttons, and chips.
 - Use inline loading placeholders or skeleton rows instead of debug spinners where possible.
 - Preserve drafts during loading, app backgrounding, and navigation.
-- Use snackbars for reversible actions such as collection removal or archive when feasible.
+- Use toasts for reversible actions such as collection removal or delete when feasible.
 - Avoid decorative motion, heavy gesture systems, or animation that delays capture or retrieval.
 
 ## Out Of Scope For This Pass

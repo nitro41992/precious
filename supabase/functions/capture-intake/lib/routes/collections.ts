@@ -24,6 +24,7 @@ export async function handleCollectionsResource(
       .select(COLLECTION_LIST_SELECT)
       .eq("user_id", userId)
       .eq("status", archived ? "archived" : "active")
+      .is("deleted_at", null)
       .order("created_at", { ascending: false })
       .limit(limit + 1);
     if (before) query = query.lt("created_at", before);
@@ -103,6 +104,47 @@ export async function handleCollectionsResource(
     .maybeSingle();
   if (existing.error) throw existing.error;
   if (!existing.data) return json({ error: "Collection not found" }, 404);
+
+  if (body.action === "delete" || body.action === "undo_delete") {
+    const deleting = body.action === "delete";
+    const deletedAt = deleting ? new Date().toISOString() : null;
+    const deletePurgeAfter = deleting
+      ? new Date(Date.now() + 8000).toISOString()
+      : null;
+    let result = await supabase
+      .from("collections")
+      .update({
+        deleted_at: deletedAt,
+        delete_purge_after: deletePurgeAfter,
+        archived_at: deleting ? existing.data.archived_at : null,
+        status: deleting ? existing.data.status : "active",
+      })
+      .eq("user_id", userId)
+      .eq("id", collectionId)
+      .select("*")
+      .single();
+    if (
+      result.error &&
+      /deleted_at|delete_purge_after|schema cache|column/i.test(
+        String(result.error.message || result.error.details || ""),
+      )
+    ) {
+      result = await supabase
+        .from("collections")
+        .update({
+          status: deleting ? "archived" : "active",
+          archived_at: deleting ? deletedAt : null,
+        })
+        .eq("user_id", userId)
+        .eq("id", collectionId)
+        .select("*")
+        .single();
+    }
+    if (result.error) throw result.error;
+    return json({
+      collection: collectionFromRow(result.data as Record<string, unknown>),
+    });
+  }
 
   if (body.action === "archive") {
     const activeLinks = await supabase

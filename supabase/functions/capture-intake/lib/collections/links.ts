@@ -147,6 +147,8 @@ export function collectionFromRow(
     status: String(row.status || "active"),
     created_by: String(row.created_by || "user"),
     archived_at: row.archived_at || null,
+    deleted_at: row.deleted_at || null,
+    delete_purge_after: row.delete_purge_after || null,
     created_at: row.created_at || null,
     updated_at: row.updated_at || null,
     capture_count: captureCounts.get(id) || 0,
@@ -201,7 +203,7 @@ export async function attachLinkedCollections(
   const { data, error } = await supabase
     .from("collection_capture_links")
     .select(
-      "capture_id, collection_id, created_by, rationale, confidence, linked_at, collections(id,title,description,status)",
+      "capture_id, collection_id, created_by, rationale, confidence, linked_at, collections(id,title,description,status,deleted_at)",
     )
     .eq("user_id", userId)
     .in("capture_id", captureIds)
@@ -212,7 +214,7 @@ export async function attachLinkedCollections(
   for (const link of data ?? []) {
     const record = link as Record<string, unknown>;
     const collection = record.collections as Record<string, unknown> | null;
-    if (!collection || collection.status === "archived") continue;
+    if (!collection || collection.status === "archived" || collection.deleted_at) continue;
     const captureId = String(record.capture_id);
     const collectionId = String(collection.id);
     const item = {
@@ -237,7 +239,7 @@ export async function attachLinkedCollections(
     ? await supabase
       .from("collection_capture_links")
       .select(
-        "capture_id, collection_id, rationale, confidence, unlinked_at, collections(id,title,description,status)",
+        "capture_id, collection_id, rationale, confidence, unlinked_at, collections(id,title,description,status,deleted_at)",
       )
       .eq("user_id", userId)
       .eq("created_by", "analysis")
@@ -261,7 +263,7 @@ export async function attachLinkedCollections(
         )
       ) continue;
       const collection = record.collections as Record<string, unknown> | null;
-      if (!collection || collection.status === "archived") continue;
+      if (!collection || collection.status === "archived" || collection.deleted_at) continue;
       overridesByCapture.set(captureId, [
         ...(overridesByCapture.get(captureId) || []),
         {

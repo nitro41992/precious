@@ -95,14 +95,14 @@ export async function applyCollectionChoice(
     if (!collectionId) return json({ error: "collectionId is required" }, 400);
     const collection = await supabase
       .from("collections")
-      .select("id,status")
+      .select("id,status,deleted_at")
       .eq("user_id", userId)
       .eq("id", collectionId)
       .maybeSingle();
     if (collection.error) throw collection.error;
     if (!collection.data) return json({ error: "Collection not found" }, 404);
-    if (collection.data.status === "archived") {
-      return json({ error: "Archived collections cannot be linked" }, 400);
+    if (collection.data.status === "archived" || collection.data.deleted_at) {
+      return json({ error: "Deleted collections cannot be linked" }, 400);
     }
   } else {
     return json({ error: "choice.type must be existing" }, 400);
@@ -252,7 +252,7 @@ export async function undoCollectionChoice(
   if (!restoredDecisions.length) {
     const removed = await supabase
       .from("collection_capture_links")
-      .select("rationale, confidence, collections(id,title,description,status)")
+      .select("rationale, confidence, collections(id,title,description,status,deleted_at)")
       .eq("user_id", userId)
       .eq("collection_id", collectionId)
       .eq("capture_id", captureId)
@@ -265,7 +265,7 @@ export async function undoCollectionChoice(
     const collection = Array.isArray(removed.data?.collections)
       ? removed.data?.collections[0] as Record<string, unknown> | undefined
       : removed.data?.collections as Record<string, unknown> | undefined;
-    if (collection && collection.status !== "archived") {
+    if (collection && collection.status !== "archived" && !collection.deleted_at) {
       restoredDecisions = [
         {
           type: "existing",

@@ -12,9 +12,9 @@ import {
   View
 } from "react-native";
 import type { FlatListProps, ListRenderItemInfo } from "react-native";
-import { ArrowLeft, Search, SlidersHorizontal, X } from "lucide-react-native";
+import { ArrowLeft, Search, X } from "lucide-react-native";
 
-import type { Capture, SearchScope } from "../types";
+import type { Capture } from "../types";
 import { SEARCH_PROMPTS } from "../capturePresentation";
 import { IconButton } from "../ui/components";
 import { colors } from "../ui/theme";
@@ -23,7 +23,6 @@ import { styles } from "../ui/styles";
 type SearchScreenProps = {
   data: {
     appSheets: ReactNode;
-    archivedCapturesError: string;
     emptyText: string;
     emptyTitle: string;
     listPerfProps: Partial<FlatListProps<Capture>>;
@@ -31,30 +30,23 @@ type SearchScreenProps = {
     searchProgressLabel: string;
     searchResults: Capture[];
     searchMotion: Animated.Value;
-    showSearchScopes: boolean;
     snackbar: ReactNode;
   };
   state: {
     remoteSearchActive: boolean;
     searchQuery: string;
-    searchScope: SearchScope;
-    searchScopeOpen: boolean;
   };
   actions: {
     closeSearch: () => void;
-    loadMoreArchivedCaptures: () => void;
     renderSearchProgress: (label: string) => ReactNode;
     renderSearchResult: (input: ListRenderItemInfo<Capture>) => ReactElement | null;
     setSearchQuery: (value: string) => void;
-    setSearchScope: (scope: SearchScope) => void;
-    toggleSearchScopeOpen: () => void;
   };
 };
 
 export function SearchScreen({ actions, data, state }: SearchScreenProps) {
   const {
     appSheets,
-    archivedCapturesError,
     emptyText,
     emptyTitle,
     listPerfProps,
@@ -62,23 +54,17 @@ export function SearchScreen({ actions, data, state }: SearchScreenProps) {
     searchMotion,
     searchProgressLabel,
     searchResults,
-    showSearchScopes,
     snackbar
   } = data;
   const {
     remoteSearchActive,
-    searchQuery,
-    searchScope,
-    searchScopeOpen
+    searchQuery
   } = state;
   const {
     closeSearch,
-    loadMoreArchivedCaptures,
     renderSearchProgress,
     renderSearchResult,
-    setSearchQuery,
-    setSearchScope,
-    toggleSearchScopeOpen
+    setSearchQuery
   } = actions;
 
   return (
@@ -130,45 +116,7 @@ export function SearchScreen({ actions, data, state }: SearchScreenProps) {
                   </Pressable>
                 ) : null}
               </View>
-              <IconButton
-                Icon={SlidersHorizontal}
-                label="Search filters"
-                onPress={toggleSearchScopeOpen}
-                selected={searchScopeOpen}
-              />
             </View>
-            {showSearchScopes ? (
-              <View style={styles.searchAssistRow}>
-                <Text style={styles.searchScopeLabel}>
-                  {searchScope === "active"
-                    ? "Active captures"
-                    : searchScope === "archived"
-                      ? "Archived captures"
-                      : "All captures"}
-                </Text>
-                <View style={styles.scopeRow}>
-                  {(["active", "archived", "all"] as const).map((scope) => (
-                    <Pressable
-                      key={scope}
-                      onPress={() => setSearchScope(scope)}
-                      style={({ pressed }) => [
-                        styles.scopeChip,
-                        searchScope === scope && styles.scopeChipSelected,
-                        pressed && styles.subtlePressed
-                      ]}
-                      testID={`pc.search.scope.${scope}`}
-                    >
-                      <Text style={[styles.scopeChipText, searchScope === scope && styles.scopeChipTextSelected]}>
-                        {scope === "active" ? "Active" : scope === "archived" ? "Archived" : "All"}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-            ) : null}
-            {archivedCapturesError && searchScope !== "active" ? (
-              <Text style={styles.errorText}>{archivedCapturesError}</Text>
-            ) : null}
             {searchProgressLabel ? renderSearchProgress(searchProgressLabel) : null}
           </View>
           <FlatList
@@ -176,9 +124,7 @@ export function SearchScreen({ actions, data, state }: SearchScreenProps) {
             data={searchResults}
             keyExtractor={(item) => item.id}
             renderItem={renderSearchResult}
-            onEndReached={() => {
-              if (!remoteSearchActive && searchScope === "archived") loadMoreArchivedCaptures();
-            }}
+            onEndReached={() => {}}
             onEndReachedThreshold={0.35}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
             ListEmptyComponent={
@@ -191,7 +137,7 @@ export function SearchScreen({ actions, data, state }: SearchScreenProps) {
                 <View style={styles.searchEmpty}>
                   <Text style={styles.emptyTitle}>{emptyTitle}</Text>
                   <Text style={styles.emptyText}>{emptyText}</Text>
-                  {!searchQuery.trim() && searchScope === "active" ? (
+                  {!searchQuery.trim() ? (
                     <View style={styles.promptChips}>
                       {SEARCH_PROMPTS.map(({ label, query, Icon }) => (
                         <Pressable

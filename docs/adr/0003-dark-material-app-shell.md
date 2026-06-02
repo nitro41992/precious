@@ -19,5 +19,5 @@ Existing capture imagery, thumbnails, screenshots, and shared image assets are p
 ## Consequences
 
 - Future app-shell UI work should start from the dark token set in `app/App.tsx` and `docs/precious-style-guide.md`.
-- Native sheets, confirmations, snackbars, and search surfaces should use dark tonal containers instead of platform `Alert` popups or warm paper panels.
+- Native sheets, confirmations, toasts, and search surfaces should use dark tonal containers instead of platform `Alert` popups or warm paper panels.
 - Light-mode or warm-paper variants are not in scope unless explicitly reopened.

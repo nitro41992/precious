@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Animated, Easing, Pressable, Text, View } from "react-native";
 import { Image } from "expo-image";
-import { AlertTriangle, Archive, Clock3, Folder, Info, Plus } from "lucide-react-native";
+import { AlertTriangle, Clock3, Folder, Info, Plus } from "lucide-react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 
 import type {
@@ -15,7 +15,7 @@ import type {
   NavIconProps,
   SnackbarState
 } from "../types";
-import { displayStatus, isArchived } from "../captureLogic";
+import { displayStatus } from "../captureLogic";
 import {
   captureImageUrl,
   captureSourceHost,
@@ -284,19 +284,14 @@ export function sourceIconColor(status: CaptureStatus) {
 
 export function StatusGlyph({ capture }: { capture: Capture }) {
   const status = displayStatus(capture);
-  if (!isArchived(capture) && status === "ready") return null;
-  const archived = isArchived(capture);
-  const Icon = archived
-    ? Archive
-    : status === "processing"
+  if (status === "ready") return null;
+  const Icon = status === "processing"
       ? Clock3
       : status === "failed"
         ? AlertTriangle
         : Info;
-  const label = archived ? "Archived" : captureStatusLabel(capture);
-  const iconColor = archived
-    ? colors.muted
-    : status === "processing"
+  const label = captureStatusLabel(capture);
+  const iconColor = status === "processing"
       ? colors.processing
       : status === "failed"
         ? colors.danger
@@ -309,8 +304,7 @@ export function StatusGlyph({ capture }: { capture: Capture }) {
         styles.statusGlyph,
         status === "processing" && styles.statusGlyphProcessing,
         status === "needs_review" && styles.statusGlyphReview,
-        status === "failed" && styles.statusGlyphFailed,
-        archived && styles.statusGlyphArchived
+        status === "failed" && styles.statusGlyphFailed
       ]}
     >
       <Icon color={iconColor} size={15} strokeWidth={2.5} />
@@ -374,7 +368,15 @@ export function Snackbar({
 }) {
   if (!snackbar) return null;
   return (
-    <View style={[styles.snackbar, withBottomNav && styles.snackbarAboveBottomNav]}>
+    <View
+      style={[
+        styles.snackbar,
+        snackbar.tone === "success" && styles.snackbarSuccess,
+        snackbar.tone === "error" && styles.snackbarError,
+        snackbar.tone === "destructive" && styles.snackbarDestructive,
+        withBottomNav && styles.snackbarAboveBottomNav
+      ]}
+    >
       <Text style={styles.snackbarText}>{snackbar.text}</Text>
       {snackbar.action && snackbar.actionLabel ? (
         <Pressable onPress={snackbar.action} hitSlop={8}>

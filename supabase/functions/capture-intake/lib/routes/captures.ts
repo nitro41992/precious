@@ -44,7 +44,7 @@ export async function handleCapturesResource(
     } else {
       query = archived
         ? query.not("archived_at", "is", null)
-        : query.is("archived_at", null);
+        : query.is("archived_at", null).is("deleted_at", null);
       if (!includeRejectedTombstones) query = query.is("rejected_at", null);
       if (before) query = query.lt("created_at", before);
       query = query.limit(limit + 1);
@@ -69,7 +69,8 @@ export async function handleCapturesResource(
       clientCaptureKey ? "detail" : "thumb",
     );
     if (clientCaptureKey) {
-      return json({ capture: withCaptureState(signedRows?.[0] ?? null) });
+      const capture = withCaptureState(signedRows?.[0] ?? null);
+      return json({ capture: capture && archivedFilter(capture, false) ? capture : null });
     }
     return json({
       captures: withCaptureStates(signedRows).filter((row) =>
@@ -126,17 +127,31 @@ export async function handleCapturesResource(
       );
     }
 
-    if (body.action === "archive" || body.action === "restore") {
-      const archivedAt = body.action === "archive"
-        ? new Date().toISOString()
+    if (
+      body.action === "delete" ||
+      body.action === "undo_delete" ||
+      body.action === "archive" ||
+      body.action === "restore"
+    ) {
+      const deleting = body.action === "delete" || body.action === "archive";
+      const deletedAt = deleting ? new Date().toISOString() : null;
+      const deletePurgeAfter = deleting
+        ? new Date(Date.now() + 8000).toISOString()
         : null;
       const analysis = mergeAnalysisPatch(existingResult.data, {
-        capture_state: body.action === "archive" ? "archived" : "active",
-        archived_at: archivedAt,
+        capture_state: deleting ? "deleted" : "active",
+        archived_at: null,
+        deleted_at: deletedAt,
+        delete_purge_after: deletePurgeAfter,
       });
       let result = await supabase
         .from("captures")
-        .update({ analysis, archived_at: archivedAt })
+        .update({
+          analysis,
+          archived_at: null,
+          deleted_at: deletedAt,
+          delete_purge_after: deletePurgeAfter,
+        })
         .eq("user_id", userId)
         .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
         .select("*")
@@ -147,9 +162,13 @@ export async function handleCapturesResource(
           String(result.error.message || result.error.details || ""),
         )
       ) {
+        const fallbackAnalysis = mergeAnalysisPatch(existingResult.data, {
+          capture_state: deleting ? "deleted" : "active",
+          archived_at: deleting ? deletedAt : null,
+        });
         result = await supabase
           .from("captures")
-          .update({ analysis })
+          .update({ analysis: fallbackAnalysis, archived_at: deleting ? deletedAt : null })
           .eq("user_id", userId)
           .or(`id.eq.${captureId},client_capture_key.eq.${captureId}`)
           .select("*")

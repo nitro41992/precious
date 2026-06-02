@@ -32,6 +32,8 @@ function capture(overrides = {}) {
     createdAt: 1000,
     updatedAt: 1000,
     archivedAt: null,
+    deletedAt: null,
+    deletePurgeAfter: null,
     defaultIntent: "remember",
     summary: "A saved reference",
     analysisProvider: "openai",
@@ -136,34 +138,35 @@ test("mergeRemoteCaptures preserves only fresh local processing rows in the acti
     status: "processing",
     createdAt: now - LOCAL_PROCESSING_GRACE_MS - 1
   });
-  const archivedLocal = capture({
-    id: "archived-local",
+  const deletedLocal = capture({
+    id: "deleted-local",
     status: "processing",
-    archivedAt: now,
+    deletedAt: now,
     createdAt: now - 4000
   });
 
   assert.deepEqual(
-    mergeRemoteCaptures(remote, [freshLocal, staleLocal, archivedLocal], "active", now).map((item) => item.id),
+    mergeRemoteCaptures(remote, [freshLocal, staleLocal, deletedLocal], "active", now).map((item) => item.id),
     ["remote", "fresh-local"]
   );
   assert.deepEqual(
     mergeRemoteCaptures(remote, [freshLocal], "archived", now).map((item) => item.id),
-    ["archived-remote"]
+    []
   );
 });
 
-test("capture scope helpers keep active and archived surfaces partitioned", () => {
+test("capture scope helpers keep only active captures visible", () => {
   const active = capture({ id: "active", archivedAt: null });
   const archived = capture({ id: "archived", archivedAt: 1234 });
+  const deleted = capture({ id: "deleted", deletedAt: 2345, deletePurgeAfter: 3456 });
   const rejected = capture({ id: "rejected", rejectedAt: 5678, analysisMode: "contextless_rejected" });
-  const rows = [active, archived, rejected];
+  const rows = [active, archived, deleted, rejected];
 
   assert.deepEqual(capturesForListMode(rows, "active").map((item) => item.id), ["active"]);
-  assert.deepEqual(capturesForListMode(rows, "archived").map((item) => item.id), ["archived"]);
+  assert.deepEqual(capturesForListMode(rows, "archived").map((item) => item.id), []);
   assert.deepEqual(capturesForSearchScope(rows, "active").map((item) => item.id), ["active"]);
-  assert.deepEqual(capturesForSearchScope(rows, "archived").map((item) => item.id), ["archived"]);
-  assert.deepEqual(capturesForSearchScope(rows, "all").map((item) => item.id), ["active", "archived"]);
+  assert.deepEqual(capturesForSearchScope(rows, "archived").map((item) => item.id), ["active"]);
+  assert.deepEqual(capturesForSearchScope(rows, "all").map((item) => item.id), ["active"]);
 });
 
 test("capture identity aliases compare local and remote ids without source dedupe", () => {
@@ -240,6 +243,7 @@ test("search cache keys normalize scope and query whitespace", () => {
   assert.equal(normalizeSearchQuery("  Ramen   Soho  "), "ramen soho");
   assert.equal(searchCacheKey("active", "  Ramen   Soho  "), "active:ramen soho");
   assert.equal(searchCacheKey("unknown", "products"), "active:products");
+  assert.equal(searchCacheKey("all", "products"), "active:products");
   assert.equal(searchCacheKey("all", "  "), "");
 });
 

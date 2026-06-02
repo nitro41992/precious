@@ -34,7 +34,7 @@ import {
   displayStatus,
   extractHttpUrl,
   hostFromUrl,
-  isArchived,
+  isDeleted,
   normalizeIntent as normalizeKnownIntent,
   reviewTargetsForCapture,
   statusLabel,
@@ -779,7 +779,7 @@ export function sourceIconForCapture(capture: Capture): LucideIconComponent {
 }
 
 export function captureStatusLabel(capture: Capture) {
-  if (isArchived(capture)) return "Archived";
+  if (isDeleted(capture)) return "Deleted";
   const status = displayStatus(capture);
   if (status === "processing") return "Analyzing";
   if (status === "failed") return "Could not analyze";
@@ -952,7 +952,7 @@ export function searchableCaptureText(capture: Capture) {
 
 export function matchReasonForCapture(capture: Capture, term: string) {
   const query = term.trim().toLowerCase();
-  if (!query) return isArchived(capture) ? "Archived capture" : "Recent capture";
+  if (!query) return isDeleted(capture) ? "Deleted capture" : "Recent capture";
   const matches = (values: Array<string | null | undefined>) =>
     values.filter(Boolean).some((value) => String(value).toLowerCase().includes(query));
   if (matches([capture.title])) return "Matched title";

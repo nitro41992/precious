@@ -16,7 +16,7 @@ The current consumer UI target is search-first memory retrieval:
 - The top-level app shell uses a Material 3-inspired bottom app bar for Recent, Collections, and Settings, with a separate contextual floating `+` action.
 - Collections is a top-level management destination, but Recent Captures remains the default home and Search remains the primary retrieval lens.
 - Map, Agenda, and full reminder delivery are deferred. Agenda depends on functioning Confirmed Reminders.
-- Smooth transitions, loading states, press feedback, draft-preserving saves, and snackbar undo are part of the expected product quality.
+- Smooth transitions, loading states, press feedback, draft-preserving saves, and toast undo are part of the expected product quality.
 
 ## Reference Inheritance
 
@@ -25,7 +25,7 @@ Mobbin access was limited during research: the supplied pages exposed title shel
 ### Apple Health
 
 - Borrow the quiet grouped-list system: low-glare dark grouped background, tonal surfaces, high-contrast text, muted metadata, thin dividers, and compact rows.
-- Lead with a curated retrieval surface, not an exhaustive database. In Precious, recent active Captures and full-screen Search should appear before archive-heavy browsing.
+- Lead with a curated retrieval surface, not an exhaustive database. In Precious, recent active Captures and full-screen Search should appear before inactive-item cleanup.
 - Use color only for meaning. Status, confidence, reminders, and collection suggestions may carry color; decoration should not.
 - Keep detail screens drill-in oriented: title and state first, source and summary next, review decisions in the middle, raw source and destructive actions last.
 - Use short explanatory blocks only where they increase trust around AI decisions.
@@ -33,10 +33,10 @@ Mobbin access was limited during research: the supplied pages exposed title shel
 ### Gentler Streak
 
 - Borrow the adaptive, non-judgmental tone. Failed or incomplete analysis should read as "needs a quick look", not as a user failure.
-- Make one primary status surface obvious. A capture should clearly move through saved, analyzing, needs review, ready, and archived states.
+- Make one primary status surface obvious. A capture should clearly move through saved, analyzing, needs review, ready, and failed states. Deleted captures leave active surfaces immediately.
 - Put contextual coaching near the relevant object: "Review the extracted title" or "Saved. Checking the source now."
 - Use compact recaps for perspective, not pressure: review backlog, captures saved this week, collections updated, or sources used.
-- Keep actions next to context. Confirm, retry, add to collection, remove, and archive should live with the capture or collection being acted on.
+- Keep actions next to context. Confirm, retry, add to collection, remove, and delete should live with the capture or collection being acted on.
 
 ### Stoic
 
@@ -51,7 +51,7 @@ Mobbin access was limited during research: the supplied pages exposed title shel
 - Borrow the clear next-action model. The screen should answer what needs attention now without making the app feel like a chore list.
 - Use visual planning cues when time matters: today, date groups, captured timestamps, reminder ideas, or carry-forward items.
 - Pair color with icon or text. Do not rely on color alone for state or category.
-- Make replanning gentle: "Move later", "Review later", "Carry forward", and "Archive" are better than failure language.
+- Make replanning gentle: "Move later", "Review later", "Carry forward", and "Delete" are better than failure language when removal is intended.
 - Break complex workflows into small steps when needed, especially capture review, reminder confirmation, and collection cleanup.
 
 ## Design Principles
@@ -66,7 +66,7 @@ Mobbin access was limited during research: the supplied pages exposed title shel
 - **Scan Before Explain:** Rows and summaries should be legible in a two-second scan. Long rationale belongs behind an intentional affordance.
 - **Private By Default:** AI and sync behavior should be legible, especially around source content, notes, images, and reminders.
 - **Thumb-Aware:** Primary actions should be reachable, tap targets should be at least 44-48px, and bottom insets must be respected.
-- **Consumer Polish:** Motion, loading states, empty states, and snackbar recovery should feel native and intentional, not debug-like.
+- **Consumer Polish:** Motion, loading states, empty states, and toast recovery should feel native and intentional, not debug-like.
 
 ## Visual System
 
@@ -89,13 +89,13 @@ Use the dark neutral palette as the default app base and add state colors sparin
 | Review | `#e2bd76` | Needs review, maybe, action needed |
 | Review Soft | `#342713` | Review callouts and changed suggestions |
 | Danger | `#ffb4a8` | Failed, destructive, could not save |
-| Archived | `#a6b3aa` | Archived or inactive state |
+| Deleted | `#ffb4a8` | Destructive delete actions and pending-delete undo |
 
 Rules:
 
 - Use one dominant accent per screen.
 - Do not use confidence percentages or red/yellow/green scoring.
-- Pair color with text labels such as `Ready`, `Analyzing`, `Needs review`, `Failed`, or `Archived`.
+- Pair color with text labels such as `Ready`, `Analyzing`, `Needs review`, `Failed`, or `Deleted`.
 - Avoid pure black, pure white as the whole page background, purple gradients, glass effects, and decorative blobs.
 - Treat available source imagery, thumbnails, screenshots, and shared image assets as product content. Use them for rows and Capture Review headers when already persisted; do not add decorative imagery or new extraction work only to fill space.
 
@@ -147,7 +147,7 @@ Rules:
 - Rows should feel tappable without heavy card styling.
 - Use separators or grouped surfaces, not thick borders.
 - Keep row tap targets at least 44px high.
-- Use stable row structure for `processing`, `ready`, `needs_review`, `failed`, and `archived`; do not make processing rows jump or disappear.
+- Use stable row structure for `processing`, `ready`, `needs_review`, and `failed`; deleted rows disappear immediately with toast undo.
 - Do not show model/provider details, analysis mode, confidence percentages, or generic `Analyzed` metadata in Recent Captures rows.
 - When a Capture belongs to multiple Collections, rows should make that visible compactly, such as first Collection plus a quiet `+N` count, rather than rendering only one Collection or listing every Collection name.
 - Group Recent Captures by recency with headers such as `Today`, `Yesterday`, `This week`, and `Earlier`.
@@ -164,7 +164,7 @@ Rules:
 - Primary buttons use `Accent` or `Ink` depending on context; they should be visually stable and bottom-reachable where possible.
 - Secondary actions should often be text buttons or light bordered buttons.
 - Destructive actions use danger text and should sit near the footer or object settings, not beside the main save action.
-- Button copy should use direct verbs: `Save review`, `Retry analysis`, `Archive capture`, `Restore capture`, `Use collection`.
+- Button copy should use direct verbs: `Save review`, `Retry analysis`, `Delete capture`, `Undo`, `Use collection`.
 
 ### Summary Cards
 
@@ -184,7 +184,7 @@ Each card should have one purpose, one short headline, one evidence line, and on
 - Use restrained native-feeling transitions for opening Search, Capture Review, collection edit views, and reminder edit views.
 - Use press feedback on rows, buttons, and chips.
 - Use inline loading placeholders or skeleton rows for captures and search results; avoid full-screen spinners except during app boot.
-- Use snackbar undo for reversible destructive or removal actions such as archive and collection removal.
+- Use toast undo for reversible destructive or removal actions such as delete and collection removal.
 - Do not use decorative motion, delayed search animations, or heavy gesture systems until core retrieval is fast.
 
 ## Workflow Patterns
@@ -202,7 +202,7 @@ Rules:
 
 - Do not use fake example feeds.
 - Do not explain every future retrieval lens.
-- For archived and collection-related empty states, state what will appear there and how it becomes useful.
+- For collection-related empty states, state what will appear there and how it becomes useful.
 
 ### Authentication
 
@@ -218,7 +218,7 @@ Rules:
 ### Recent Captures Home
 
 - Home shows active Captures only, ordered by most recently captured.
-- Archived Captures stay retrievable through a secondary filter or view, not the default list.
+- Deleted Captures are hidden from Recent Captures and Search immediately.
 - Place a compact Search action in the top bar.
 - Tapping Search opens full-screen Search.
 - Rows should include source and date/time metadata, not only time.
@@ -294,7 +294,7 @@ Rules:
 
 - Keep Collection management secondary to Recent Captures and Search.
 - Collections may be a top-level management destination, but it should not become the default home module.
-- Empty accounts may start with a finite set of object-based starter Collections, such as recipes, movies and shows, restaurants, products, and articles or guides. They should look and behave like normal Collections, including archive/restore.
+- Empty accounts may start with a finite set of object-based starter Collections, such as recipes, movies and shows, restaurants, products, and articles or guides. They should look and behave like normal Collections, including delete with undo.
 - Let users create, rename, and manage Collections outside an individual Capture.
 - Let Capture Review open collection selection or management and return without losing unsaved edits.
 - Treat `No collection` as a valid choice, not an unresolved state.
@@ -329,7 +329,7 @@ Avoid:
 
 Collections are ongoing purpose groups, not folders.
 
-- Show title, description, capture count, and archived state.
+- Show title, description, capture count, and a destructive delete action.
 - Open `New collection` from the Collections floating `+` as a focused bottom sheet using the same sheet treatment as New Capture.
 - AI never creates or suggests new Collections. It may only attach high-confidence matches to existing active Collections.
 - A Capture may intentionally have no Collection, and may belong to multiple Collections.
@@ -337,7 +337,7 @@ Collections are ongoing purpose groups, not folders.
 - The selector must include `No collection`, search, check states, and one sticky `Save collections` action.
 - If the user removes or changes an AI-applied Collection, do not reattach it automatically.
 - Do not show `Use suggestion`, inline Collection creation, or per-row `Manage` actions in Capture Review.
-- Collection removal should offer immediate snackbar undo when feasible.
+- Collection removal should offer immediate toast undo when feasible.
 - Collection management is a top-level bottom-bar destination, but Recent Captures and Search remain the primary retrieval surfaces.
 
 ### Search
@@ -385,7 +385,7 @@ Use:
 - `Couldn't tell`
 - `Review later`
 - `Move later`
-- `Archive`
+- `Delete`
 
 Avoid:
 
@@ -409,7 +409,7 @@ Before shipping a Precious UI change, verify:
 - Tap targets are at least 44-48px.
 - The screen works around 360px-wide Android phones.
 - Text does not overlap, clip awkwardly, or depend on fixed-height containers.
-- Loading, empty, failed, archived, and long-content states are designed.
+- Loading, empty, failed, delete-undo, and long-content states are designed.
 - AI rationale is concise and user-facing; model/provider/debug details are hidden.
 - Suggested reminders require confirmation, and new Collections require explicit user creation.
 - The UI respects safe areas and bottom insets.
@@ -417,7 +417,7 @@ Before shipping a Precious UI change, verify:
 - Recent Captures rows include date/time metadata and hide audit-like extraction details.
 - Search opens as a full-screen lens and can match persisted extraction details.
 - Collections, Map, Agenda, and Upcoming are not primary navigation destinations for this pass.
-- Collection removal offers immediate snackbar undo where feasible.
+- Collection removal offers immediate toast undo where feasible.
 - Animations and loading states feel smooth without delaying capture or retrieval.
 
 ## Reference Links

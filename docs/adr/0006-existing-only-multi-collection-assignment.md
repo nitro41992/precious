@@ -18,7 +18,7 @@ Captures may belong to zero or more Collections. Capture Review opens a focused 
 
 Capture Analysis may only match a Capture to existing active Collections retrieved for that user. High-confidence existing matches may be applied quietly because they are finite and reversible. AI must not create, name, or surface new Collections, and low-confidence Collection matches should not become Capture Review work.
 
-Collection creation, renaming, archiving, and restore remain in the top-level Collections destination.
+Collection creation, renaming, and delete with undo remain in the top-level Collections destination. ADR 0012 replaces archive/restore with delete/undo.
 
 ## Consequences
 

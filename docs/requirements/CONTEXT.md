@@ -73,7 +73,7 @@ A user-facing view over Captures and related entities that helps the user find s
 _Avoid_: Item type, folder, separate app
 
 **Recent Captures**:
-The default home Retrieval Lens that shows active Captures in most-recently-captured order, with Search as the primary action for retrieval. Archived Captures remain retrievable through a secondary archived view or filter rather than appearing in the default list.
+The default home Retrieval Lens that shows active Captures in most-recently-captured order, with Search as the primary action for retrieval. Deleted Captures are hidden immediately and are not part of Recent Captures or Search.
 _Avoid_: Upcoming, daily dashboard, activity feed, productivity homepage
 
 **Upcoming**:
@@ -89,8 +89,8 @@ A deferred Retrieval Lens for time-relevant Captures and Confirmed Reminders. Ag
 _Avoid_: Calendar replacement, automatic schedule, notification queue
 
 **Library**:
-The Retrieval Lens hub for browsing saved Captures by recency, place, time, Collection, and archived state. Library should feel like organized memory rather than a filing cabinet or power-user database.
-_Avoid_: Folder tree, archive dump, database browser
+The Retrieval Lens hub for browsing saved Captures by recency, place, time, and Collection. Library should feel like organized memory rather than a filing cabinet or power-user database.
+_Avoid_: Folder tree, deleted-item dump, database browser
 
 **Search**:
 A full-screen fuzzy-memory Retrieval Lens for finding Captures by meaning, entity, Save Intent, Collection, place, time, source, or remembered context. Search may use persisted Searchable Extraction Detail and command-like filters for Collections, entities, intent, Map, and Agenda, but it should not default to a generic chat assistant or remain a small embedded field on the Recent Captures home lens.
@@ -181,7 +181,7 @@ The stronger call to action on a Capture Completion Notification when the proces
 _Avoid_: Mandatory review, engagement prompt, generic open app
 
 **Capture State**:
-The user's lifecycle state for a Capture, such as active, archived, or deleted.
+The user's lifecycle state for a Capture, such as active or pending deletion.
 _Avoid_: Folder, category
 
 **Reschedule**:
@@ -252,4 +252,4 @@ Domain Expert: "A Reminder should say what is resurfacing and why the user wante
 
 Product: "What if a Capture is no longer active but should remain searchable?"
 
-Domain Expert: "Archive the Capture. Archived Captures should remain searchable and visibly archived, while deleted Captures should remove the Capture and associated extracted data."
+Domain Expert: "Delete the Capture. It should leave active surfaces immediately with a short Undo window, then become eligible for hard purge with associated extracted data and assets."

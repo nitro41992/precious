@@ -14,7 +14,7 @@ The starter set should group what is being saved rather than duplicate Save Inte
 
 ## Decision
 
-When an authenticated user has zero Collections total, including archived Collections, Precious Captures seeds five active starter Collections:
+When an authenticated user has zero Collections total, including deleted Collections, Precious Captures seeds five active starter Collections:
 
 - `Recipes`
 - `Movies & Shows`
@@ -22,11 +22,11 @@ When an authenticated user has zero Collections total, including archived Collec
 - `Products`
 - `Articles & Guides`
 
-These Collections are marked with `created_by: starter`, but otherwise behave like normal active Collections. Users can rename them, attach Captures to them, and remove them from Active through the existing archive flow. Archived starter Collections must not be recreated on a later fetch.
+These Collections are marked with `created_by: starter`, but otherwise behave like normal active Collections. Users can rename them, attach Captures to them, and delete them with undo. Deleted starter Collections must not be recreated on a later fetch.
 
 ## Consequences
 
 - Starter Collections are a product-owned onboarding default, not AI-generated Collection suggestions.
 - Capture Analysis may match Captures to starter Collections because they are active existing Collections for that user.
 - The starter set stays finite and object-based so Collections do not become another Save Intent taxonomy.
-- The existing archive/restore model remains the removal path; this decision does not introduce irreversible hard delete.
+- ADR 0012 replaces archive/restore with delete/undo. Starter Collections still count as existing Collections after deletion so they are not recreated for the same account.

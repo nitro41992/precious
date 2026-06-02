@@ -21,38 +21,25 @@ import type {
   AppConfig,
   AuthSession,
   Capture,
-  SearchRemoteMode,
-  SearchScope
+  SearchRemoteMode
 } from "../types";
 
 const SEARCH_KEYWORD_DEBOUNCE_MS = 120;
 const SEARCH_HYBRID_DELAY_MS = 520;
 
 export function useCaptureSearch({
-  archivedCaptures,
-  archivedCapturesLoaded,
-  archivedCapturesLoading,
   captures,
   config,
-  loadArchivedCaptures,
-  onMessage,
   session,
   withFreshAccessToken
 }: {
-  archivedCaptures: Capture[];
-  archivedCapturesLoaded: boolean;
-  archivedCapturesLoading: boolean;
   captures: Capture[];
   config: AppConfig | null;
-  loadArchivedCaptures: () => Promise<void>;
-  onMessage: (updater: (current: string) => string) => void;
   session: AuthSession | null;
   withFreshAccessToken: <T>(send: (accessToken: string) => Promise<T>) => Promise<T>;
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchScope, setSearchScope] = useState<SearchScope>("active");
-  const [searchScopeOpen, setSearchScopeOpen] = useState(false);
   const [remoteSearchResults, setRemoteSearchResults] = useState<Capture[]>([]);
   const [remoteSearchLoading, setRemoteSearchLoading] = useState(false);
   const [remoteSearchEnhancing, setRemoteSearchEnhancing] = useState(false);
@@ -74,22 +61,11 @@ export function useCaptureSearch({
     searchResultsModeRef.current = {};
   }, [session?.userId]);
 
-  useEffect(() => {
-    if (!searchOpen || searchScope === "active" || archivedCapturesLoaded || archivedCapturesLoading) return;
-    void loadArchivedCaptures().catch((error) => {
-      onMessage((current) => current || friendlyError(error, "Could not load archived captures"));
-    });
-  }, [archivedCapturesLoaded, archivedCapturesLoading, loadArchivedCaptures, onMessage, searchOpen, searchScope]);
-
   const searchPool = useMemo(() => {
-    const activeRows = capturesForListMode(captures, "active");
-    const archivedRows = capturesForListMode(archivedCaptures, "archived");
-    if (searchScope === "archived") return uniqueCaptures(archivedRows);
-    if (searchScope === "all") return uniqueCaptures([...activeRows, ...archivedRows]);
-    return uniqueCaptures(activeRows);
-  }, [archivedCaptures, captures, searchScope]);
+    return uniqueCaptures(capturesForListMode(captures, "active"));
+  }, [captures]);
   const searchTerm = searchQuery.trim();
-  const currentSearchKey = searchCacheKey(searchScope, searchTerm);
+  const currentSearchKey = searchCacheKey("active", searchTerm);
   const remoteSearchActive = Boolean(
     searchOpen &&
       searchTerm &&
@@ -109,8 +85,8 @@ export function useCaptureSearch({
       !remoteSearchError
   );
   const scopedRemoteSearchResults = useMemo(
-    () => capturesForSearchScope(remoteSearchResults, searchScope),
-    [remoteSearchResults, searchScope]
+    () => capturesForSearchScope(remoteSearchResults, "active"),
+    [remoteSearchResults]
   );
   const searchResults = remoteSearchReadyForQuery
     ? mergeSearchResults(localSearchResults, scopedRemoteSearchResults)
@@ -148,7 +124,7 @@ export function useCaptureSearch({
           requestJson<{ captures?: Array<Record<string, any>> }>(
             edgeResourceUrl(config.apiUrl, "search", {
               q: searchTerm,
-              scope: searchScope,
+              scope: "active",
               mode,
               limit: "50"
             }),
@@ -201,7 +177,6 @@ export function useCaptureSearch({
     config?.supabaseAnonKey,
     currentSearchKey,
     remoteSearchActive,
-    searchScope,
     searchTerm,
     session?.accessToken,
     withFreshAccessToken
@@ -218,8 +193,8 @@ export function useCaptureSearch({
     searchOpen,
     searchQuery,
     searchResults,
-    searchScope,
-    searchScopeOpen,
+    searchScope: "active" as const,
+    searchScopeOpen: false,
     searchTerm,
     setRemoteSearchEnhancing,
     setRemoteSearchError,
@@ -228,7 +203,7 @@ export function useCaptureSearch({
     setRemoteSearchResults,
     setSearchOpen,
     setSearchQuery,
-    setSearchScope,
-    setSearchScopeOpen
+    setSearchScope: (_scope: "active") => {},
+    setSearchScopeOpen: (_value: boolean | ((current: boolean) => boolean)) => {}
   };
 }

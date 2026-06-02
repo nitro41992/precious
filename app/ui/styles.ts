@@ -614,9 +614,6 @@ export const styles = StyleSheet.create({
   statusGlyphFailed: {
     backgroundColor: colors.dangerSoft
   },
-  statusGlyphArchived: {
-    backgroundColor: colors.surfaceContainerHigh
-  },
   rowContent: {
     flex: 1,
     gap: 4,
@@ -1290,10 +1287,6 @@ export const styles = StyleSheet.create({
     position: "absolute",
     right: 8,
     width: 48
-  },
-  collectionsEmptyBadgeArchived: {
-    backgroundColor: colors.surfaceContainerHighest,
-    borderColor: colors.paper
   },
   collectionsEmptyCopy: {
     alignItems: "center",
@@ -2659,6 +2652,18 @@ export const styles = StyleSheet.create({
   },
   snackbarAboveBottomNav: {
     bottom: Platform.OS === "android" ? 124 : 128
+  },
+  snackbarSuccess: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent
+  },
+  snackbarError: {
+    backgroundColor: colors.dangerSoft,
+    borderColor: colors.danger
+  },
+  snackbarDestructive: {
+    backgroundColor: colors.dangerSoft,
+    borderColor: colors.danger
   },
   snackbarText: {
     color: colors.ink,

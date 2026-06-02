@@ -81,20 +81,22 @@ function isArchived(capture) {
   return Boolean(capture.archivedAt);
 }
 
+function isDeleted(capture) {
+  return Boolean(capture.deletedAt || capture.archivedAt);
+}
+
 function isRejected(capture) {
   return Boolean(capture.rejectedAt || capture.analysisMode === "contextless_rejected");
 }
 
 function capturesForListMode(captures, listMode) {
-  const archived = listMode === "archived";
+  if (listMode === "archived") return [];
   return (captures || []).filter((capture) =>
-    !isRejected(capture) && (archived ? isArchived(capture) : !isArchived(capture))
+    !isRejected(capture) && !isDeleted(capture)
   );
 }
 
 function capturesForSearchScope(captures, scope) {
-  if (scope === "archived") return capturesForListMode(captures, "archived");
-  if (scope === "all") return [...(captures || [])].filter((capture) => !isRejected(capture));
   return capturesForListMode(captures, "active");
 }
 
@@ -219,7 +221,7 @@ function mergeRemoteCaptures(remoteCaptures, currentCaptures, listMode, now = Da
     return (
       !remoteRows.some((remote) => capturesShareIdentity(remote, capture)) &&
       !aliases.some((alias) => rejectedAliases.has(alias)) &&
-      !isArchived(capture) &&
+      !isDeleted(capture) &&
       displayStatus(capture) === "processing" &&
       now - capture.createdAt < LOCAL_PROCESSING_GRACE_MS
     );
@@ -232,9 +234,8 @@ function normalizeSearchQuery(value) {
 }
 
 function searchCacheKey(scope, query) {
-  const safeScope = scope === "archived" || scope === "all" ? scope : "active";
   const normalizedQuery = normalizeSearchQuery(query);
-  return normalizedQuery ? `${safeScope}:${normalizedQuery}` : "";
+  return normalizedQuery ? `active:${normalizedQuery}` : "";
 }
 
 function mergeSearchResults(immediateResults, rankedResults) {
@@ -262,6 +263,7 @@ module.exports = {
   hasExtractedData,
   hostFromUrl,
   isArchived,
+  isDeleted,
   isRejected,
   mapSearchCandidates,
   mapsSearchUrls,
