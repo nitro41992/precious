@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Animated, Easing, Pressable, Text, View } from "react-native";
 import { Image } from "expo-image";
-import { AlertTriangle, Clock3, Folder, Info, Plus } from "lucide-react-native";
+import { AlertTriangle, Check, Clock3, Folder, Info, Plus } from "lucide-react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 
 import type {
@@ -13,7 +13,9 @@ import type {
   LucideIconComponent,
   NavIconComponent,
   NavIconProps,
-  SnackbarState
+  ToastPlacement,
+  ToastState,
+  ToastTone
 } from "../types";
 import { displayStatus } from "../captureLogic";
 import {
@@ -359,32 +361,99 @@ export function CollectionMeaningToken({ collections }: { collections: LinkedCol
   );
 }
 
-export function Snackbar({
-  snackbar,
-  withBottomNav = false
+export function ToastHost({
+  toast,
+  placement = "base"
 }: {
-  snackbar: SnackbarState | null;
-  withBottomNav?: boolean;
+  toast: ToastState | null;
+  placement?: ToastPlacement;
 }) {
-  if (!snackbar) return null;
+  const animation = useRef(new Animated.Value(toast ? 1 : 0)).current;
+  const [visibleToast, setVisibleToast] = useState<ToastState | null>(toast);
+
+  useEffect(() => {
+    if (toast) {
+      setVisibleToast(toast);
+      animation.setValue(0);
+      Animated.timing(animation, {
+        duration: 190,
+        easing: Easing.out(Easing.cubic),
+        toValue: 1,
+        useNativeDriver: true
+      }).start();
+      return;
+    }
+    Animated.timing(animation, {
+      duration: 130,
+      easing: Easing.in(Easing.cubic),
+      toValue: 0,
+      useNativeDriver: true
+    }).start(({ finished }) => {
+      if (finished) setVisibleToast(null);
+    });
+  }, [animation, toast]);
+
+  if (!visibleToast) return null;
+  const tone = visibleToast.tone || "neutral";
+  const Icon = toastIconForTone(tone);
+  const iconColor = toastColorForTone(tone);
+  const translateY = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [18, 0]
+  });
   return (
-    <View
+    <Animated.View
+      accessibilityLiveRegion="polite"
+      accessibilityRole={tone === "error" || tone === "destructive" ? "alert" : "text"}
       style={[
-        styles.snackbar,
-        snackbar.tone === "success" && styles.snackbarSuccess,
-        snackbar.tone === "error" && styles.snackbarError,
-        snackbar.tone === "destructive" && styles.snackbarDestructive,
-        withBottomNav && styles.snackbarAboveBottomNav
+        styles.toast,
+        placement === "bottomNav" && styles.toastAboveBottomNav,
+        placement === "footer" && styles.toastAboveFooter,
+        {
+          opacity: animation,
+          transform: [{ translateY }]
+        }
       ]}
     >
-      <Text style={styles.snackbarText}>{snackbar.text}</Text>
-      {snackbar.action && snackbar.actionLabel ? (
-        <Pressable onPress={snackbar.action} hitSlop={8}>
-          <Text style={styles.snackbarAction}>{snackbar.actionLabel}</Text>
+      <View style={[styles.toastIconWell, toastIconWellStyle(tone)]}>
+        <Icon color={iconColor} size={17} strokeWidth={2.7} />
+      </View>
+      <Text style={styles.toastText}>{visibleToast.text}</Text>
+      {visibleToast.action && visibleToast.actionLabel ? (
+        <Pressable
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={visibleToast.action}
+          style={({ pressed }) => [styles.toastActionButton, pressed && styles.subtlePressed]}
+        >
+          <Text style={[styles.toastAction, tone === "destructive" && styles.toastActionDestructive]}>
+            {visibleToast.actionLabel}
+          </Text>
         </Pressable>
       ) : null}
-    </View>
+    </Animated.View>
   );
+}
+
+function toastIconForTone(tone: ToastTone) {
+  if (tone === "success") return Check;
+  if (tone === "error" || tone === "destructive") return AlertTriangle;
+  if (tone === "processing") return Clock3;
+  return Info;
+}
+
+function toastColorForTone(tone: ToastTone) {
+  if (tone === "success") return colors.accent;
+  if (tone === "error" || tone === "destructive") return colors.danger;
+  if (tone === "processing") return colors.processing;
+  return colors.ink;
+}
+
+function toastIconWellStyle(tone: ToastTone) {
+  if (tone === "success") return styles.toastIconWellSuccess;
+  if (tone === "error" || tone === "destructive") return styles.toastIconWellError;
+  if (tone === "processing") return styles.toastIconWellProcessing;
+  return styles.toastIconWellNeutral;
 }
 
 export function BottomAppBar({

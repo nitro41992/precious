@@ -24,8 +24,8 @@ object CaptureNotifications {
     notify(
       context = context,
       captureId = captureId,
-      title = "Processing capture",
-      body = "Queued for AI extraction.",
+      title = "Saving capture",
+      body = "Queued to check the source.",
       ongoing = true
     )
   }
@@ -35,7 +35,7 @@ object CaptureNotifications {
       context = context,
       captureId = captureId,
       title = "Waiting for internet",
-      body = "Sharebook will keep trying when the API is reachable.",
+      body = "Sharebook will keep trying when you are back online.",
       ongoing = true
     )
   }
@@ -45,7 +45,7 @@ object CaptureNotifications {
       context = context,
       captureId = captureId,
       title = "Saving capture",
-      body = "Uploading to Sharebook.",
+      body = "Uploading shared content.",
       ongoing = true
     )
   }
@@ -54,8 +54,8 @@ object CaptureNotifications {
     notify(
       context = context,
       captureId = captureId,
-      title = "AI extraction running",
-      body = "Extracting intent, reminders, and collections.",
+      title = "Checking the source",
+      body = "Capture analysis is running.",
       ongoing = true
     )
   }
@@ -64,8 +64,8 @@ object CaptureNotifications {
     notify(
       context = context,
       captureId = captureId,
-      title = "Saving AI results",
-      body = "Persisting reminders and collection ideas.",
+      title = "Saving capture",
+      body = "Storing the details.",
       ongoing = true
     )
   }
@@ -74,8 +74,8 @@ object CaptureNotifications {
     notify(
       context = context,
       captureId = captureId,
-      title = "AI extraction complete",
-      body = captureTitle,
+      title = "Capture processed",
+      body = "Extraction looks good.",
       ongoing = false
     )
   }
@@ -84,8 +84,8 @@ object CaptureNotifications {
     notify(
       context = context,
       captureId = captureId,
-      title = "AI extraction needs review",
-      body = captureTitle,
+      title = "Capture processed",
+      body = "Extraction needs review.",
       ongoing = false
     )
   }
@@ -94,7 +94,7 @@ object CaptureNotifications {
     notify(
       context = context,
       captureId = captureId,
-      title = "AI extraction failed",
+      title = "Capture needs a quick look",
       body = captureTitle,
       ongoing = false
     )

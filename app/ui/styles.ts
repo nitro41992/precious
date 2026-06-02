@@ -1595,19 +1595,16 @@ export const styles = StyleSheet.create({
   },
   reviewInsightCard: {
     alignItems: "center",
-    backgroundColor: colors.surfaceContainer,
-    borderColor: colors.line,
+    backgroundColor: colors.surfaceContainerHigh,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 11,
     minHeight: 78,
-    paddingHorizontal: 12,
-    paddingVertical: 12
+    paddingHorizontal: 13,
+    paddingVertical: 13
   },
   reviewInsightCardReview: {
-    backgroundColor: colors.reviewSoft,
-    borderColor: colors.review
+    backgroundColor: colors.reviewSoft
   },
   reviewInsightIcon: {
     alignItems: "center",
@@ -1646,10 +1643,8 @@ export const styles = StyleSheet.create({
   },
   reviewInsightCountBadge: {
     alignItems: "center",
-    backgroundColor: colors.reviewSoft,
-    borderColor: colors.review,
+    backgroundColor: colors.surfaceContainerHigh,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
     justifyContent: "center",
     minHeight: 24,
     minWidth: 24,
@@ -1941,7 +1936,7 @@ export const styles = StyleSheet.create({
     paddingTop: 12
   },
   reviewInsightSheet: {
-    gap: 16,
+    gap: 15,
     maxHeight: "90%",
     paddingBottom: Platform.OS === "android" ? 36 : 44,
     paddingTop: 8
@@ -2093,33 +2088,29 @@ export const styles = StyleSheet.create({
     flexGrow: 0
   },
   reviewInsightScrollContent: {
-    gap: 16,
+    gap: 18,
     paddingBottom: 2
   },
   reviewChecklist: {
-    backgroundColor: colors.reviewSoft,
-    borderColor: colors.review,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
     gap: 0,
-    paddingHorizontal: 12,
-    paddingTop: 10
+    paddingTop: 2
   },
   reviewChecklistHeader: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingBottom: 8
+    minHeight: 32,
+    paddingBottom: 4
   },
   reviewChecklistLabel: {
     color: colors.review,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "800",
-    lineHeight: 16
+    lineHeight: 17
   },
   reviewChecklistCount: {
     alignItems: "center",
-    backgroundColor: colors.surfaceContainer,
+    backgroundColor: colors.reviewSoft,
     borderRadius: 8,
     justifyContent: "center",
     minHeight: 24,
@@ -2134,12 +2125,12 @@ export const styles = StyleSheet.create({
   },
   reviewChecklistTask: {
     alignItems: "flex-start",
-    borderTopColor: "rgba(226, 189, 118, 0.34)",
+    borderTopColor: colors.line,
     borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
-    gap: 5,
-    minHeight: 84,
-    paddingVertical: 13
+    gap: 6,
+    minHeight: 88,
+    paddingVertical: 14
   },
   reviewChecklistCopy: {
     flex: 1,
@@ -2211,6 +2202,9 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     width: 52
   },
+  rationaleSheetHeaderIconReview: {
+    backgroundColor: colors.reviewSoft
+  },
   rationaleSheetHeaderCopy: {
     flex: 1,
     gap: 3,
@@ -2224,9 +2218,9 @@ export const styles = StyleSheet.create({
   },
   rationaleSheetLead: {
     color: colors.ink,
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "700",
-    lineHeight: 24,
+    lineHeight: 23,
     paddingHorizontal: 2,
     paddingTop: 2
   },
@@ -2235,6 +2229,14 @@ export const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 0,
     marginTop: 0
+  },
+  rationaleSheetSectionHeader: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 17,
+    paddingTop: 12,
+    paddingBottom: 2
   },
   rationaleSheetSection: {
     alignItems: "flex-start",
@@ -2621,60 +2623,72 @@ export const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700"
   },
-  message: {
-    color: colors.muted,
-    fontSize: 14,
-    textAlign: "center"
-  },
-  messageInline: {
-    color: colors.muted,
-    fontSize: 14,
-    lineHeight: 20,
-    paddingTop: 8
-  },
-  snackbar: {
+  toast: {
     alignItems: "center",
     backgroundColor: colors.surfaceContainerHighest,
-    borderColor: colors.line,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
+    borderRadius: 12,
     bottom: Platform.OS === "android" ? 16 : 22,
+    elevation: 10,
     flexDirection: "row",
-    gap: 12,
+    gap: 10,
     justifyContent: "space-between",
     left: 22,
-    minHeight: 50,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    minHeight: 58,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
     position: "absolute",
     right: 22,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
     zIndex: 32
   },
-  snackbarAboveBottomNav: {
+  toastAboveBottomNav: {
     bottom: Platform.OS === "android" ? 124 : 128
   },
-  snackbarSuccess: {
-    backgroundColor: colors.accentSoft,
-    borderColor: colors.accent
+  toastAboveFooter: {
+    bottom: Platform.OS === "android" ? 94 : 104
   },
-  snackbarError: {
-    backgroundColor: colors.dangerSoft,
-    borderColor: colors.danger
+  toastIconWell: {
+    alignItems: "center",
+    borderRadius: 8,
+    height: 34,
+    justifyContent: "center",
+    width: 34
   },
-  snackbarDestructive: {
-    backgroundColor: colors.dangerSoft,
-    borderColor: colors.danger
+  toastIconWellNeutral: {
+    backgroundColor: colors.surfaceContainerHigh
   },
-  snackbarText: {
+  toastIconWellSuccess: {
+    backgroundColor: colors.accentSoft
+  },
+  toastIconWellError: {
+    backgroundColor: colors.dangerSoft
+  },
+  toastIconWellProcessing: {
+    backgroundColor: colors.processingSoft
+  },
+  toastText: {
     color: colors.ink,
     flex: 1,
     fontSize: 14,
     fontWeight: "700",
     lineHeight: 19
   },
-  snackbarAction: {
+  toastActionButton: {
+    alignItems: "center",
+    borderRadius: 8,
+    justifyContent: "center",
+    minHeight: 36,
+    paddingHorizontal: 8
+  },
+  toastAction: {
     color: colors.accent,
     fontSize: 14,
     fontWeight: "800"
+  },
+  toastActionDestructive: {
+    color: colors.danger
   }
 });

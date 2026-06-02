@@ -30,9 +30,8 @@ type CollectionDetailScreenProps = {
     collectionDetailListRef: RefObject<FlatList<Capture> | null>;
     keyboardHeight: number;
     listPerfProps: Partial<FlatListProps<Capture>>;
-    message: string;
     selectedCollection: Collection;
-    snackbar: ReactNode;
+    toast: ReactNode;
   };
   state: {
     collectionDescription: string;
@@ -66,9 +65,8 @@ export function CollectionDetailScreen({ actions, data, state }: CollectionDetai
     collectionDetailListRef,
     keyboardHeight,
     listPerfProps,
-    message,
     selectedCollection,
-    snackbar
+    toast
   } = data;
   const { collectionDescription, collectionTitle } = state;
   const {
@@ -205,7 +203,6 @@ export function CollectionDetailScreen({ actions, data, state }: CollectionDetai
                 >
                   <Text style={styles.dangerButtonText}>Delete collection</Text>
                 </Pressable>
-                {message ? <Text style={styles.message}>{message}</Text> : null}
               </View>
             </>
           }
@@ -213,7 +210,7 @@ export function CollectionDetailScreen({ actions, data, state }: CollectionDetai
         />
       </KeyboardAvoidingView>
       {appSheets}
-      {snackbar}
+      {toast}
     </SafeAreaView>
   );
 }

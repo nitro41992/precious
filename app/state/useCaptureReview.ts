@@ -5,7 +5,6 @@ import {
   mapSearchCandidates
 } from "../captureLogic";
 import {
-  reviewChecklistCta,
   reviewChecklistTasksForCapture,
   reviewInsightForCapture
 } from "../capturePresentation";
@@ -56,7 +55,7 @@ export function useCaptureReview({ selected }: { selected: Capture | null }) {
     if (!text) return null;
     const tasks = reviewChecklistTasksForCapture(capture);
     return {
-      title: tasks.length ? reviewChecklistCta(tasks) : "Review insight",
+      title: tasks.length ? "Needs a quick look" : "Review insight",
       text,
       sections: insight.sections,
       tasks

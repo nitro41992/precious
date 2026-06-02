@@ -73,6 +73,19 @@ function reviewTaskIconStyle(target: ReviewTarget) {
   }
 }
 
+function rationaleSectionTarget(label: string): ReviewTarget | null {
+  switch (label) {
+    case "Save Intent":
+      return "intent";
+    case "Collections":
+      return "collections";
+    case "Reminder idea":
+      return "reminder";
+    default:
+      return null;
+  }
+}
+
 export function AppSheets({
   accountSheetOpen,
   editReviewTask,
@@ -132,6 +145,17 @@ export function AppSheets({
   }
 
   if (rationaleSheet) {
+    const reviewTasks = rationaleSheet.tasks || [];
+    const reviewTaskTargets = new Set(reviewTasks.map((task) => task.target));
+    const insightSections = (rationaleSheet.sections || []).filter((section) => {
+      const target = rationaleSectionTarget(section.label);
+      return !target || !reviewTaskTargets.has(target);
+    });
+    const reviewSubtitle = reviewTasks.length
+      ? reviewTasks.length === 1
+        ? "1 detail to confirm"
+        : `${reviewTasks.length} details to confirm`
+      : "How this capture was interpreted";
     return (
       <View style={styles.modalLayer} pointerEvents="box-none">
         <Pressable
@@ -145,12 +169,12 @@ export function AppSheets({
         <View style={[styles.actionSheet, styles.reviewInsightSheet]}>
           <View style={styles.sheetGrabber} />
           <View style={styles.rationaleSheetHeader}>
-            <View style={styles.rationaleSheetHeaderIcon}>
-              <Info color={colors.accent} size={22} strokeWidth={2.4} />
+            <View style={[styles.rationaleSheetHeaderIcon, reviewTasks.length ? styles.rationaleSheetHeaderIconReview : null]}>
+              <Info color={reviewTasks.length ? colors.review : colors.accent} size={22} strokeWidth={2.4} />
             </View>
             <View style={styles.rationaleSheetHeaderCopy}>
               <Text style={styles.sheetTitle}>{rationaleSheet.title}</Text>
-              <Text style={styles.rationaleSheetKicker}>How this capture was interpreted</Text>
+              <Text style={styles.rationaleSheetKicker}>{reviewSubtitle}</Text>
             </View>
             <IconButton
               Icon={X}
@@ -170,15 +194,15 @@ export function AppSheets({
             {rationaleSheet.text ? (
               <Text style={styles.rationaleSheetLead}>{rationaleSheet.text}</Text>
             ) : null}
-            {rationaleSheet.tasks?.length ? (
+            {reviewTasks.length ? (
               <View style={styles.reviewChecklist}>
                 <View style={styles.reviewChecklistHeader}>
-                  <Text style={styles.reviewChecklistLabel}>Needs review</Text>
+                  <Text style={styles.reviewChecklistLabel}>Suggested details</Text>
                   <View style={styles.reviewChecklistCount}>
-                    <Text style={styles.reviewChecklistCountText}>{rationaleSheet.tasks.length}</Text>
+                    <Text style={styles.reviewChecklistCountText}>{reviewTasks.length}</Text>
                   </View>
                 </View>
-                {rationaleSheet.tasks.map((task) => {
+                {reviewTasks.map((task) => {
                   const TaskIcon = reviewTaskIcon(task.target);
                   const showIntentPicker = task.target === "intent" && rationaleEditTarget === "intent";
                   return (
@@ -258,9 +282,10 @@ export function AppSheets({
                 })}
               </View>
             ) : null}
-            {rationaleSheet.sections?.length ? (
+            {insightSections.length ? (
               <View style={styles.rationaleSheetSections}>
-                {rationaleSheet.sections.map((section) => {
+                <Text style={styles.rationaleSheetSectionHeader}>AI insight</Text>
+                {insightSections.map((section) => {
                   const SectionIcon = rationaleSectionIcon(section.label);
                   return (
                     <View key={section.label} style={styles.rationaleSheetSection}>

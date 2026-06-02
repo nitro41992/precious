@@ -185,6 +185,7 @@ Each card should have one purpose, one short headline, one evidence line, and on
 - Use press feedback on rows, buttons, and chips.
 - Use inline loading placeholders or skeleton rows for captures and search results; avoid full-screen spinners except during app boot.
 - Use toast undo for reversible destructive or removal actions such as delete and collection removal.
+- Use the shared tonal toast host for transient action feedback such as saved, copied, removed, undo, unavailable, and could-not-complete states. Toasts should be bottom-docked, dark tonal, borderless, icon-led, and should show tone through the icon/action accent rather than a colored card edge. Keep page-level load errors, authentication form errors, and field-level autosave state inline where they orient the current task.
 - Do not use decorative motion, delayed search animations, or heavy gesture systems until core retrieval is fast.
 
 ## Workflow Patterns

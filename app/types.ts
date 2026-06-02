@@ -295,9 +295,11 @@ export type SearchRemoteMode = "keyword" | "hybrid";
 export type HomeListRow =
   | { type: "section"; id: string; title: string }
   | { type: "capture"; id: string; capture: Capture };
-export type SnackbarState = {
+export type ToastTone = "neutral" | "success" | "error" | "destructive" | "processing";
+export type ToastPlacement = "base" | "bottomNav" | "footer";
+export type ToastState = {
   text: string;
-  tone?: "neutral" | "success" | "error" | "destructive";
+  tone?: ToastTone;
   durationMs?: number;
   actionLabel?: string;
   action?: () => void;

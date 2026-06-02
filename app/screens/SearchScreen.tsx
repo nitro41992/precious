@@ -30,7 +30,7 @@ type SearchScreenProps = {
     searchProgressLabel: string;
     searchResults: Capture[];
     searchMotion: Animated.Value;
-    snackbar: ReactNode;
+    toast: ReactNode;
   };
   state: {
     remoteSearchActive: boolean;
@@ -54,7 +54,7 @@ export function SearchScreen({ actions, data, state }: SearchScreenProps) {
     searchMotion,
     searchProgressLabel,
     searchResults,
-    snackbar
+    toast
   } = data;
   const {
     remoteSearchActive,
@@ -161,7 +161,7 @@ export function SearchScreen({ actions, data, state }: SearchScreenProps) {
         </KeyboardAvoidingView>
       </Animated.View>
       {appSheets}
-      {snackbar}
+      {toast}
     </SafeAreaView>
   );
 }

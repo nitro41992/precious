@@ -16,9 +16,8 @@ type CollectionSelectorScreenProps = {
     collectionsColdSkeletonVisible: boolean;
     collectionsListPerfProps: Partial<FlatListProps<Collection>>;
     collectionListFade: Animated.Value;
-    message: string;
     selected: Capture;
-    snackbar: ReactNode;
+    toast: ReactNode;
   };
   state: {
     activeCollectionsLoadedOnce: boolean;
@@ -48,9 +47,8 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
     collectionsColdSkeletonVisible,
     collectionsListPerfProps,
     collectionListFade,
-    message,
     selected,
-    snackbar
+    toast
   } = data;
   const {
     activeCollectionsLoadedOnce,
@@ -210,7 +208,6 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
           contentContainerStyle={styles.collectionSelectorListContent}
           style={styles.collectionSelectorList}
         />
-        {message ? <Text style={styles.messageInline}>{message}</Text> : null}
       </View>
       <View style={styles.collectionSelectionFooter}>
         <Pressable
@@ -231,7 +228,7 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
           </Text>
         </Pressable>
       </View>
-      {snackbar}
+      {toast}
     </SafeAreaView>
   );
 }

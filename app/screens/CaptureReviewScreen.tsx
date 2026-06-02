@@ -70,11 +70,10 @@ type CaptureReviewScreenProps = {
     captureReturnCollectionId: string | null;
     faviconFailures: Record<string, boolean>;
     keyboardHeight: number;
-    message: string;
     noteInputRef: RefObject<TextInput | null>;
     reviewMotion: Animated.Value;
     selected: Capture;
-    snackbar: ReactNode;
+    toast: ReactNode;
     visitTargetMapCandidates: MapSearchCandidate[];
     windowHeight: number;
   };
@@ -129,11 +128,10 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     captureReturnCollectionId,
     faviconFailures,
     keyboardHeight,
-    message,
     noteInputRef,
     reviewMotion,
     selected,
-    snackbar,
+    toast,
     visitTargetMapCandidates,
     windowHeight
   } = data;
@@ -639,7 +637,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
               <Trash2 color={colors.danger} size={18} strokeWidth={2.2} />
               <Text style={styles.dangerButtonText}>Delete capture</Text>
             </Pressable>
-            {message ? <Text style={styles.message}>{message}</Text> : null}
           </ScrollView>
           {showReviewFooter ? (
             <View style={styles.reviewFooter}>
@@ -748,7 +745,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
         visible={reminderSheetOpen}
       />
       {appSheets}
-      {snackbar}
+      {toast}
     </SafeAreaView>
   );
 }

@@ -16,8 +16,7 @@ type CollectionsScreenProps = {
     collectionsColdSkeletonVisible: boolean;
     collectionsError: string;
     collectionsListPerfProps: Partial<FlatListProps<Collection>>;
-    message: string;
-    snackbar: ReactNode;
+    toast: ReactNode;
   };
   state: {
     collectionsLoadPhase: LoadPhase;
@@ -46,8 +45,7 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
     collectionsColdSkeletonVisible,
     collectionsError,
     collectionsListPerfProps,
-    message,
-    snackbar
+    toast
   } = data;
   const { collectionsLoadPhase, collectionsLoading } = state;
   const {
@@ -138,12 +136,11 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
               : null
           }
         />
-        {message ? <Text style={styles.messageInline}>{message}</Text> : null}
       </View>
       {appSheets}
       {bottomAppBar}
       {collectionComposerSheet}
-      {snackbar}
+      {toast}
     </SafeAreaView>
   );
 }

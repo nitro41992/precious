@@ -12,12 +12,13 @@ import type {
   Collection,
   CollectionListMode,
   HomeListRow,
-  SnackbarState
+  ToastPlacement,
+  ToastState
 } from "../types";
 import {
   BottomAppBar,
   SkeletonRevealFrame,
-  Snackbar
+  ToastHost
 } from "./components";
 import {
   CaptureRow,
@@ -56,7 +57,7 @@ export type AppRenderHelpersInput = {
   searchQuery: string;
   selectedCollection: Collection | null;
   skeletonPulse: Animated.Value;
-  snackbar: SnackbarState | null;
+  toast: ToastState | null;
 };
 
 export function createAppRenderHelpers(input: AppRenderHelpersInput) {
@@ -271,8 +272,8 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     );
   }
 
-  function renderSnackbar(withBottomNav = false) {
-    return <Snackbar snackbar={input.snackbar} withBottomNav={withBottomNav} />;
+  function renderToast(placement: ToastPlacement = "base") {
+    return <ToastHost toast={input.toast} placement={placement} />;
   }
 
   function renderBottomAppBar(active: "recent" | "collections") {
@@ -301,7 +302,7 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     renderLoadingRows,
     renderSearchProgress,
     renderSearchResult,
-    renderSnackbar,
+    renderToast,
     SkeletonBlock: SkeletonBlock as ({ style }: { style?: any }) => ReactElement
   };
 }

@@ -50,7 +50,7 @@ import type {
   ReminderReviewDecision,
   ReviewChecklistTask,
   ReviewTarget,
-  SnackbarState,
+  ToastState,
 } from "./types";
 import { DEFAULT_CAPTURE_COMPOSER_MODE } from "./types";
 import {
@@ -190,7 +190,7 @@ export default function App() {
   const [draftNoteDirty, setDraftNoteDirty] = useState(false);
   const [draftIntentDirty, setDraftIntentDirty] = useState(false);
   const [message, setMessage] = useState("");
-  const [snackbar, setSnackbar] = useState<SnackbarState | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
   const [sourceDraft, setSourceDraft] = useState("");
   const [captureMode, setCaptureMode] = useState<CaptureComposerMode>(DEFAULT_CAPTURE_COMPOSER_MODE);
   const [showCaptureComposer, setShowCaptureComposer] = useState(false);
@@ -432,6 +432,14 @@ export default function App() {
     setReminderSheetOpen(false);
   }, []);
 
+  const showToast = useCallback((next: ToastState | string, tone: ToastState["tone"] = "neutral") => {
+    setToast(typeof next === "string" ? { text: next, tone } : next);
+  }, []);
+
+  const showErrorToast = useCallback((error: unknown, fallback: string) => {
+    showToast({ text: friendlyError(error, fallback), tone: "error" });
+  }, [showToast]);
+
   const {
     authEmail,
     authLoading,
@@ -538,7 +546,6 @@ export default function App() {
       const text = friendlyError(error, mode === "archived" ? "Could not load archived captures" : "Could not load captures");
       errorSetter(text);
       phaseSetter("error");
-      setMessage(text);
       throw error;
     } finally {
       loadingSetter(false);
@@ -552,14 +559,15 @@ export default function App() {
     const loading = mode === "archived" ? archivedCapturesLoading : capturesLoading;
     if (!cursor || loading) return;
     void loadCaptures(mode, { append: true, before: cursor }).catch((error) => {
-      setMessage((current) => current || friendlyError(error, "Could not load more captures"));
+      showErrorToast(error, "Could not load more captures");
     });
   }, [
     archivedCapturesLoading,
     archivedCapturesNextCursor,
     capturesLoading,
     capturesNextCursor,
-    loadCaptures
+    loadCaptures,
+    showErrorToast
   ]);
 
   const loadArchivedCapturesForSearch = useCallback(
@@ -647,9 +655,9 @@ export default function App() {
     const cursor = collectionsNextCursor[collectionsMode];
     if (!cursor || collectionsLoading) return;
     void loadCollections(collectionsMode, { append: true, before: cursor }).catch((error) => {
-      setMessage((current) => current || friendlyError(error, "Could not load more collections"));
+      showErrorToast(error, "Could not load more collections");
     });
-  }, [collectionsLoading, collectionsMode, collectionsNextCursor, loadCollections]);
+  }, [collectionsLoading, collectionsMode, collectionsNextCursor, loadCollections, showErrorToast]);
 
   const loadCollectionCaptures = useCallback(async (
     collectionId: string,
@@ -710,13 +718,14 @@ export default function App() {
       before: collectionCapturesNextCursor,
       phase: "append"
     }).catch((error) => {
-      setMessage((current) => current || friendlyError(error, "Could not load more collection captures"));
+      showErrorToast(error, "Could not load more collection captures");
     });
   }, [
     collectionCapturesLoading,
     collectionCapturesNextCursor,
     loadCollectionCaptures,
-    selectedCollectionId
+    selectedCollectionId,
+    showErrorToast
   ]);
 
   const retryLoadCollectionCaptures = useCallback(() => {
@@ -728,7 +737,6 @@ export default function App() {
       setCollectionCapturesForId(selectedCollectionId);
       setCollectionCapturesNextCursor(null);
       setCollectionCapturesError(text);
-      setMessage((current) => current || text);
     });
   }, [collectionCapturesLoading, loadCollectionCaptures, selectedCollectionId]);
 
@@ -837,7 +845,7 @@ export default function App() {
     try {
       await Linking.openURL(url);
     } catch {
-      setMessage("Could not open source.");
+      showToast("Could not open source.", "error");
     }
   }
 
@@ -989,7 +997,6 @@ export default function App() {
     } catch (error) {
       const text = friendlyError(error, "Could not load collections.");
       setCollectionsError(text);
-      setMessage(text);
     }
   }
 
@@ -1072,7 +1079,7 @@ export default function App() {
 
   useEffect(() => {
     void loadCaptures().catch((error) => {
-      setMessage((current) => current || friendlyError(error, "Could not load captures"));
+      setCapturesError((current) => current || friendlyError(error, "Could not load captures"));
     });
   }, [loadCaptures]);
 
@@ -1217,10 +1224,10 @@ export default function App() {
   }, [draftNote]);
 
   useEffect(() => {
-    if (!snackbar) return;
-    const timer = setTimeout(() => setSnackbar(null), snackbar.durationMs ?? 6000);
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), toast.durationMs ?? 5000);
     return () => clearTimeout(timer);
-  }, [snackbar]);
+  }, [toast]);
 
   useEffect(() => {
     const appSubscription = AppState.addEventListener("change", (state) => {
@@ -1392,7 +1399,6 @@ export default function App() {
         setCollectionCapturesNextCursor(null);
         setCollectionCapturesError(text);
       }
-      setMessage((current) => current || text);
     });
   }, [captureReturnCollectionId, loadCollectionCaptures, selectedCollection?.captureCount, selectedCollection?.status, selectedCollectionId]);
 
@@ -1565,9 +1571,9 @@ export default function App() {
         setReminderDrafts({});
         setCollectionDrafts({});
         clearSelectedReviewDraft(selected);
-        setMessage("Saved.");
+        showToast("Review saved.", "success");
       } catch (error) {
-        setMessage(friendlyError(error, "Could not save."));
+        showErrorToast(error, "Could not save review.");
       }
       return;
     }
@@ -1605,7 +1611,7 @@ export default function App() {
     setReminderDrafts({});
     setCollectionDrafts({});
     clearSelectedReviewDraft(selected);
-    setMessage("Saved.");
+    showToast("Review saved.", "success");
   }
 
   async function resolveReviewTargets(
@@ -1643,9 +1649,9 @@ export default function App() {
         setDraftIntentDirty(false);
         setRationaleEditTarget(null);
         refreshRationaleSheet(updatedCapture);
-        setMessage("Review updated.");
+        showToast("Review updated.", "success");
       } catch (error) {
-        setMessage(friendlyError(error, "Could not update review."));
+        showErrorToast(error, "Could not update review.");
       }
       return;
     }
@@ -1669,7 +1675,7 @@ export default function App() {
     setDraftIntentDirty(false);
     setRationaleEditTarget(null);
     refreshRationaleSheet(updatedCapture);
-    setMessage("Review updated.");
+    showToast("Review updated.", "success");
   }
 
   function editReviewTask(task: ReviewChecklistTask) {
@@ -1730,7 +1736,7 @@ export default function App() {
       return;
     }
     if (!config?.apiUrl || !session?.accessToken) {
-      setMessage("Sign in to manage collections.");
+      showToast("Sign in to manage collections.", "error");
       return;
     }
     const previousId = selected.id;
@@ -1757,9 +1763,9 @@ export default function App() {
       );
       closeCollectionPicker();
       await loadCollections("active");
-      setMessage("Collections updated.");
+      showToast("Collections updated.", "success");
     } catch (error) {
-      setMessage(friendlyError(error, "Could not update collections."));
+      showErrorToast(error, "Could not update collections.");
     } finally {
       setCollectionChoiceSaving(null);
     }
@@ -1773,7 +1779,7 @@ export default function App() {
     try {
       await loadCollections("active");
     } catch (error) {
-      setMessage(friendlyError(error, "Could not load collections."));
+      showErrorToast(error, "Could not load collections.");
     }
   }
 
@@ -1812,9 +1818,9 @@ export default function App() {
         setShowCollectionForm(false);
       }
       setCollectionDraftDirty(false);
-      setMessage("Collection saved.");
+      showToast("Collection saved.", "success");
     } catch (error) {
-      setMessage(friendlyError(error, "Could not save collection."));
+      showErrorToast(error, "Could not save collection.");
     }
   }
 
@@ -1827,12 +1833,12 @@ export default function App() {
       const restored = collectionFromRemote(json.collection);
       collectionsCacheRef.current.active = uniqueCollections([restored, ...collectionsCacheRef.current.active]);
       setCollections((current) => uniqueCollections([restored, ...current]));
-      setSnackbar(null);
-      setMessage("");
+      setToast(null);
+      showToast("Collection restored.", "success");
       await loadCollections("active");
       await loadCaptures();
     } catch (error) {
-      setMessage(friendlyError(error, "Could not undo delete."));
+      showErrorToast(error, "Could not undo delete.");
     }
   }
 
@@ -1848,8 +1854,8 @@ export default function App() {
     setCollections((current) => current.filter((item) => item.id !== collection.id));
     collectionCapturesCacheRef.current[collection.id] = [];
     removeCollectionFromKnownCaptures(collection.id);
-    setMessage("");
-    setSnackbar({
+    setToast(null);
+    showToast({
       text: "Collection deleted.",
       tone: "destructive",
       durationMs: DELETE_UNDO_MS,
@@ -1866,7 +1872,7 @@ export default function App() {
     } catch (error) {
       collectionsCacheRef.current = previousCache;
       setCollections(previousCollections);
-      setMessage(friendlyError(error, "Could not delete collection."));
+      showErrorToast(error, "Could not delete collection.");
     }
   }
 
@@ -1908,19 +1914,19 @@ export default function App() {
           "active"
         )
       );
-      setMessage("");
+      setToast(null);
       if (removedCollection) {
-        setSnackbar({
+        showToast({
           text: "Removed from collection.",
           actionLabel: "Undo",
           action: () => void restoreCollectionLink(collectionId, capture, removedCollection)
         });
       } else {
-        setSnackbar({ text: "Removed from collection." });
+        showToast({ text: "Removed from collection." });
       }
       await loadCaptures();
     } catch (error) {
-      setMessage(friendlyError(error, "Could not remove collection."));
+      showErrorToast(error, "Could not remove collection.");
     }
   }
 
@@ -1963,11 +1969,11 @@ export default function App() {
         addCollection(capture),
         ...current.filter((item) => item.id !== capture.id)
       ].filter((item) => !isDeleted(item)));
-      setSnackbar(null);
-      setMessage("Collection restored.");
+      setToast(null);
+      showToast("Collection restored.", "success");
       await loadCaptures();
     } catch (error) {
-      setMessage(friendlyError(error, "Could not restore collection."));
+      showErrorToast(error, "Could not restore collection.");
     }
   }
 
@@ -1992,9 +1998,9 @@ export default function App() {
         );
         const updatedCapture = captureFromRemote(json.capture);
         applyUpdatedCapture(updatedCapture, selected.id);
-        setMessage("Reminder removed.");
+        showToast("Reminder removed.", "success");
       } catch (error) {
-        setMessage(friendlyError(error, "Could not remove reminder."));
+        showErrorToast(error, "Could not remove reminder.");
       }
       return;
     }
@@ -2015,7 +2021,7 @@ export default function App() {
     setArchivedCaptures((current) => capturesForListMode(current.map(removeReminder), "archived"));
     setCollectionCaptures((current) => capturesForListMode(current.map(removeReminder), "active"));
     setReminderDrafts({});
-    setMessage("Reminder removed.");
+    showToast("Reminder removed.", "success");
   }
 
   async function saveReminder(draft: ReminderScheduleDraft, reminderIndex: number | null) {
@@ -2058,9 +2064,9 @@ export default function App() {
         const updatedCapture = captureFromRemote(json.capture);
         applyUpdatedCapture(updatedCapture, selected.id);
         setReminderDrafts({});
-        setMessage("Reminder saved.");
+        showToast("Reminder saved.", "success");
       } catch (error) {
-        setMessage(friendlyError(error, "Could not save reminder."));
+        showErrorToast(error, "Could not save reminder.");
       }
       return;
     }
@@ -2092,7 +2098,7 @@ export default function App() {
     };
     applyUpdatedCapture(updatedCapture, selected.id);
     setReminderDrafts({});
-    setMessage("Reminder saved.");
+    showToast("Reminder saved.", "success");
   }
 
   async function copySource() {
@@ -2102,9 +2108,9 @@ export default function App() {
     try {
       if (!nativeClipboard) throw new Error("Clipboard is unavailable.");
       await nativeClipboard?.copy(source);
-      setMessage("Source copied.");
+      showToast("Source copied.", "success");
     } catch (error) {
-      setMessage(friendlyError(error, "Could not copy source."));
+      showErrorToast(error, "Could not copy source.");
     }
   }
 
@@ -2112,29 +2118,29 @@ export default function App() {
     try {
       await Linking.openURL(candidate.url);
     } catch {
-      setMessage(`Could not open ${candidate.label}.`);
+      showToast(`Could not open ${candidate.label}.`, "error");
     }
   }
 
   async function pasteExpandedUrl() {
     if (!selected) return;
     if (!nativeStore?.submitExpandedUrl || !nativeClipboard?.paste) {
-      setMessage("Copy the expanded URL, then paste it as a new capture.");
+      showToast("Copy the expanded URL, then paste it as a new capture.");
       return;
     }
     try {
       const clipboardText = await nativeClipboard.paste();
       const expandedUrl = extractHttpUrl(clipboardText);
       if (!expandedUrl) {
-        setMessage("Copy the expanded URL first, then tap Paste expanded URL.");
+        showToast("Copy the expanded URL first, then tap Paste expanded URL.", "error");
         return;
       }
       const raw = await nativeStore.submitExpandedUrl(selected.id, expandedUrl);
       const next = JSON.parse(raw || "[]") as Capture[];
       replaceLocalCaptureLists(next);
-      setMessage("Expanded URL saved. Checking the source now.");
+      showToast({ text: "Expanded URL saved. Checking the source now.", tone: "processing" });
     } catch (error) {
-      setMessage(friendlyError(error, "Could not use the expanded URL."));
+      showErrorToast(error, "Could not use the expanded URL.");
     }
   }
 
@@ -2162,14 +2168,14 @@ export default function App() {
           collectionCapturesCacheRef.current[returnCollectionId] = [];
           void loadCollectionCaptures(returnCollectionId, { phase: "refresh" }).catch(() => {});
         }
-        setSnackbar(null);
-        setMessage("");
+        setToast(null);
+        showToast("Capture restored.", "success");
         collectionCapturesCacheRef.current = {};
         collectionCapturesCursorCacheRef.current = {};
         await loadCaptures();
         if (collectionsOpen || selectedCollectionId || returnCollectionId) await loadCollections("active");
       } catch (error) {
-        setMessage(friendlyError(error, "Could not undo delete."));
+        showErrorToast(error, "Could not undo delete.");
       }
       return;
     }
@@ -2178,8 +2184,8 @@ export default function App() {
       ? await nativeStore.undoDeleteCapture(capture.id)
       : await nativeStore.restoreCapture(capture.id);
     replaceLocalCaptureLists(JSON.parse(raw || "[]") as Capture[]);
-    setSnackbar(null);
-    setMessage("");
+    setToast(null);
+    showToast("Capture restored.", "success");
   }
 
   async function deleteSelectedCapture() {
@@ -2189,8 +2195,8 @@ export default function App() {
     removeCaptureFromVisibleLists(capture);
     selectCapture(null);
     if (returnCollectionId) selectCollection(returnCollectionId);
-    setMessage("");
-    setSnackbar({
+    setToast(null);
+    showToast({
       text: "Capture deleted.",
       tone: "destructive",
       durationMs: DELETE_UNDO_MS,
@@ -2219,7 +2225,7 @@ export default function App() {
         if (collectionsOpen || selectedCollectionId || returnCollectionId) await loadCollections("active");
       } catch (error) {
         upsertActiveCapture(capture);
-        setMessage(friendlyError(error, "Could not delete."));
+        showErrorToast(error, "Could not delete.");
       }
       return;
     }
@@ -2231,7 +2237,7 @@ export default function App() {
       replaceLocalCaptureLists(JSON.parse(raw || "[]") as Capture[]);
     } catch (error) {
       upsertActiveCapture(capture);
-      setMessage(friendlyError(error, "Could not delete."));
+      showErrorToast(error, "Could not delete.");
     }
   }
 
@@ -2239,11 +2245,11 @@ export default function App() {
     const source = sourceDraft.trim();
     if (!source) return;
     if (!nativeStore) {
-      setMessage("Native capture worker is unavailable.");
+      showToast("Native capture worker is unavailable.", "error");
       return;
     }
     setSavingCapture(true);
-    setMessage("");
+    setToast(null);
     try {
       const raw = await nativeStore.captureSource(source);
       const localCapture = JSON.parse(raw) as Capture;
@@ -2251,7 +2257,7 @@ export default function App() {
       setSourceDraft("");
       closeCaptureComposer();
     } catch (error) {
-      setMessage(friendlyError(error, "Could not save capture."));
+      showErrorToast(error, "Could not save capture.");
     } finally {
       setSavingCapture(false);
     }
@@ -2260,12 +2266,12 @@ export default function App() {
   async function pickCaptureImage() {
     if (pickingCaptureImage || captureImagePickerActiveRef.current) return;
     if (!nativeStore?.captureImage) {
-      setMessage("Image upload is unavailable in this build.");
+      showToast("Image upload is unavailable in this build.", "error");
       return;
     }
     captureImagePickerActiveRef.current = true;
     setPickingCaptureImage(true);
-    setMessage("");
+    setToast(null);
     try {
       const raw = await nativeStore.captureImage();
       if (!raw) return;
@@ -2274,7 +2280,7 @@ export default function App() {
       setSourceDraft("");
     } catch (error) {
       if (isCaptureImageCancel(error)) return;
-      setMessage(friendlyError(error, "Could not save image."));
+      showErrorToast(error, "Could not save image.");
     } finally {
       captureImagePickerActiveRef.current = false;
       setPickingCaptureImage(false);
@@ -2297,7 +2303,7 @@ export default function App() {
     renderListLoadingFooter,
     renderSearchProgress,
     renderSearchResult,
-    renderSnackbar
+    renderToast
   } = createAppRenderHelpers({
     activeCapturesLoadedOnce,
     captureImageLoadStates,
@@ -2326,7 +2332,7 @@ export default function App() {
     searchQuery,
     selectedCollection,
     skeletonPulse,
-    snackbar
+    toast
   });
 
   function renderCollectionComposerSheet() {
@@ -2409,11 +2415,10 @@ export default function App() {
           captureReturnCollectionId,
           faviconFailures,
           keyboardHeight,
-          message,
           noteInputRef,
           reviewMotion,
           selected: capture,
-          snackbar: renderSnackbar(),
+          toast: renderToast("footer"),
           visitTargetMapCandidates,
           windowHeight
         }}
@@ -2459,7 +2464,7 @@ export default function App() {
           captureKeyboardInset,
           homeCaptures: homeRows,
           listPerfProps: CAPTURE_LIST_PERF_PROPS,
-          snackbar: includeChrome ? renderSnackbar(!showCaptureComposer) : null,
+          toast: includeChrome ? renderToast(showCaptureComposer ? "footer" : "bottomNav") : null,
           sourceInputRef,
           visibleHomeRows,
           windowHeight
@@ -2472,7 +2477,6 @@ export default function App() {
           homeColdSkeletonVisible,
           homeInitialLoading,
           keyboardHeight,
-          message,
           pickingCaptureImage,
           quickLookCount,
           savingCapture,
@@ -2526,9 +2530,8 @@ export default function App() {
           collectionDetailListRef,
           keyboardHeight,
           listPerfProps: CAPTURE_LIST_PERF_PROPS,
-          message,
           selectedCollection,
-          snackbar: renderSnackbar()
+          toast: renderToast("footer")
         }}
         state={{
           collectionDescription,
@@ -2556,8 +2559,7 @@ export default function App() {
           collectionsColdSkeletonVisible,
           collectionsError,
           collectionsListPerfProps: COLLECTION_LIST_PERF_PROPS,
-          message,
-          snackbar: renderSnackbar(!showCollectionForm)
+          toast: renderToast(showCollectionForm ? "footer" : "bottomNav")
         }}
         state={{
           collectionsLoadPhase,
@@ -2584,9 +2586,8 @@ export default function App() {
           collections,
           collectionsColdSkeletonVisible,
           collectionsListPerfProps: COLLECTION_LIST_PERF_PROPS,
-          message,
           selected,
-          snackbar: renderSnackbar()
+          toast: renderToast("footer")
         }}
         state={{
           activeCollectionsLoadedOnce: collectionsLoadedOnce.active,
@@ -2660,7 +2661,7 @@ export default function App() {
           searchMotion,
           searchProgressLabel,
           searchResults,
-          snackbar: renderSnackbar()
+          toast: renderToast()
         }}
         state={{
           remoteSearchActive,

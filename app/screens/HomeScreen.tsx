@@ -28,7 +28,7 @@ type HomeScreenProps = {
     captureKeyboardInset: Animated.Value;
     homeCaptures: HomeListRow[];
     listPerfProps: Partial<FlatListProps<HomeListRow>>;
-    snackbar: ReactNode;
+    toast: ReactNode;
     sourceInputRef: RefObject<TextInput | null>;
     visibleHomeRows: HomeListRow[];
     windowHeight: number;
@@ -41,7 +41,6 @@ type HomeScreenProps = {
     homeColdSkeletonVisible: boolean;
     homeInitialLoading: boolean;
     keyboardHeight: number;
-    message: string;
     pickingCaptureImage: boolean;
     quickLookCount: number;
     savingCapture: boolean;
@@ -73,7 +72,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
     captureKeyboardInset,
     homeCaptures,
     listPerfProps,
-    snackbar,
+    toast,
     sourceInputRef,
     visibleHomeRows,
     windowHeight
@@ -86,7 +85,6 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
     homeColdSkeletonVisible,
     homeInitialLoading,
     keyboardHeight,
-    message,
     pickingCaptureImage,
     quickLookCount,
     savingCapture,
@@ -161,7 +159,6 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
               </Text>
             </Pressable>
           ) : null}
-          {message ? <Text style={styles.messageInline}>{message}</Text> : null}
         </View>
         <FlatList
           {...listPerfProps}
@@ -365,7 +362,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
       ) : null}
       {appSheets}
       {bottomAppBar}
-      {snackbar}
+      {toast}
     </SafeAreaView>
   );
 }
