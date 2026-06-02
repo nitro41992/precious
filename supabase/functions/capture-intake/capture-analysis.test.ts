@@ -324,6 +324,46 @@ Deno.test("reminder prompt resolves conflicting edition text with explicit liste
   );
 });
 
+Deno.test("reminder schema and prompt only allow time interval suggestions", () => {
+  const schema = urlEvidence.analysisSchemaForCollections([]) as any;
+  assertEqual(
+    JSON.stringify(
+      schema.properties.suggested_reminders.items.properties.trigger_type.enum,
+    ),
+    JSON.stringify(["time"]),
+    "reminder trigger_type should be time-only",
+  );
+
+  const prompt = urlEvidence.buildPrompt(
+    captureFixture({
+      source_text:
+        "Out of Control Vintage popup at St. Anthony's Flea Market, 154 Sullivan Street.",
+    }),
+    null,
+    [],
+  );
+
+  assert(
+    prompt.includes("Suggested reminders are time intervals only"),
+    "prompt should define Reminder ideas as time intervals",
+  );
+  assert(
+    prompt.includes("Never create location, place, proximity, venue") &&
+      prompt.includes("when near"),
+    "prompt should forbid location/proximity reminder ideas",
+  );
+  assert(
+    prompt.includes(
+      "Place, venue, address, and maps-search evidence belongs in visit_target_* fields",
+    ),
+    "prompt should route place evidence to Visit Target fields",
+  );
+  assert(
+    prompt.includes("154 Sullivan Street"),
+    "prompt should still pass place evidence through for Visit Target extraction",
+  );
+});
+
 Deno.test("analysis schema restricts collection decisions to retrieved active collections", () => {
   const schema = urlEvidence.analysisSchemaForCollections([
     { id: "articles-id", title: "Articles & Guides", description: "" },

@@ -11,6 +11,7 @@ const {
   extractHttpUrl,
   hostFromUrl,
   mapSearchCandidates,
+  mapSearchCandidatesForVisitTarget,
   mapsSearchUrls,
   mergeRemoteCaptures,
   mergeSearchResults,
@@ -83,6 +84,36 @@ test("mapSearchCandidates uses native providers and omits unavailable platform p
   assert.equal(
     mapSearchCandidates("Sanwits", "android").some((candidate) => candidate.provider === "apple"),
     false
+  );
+});
+
+test("mapSearchCandidatesForVisitTarget prefers the visit target name over the long query", () => {
+  assert.deepEqual(
+    mapSearchCandidatesForVisitTarget(
+      {
+        name: "Out of Control Vintage",
+        query:
+          "Out of Control Vintage — popup at St. Anthony's Flea Market, 154 Sullivan Street, SOHO, NYC"
+      },
+      "android"
+    ),
+    [
+      {
+        provider: "google",
+        label: "Google Maps",
+        url: "geo:0,0?q=Out%20of%20Control%20Vintage"
+      }
+    ]
+  );
+  assert.deepEqual(
+    mapSearchCandidatesForVisitTarget({ name: "", query: "154 Sullivan Street" }, "android"),
+    [
+      {
+        provider: "google",
+        label: "Google Maps",
+        url: "geo:0,0?q=154%20Sullivan%20Street"
+      }
+    ]
   );
 });
 

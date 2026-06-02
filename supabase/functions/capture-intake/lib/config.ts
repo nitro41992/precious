@@ -215,7 +215,7 @@ export const analysisSchema = {
         properties: {
           trigger_type: {
             type: "string",
-            enum: ["time", "place", "event", "none"],
+            enum: ["time"],
           },
           trigger_value: { type: "string" },
           trigger_text: { type: ["string", "null"] },

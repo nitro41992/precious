@@ -6,6 +6,10 @@ export type MapSearchCandidate = {
   label: string;
   url: string;
 };
+export type MapSearchVisitTarget = {
+  name?: string | null;
+  query?: string | null;
+};
 
 type ReviewableCapture = {
   status: CaptureStatus;
@@ -59,6 +63,7 @@ export function isArchived(capture: { archivedAt?: number | null }): boolean;
 export function isDeleted(capture: { archivedAt?: number | null; deletedAt?: number | null }): boolean;
 export function isRejected(capture: { rejectedAt?: number | null; analysisMode?: string }): boolean;
 export function mapSearchCandidates(query?: string | null, platform?: string): MapSearchCandidate[];
+export function mapSearchCandidatesForVisitTarget(target?: MapSearchVisitTarget | null, platform?: string): MapSearchCandidate[];
 export function mapsSearchUrls(query?: string | null): { google: string; apple: string };
 export function mergeRemoteCaptures<T extends SortableCapture>(
   remoteCaptures: T[],

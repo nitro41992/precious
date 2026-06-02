@@ -22,6 +22,17 @@ export const reviewTargetKeys = [
   "analysis",
 ] as const;
 const reviewTargetSet = new Set<string>(reviewTargetKeys);
+const reminderDatePrecisions = new Set([
+  "exact",
+  "day",
+  "date_range",
+  "week",
+  "month_window",
+  "month",
+  "unknown",
+]);
+const reminderTimePrecisions = new Set(["exact", "time_range", "unknown"]);
+const reminderDurationUnits = new Set(["minutes", "hours", "days", "weeks"]);
 
 export function normalizedReviewTargets(value: unknown) {
   if (!Array.isArray(value)) return [] as string[];
@@ -40,13 +51,27 @@ function analysisHasReviewTargets(analysis: Record<string, unknown>) {
   return Object.prototype.hasOwnProperty.call(analysis, "review_targets");
 }
 
+function reviewTargetsCompatibleWithAnalysis(
+  analysis: Record<string, unknown>,
+  targets: string[],
+) {
+  if (!targets.includes("reminder")) return targets;
+  const hasTimeReminder = normalizedTimeReminderSuggestions(
+    analysis.suggested_reminders,
+  ).length > 0;
+  return targets.filter((target) => target !== "reminder" || hasTimeReminder);
+}
+
 export function reviewTargetsForAnalysis(
   analysis: Record<string, unknown>,
   reviewConfirmedAt?: unknown,
 ) {
   if (reviewConfirmedAt) return [] as string[];
   if (analysisHasReviewTargets(analysis)) {
-    return normalizedReviewTargets(analysis.review_targets);
+    return reviewTargetsCompatibleWithAnalysis(
+      analysis,
+      normalizedReviewTargets(analysis.review_targets),
+    );
   }
   const defaultIntent = jsonObject(analysis.default_intent);
   const targets: string[] = [];
@@ -57,7 +82,10 @@ export function reviewTargetsForAnalysis(
     targets.push("intent");
   }
   if (analysis.needs_review && !targets.length) targets.push("analysis");
-  return normalizedReviewTargets(targets);
+  return reviewTargetsCompatibleWithAnalysis(
+    analysis,
+    normalizedReviewTargets(targets),
+  );
 }
 
 export function resolveReviewTargets(
@@ -98,6 +126,157 @@ export function normalizedDefaultIntent(analysis: Record<string, unknown>) {
   };
 }
 
+function validReminderDate(value: string | null) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || "");
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day;
+}
+
+function validReminderTime(value: string | null) {
+  const match = /^(\d{2}):(\d{2})$/.exec(value || "");
+  if (!match) return false;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+}
+
+function dateTimeMs(date: string, time = "00:00") {
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  const timeMatch = /^(\d{2}):(\d{2})$/.exec(time);
+  if (!dateMatch || !timeMatch) return NaN;
+  return Date.UTC(
+    Number(dateMatch[1]),
+    Number(dateMatch[2]) - 1,
+    Number(dateMatch[3]),
+    Number(timeMatch[1]),
+    Number(timeMatch[2]),
+  );
+}
+
+function normalizedReminderDuration(value: unknown) {
+  const duration = Number(value);
+  return Number.isFinite(duration) && duration > 0 ? duration : null;
+}
+
+function normalizedReminderDurationUnit(value: unknown) {
+  const unit = stringValue(value);
+  return unit && reminderDurationUnits.has(unit) ? unit : null;
+}
+
+function normalizedReminderDateWindow(value: unknown, fallback: string) {
+  const date = stringValue(value);
+  return date && validReminderDate(date) ? date : fallback;
+}
+
+function normalizedReminderDatePrecision(
+  value: unknown,
+  startDate: string,
+  endDate: string,
+) {
+  const precision = stringValue(value);
+  if (precision && reminderDatePrecisions.has(precision)) return precision;
+  return startDate === endDate ? "exact" : "date_range";
+}
+
+function normalizedReminderTimePrecision(
+  value: unknown,
+  startTime: string | null,
+  endTime: string | null,
+) {
+  const precision = stringValue(value);
+  if (precision && reminderTimePrecisions.has(precision)) return precision;
+  if (startTime && endTime) return "time_range";
+  if (startTime) return "exact";
+  return "unknown";
+}
+
+export function normalizedTimeReminderSuggestion(value: unknown) {
+  const record = jsonObject(value);
+  if (!Object.keys(record).length || record.trigger_type !== "time") {
+    return null;
+  }
+  const startDate = stringValue(record.start_date) ||
+    stringValue(record.trigger_date) ||
+    stringValue(record.date_window_start);
+  const endDate = stringValue(record.end_date) ||
+    stringValue(record.date_window_end) ||
+    startDate;
+  if (
+    !startDate ||
+    !endDate ||
+    !validReminderDate(startDate) ||
+    !validReminderDate(endDate) ||
+    dateTimeMs(endDate) < dateTimeMs(startDate)
+  ) {
+    return null;
+  }
+  const startTime = stringValue(record.start_time) ||
+    stringValue(record.trigger_time) ||
+    null;
+  const endTime = stringValue(record.end_time) || null;
+  if (
+    (startTime && !validReminderTime(startTime)) ||
+    (endTime && !validReminderTime(endTime)) ||
+    (!startTime && endTime) ||
+    (startTime && endTime &&
+      dateTimeMs(endDate, endTime) <= dateTimeMs(startDate, startTime))
+  ) {
+    return null;
+  }
+  const triggerValue = stringValue(record.trigger_value) ||
+    (startDate === endDate ? startDate : `${startDate}-${endDate}`);
+  const durationUnit = normalizedReminderDurationUnit(record.duration_unit);
+  return {
+    ...record,
+    trigger_type: "time",
+    trigger_value: triggerValue,
+    trigger_text: stringValue(record.trigger_text),
+    start_date: startDate,
+    end_date: endDate,
+    start_time: startTime,
+    end_time: endTime,
+    trigger_date: startDate,
+    date_window_start: normalizedReminderDateWindow(
+      record.date_window_start,
+      startDate,
+    ),
+    date_window_end: normalizedReminderDateWindow(
+      record.date_window_end,
+      endDate,
+    ),
+    date_precision: normalizedReminderDatePrecision(
+      record.date_precision,
+      startDate,
+      endDate,
+    ),
+    trigger_time: startTime,
+    time_precision: normalizedReminderTimePrecision(
+      record.time_precision,
+      startTime,
+      endTime,
+    ),
+    timezone: stringValue(record.timezone),
+    duration: durationUnit ? normalizedReminderDuration(record.duration) : null,
+    duration_unit: durationUnit,
+    rationale: stringValue(record.rationale) ||
+      "The capture includes a future date or time.",
+    confidence: finiteNumber(record.confidence),
+  };
+}
+
+export function normalizedTimeReminderSuggestions(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => normalizedTimeReminderSuggestion(item))
+    .filter((item) => item !== null);
+}
+
 export function analysisWithCurrentIntent(
   analysis: Record<string, unknown>,
   currentSaveIntent: unknown,
@@ -129,6 +308,9 @@ export function normalizedReviewAnalysis(
   const normalizedAnalysis = {
     ...sanitized,
     default_intent: normalizedDefaultIntent(sanitized),
+    suggested_reminders: normalizedTimeReminderSuggestions(
+      sanitized.suggested_reminders,
+    ),
   };
   const needsReview = analysisRequiresReview(
     normalizedAnalysis,

@@ -208,7 +208,7 @@ Deno.test("review rationale drops source-format explanations when source fallbac
       intent: "Suggested Learn because this is an Instagram Reel.",
       collections:
         "Suggested Movies & Shows because it is a short social video.",
-      reminder: "No concrete time, place, or event trigger was found.",
+      reminder: "No future date, time, deadline, or time window was found.",
     },
     confidence_label: "Looks right",
     needs_review: false,
@@ -229,6 +229,116 @@ Deno.test("review rationale drops source-format explanations when source fallbac
     normalized.review_rationale.collections,
     "No Collection was selected because none of your existing Collections matched this capture strongly enough.",
     "sanitized collection rationale should use product fallback language",
+  );
+});
+
+Deno.test("review normalization drops location reminders and preserves Visit Targets", () => {
+  const normalized = urlEvidence.normalizedReviewAnalysis({
+    display_title: "Out of Control Vintage",
+    summary: "A vintage popup at St. Anthony's Flea Market.",
+    default_intent: {
+      category: "visit",
+      confidence: 0.86,
+      rationale: "The capture names a local popup the user may visit.",
+    },
+    visit_target_name: "Out of Control Vintage",
+    visit_target_query:
+      "Out of Control Vintage popup at St. Anthony's Flea Market, 154 Sullivan Street, SOHO, NYC",
+    visit_target_confidence: "high",
+    visit_target_evidence: ["The capture names a popup and street address."],
+    verified_place: false,
+    review_rationale: {
+      focus: "Confirm Reminder idea",
+      summary: "Looks like a local popup, so I saved it as Visit.",
+      intent: "The capture names a local popup the user may visit.",
+      collections: "No Collection matched strongly enough.",
+      reminder: "Suggested a reminder when near 154 Sullivan Street.",
+    },
+    review_targets: ["reminder"],
+    suggested_reminders: [
+      {
+        trigger_type: "place",
+        trigger_value: "When near 154 Sullivan Street",
+        rationale: "The capture includes a place.",
+        confidence: 0.72,
+      },
+    ],
+    confidence_label: "Looks right",
+    needs_review: true,
+  });
+
+  assertEqual(
+    normalized.suggested_reminders.length,
+    0,
+    "non-time reminder suggestions should be removed",
+  );
+  assertEqual(
+    normalized.review_targets.length,
+    0,
+    "reminder review target should clear when no valid Reminder idea remains",
+  );
+  assertEqual(
+    normalized.needs_review,
+    false,
+    "dropped location reminder should not leave the capture needing review",
+  );
+  assertEqual(
+    normalized.visit_target_name,
+    "Out of Control Vintage",
+    "place evidence should remain as a Visit Target",
+  );
+});
+
+Deno.test("review normalization preserves structured time reminder intervals", () => {
+  const normalized = urlEvidence.normalizedReviewAnalysis({
+    display_title: "Weekend market",
+    summary: "A weekend market with public dates.",
+    default_intent: {
+      category: "visit",
+      confidence: 0.86,
+      rationale: "The market has dates and a real-world location.",
+    },
+    review_rationale: {
+      focus: "Confirm Reminder idea",
+      summary: "Looks like a weekend market, so I saved it as Visit.",
+      intent: "The market has dates and a real-world location.",
+      collections: "No Collection matched strongly enough.",
+      reminder: "The listed dates support a Reminder idea.",
+    },
+    review_targets: ["reminder"],
+    suggested_reminders: [
+      {
+        trigger_type: "time",
+        trigger_value: "June 4-7",
+        start_date: "2026-06-04",
+        end_date: "2026-06-07",
+        rationale: "The capture explicitly lists June 4-7.",
+        confidence: 0.82,
+      },
+    ],
+    confidence_label: "Looks right",
+    needs_review: true,
+  });
+
+  assertEqual(
+    normalized.suggested_reminders.length,
+    1,
+    "valid time reminder should be preserved",
+  );
+  assertEqual(
+    normalized.suggested_reminders[0].trigger_date,
+    "2026-06-04",
+    "trigger_date should derive from start_date",
+  );
+  assertEqual(
+    normalized.suggested_reminders[0].date_window_end,
+    "2026-06-07",
+    "date_window_end should derive from end_date",
+  );
+  assertEqual(
+    normalized.review_targets.join("|"),
+    "reminder",
+    "valid reminder ideas can still require review",
   );
 });
 
@@ -279,7 +389,7 @@ Deno.test("review targets drive review state and allow reviewed blank intent", (
         "Looks like a kettlebell routine, so I saved it as Do and matched PT.",
       intent: "The kettlebell and dumbbell routine is an activity to do.",
       collections: "The routine matches your PT Collection.",
-      reminder: "No concrete time, place, or event trigger was found.",
+      reminder: "No future date, time, deadline, or time window was found.",
     },
     linked_collections: [
       {
@@ -349,7 +459,15 @@ Deno.test("review target resolution preserves unresolved checklist items", () =>
       reminder: "The weekend hours support a Reminder idea.",
     },
     review_targets: ["intent", "reminder"],
-    suggested_reminders: [{ trigger_type: "time", trigger_value: "Saturday 9 AM" }],
+    suggested_reminders: [
+      {
+        trigger_type: "time",
+        trigger_value: "Saturday 9 AM",
+        start_date: "2026-06-06",
+        end_date: "2026-06-06",
+        start_time: "09:00",
+      },
+    ],
     confidence_label: "Maybe",
     needs_review: true,
   });

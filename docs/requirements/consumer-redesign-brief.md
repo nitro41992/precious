@@ -88,7 +88,7 @@ Captured Entities may appear as supporting context, but entity editing should no
 
 Quick Edit should optimize for tactile delight: restrained visuals, tappable chips, haptic-feeling transitions where native platforms allow them, quick accept/change/dismiss gestures, and enough polish that correcting AI feels easy rather than punitive. It should not become gamified or visually loud.
 
-Quick Edit should include a concise because sentence for each AI-predicted suggestion that asks for user trust, including inferred Save Intent, suggested Reminder, and location or place placement. Collection assignment should use only existing Collections and should not surface free-form AI suggestions. The rationale should be short and specific, such as "Because the reel mentions a SoHo ramen shop." The first version should not include expandable evidence, confidence percentages, or an analysis report.
+Quick Edit should include a concise because sentence for each AI-predicted suggestion that asks for user trust, including inferred Save Intent, suggested time-based Reminder, and Visit Target placement. Collection assignment should use only existing Collections and should not surface free-form AI suggestions. The rationale should be short and specific, such as "Because the reel mentions a SoHo ramen shop." The first version should not include expandable evidence, confidence percentages, or an analysis report.
 
 If the user dismisses Quick Edit:
 

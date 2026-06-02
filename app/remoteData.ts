@@ -3,6 +3,7 @@ import type {
   Collection,
   CollectionChoiceOverride,
   CollectionDecision,
+  ReminderSuggestion,
   LinkedCollection,
   VisitTarget
 } from "./types";
@@ -92,7 +93,7 @@ export function captureFromRemote(row: Record<string, any>): Capture {
     ),
     entities: analysis.entities || [],
     visitTarget: visitTargetFromRemote(analysis),
-    suggestedReminders: analysis.suggested_reminders || [],
+    suggestedReminders: reminderSuggestionsFromRemote(analysis.suggested_reminders),
     linkedCollections: Array.isArray(row.linked_collections)
       ? row.linked_collections.map(linkedCollectionFromRemote)
       : Array.isArray(analysis.linked_collections)
@@ -168,6 +169,45 @@ export function nullableTimestamp(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   const parsed = Date.parse(String(value));
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function validReminderDate(value: unknown) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day;
+}
+
+function hasReminderDate(value: Record<string, any>) {
+  return [value.start_date, value.trigger_date, value.date_window_start].some(
+    validReminderDate
+  );
+}
+
+export function reminderSuggestionsFromRemote(value: unknown): ReminderSuggestion[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is Record<string, any> =>
+      Boolean(
+        item &&
+          typeof item === "object" &&
+          !Array.isArray(item) &&
+          item.trigger_type === "time" &&
+          hasReminderDate(item)
+      )
+    )
+    .map((item) => ({
+      ...item,
+      trigger_type: "time",
+      trigger_value: String(item.trigger_value || item.trigger_text || item.start_date || item.trigger_date || ""),
+      rationale: String(item.rationale || ""),
+      confidence: Number.isFinite(Number(item.confidence)) ? Number(item.confidence) : 0
+    }));
 }
 
 export function visitTargetFromRemote(analysis: Record<string, any>): VisitTarget | null {

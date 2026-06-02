@@ -128,7 +128,7 @@ export function reviewRationaleFromAnalysis(analysis: Record<string, unknown>) {
       : "No Collection was selected because none of your existing Collections matched this capture strongly enough.");
   const reminder = rationaleForAnalysis(analysis, reviewRationale.reminder) ||
     rationaleForAnalysis(analysis, reminderRationale) ||
-    "No Reminder idea was suggested because the capture did not include a clear future time, place, event, or trigger.";
+    "No Reminder idea was suggested because the capture did not include a clear future date, time, deadline, or time window.";
   const summary = rationaleForAnalysis(analysis, reviewRationale.summary) ||
     summaryReviewRationale(subject, intentLabel, linkedCollectionTitle);
   const reviewTargets = reviewTargetsForAnalysis(analysis);
@@ -186,5 +186,5 @@ function summaryReviewRationale(
   if (collectionTitle) {
     return `Looks like ${subject}, so I matched ${collectionTitle}.`;
   }
-  return "I could not find a strong existing Collection or reminder trigger from the saved content.";
+  return "I could not find a strong existing Collection or time-based reminder from the saved content.";
 }

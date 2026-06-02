@@ -81,7 +81,7 @@ An optional Retrieval Lens that surfaces saved things when they become relevant 
 _Avoid_: Daily dashboard, activity feed, productivity homepage
 
 **Map**:
-A deferred Retrieval Lens that shows Captures associated with place-like Captured Entities, such as restaurants, venues, stores, hotels, trip ideas, or event locations. High-confidence captured places may appear on Map automatically, while uncertain places should go to Review Inbox before appearing as normal pins. Map should not show where the user happened to be when saving unless that location is part of the Capture's meaning or a user-approved Reminder trigger.
+A deferred Retrieval Lens that shows Captures associated with place-like Captured Entities, such as restaurants, venues, stores, hotels, trip ideas, or event locations. High-confidence captured places may appear on Map automatically, while uncertain places should go to Review Inbox before appearing as normal pins. Map should not show where the user happened to be when saving unless that location is part of the Capture's meaning.
 _Avoid_: Location history, check-in map, GPS trail
 
 **Agenda**:
@@ -153,11 +153,11 @@ An internal AI match from a Capture to one or more existing active Collections. 
 _Avoid_: Required filing, folder audit, automatic new Collection, free-form collection name
 
 **Reminder**:
-A first-class prompt to resurface one or more Captures at a specific time, relative time, location, event, or other future context.
+A first-class prompt to resurface one or more Captures at a specific date, time, deadline, or time window. Capture-local Reminders are not place or proximity triggers; place evidence belongs to Visit Targets and Map actions.
 _Avoid_: Notification setting, capture property
 
 **Reminder Suggestion**:
-An AI-proposed future resurfacing idea for a Capture. Reminder Suggestions are not Confirmed Reminders and must not notify until the user explicitly accepts or edits them.
+An AI-proposed time-based resurfacing idea for a Capture. Reminder Suggestions are not Confirmed Reminders and must not notify until the user explicitly accepts or edits them.
 _Avoid_: Automatic reminder, scheduled obligation, AI nudge
 
 **Confirmed Reminder**:
@@ -185,7 +185,7 @@ The user's lifecycle state for a Capture, such as active or pending deletion.
 _Avoid_: Folder, category
 
 **Reschedule**:
-The action of moving an existing Reminder to a later time, place, event, or context after it has fired or before it is due.
+The action of moving an existing Reminder to a later date, time, or time window after it has fired or before it is due.
 _Avoid_: Re-remind
 
 ## Example Dialogue
@@ -196,7 +196,7 @@ Domain Expert: "That is the content summary, not the Save Intent. The Save Inten
 
 Product: "So the Capture should keep the reel, the restaurant, the neighborhood, the creator, and the inferred reason?"
 
-Domain Expert: "Yes. The user should later be able to search 'that ramen place near SoHo' or get reminded when the place becomes relevant."
+Domain Expert: "Yes. The user should later be able to search 'that ramen place near SoHo' or open its Visit Target in maps, while any Reminder stays tied to a date or time window."
 
 Product: "Do we need to normalize every possible field from Instagram, TikTok, Reddit, YouTube, and Maps?"
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Linking, Platform } from "react-native";
 
 import {
-  mapSearchCandidates
+  mapSearchCandidatesForVisitTarget
 } from "../captureLogic";
 import {
   reviewChecklistTasksForCapture,
@@ -20,10 +20,17 @@ export function useCaptureReview({ selected }: { selected: Capture | null }) {
   const [visitTargetMapCandidates, setVisitTargetMapCandidates] = useState<MapSearchCandidate[]>([]);
   const [rationaleSheet, setRationaleSheet] = useState<RationaleSheet | null>(null);
   const [rationaleEditTarget, setRationaleEditTarget] = useState<ReviewTarget | null>(null);
+  const selectedVisitTargetName = selected?.visitTarget?.name || "";
   const selectedVisitTargetQuery = selected?.visitTarget?.query || "";
 
   useEffect(() => {
-    const candidates = mapSearchCandidates(selectedVisitTargetQuery, Platform.OS);
+    const candidates = mapSearchCandidatesForVisitTarget(
+      {
+        name: selectedVisitTargetName,
+        query: selectedVisitTargetQuery
+      },
+      Platform.OS
+    );
     if (!candidates.length) {
       setVisitTargetMapCandidates([]);
       return;
@@ -47,7 +54,7 @@ export function useCaptureReview({ selected }: { selected: Capture | null }) {
     return () => {
       cancelled = true;
     };
-  }, [selectedVisitTargetQuery]);
+  }, [selectedVisitTargetName, selectedVisitTargetQuery]);
 
   function rationaleSheetForCapture(capture: Capture): RationaleSheet | null {
     const insight = reviewInsightForCapture(capture);

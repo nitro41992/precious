@@ -77,6 +77,12 @@ function mapSearchCandidates(query, platform = "") {
   ].filter((candidate) => candidate.url);
 }
 
+function mapSearchCandidatesForVisitTarget(target, platform = "") {
+  const name = String(target?.name || "").trim();
+  const query = String(target?.query || "").trim();
+  return mapSearchCandidates(name || query, platform);
+}
+
 function isArchived(capture) {
   return Boolean(capture.archivedAt);
 }
@@ -266,6 +272,7 @@ module.exports = {
   isDeleted,
   isRejected,
   mapSearchCandidates,
+  mapSearchCandidatesForVisitTarget,
   mapsSearchUrls,
   mergeRemoteCaptures,
   mergeSearchResults,

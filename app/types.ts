@@ -71,7 +71,7 @@ export type Capture = {
   entities?: Array<{ type: string; name: string; evidence: string; confidence: number }>;
   visitTarget?: VisitTarget | null;
   suggestedReminders?: Array<{
-    trigger_type: string;
+    trigger_type: "time";
     trigger_value: string;
     trigger_text?: string | null;
     start_date?: string | null;

@@ -278,7 +278,7 @@ Capture Review should use one `Review insight` surface for AI rationale across S
 
 When reminders are not fully implemented, use `Reminder idea: [before Saturday]` for AI proposals and `Reminder` for the user-approved editor. Do not use copy that implies notification delivery.
 
-When a Capture has a maps-searchable Visit Target, Capture Review may show `Open in Maps` actions for Google Maps and Apple Maps. Treat this as a Maps search action from persisted evidence, not a verified address, place ID, or top-level Map lens.
+When a Capture has a maps-searchable Visit Target, Capture Review may show `Open in Maps` actions for Google Maps and Apple Maps. Treat this as a Maps search action from persisted Visit Target evidence, preferring the target name for launch when present, not a verified address, place ID, or top-level Map lens.
 
 ### Collection Management
 
@@ -359,7 +359,7 @@ Search is a full-screen retrieval utility, not a chatbot default.
 - Suggested reminders are review items, not scheduled obligations.
 - Capture Review should always offer `Add reminder` when a capture can be edited, even when Capture Analysis found no Reminder idea.
 - Use review language until the user accepts: `Reminder idea`, `Add reminder`, `Choose date and time`.
-- A capture-local Confirmed Reminder should store a structured interval: start date, end date, optional start time, optional end time, timezone, date precision, time precision, and derived duration. Date ranges cover days or weeks; time ranges cover minutes or hours; if only time duration is present, start date and end date are the same.
+- A capture-local Confirmed Reminder should store a structured interval: start date, end date, optional start time, optional end time, timezone, date precision, time precision, and derived duration. Date ranges cover days or weeks; time ranges cover minutes or hours; if only time duration is present, start date and end date are the same. Location, venue, and proximity evidence belongs in Visit Targets and Maps actions, not Reminders.
 - Do not imply notification delivery until notification delivery exists.
 - Agenda is deferred until Confirmed Reminders function.
 
