@@ -1,4 +1,5 @@
 export * from "./capture-gate.ts";
+export * from "./capture-roles.ts";
 export * from "./content-evidence.ts";
 export * from "./openai-client.ts";
 export * from "./preflight.ts";

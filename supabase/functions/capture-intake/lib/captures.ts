@@ -28,6 +28,7 @@ import {
   captureGateMetadata,
   captureGateNeedsReviewAnalysis,
   contentEvidenceProfile,
+  captureRoleTraceFromCollections,
   firstCaptureAsset,
   normalizedReviewAnalysis,
   normalizedUrlEvidenceForCapture,
@@ -417,8 +418,10 @@ export async function processCapture(captureId: string, userId: string) {
       urlEvidence,
       promptCollections,
     );
+    const captureRoleTrace = captureRoleTraceFromCollections(promptCollections);
     const analysisInput: AnalysisOutput = {
       ...validateReminderIdeas(result.analysis, captureForAnalysis.created_at),
+      ...captureRoleTrace,
       content_evidence_profile: contentEvidenceProfile(
         captureForAnalysis,
         urlEvidence,

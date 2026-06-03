@@ -11,8 +11,8 @@ primary accuracy truth.
 - Exa can provide observed public evidence: URL, title, author, text excerpts,
   highlights, images, and crawl/access status.
 - Human labels are the ground truth for Sharebook-specific decisions: terminal
-  outcome, Save Intent, meaningful entities, Visit Target, Reminder idea, and
-  Collection fit.
+  outcome, Save Intent, meaningful entities, Visit Target, structured location
+  context, Reminder idea, and Collection fit.
 - Gemini labels are independent silver labels. They should guide review queue
   priority, never replace gold labels in the primary accuracy report.
 - Blocked, login-gated, stale, or weak public links remain useful samples. The
@@ -96,8 +96,9 @@ primary accuracy truth.
    is the readable companion view, and JSON remains the machine-readable queue.
    The queue includes all disagreements, low-confidence silver rows,
    blocked/login-gated rows, date/time Reminder cases, location-only false
-   Reminder risks, Collection-fit mismatches, suitability exclusions, and a
-   deterministic 15% sample of agreement rows.
+   Reminder risks, structured location disagreements, Collection-fit
+   mismatches, suitability exclusions, and a deterministic 15% sample of
+   agreement rows.
 
 7. Promote reviewed rows into
    `eval/capture-accuracy/generated/gold-labels.json`, then pass that file as
@@ -153,6 +154,10 @@ ignored by git.
 - `save_intent`: one active Save Intent, or empty when not labeled
 - `entities`: names or `{ "name": "..." }` objects expected from analysis
 - `visit_target`: expected place/search target, or `none`
+- `location_context`: optional structured location fields such as
+  `place_name`, `address`, `city`, `region`, `country`, `coordinates`,
+  `source_destination`, and coarse local-vs-travel context when the fixed
+  evidence supports it. This is scored separately from `visit_target`.
 - `reminder`: `suggested` or `none`
 - `reminder_fields`: optional exact date/time details that explain a
   `suggested` Reminder
@@ -169,6 +174,28 @@ Save Intent silver labels follow the same precedence as Precious: `learn` over
 `visit` for concrete places; `plan` for logistics or future arrangements; `buy`
 for concrete purchase targets; `cook` for food preparation; and `make` for
 created artifacts.
+
+Collection labels should require a strong subject or purpose fit, especially
+for secondary Collections. Use `Articles & Guides` when the guide, checklist,
+template, or explanatory framing is central to why the item is worth saving;
+do not add it merely because the page is article-shaped. Likewise, examples
+inside a guide should not trigger their own topical Collections unless that
+topic is the main content. For example, a vacation meal-planning guide can be
+`Travel & Trips` plus `Articles & Guides`, but it should not be `Recipes`
+unless recipe or cooking instructions are central. Product rankings, shopping
+roundups, and list-style buying guides should usually remain `Products` only
+unless they include substantial non-shopping instruction.
+Likewise, single-place restaurant reviews or menu walkthroughs should usually
+remain `Restaurants & Cafes`; add `Travel & Trips` only when the content helps
+plan a destination or trip beyond the dining place itself.
+
+Precious may expose an internal `capture_role` in eval/debug output. Treat it
+as a reranker trace for the capture's saved-value role, not as a gold label or
+user-facing taxonomy.
+
+Prompt and reranker improvement candidates live in
+`eval/capture-accuracy/prompt-pipeline-improvements.md` so repeated review
+patterns can be planned without bloating this workflow README.
 
 ## Networkless Smokes
 

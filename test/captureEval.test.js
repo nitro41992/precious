@@ -164,6 +164,11 @@ test("scoreCapturePredictions measures exact and set-based accuracy", async () =
           terminal_outcome: "ready",
           save_intent: "read",
           entities: [{ name: "Kyoto" }, { name: "Mina Park" }],
+          location_context: {
+            city: "Kyoto",
+            country: "Japan",
+            source_destination: "Kyoto"
+          },
           visit_target: "",
           reminder: "none",
           collections: ["Articles & Guides"],
@@ -179,6 +184,11 @@ test("scoreCapturePredictions measures exact and set-based accuracy", async () =
           terminal_outcome: "ready",
           save_intent: "read",
           entities: ["Kyoto"],
+          location_context: {
+            city: "Kyoto",
+            country: "Japan",
+            source_destination: "Kyoto"
+          },
           visit_target: "",
           reminder: "none",
           collections: ["Articles & Guides"],
@@ -194,6 +204,7 @@ test("scoreCapturePredictions measures exact and set-based accuracy", async () =
   assert.equal(score.overall.save_intent.accuracy, 1);
   assert.equal(score.overall.entities.precision, 0.5);
   assert.equal(score.overall.entities.recall, 1);
+  assert.equal(score.overall.location_context.exact_accuracy, 1);
   assert.equal(score.overall.collections.exact_accuracy, 1);
   assert.equal(score.failures.length, 1);
   assert.equal(score.failures[0].metric, "entities");
@@ -300,12 +311,72 @@ test("normalizeExpectedLabel preserves missing reminder and maps exact reminder 
         timezone: "America/New_York"
       },
       collections: [],
+      location_context: {
+        place_name: "",
+        address: "",
+        city: "",
+        region: "",
+        country: "",
+        coordinates: null,
+        source_destination: "",
+        is_destination_away_from_user: null,
+        travel_context_reason: ""
+      },
       title_contains: [],
       summary_contains: [],
       access_state: "",
       notes: ""
     }
   );
+});
+
+test("location context scoring is separate from visit target", async () => {
+  const { scoreCapturePredictions } = await evalLib();
+  const score = scoreCapturePredictions(
+    [
+      {
+        sample_id: "travel-guide",
+        prediction: {
+          terminal_outcome: "ready",
+          save_intent: "plan",
+          reminder: "none",
+          visit_target: "",
+          collections: ["Travel & Trips"],
+          title: "Sekigahara day trip",
+          summary: "A guide to battlefield sites and the museum.",
+          location_context: {
+            place_name: "Gifu Sekigahara Battlefield Memorial Museum",
+            city: "Sekigahara",
+            region: "Gifu",
+            country: "Japan",
+            source_destination: "Sekigahara, Gifu, Japan"
+          }
+        }
+      }
+    ],
+    [
+      {
+        sample_id: "travel-guide",
+        expected: {
+          terminal_outcome: "ready",
+          save_intent: "plan",
+          reminder: "none",
+          visit_target: "none",
+          collections: ["Travel & Trips"],
+          location_context: {
+            city: "Sekigahara",
+            region: "Gifu",
+            country: "Japan",
+            source_destination: "Sekigahara, Gifu, Japan"
+          }
+        }
+      }
+    ]
+  );
+
+  assert.equal(score.overall.visit_target.accuracy, 1);
+  assert.equal(score.overall.location_context.recall, 1);
+  assert.equal(score.overall.location_context.precision < 1, true);
 });
 
 test("geminiPreflightFailureMessage names model override", async () => {

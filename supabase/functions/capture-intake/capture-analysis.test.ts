@@ -135,6 +135,12 @@ Deno.test("analysis prompt limits reminder and visit target overlap", () => {
       prompt.includes("named visitable place"),
     "prompt should distinguish concrete Visit Targets from broad location evidence",
   );
+  assert(
+    prompt.includes("Extract location_context as internal structured evidence") &&
+      prompt.includes("is_destination_away_from_user must be null") &&
+      prompt.includes("Do not implement or imply continuous precise location tracking"),
+    "prompt should extract structured location without implying user tracking",
+  );
 });
 
 Deno.test("collection retrieval breadth uses twenty candidates and prompts eight", () => {
@@ -388,6 +394,11 @@ Deno.test("reminder schema and prompt only allow time interval suggestions", () 
     JSON.stringify(["time"]),
     "reminder trigger_type should be time-only",
   );
+  assert(
+    schema.required.includes("location_context") &&
+      schema.properties.location_context.required.includes("source_destination"),
+    "analysis schema should include structured location context",
+  );
 
   const prompt = urlEvidence.buildPrompt(
     captureFixture({
@@ -472,14 +483,58 @@ Deno.test("collection prompt is subject-first when social video content is avail
   );
   assert(
     prompt.includes(
-      "Do not match to media or entertainment Collections merely because a capture is a reel",
-    ),
-    "prompt should forbid source-format collection matches",
+      "Choose Collections based on the durable reason the user would save this capture",
+    ) &&
+      prompt.includes(
+        "source is an article, profile, directory, platform page, social post, video, or mentions a topic",
+      ),
+    "prompt should forbid source-shape collection matches",
   );
   assert(
     prompt.includes('"title": "Articles & Guides"') &&
       prompt.includes('"title": "Movies & Shows"'),
     "prompt should still inject retrieved collection values",
+  );
+  const instructionText = prompt.slice(
+    0,
+    prompt.indexOf("Reranked retrieved active collections:"),
+  );
+  assert(
+    !instructionText.includes("Articles & Guides") &&
+      !instructionText.includes("Movies & Shows"),
+    "collection instructions should not hard-code candidate Collection names",
+  );
+});
+
+Deno.test("analysis prompt includes capture role trace from reranking", () => {
+  const prompt = urlEvidence.buildPrompt(
+    captureFixture({
+      source_text:
+        "Step-by-step guide to build a tiny Expo web app with PreviewDrop.",
+    }),
+    null,
+    [
+      {
+        id: "software-id",
+        title: "Software & Apps",
+        description: "Apps and software workflows.",
+        rerank_rank: 1,
+        rerank_fit: "strong",
+        rerank_confidence: 0.92,
+        rerank_rationale: "Software workflow.",
+        rerank_capture_role: "learning_reference",
+        rerank_capture_role_confidence: 0.88,
+        rerank_capture_role_rationale:
+          "The saved value is a step-by-step guide.",
+      },
+    ] as any,
+  );
+
+  assert(
+    prompt.includes("Internal capture role signal from Collection reranking") &&
+      prompt.includes('"capture_role": "learning_reference"') &&
+      prompt.includes('"capture_role_confidence": 0.88'),
+    "prompt should pass the reranker capture role into extraction",
   );
 });
 
@@ -515,5 +570,99 @@ Deno.test("reminder validation drops stale extracted reminder ideas", () => {
   assert(
     String(analysis.review_rationale?.reminder || "").includes("stale"),
     "validator should explain why the reminder was dropped",
+  );
+});
+
+Deno.test("reminder validation drops broad directories and generic cadence advice", () => {
+  const broadDirectory = urlEvidence.validateReminderIdeas(
+    {
+      display_title: "North Carolina events directory",
+      summary: "A statewide directory with many unrelated event dates.",
+      suggested_reminders: [
+        {
+          trigger_type: "time",
+          trigger_value: "June events",
+          start_date: "2026-06-05",
+          end_date: "2026-06-28",
+          rationale: "The page lists many event dates.",
+          confidence: 0.8,
+        },
+      ],
+      review_targets: ["reminder"],
+      review_rationale: {
+        reminder: "Reminder idea: June events.",
+      },
+    },
+    "2026-06-03T12:00:00.000Z",
+  );
+  assertEqual(
+    broadDirectory.suggested_reminders.length,
+    0,
+    "broad event directories should not keep Reminder ideas",
+  );
+  assert(
+    String(broadDirectory.review_rationale?.reminder || "").includes(
+      "broad directory",
+    ),
+    "broad directory drop should be explained",
+  );
+
+  const cadenceAdvice = urlEvidence.validateReminderIdeas(
+    {
+      display_title: "How to maintain a movie watchlist",
+      summary: "Advice for keeping a watchlist tidy.",
+      suggested_reminders: [
+        {
+          trigger_type: "time",
+          trigger_value: "Review your watchlist monthly",
+          start_date: "2026-07-01",
+          end_date: "2026-07-01",
+          rationale: "The guide recommends reviewing your watchlist monthly.",
+          confidence: 0.8,
+        },
+      ],
+      review_targets: ["reminder"],
+      review_rationale: {
+        reminder: "Reminder idea: review the watchlist monthly.",
+      },
+    },
+    "2026-06-03T12:00:00.000Z",
+  );
+  assertEqual(
+    cadenceAdvice.suggested_reminders.length,
+    0,
+    "generic cadence advice should not keep Reminder ideas",
+  );
+  assert(
+    String(cadenceAdvice.review_rationale?.reminder || "").includes(
+      "generic advice",
+    ),
+    "generic cadence drop should be explained",
+  );
+});
+
+Deno.test("reminder validation preserves concrete future reminders", () => {
+  const analysis = urlEvidence.validateReminderIdeas(
+    {
+      display_title: "Sample sale",
+      summary: "Sale ends July 8.",
+      suggested_reminders: [
+        {
+          trigger_type: "time",
+          trigger_value: "Sale ends July 8",
+          start_date: "2026-07-08",
+          end_date: "2026-07-08",
+          rationale: "The sale ends July 8.",
+          confidence: 0.9,
+        },
+      ],
+      review_targets: ["reminder"],
+    },
+    "2026-06-03T12:00:00.000Z",
+  );
+  assertEqual(
+    analysis.suggested_reminders.length,
+    1,
+    "concrete future sale reminders should be preserved",
   );
 });

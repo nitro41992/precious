@@ -18,7 +18,8 @@ export const primaryScoreMetrics = [
 export const secondaryScoreMetrics = [
   "title_contains",
   "summary_contains",
-  "entities"
+  "entities",
+  "location_context"
 ];
 
 export const suitabilityValues = new Set(["core", "edge", "exclude"]);
@@ -244,6 +245,58 @@ export function uniqueStringList(value) {
     output.push(text);
   }
   return output;
+}
+
+export function normalizeLocationContext(value = {}) {
+  const input = value && typeof value === "object" && !Array.isArray(value)
+    ? value
+    : {};
+  const coordinates = input.coordinates && typeof input.coordinates === "object"
+    ? input.coordinates
+    : {};
+  const latitude = Number(coordinates.latitude);
+  const longitude = Number(coordinates.longitude);
+  const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
+  const awayValue = input.is_destination_away_from_user;
+  return {
+    place_name: String(input.place_name || "").trim(),
+    address: String(input.address || "").trim(),
+    city: String(input.city || "").trim(),
+    region: String(input.region || "").trim(),
+    country: String(input.country || "").trim(),
+    coordinates: hasCoordinates ? { latitude, longitude } : null,
+    source_destination: String(input.source_destination || "").trim(),
+    is_destination_away_from_user: typeof awayValue === "boolean" ? awayValue : null,
+    travel_context_reason: String(input.travel_context_reason || "").trim()
+  };
+}
+
+function locationContextEntries(value = {}) {
+  const normalized = normalizeLocationContext(value);
+  const entries = [];
+  for (const field of [
+    "place_name",
+    "address",
+    "city",
+    "region",
+    "country",
+    "source_destination",
+    "travel_context_reason"
+  ]) {
+    if (normalized[field]) entries.push(`${field}:${normalizeText(normalized[field])}`);
+  }
+  if (normalized.coordinates) {
+    entries.push(
+      `coordinates:${normalized.coordinates.latitude.toFixed(6)},${normalized.coordinates.longitude.toFixed(6)}`
+    );
+  }
+  if (
+    typeof normalized.is_destination_away_from_user === "boolean" &&
+    (normalized.source_destination || normalized.travel_context_reason)
+  ) {
+    entries.push(`is_destination_away_from_user:${normalized.is_destination_away_from_user}`);
+  }
+  return entries;
 }
 
 export function dedupeCandidates(candidates) {
@@ -503,6 +556,7 @@ export function labelTemplateForSample(sample) {
       reminder: "",
       reminder_fields: {},
       collections: [],
+      location_context: normalizeLocationContext(),
       title_contains: [],
       summary_contains: [],
       access_state: "",
@@ -551,8 +605,10 @@ export function predictionFromCapture(capture) {
       })).filter((entity) => entity.name)
       : [],
     visit_target: analysis.visit_target_name || analysis.visit_target_query || "",
+    location_context: normalizeLocationContext(analysis.location_context || {}),
     reminder: reminderCount > 0 ? "suggested" : "none",
     collections: collectionTitles,
+    capture_role: analysis.capture_role || "",
     title: analysis.display_title || capture?.display_title || capture?.title || "",
     summary: analysis.summary || "",
     confidence_label: analysis.confidence_label || "",
@@ -563,6 +619,9 @@ export function predictionFromCapture(capture) {
 }
 
 function isMissingLabelValue(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return locationContextEntries(value).length === 0;
+  }
   return value === undefined || value === null || value === "" ||
     (Array.isArray(value) && value.length === 0);
 }
@@ -573,6 +632,7 @@ function hasScoredLabel(expected) {
     expected.save_intent,
     expected.visit_target,
     expected.reminder,
+    expected.location_context,
     expected.title_contains,
     expected.summary_contains,
     expected.entities,
@@ -601,6 +661,22 @@ export function setStats(expectedValue, predictedValue) {
   const expected = new Set(normalizeStringList(expectedValue));
   if (!expected.size) return null;
   const predicted = new Set(normalizeStringList(predictedValue));
+  let truePositive = 0;
+  for (const value of predicted) {
+    if (expected.has(value)) truePositive += 1;
+  }
+  return {
+    tp: truePositive,
+    fp: Math.max(predicted.size - truePositive, 0),
+    fn: Math.max(expected.size - truePositive, 0),
+    exact: truePositive === expected.size && predicted.size === expected.size
+  };
+}
+
+export function locationContextStats(expectedValue, predictedValue) {
+  const expected = new Set(locationContextEntries(expectedValue));
+  if (!expected.size) return null;
+  const predicted = new Set(locationContextEntries(predictedValue));
   let truePositive = 0;
   for (const value of predicted) {
     if (expected.has(value)) truePositive += 1;
@@ -707,6 +783,7 @@ export function normalizeExpectedLabel(value = {}) {
     reminder: reminder.reminder,
     reminder_fields: reminder.fields,
     collections: Array.isArray(expected.collections) ? expected.collections : [],
+    location_context: normalizeLocationContext(expected.location_context),
     title_contains: Array.isArray(expected.title_contains) ? expected.title_contains : [],
     summary_contains: Array.isArray(expected.summary_contains) ? expected.summary_contains : [],
     access_state: String(expected.access_state || ""),
@@ -724,6 +801,10 @@ export function predictionExpectedComparisons(prediction, expected) {
     title_contains: containsMetric(normalizedExpected.title_contains, prediction.title),
     summary_contains: containsMetric(normalizedExpected.summary_contains, prediction.summary),
     entities: setStats(normalizedExpected.entities, prediction.entities),
+    location_context: locationContextStats(
+      normalizedExpected.location_context,
+      prediction.location_context
+    ),
     collections: setStats(normalizedExpected.collections, prediction.collections)
   };
 }
@@ -743,6 +824,7 @@ export function emptyScoreMetrics() {
     title_contains: emptyMetric(),
     summary_contains: emptyMetric(),
     entities: emptySetMetric(),
+    location_context: emptySetMetric(),
     collections: emptySetMetric()
   };
 }
@@ -788,6 +870,7 @@ export function scoreCapturePredictions(samples, labels) {
     ];
     const setChecks = [
       ["entities", comparisons.entities],
+      ["location_context", comparisons.location_context],
       ["collections", comparisons.collections]
     ];
 
@@ -899,6 +982,7 @@ function scoreCoverage(samples, labels) {
   const groups = {
     reminder_cases: { sample_count: 0, predicted_suggested: 0, expected_suggested: 0 },
     visit_target_cases: { sample_count: 0, predicted_present: 0, expected_present: 0 },
+    structured_location_context: { sample_count: 0, predicted_present: 0, expected_present: 0 },
     google_maps_location_links: { sample_count: 0, predicted_visit_target: 0 },
     location_only_no_reminder: { sample_count: 0, false_reminder_predictions: 0 },
     starter_collection_fit: Object.fromEntries(
@@ -925,6 +1009,7 @@ function scoreCoverage(samples, labels) {
       coverageTags.includes("google_maps_location") ||
       Boolean(sample.expected_visit_target_surface || label?.expected_visit_target_surface) ||
       !isMissingLabelValue(expected.visit_target);
+    const hasLocationContextCase = !isMissingLabelValue(expected.location_context);
 
     if (hasReminderCase) {
       groups.reminder_cases.sample_count += 1;
@@ -936,6 +1021,15 @@ function scoreCoverage(samples, labels) {
       if (!isMissingLabelValue(prediction.visit_target)) groups.visit_target_cases.predicted_present += 1;
       if (!isMissingLabelValue(expected.visit_target) && normalizeText(expected.visit_target) !== "none") {
         groups.visit_target_cases.expected_present += 1;
+      }
+    }
+    if (hasLocationContextCase) {
+      groups.structured_location_context.sample_count += 1;
+      if (!isMissingLabelValue(prediction.location_context)) {
+        groups.structured_location_context.predicted_present += 1;
+      }
+      if (!isMissingLabelValue(expected.location_context)) {
+        groups.structured_location_context.expected_present += 1;
       }
     }
     if (coverageTags.includes("google_maps_location")) {
@@ -1053,11 +1147,16 @@ function scoreSectionMarkdown(score, title) {
 
 function coverageReportMarkdown(coverage) {
   if (!coverage) return "";
+  const structuredLocation = coverage.structured_location_context || {
+    sample_count: 0,
+    predicted_present: 0
+  };
   const lines = [
     "## Coverage",
     "",
     `Reminder cases: ${coverage.reminder_cases.sample_count} (${coverage.reminder_cases.predicted_suggested} predicted suggested)`,
     `Visit Target cases: ${coverage.visit_target_cases.sample_count} (${coverage.visit_target_cases.predicted_present} predicted present)`,
+    `Structured location context: ${structuredLocation.sample_count} (${structuredLocation.predicted_present} predicted present)`,
     `Google Maps/location links: ${coverage.google_maps_location_links.sample_count} (${coverage.google_maps_location_links.predicted_visit_target} predicted Visit Targets)`,
     `Location-only no-reminder checks: ${coverage.location_only_no_reminder.sample_count} (${coverage.location_only_no_reminder.false_reminder_predictions} false Reminder predictions)`,
     "",
@@ -1135,6 +1234,7 @@ export function normalizeGeminiSilverLabel(sample, parsed, metadata = {}) {
     "visit_target",
     "reminder",
     "collections",
+    "location_context",
     "title_contains",
     "summary_contains",
     "access_state"
@@ -1167,6 +1267,7 @@ export function normalizeGeminiSilverLabel(sample, parsed, metadata = {}) {
       visit_target: uniqueStringList(parsed.evidence_snippets?.visit_target),
       reminder: uniqueStringList(parsed.evidence_snippets?.reminder),
       collections: uniqueStringList(parsed.evidence_snippets?.collections),
+      location_context: uniqueStringList(parsed.evidence_snippets?.location_context),
       access_state: uniqueStringList(parsed.evidence_snippets?.access_state)
     },
     uncertainty_flags: uniqueStringList(parsed.uncertainty_flags),

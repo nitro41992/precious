@@ -38,8 +38,8 @@ export const STARTER_COLLECTIONS = [
   },
 ] as const;
 
-export const PROMPT_VERSION = "precious-capture-analysis-v10";
-export const SCHEMA_VERSION = "precious-capture-analysis-v8";
+export const PROMPT_VERSION = "precious-capture-analysis-v11";
+export const SCHEMA_VERSION = "precious-capture-analysis-v9";
 export const PREFLIGHT_PROMPT_VERSION = "precious-capture-preflight-v1";
 export const CAPTURE_GATE_PROMPT_VERSION = "precious-capture-gate-v1";
 export const CLIENT_EVENT_RETENTION_DAYS = 90;
@@ -136,6 +136,7 @@ export const analysisSchema = {
     "summary",
     "default_intent",
     "entities",
+    "location_context",
     "visit_target_name",
     "visit_target_query",
     "visit_target_confidence",
@@ -177,6 +178,40 @@ export const analysisSchema = {
           evidence: { type: "string" },
           confidence: { type: "number" },
         },
+      },
+    },
+    location_context: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "place_name",
+        "address",
+        "city",
+        "region",
+        "country",
+        "coordinates",
+        "source_destination",
+        "is_destination_away_from_user",
+        "travel_context_reason",
+      ],
+      properties: {
+        place_name: { type: ["string", "null"] },
+        address: { type: ["string", "null"] },
+        city: { type: ["string", "null"] },
+        region: { type: ["string", "null"] },
+        country: { type: ["string", "null"] },
+        coordinates: {
+          type: ["object", "null"],
+          additionalProperties: false,
+          required: ["latitude", "longitude"],
+          properties: {
+            latitude: { type: "number" },
+            longitude: { type: "number" },
+          },
+        },
+        source_destination: { type: ["string", "null"] },
+        is_destination_away_from_user: { type: ["boolean", "null"] },
+        travel_context_reason: { type: "string" },
       },
     },
     visit_target_name: { type: ["string", "null"] },

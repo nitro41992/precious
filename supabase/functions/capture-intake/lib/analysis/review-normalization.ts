@@ -9,6 +9,7 @@ import {
   sanitizeAnalysisRationales,
 } from "./rationales.ts";
 import { normalizeVisitTargetFields } from "./visit-targets.ts";
+import { normalizedLocationContext } from "./capture-roles.ts";
 
 export function confidenceRequiresReview(value: unknown) {
   return value === "Maybe" || value === "Not sure" ||
@@ -308,6 +309,7 @@ export function normalizedReviewAnalysis(
   const normalizedAnalysis = {
     ...sanitized,
     default_intent: normalizedDefaultIntent(sanitized),
+    location_context: normalizedLocationContext(sanitized.location_context),
     suggested_reminders: normalizedTimeReminderSuggestions(
       sanitized.suggested_reminders,
     ),

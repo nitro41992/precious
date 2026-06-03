@@ -165,7 +165,20 @@ export type RetrievedCollection = {
   rerank_confidence?: number | null;
   rerank_fit?: "strong" | "possible" | "none" | null;
   rerank_rationale?: string | null;
+  rerank_capture_role?: CaptureRole | null;
+  rerank_capture_role_confidence?: number | null;
+  rerank_capture_role_rationale?: string | null;
 };
+export type CaptureRole =
+  | "shopping"
+  | "place_visit"
+  | "event_attendance"
+  | "trip_planning"
+  | "learning_reference"
+  | "visual_inspiration"
+  | "project_execution"
+  | "media_watch_or_listen"
+  | "other";
 export type ContentEvidenceProfile = {
   content_limited: boolean;
   source_fallback_allowed: boolean;

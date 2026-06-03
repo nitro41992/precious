@@ -32,12 +32,64 @@ function isStaleReminder(
   return dateOnlyMs(endDate) < dateOnlyMs(referenceDate);
 }
 
-function noReminderRationale(reviewRationale: unknown) {
+function reminderText(reminder: Record<string, unknown>) {
+  return [
+    reminder.trigger_value,
+    reminder.trigger_text,
+    reminder.rationale,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function analysisText(analysis: AnalysisOutput) {
+  const rationale = jsonObject(analysis.review_rationale);
+  return [
+    analysis.display_title,
+    analysis.summary,
+    Array.isArray(analysis.search_phrases)
+      ? analysis.search_phrases.join(" ")
+      : "",
+    rationale.intent,
+    rationale.collections,
+    rationale.reminder,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function isGenericCadenceAdvice(reminder: Record<string, unknown>) {
+  const text = reminderText(reminder);
+  if (!text) return false;
+  const cadence =
+    /\b(review|check|revisit|visit|look|come|return)\b.{0,40}\b(monthly|weekly|regularly|often|soon|periodically|from time to time)\b/i
+      .test(text) ||
+    /\b(monthly|weekly|regular)\b.{0,40}\b(review|check|revisit|visit|look|return)\b/i
+      .test(text);
+  if (!cadence) return false;
+  return !/\b(deadline|due|ends?|expires?|sale|event|concert|show|festival|workshop|class|booking|reservation|release|launch|opens?|closes?|appointment|ticket|presale)\b/i
+    .test(text);
+}
+
+function isBroadDirectoryReminder(
+  reminder: Record<string, unknown>,
+  analysis: AnalysisOutput,
+) {
+  const text = `${analysisText(analysis)} ${reminderText(reminder)}`;
+  if (!/\b(events?|dated|calendar|schedule)\b/i.test(text)) return false;
+  return /\b(directory|homepage|home page|index|feed|profile|calendar|many unrelated|multiple unrelated|statewide|state-wide|broad list|listing page)\b/i
+    .test(text);
+}
+
+function noReminderRationale(reviewRationale: unknown, reason: string) {
   const rationale = jsonObject(reviewRationale);
   return {
     ...rationale,
-    reminder:
-      "No Reminder idea was saved because the extracted timing was stale or inconsistent.",
+    reminder: `No Reminder idea was saved because ${reason}.`,
   };
 }
 
@@ -51,21 +103,37 @@ export function validateReminderIdeas(
   if (!reminders.length) return analysis;
 
   const kept = [];
+  const dropReasons = [];
   for (const reminder of reminders) {
     const normalized = normalizedTimeReminderSuggestion(reminder);
-    if (normalized && !isStaleReminder(normalized, capturedAt)) {
-      kept.push(normalized);
+    if (!normalized) {
+      dropReasons.push("the extracted timing was inconsistent");
+      continue;
     }
+    if (isStaleReminder(normalized, capturedAt)) {
+      dropReasons.push("the extracted timing was stale");
+      continue;
+    }
+    if (isBroadDirectoryReminder(normalized, analysis)) {
+      dropReasons.push("the capture is a broad directory with unrelated dates");
+      continue;
+    }
+    if (isGenericCadenceAdvice(normalized)) {
+      dropReasons.push("the timing was generic advice rather than a concrete future action");
+      continue;
+    }
+    kept.push(normalized);
   }
   if (kept.length === reminders.length) {
     return { ...analysis, suggested_reminders: kept };
   }
+  const reason = dropReasons[0] || "the extracted timing was stale or inconsistent";
   return {
     ...analysis,
     suggested_reminders: kept,
     review_rationale: kept.length
       ? analysis.review_rationale
-      : noReminderRationale(analysis.review_rationale),
+      : noReminderRationale(analysis.review_rationale, reason),
     review_targets: Array.isArray(analysis.review_targets)
       ? analysis.review_targets.filter((target) => target !== "reminder")
       : analysis.review_targets,

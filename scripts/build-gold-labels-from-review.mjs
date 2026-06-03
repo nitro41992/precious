@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import {
   normalizeExpectedLabel,
+  normalizeLocationContext,
   normalizeReminderValue,
   normalizeSuitability,
   uniqueStringList
@@ -113,6 +114,16 @@ function parseList(value) {
   return uniqueStringList(text.split(/[;,]/).map((item) => item.trim()));
 }
 
+function parseLocationContext(value) {
+  const text = cleanDraft(value);
+  if (!text || text === "none") return normalizeLocationContext();
+  try {
+    return normalizeLocationContext(JSON.parse(text));
+  } catch {
+    return normalizeLocationContext({ source_destination: text });
+  }
+}
+
 function setStringField(expected, field, value) {
   const text = cleanDraft(value);
   if (text) expected[field] = text === "blank" ? "" : text;
@@ -156,6 +167,10 @@ function applyFieldValues(row, expected) {
     const value = goldValue(row, field) || (usePrecious ? preciousFallback(row, field) : "");
     if (value) setListField(expected, field, value);
   }
+
+  const locationValue = goldValue(row, "location_context") ||
+    (usePrecious ? preciousFallback(row, "location_context") : "");
+  if (locationValue) expected.location_context = parseLocationContext(locationValue);
 
   if (row.silver_reminder_fields && !Object.keys(expected.reminder_fields || {}).length) {
     try {

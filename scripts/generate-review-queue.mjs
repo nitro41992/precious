@@ -137,6 +137,7 @@ function reviewBucket(row) {
   if (reasons.some((reason) =>
     reason.includes("reminder") ||
     reason.includes("visit_target") ||
+    reason.includes("location_context") ||
     reason === "date_time_reminder_case" ||
     reason === "location_only_false_reminder_risk"
   )) {
@@ -178,6 +179,7 @@ function reviewRowsCsv(output) {
     ["save_intent", "save_intent"],
     ["reminder", "reminder"],
     ["visit_target", "visit_target"],
+    ["location_context", "location_context"],
     ["collections", "collections"],
     ["title_contains", "title_contains"],
     ["summary_contains", "summary_contains"],
@@ -244,6 +246,7 @@ function fieldComparisonRows(row) {
     ["save_intent", "Intent"],
     ["reminder", "Reminder"],
     ["visit_target", "Visit target"],
+    ["location_context", "Location context"],
     ["collections", "Collections"],
     ["title_contains", "Title"],
     ["summary_contains", "Summary"],

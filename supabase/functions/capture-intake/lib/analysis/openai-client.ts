@@ -69,7 +69,7 @@ function buildOpenAiRequestBody(
   const requestBody: Record<string, unknown> = {
     model,
     reasoning: { effort: "low" },
-    max_output_tokens: 1900,
+    max_output_tokens: 2200,
     input: [
       {
         role: "system",

@@ -34,6 +34,10 @@ _Avoid_: Keyword, tag
 A maps-searchable candidate extracted from Capture evidence when the Capture appears to reference a real-world venue, business, restaurant, shop, park, hotel, event venue, or other place the user may want to visit. A Visit Target stores a name, search query, confidence state, evidence, and `verified_place: false` until a future resolver verifies it. It may power Google Maps or Apple Maps search links without becoming a canonical place record.
 _Avoid_: Verified location, place ID, address, map pin
 
+**Structured Location Context**:
+Internal extraction detail for explicit place and destination evidence, such as a place name, address, city, region, country, coordinates when provided, source destination framing, and coarse local-vs-travel reasoning when user context explicitly supports it. It helps eval and future travel/local Collection reasoning without becoming a verified place record, Map pin, location history, or continuous precise tracking feature.
+_Avoid_: Location tracking, verified place, GPS history
+
 **Platform Evidence**:
 Optional source-specific details preserved from the capture surface, such as creator, caption, transcript, comment text, collection name, sender, post type, or URL metadata.
 _Avoid_: Required platform metadata, full integration data
@@ -99,12 +103,16 @@ A full-screen fuzzy-memory Retrieval Lens for finding Captures by meaning, entit
 _Avoid_: Chatbot, database query builder, tag search
 
 **Searchable Extraction Detail**:
-Analysis-derived Capture data that remains persisted and available to Search, such as extracted entities, summary, Save Intent, Platform Evidence, Collection links, Reminder suggestions, source URL, and timestamps. Searchable Extraction Detail may improve retrieval without appearing as audit metadata in the Recent Captures row.
+Analysis-derived Capture data that remains persisted and available to Search, such as extracted entities, summary, Save Intent, Platform Evidence, Collection links, Reminder suggestions, Structured Location Context, source URL, and timestamps. Searchable Extraction Detail may improve retrieval without appearing as audit metadata in the Recent Captures row.
 _Avoid_: Debug metadata, visible model output, analysis report
 
 **Capture Context**:
 The surrounding signals available when a Capture is created, such as source app, share text, screenshot content, timestamp, collection name, sender, calendar context, travel context, location, or a one-tap correction.
 _Avoid_: Metadata, note
+
+**Capture Role**:
+An internal non-user-facing analysis signal for the durable reason a Capture was likely saved, such as shopping, place visit, event attendance, trip planning, learning/reference, visual inspiration, project execution, media to watch/listen to, or other. Capture Role helps Collection retrieval and reranking reason from saved value before matching dynamic user-owned Collection titles and descriptions. It is not a user-visible taxonomy and should not replace Save Intent or Collections.
+_Avoid_: User tag, Collection name, Save Intent category
 
 **Analyzer Context**:
 A bounded set of relevant prior Captures, Reminders, Collections, and preference signals made available to Capture Analysis so Sharebook can interpret the current Capture without reading the user's full history.
@@ -152,6 +160,7 @@ _Avoid_: Folder, plan
 
 **Collection Suggestion**:
 An internal AI match from a Capture to one or more existing active Collections. Collection Suggestions match the Capture's subject or purpose before source app, host, or format; source is fallback evidence only when content and context are limited. High-confidence matches may be quietly applied because they are finite and reversible. AI must not create, name, or surface new Collections, and lower-confidence matches should not become Capture Review work.
+Secondary Collection Suggestions should require a strong independent subject or purpose fit and should reason from the user's available Collection titles and descriptions rather than a fixed taxonomy. Guide-shaped Captures may also match a guide/reference Collection when the guide, checklist, template, or explanatory framing is central, but incidental examples inside a guide should not trigger their own topical Collections. Product rankings, shopping roundups, and list-style buying guides should usually remain in the user's product/shopping Collection when one exists unless they include substantial non-shopping instruction. Single-place restaurant reviews or menu walkthroughs should usually remain in the user's dining/place Collection when one exists; travel Collection fit requires destination or trip-planning value beyond the dining place itself.
 _Avoid_: Required filing, folder audit, automatic new Collection, free-form collection name
 
 **Reminder**:
@@ -160,6 +169,7 @@ _Avoid_: Notification setting, capture property
 
 **Reminder Suggestion**:
 An AI-proposed time-based resurfacing idea for a Capture. Reminder Suggestions are not Confirmed Reminders and must not notify until the user explicitly accepts or edits them.
+Reminder Suggestions require one coherent future event, deadline, sale end, reservation window, release, appointment, or bounded interval. Broad directories, feeds, profiles, calendars, or indexes with many unrelated dated items should not create a Reminder Suggestion, and generic advice such as "review monthly" or "check back often" is not a Reminder Suggestion by itself.
 _Avoid_: Automatic reminder, scheduled obligation, AI nudge
 
 **Confirmed Reminder**:

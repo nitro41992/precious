@@ -82,6 +82,26 @@ function fixtureForSample(responses, sample, index) {
 
 function geminiResponseSchema() {
   const stringArray = { type: "ARRAY", items: { type: "STRING" } };
+  const locationContext = {
+    type: "OBJECT",
+    properties: {
+      place_name: { type: "STRING" },
+      address: { type: "STRING" },
+      city: { type: "STRING" },
+      region: { type: "STRING" },
+      country: { type: "STRING" },
+      coordinates: {
+        type: "OBJECT",
+        properties: {
+          latitude: { type: "NUMBER" },
+          longitude: { type: "NUMBER" }
+        }
+      },
+      source_destination: { type: "STRING" },
+      is_destination_away_from_user: { type: "BOOLEAN" },
+      travel_context_reason: { type: "STRING" }
+    }
+  };
   const reminderFields = {
     type: "OBJECT",
     properties: {
@@ -102,6 +122,7 @@ function geminiResponseSchema() {
       "visit_target",
       "reminder",
       "collections",
+      "location_context",
       "title_contains",
       "summary_contains",
       "access_state"
@@ -125,6 +146,7 @@ function geminiResponseSchema() {
           "save_intent",
           "entities",
           "visit_target",
+          "location_context",
           "reminder",
           "reminder_fields",
           "collections",
@@ -138,6 +160,7 @@ function geminiResponseSchema() {
           save_intent: { type: "STRING" },
           entities: stringArray,
           visit_target: { type: "STRING" },
+          location_context: locationContext,
           reminder: { type: "STRING", enum: ["suggested", "none"] },
           reminder_fields: reminderFields,
           collections: stringArray,
@@ -158,6 +181,7 @@ function geminiResponseSchema() {
           save_intent: stringArray,
           entities: stringArray,
           visit_target: stringArray,
+          location_context: stringArray,
           reminder: stringArray,
           collections: stringArray,
           access_state: stringArray
@@ -224,6 +248,7 @@ export function labelPrompt(sample, collections = starterCollections) {
     "- Do not label publish dates, modified dates, generic edition dates, incidental date mentions, historical dates, stale dates, or weak promotional dates as Reminder ideas unless the date is clearly actionable.",
     "- Put exact Reminder dates/times in reminder_fields. Do not put dates, natural language times, or event names in expected.reminder.",
     "- Visit Target is a maps-searchable venue/business/place candidate; use none if no concrete named visitable place is supported. Cities, neighborhoods, regions, categories, generic location lists, and articles about places are not Visit Targets by themselves.",
+    "- location_context is scored separately from Visit Target. Fill explicit place, address, city, region, country, or destination context when the evidence supports it. Use empty strings for unknown location fields. Set is_destination_away_from_user only if user/home/current/trip context and source destination can be compared from the fixed evidence; otherwise omit or leave false with a note in travel_context_reason.",
     "- Collections are limited to the starter Collections below; include only strong fits.",
     "- Terminal outcome is ready, needs_review, failed, or rejected. Use rejected for contextless/blocked links with too little useful evidence.",
     "- access_state is public, blocked, login_gated, stale, dead, or weak_metadata.",

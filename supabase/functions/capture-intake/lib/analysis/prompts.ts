@@ -6,6 +6,10 @@ import {
   sourceFallbackEvidence,
   textWithoutUrls,
 } from "./content-evidence.ts";
+import {
+  captureRoleInstruction,
+  captureRoleTraceFromCollections,
+} from "./capture-roles.ts";
 
 export function buildPrompt(
   capture: CaptureRow,
@@ -14,6 +18,7 @@ export function buildPrompt(
 ) {
   const llmUrlEvidence = compactUrlEvidence(urlEvidence);
   const profile = contentEvidenceProfile(capture, urlEvidence);
+  const captureRoleTrace = captureRoleTraceFromCollections(retrievedCollections);
   return [
     "Infer why the user saved this item. Focus on intent, medium-term usefulness, reminders, and collection fit.",
     "Return concise structured data for a mobile quick-edit surface.",
@@ -40,13 +45,20 @@ export function buildPrompt(
     "Categorize only from explicit url_evidence fields, shared text, and image evidence. Never infer exact article, post, video, product, or media details from a weak URL path or opaque token.",
     "If url_evidence.evidence_quality is high or medium, categorize normally from content evidence. If it is low, use shared text and other content evidence first; use domain or URL path only when source_fallback_allowed is true. If status is needs_client_resolution or insufficient_url_evidence, do not infer exact content details.",
     "If URL evidence is weak and web search is available, search for the exact shared URL, canonical URL, exact title, or stable public identifier. Use only evidence that clearly matches that exact URL or identifier. Topic-level search results are not exact evidence.",
+    "Extract location_context as internal structured evidence for future local-vs-travel evaluation. Use only explicit capture evidence; do not infer from user IP, device state, private history, or external lookup.",
+    "location_context.place_name is the named place when one is central. address, city, region, country, and coordinates should be filled only when explicitly supported by provided evidence. Use null when absent.",
+    "location_context.source_destination can be a city, region, country, or destination framing from the source when it matters to the saved value, even if no single Visit Target is selected.",
+    "location_context.is_destination_away_from_user must be null unless the capture or user context explicitly provides both a user home/current/trip context and a destination that can be compared. Do not implement or imply continuous precise location tracking.",
+    "location_context.travel_context_reason should briefly explain any destination or travel/local signal, or be an empty string when none is supported.",
     "Extract visit_target_* only when the provided capture evidence references a real-world venue, business, restaurant, shop, park, hotel, event venue, or other concrete place the user could intentionally visit.",
     "For visit_target_name, prefer the venue or business name over a dish, product, creator, neighborhood, or city. For visit_target_query, include disambiguating context from the title, caption, transcript, OCR, source profile, source text, image evidence, or user note when it would help Maps search.",
     "Do not create a Visit Target for only a city, neighborhood, region, category, generic location list, or article about a place unless there is a named visitable place to search for.",
     "When service-like or locator-style evidence could describe a generic category, visible brand, product, or storefront text may disambiguate the Visit Target. Use only the provided capture evidence, never a hard-coded brand list; do not create a Visit Target from a brand or product alone.",
-    "This is a maps-searchable candidate, not verified place resolution. Never invent or return an address, latitude, longitude, phone number, hours, or place ID. verified_place must always be false.",
+    "Visit Target is a maps-searchable candidate, not verified place resolution. Never invent address, latitude, longitude, phone number, hours, or place ID for Visit Target. verified_place must always be false. Explicit address or coordinate evidence may appear only in location_context.",
     "When there is no real-world visit target, set visit_target_name and visit_target_query to null, visit_target_confidence to none, visit_target_evidence to [], and verified_place to false.",
     "Suggested reminders are time intervals only. Suggest a Reminder idea only when the evidence has an actionable future event window, deadline, booking window, sale end, user-relevant appointment, or time window.",
+    "Do not suggest a Reminder idea for a broad homepage, index, profile, directory, calendar, or feed that lists many unrelated dated items. Such pages may still have date text, but they do not provide one coherent user-relevant future action.",
+    "Do not suggest a Reminder idea from generic advice such as reviewing monthly, checking back often, visiting soon, revisiting regularly, or similar editorial cadence language unless the source also gives a concrete date, deadline, event, sale end, release, reservation window, or bounded future interval.",
     "Do not suggest a Reminder idea for publish dates, modified dates, generic edition dates, incidental date mentions, historical dates, stale dates, or weak promotional date text unless the capture evidence clearly makes that date actionable.",
     "Never create location, place, proximity, venue, or 'when near' Reminder ideas. If the evidence only names a place with no future time interval, return suggested_reminders as [] and explain that no Reminder idea was selected because no date or time was present.",
     "Place, venue, address, and maps-search evidence belongs in visit_target_* fields, not in suggested_reminders.",
@@ -66,17 +78,25 @@ export function buildPrompt(
     "If evidence gives a date range such as June 4-7, set start_date to June 4, end_date to June 7, and date_precision date_range. If evidence gives a time range such as 7-10pm without a date range, set start_time 19:00, end_time 22:00, time_precision time_range, and set start_date and end_date to the same date when a date is known.",
     "Use null when evidence does not provide that part; do not invent an exact date, time, or duration beyond mapping explicit vague phrases into their structured interval.",
     "You may choose from only the reranked retrieved active collections listed below. If one fits strongly, return an existing collection decision with its exact collection_id and title.",
-    "Collection matching is subject/purpose-first. Do not match to media or entertainment Collections merely because a capture is a reel, short, video, or social post; match only when the content itself is about that Collection subject.",
-    "Prefer specific subject/purpose Collections over broad containers. Local Activities is a fallback for local outing ideas; do not choose it over Restaurants & Cafes, Events & Tickets, Travel & Trips, Fitness & Health, Classes & Courses, Products, or Software & Apps when one of those is the clearer subject.",
-    "Use Events & Tickets for specific time-bound attendable events, ticket pages, workshops, concerts, performances, and event schedules. Do not choose Events & Tickets for regular places, museums, attractions, apps, or guides solely because they mention hours, admission, or tickets.",
-    "Use Restaurants & Cafes for named dining places, menus, restaurant lists, and maps/place links for restaurants or cafes. Use Software & Apps for app listings, SaaS, GitHub repositories, software docs, and software workflows even when the app is about another subject.",
-    "Practical advice, recommendations, explanations, and how-tos should match the Collection that describes that subject. Source format alone is never enough when content evidence is available.",
+    captureRoleInstruction(),
+    "Choose Collections based on the durable reason the user would save this capture, not merely because the source is an article, profile, directory, platform page, social post, video, or mentions a topic.",
+    "Collections are dynamic user-owned objects. Reason from retrieved Collection titles/descriptions, not a fixed starter taxonomy or hard-coded Collection names.",
+    "Match the capture role and saved value to the retrieved descriptions. Prefer the most specific strong fit and return at most 2 Collection decisions.",
+    "Select a secondary Collection only when it represents an independent saved value, not merely because the page is article-shaped or contains incidental examples.",
+    "Guide/tutorial/reference Collections can fit instructional captures when that framing is central. Do not select them merely because the source is an article or page.",
+    "Shopping/product Collections can fit product roundups, rankings, listings, stores, deals, and buy links. Do not add a guide/reference Collection when the saved value is mostly shopping.",
+    "Place/dining Collections can fit a single named place, menu, review, or place list. Trip/travel Collections need destination, itinerary, route, access, booking, or logistics value beyond one place mention.",
+    "Event/activity Collections fit specific time-bound attendable events, schedules, ticket pages, workshops, classes, performances, or coherent event series. Broad directories with unrelated events should be conservative.",
+    "Software/tool Collections fit app listings, SaaS products, developer repositories, software docs, and software workflows. Do not select them from platform/forum/domain mentions alone.",
+    "Course/class Collections require course-like evidence such as enrollment, curriculum, lesson series, workshop, training program, or class offering. A standalone tutorial, reference page, or PDF is not enough by itself.",
+    "Visual-inspiration Collections can fit aesthetic, design, style, moodboard, profile, portfolio, or creative reference value even when Save Intent is null. Project/execution Collections require steps, materials, sources, before/after evidence, or practical execution details.",
+    "Broad directories, profiles, feeds, calendars, and roundups often contain many items; prefer conservative Collection assignment unless the overall saved value strongly matches the Collection description.",
     "Never invent a collection, propose a new collection name, or return a free-form collection. If no retrieved collection is a strong fit, return an empty collection_decisions array.",
     "Use collection_decisions only for existing retrieved collections. Rerank metadata is advisory evidence, not permission to choose a weak fit. Return at most 2 decisions. Prefer no collection decision over a weak one.",
     "Always fill review_rationale with concise user-facing evidence for Capture Review. It is not chain-of-thought and must not mention models, prompts, scores, or hidden reasoning.",
     "Use app language in review_rationale: Save Intent, Collections, Reminder idea, No intent, and No collection.",
     "review_rationale.summary must be a friendly because-style sentence, not a recap of field values. Good shape: 'Looks like a workout routine, so I saved it as Do and matched PT.'",
-    "review_rationale.focus is the visible review cue, under 80 characters. It must name exactly what the user should check, such as 'Confirm Save Intent: Visit', 'Choose a Save Intent', 'Check Collections: Articles & Guides', 'Confirm Reminder idea', or 'Open link once for context'.",
+    "review_rationale.focus is the visible review cue, under 80 characters. It must name exactly what the user should check, such as 'Confirm Save Intent: Visit', 'Choose a Save Intent', 'Check Collections: <Collection title>', 'Confirm Reminder idea', or 'Open link once for context'.",
     "If needs_review is true, review_rationale.focus must point to the uncertain field or decision rather than restating the content. If default_intent.category is null, use a focus like 'Choose a Save Intent'. If nothing needs review, use a short trust cue such as 'Save Intent and Reminder idea look ready'.",
     "review_rationale.summary should summarize why the overall suggestion is useful, but keep it under 140 characters because it may be used only as fallback. review_rationale.intent, collections, and reminder should each be one concise user-facing sentence explaining that decision or non-decision.",
     "review_rationale.intent explains the Save Intent using only active intent labels or No intent, and must include a concrete evidence phrase from the capture. Never use generic wording that only says the action is supported.",
@@ -117,6 +137,9 @@ export function buildPrompt(
       2,
     ),
     "",
+    "Internal capture role signal from Collection reranking:",
+    JSON.stringify(captureRoleTrace, null, 2),
+    "",
     "Reranked retrieved active collections:",
     JSON.stringify(
       retrievedCollections.map((collection) => ({
@@ -133,6 +156,11 @@ export function buildPrompt(
           fit: collection.rerank_fit ?? null,
           confidence: collection.rerank_confidence ?? null,
           rationale: collection.rerank_rationale ?? null,
+          capture_role: collection.rerank_capture_role ?? null,
+          capture_role_confidence:
+            collection.rerank_capture_role_confidence ?? null,
+          capture_role_rationale:
+            collection.rerank_capture_role_rationale ?? null,
         },
       })),
       null,
