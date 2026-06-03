@@ -1,0 +1,80 @@
+{
+  "responses": [
+    {
+      "sample_id": "cap_66edb39731d3",
+      "parsed": {
+        "expected": {
+          "terminal_outcome": "ready",
+          "save_intent": "visit",
+          "entities": ["Neighborhood ramen spots"],
+          "visit_target": "Neighborhood ramen spots",
+          "reminder": "none",
+          "collections": ["Restaurants & Cafes"],
+          "title_contains": ["ramen"],
+          "summary_contains": ["ramen spots"],
+          "access_state": "public",
+          "notes": "Public social evidence names restaurant recommendations without future timing."
+        },
+        "confidence": {
+          "terminal_outcome": 0.8,
+          "save_intent": 0.76,
+          "entities": 0.68,
+          "visit_target": 0.62,
+          "reminder": 0.9,
+          "collections": 0.82,
+          "title_contains": 0.9,
+          "summary_contains": 0.88,
+          "access_state": 0.84
+        },
+        "evidence_snippets": {
+          "terminal_outcome": ["A public short-form video recommending ramen spots."],
+          "save_intent": ["recommending ramen spots"],
+          "entities": ["Neighborhood ramen spots"],
+          "visit_target": ["ramen spots"],
+          "reminder": ["No future date or time evidence."],
+          "collections": ["restaurants"],
+          "access_state": ["status success"]
+        },
+        "uncertainty_flags": ["specific venue name is weak"]
+      }
+    },
+    {
+      "sample_id": "cap_00570044ea79",
+      "parsed": {
+        "expected": {
+          "terminal_outcome": "ready",
+          "save_intent": "plan",
+          "entities": ["Weekend trip checklist"],
+          "visit_target": "none",
+          "reminder": "none",
+          "collections": ["Articles & Guides"],
+          "title_contains": ["Weekend trip"],
+          "summary_contains": ["trip-planning"],
+          "access_state": "public",
+          "notes": "Guide evidence supports planning but no explicit future trigger."
+        },
+        "confidence": {
+          "terminal_outcome": 0.86,
+          "save_intent": 0.78,
+          "entities": 0.78,
+          "visit_target": 0.88,
+          "reminder": 0.88,
+          "collections": 0.91,
+          "title_contains": 0.92,
+          "summary_contains": 0.8,
+          "access_state": 0.9
+        },
+        "evidence_snippets": {
+          "terminal_outcome": ["A guide with practical trip-planning steps."],
+          "save_intent": ["trip-planning steps"],
+          "entities": ["Weekend trip checklist"],
+          "visit_target": ["No concrete maps-searchable place."],
+          "reminder": ["No future date or time evidence."],
+          "collections": ["guide"],
+          "access_state": ["status success"]
+        },
+        "uncertainty_flags": []
+      }
+    }
+  ]
+}

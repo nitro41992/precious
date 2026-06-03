@@ -1,0 +1,386 @@
+{
+  "version": 1,
+  "target_samples": 300,
+  "public_samples": 240,
+  "private_real_capture_samples": 60,
+  "random_seed": "capture-accuracy-v1-300",
+  "coverage_quotas": {
+    "has_date_time": 50,
+    "location_only": 25,
+    "google_maps_location": 15,
+    "starter_collection_fit": {
+      "Recipes": 10,
+      "Movies & Shows": 10,
+      "Restaurants & Cafes": 10,
+      "Products": 10,
+      "Articles & Guides": 10,
+      "Events & Tickets": 10,
+      "Travel & Trips": 10,
+      "Fitness & Health": 10,
+      "Home & DIY": 10,
+      "Books & Reading": 10,
+      "Music & Podcasts": 10,
+      "Software & Apps": 10,
+      "Design Inspiration": 10,
+      "Work & Career": 10,
+      "Personal Finance": 10,
+      "Parenting & Family": 10,
+      "Beauty & Skincare": 10,
+      "Local Activities": 10,
+      "Gift Ideas": 10,
+      "Classes & Courses": 10
+    },
+    "ambiguous_negative": 20
+  },
+  "starter_collections": [
+    {
+      "title": "Recipes",
+      "description": "Dishes, cooking ideas, restaurant-inspired meals, grocery notes, and kitchen tips you may want to find again."
+    },
+    {
+      "title": "Movies & Shows",
+      "description": "Films, series, trailers, reviews, and recommendations about movies, shows, performers, and media titles."
+    },
+    {
+      "title": "Restaurants & Cafes",
+      "description": "Named restaurants, cafes, bars, bakeries, dining maps/place links, menus, reviews, and food-place lists. Prefer this over Local Activities for concrete places to eat or drink."
+    },
+    {
+      "title": "Products",
+      "description": "Clothing, gifts, gear, home items, tools, and comparisons you are considering or want to revisit."
+    },
+    {
+      "title": "Articles & Guides",
+      "description": "Long reads, how-tos, explainers, reference pages, and practical guides saved for later use."
+    },
+    {
+      "title": "Events & Tickets",
+      "description": "Specific time-bound events, concerts, workshops, performances, ticket pages, event schedules, venues for an event, and attendable activities. Not for regular places or attractions merely because hours or admission are mentioned."
+    },
+    {
+      "title": "Travel & Trips",
+      "description": "Trip planning, destinations, hotels, itineraries, travel logistics, attractions, city guides, and saved ideas for future travel."
+    },
+    {
+      "title": "Fitness & Health",
+      "description": "Workouts, wellness routines, physical therapy, health advice, medical admin, classes, recovery, and fitness gear or habits."
+    },
+    {
+      "title": "Home & DIY",
+      "description": "Home projects, repairs, decor, cleaning, gardening, organization, crafts, tools, and do-it-yourself build instructions."
+    },
+    {
+      "title": "Books & Reading",
+      "description": "Books, authors, reading lists, literary recommendations, articles about books, bookstores, and things to read later."
+    },
+    {
+      "title": "Music & Podcasts",
+      "description": "Songs, albums, artists, playlists, concerts as media interest, podcast episodes, audio shows, and listening recommendations."
+    },
+    {
+      "title": "Software & Apps",
+      "description": "Apps, app-store listings, SaaS products, software tools, developer libraries, GitHub repositories, technical docs, and software workflows, even when the app is about restaurants, media, travel, or shopping."
+    },
+    {
+      "title": "Design Inspiration",
+      "description": "Visual references, UI patterns, interiors, fashion looks, brand systems, creative direction, and aesthetic examples to revisit."
+    },
+    {
+      "title": "Work & Career",
+      "description": "Professional development, job search, management, business operations, productivity, workplace skills, and career planning."
+    },
+    {
+      "title": "Personal Finance",
+      "description": "Budgeting, taxes, investing, insurance, banking, deals with financial decisions, subscriptions, and money administration."
+    },
+    {
+      "title": "Parenting & Family",
+      "description": "Childcare, school, family logistics, activities for kids, parenting advice, family purchases, and household coordination."
+    },
+    {
+      "title": "Beauty & Skincare",
+      "description": "Skincare routines, cosmetics, haircare, beauty products, dermatology tips, grooming advice, and product recommendations."
+    },
+    {
+      "title": "Local Activities",
+      "description": "Nearby non-dining, non-ticketed things to do such as museums, parks, pop-ups, seasonal outings, and neighborhood ideas. Prefer more specific Collections for restaurants, events, travel, fitness, courses, products, or apps."
+    },
+    {
+      "title": "Gift Ideas",
+      "description": "Potential gifts, wishlists, presents for specific people, holiday shopping ideas, and thoughtful items to consider later."
+    },
+    {
+      "title": "Classes & Courses",
+      "description": "Courses, workshops, tutorials, lessons, training programs, educational events, and skill-building opportunities to enroll in."
+    }
+  ],
+  "query_defaults": {
+    "type": "auto",
+    "numResults": 25,
+    "userLocation": "US",
+    "moderation": true,
+    "contents": {
+      "highlights": true,
+      "maxAgeHours": 168,
+      "livecrawlTimeout": 12000,
+      "extras": {
+        "imageLinks": 3
+      }
+    }
+  },
+  "strata": [
+    {
+      "id": "social_video_posts",
+      "label": "Social video posts",
+      "quota": 36,
+      "queries": [
+        {
+          "id": "social-video-food-travel",
+          "query": "public short-form social video posts about restaurants travel tips recipes workouts products or events",
+          "coverage_tags": ["has_date_time", "location_only"],
+          "expected_collections": ["Recipes", "Restaurants & Cafes", "Products", "Fitness & Health", "Events & Tickets", "Local Activities"],
+          "expected_reminder_surface": "when the post includes a concrete future event date or deadline",
+          "expected_visit_target_surface": "when the post names a concrete venue, restaurant, shop, park, hotel, or event location",
+          "includeDomains": ["tiktok.com", "instagram.com", "youtube.com", "youtu.be"]
+        },
+        {
+          "id": "social-video-howto",
+          "query": "public reels shorts or TikTok videos with practical how-to advice worth saving for later",
+          "coverage_tags": [],
+          "expected_collections": ["Recipes", "Products", "Articles & Guides", "Fitness & Health", "Beauty & Skincare", "Home & DIY"],
+          "includeDomains": ["tiktok.com", "instagram.com", "youtube.com", "youtu.be"]
+        },
+        {
+          "id": "social-video-local-places",
+          "query": "public social video posts recommending specific cafes shops venues or places to visit",
+          "coverage_tags": ["location_only"],
+          "expected_collections": ["Restaurants & Cafes", "Products", "Local Activities", "Travel & Trips"],
+          "expected_visit_target_surface": "specific visitable place recommendation",
+          "includeDomains": ["tiktok.com", "instagram.com", "youtube.com", "youtu.be"]
+        }
+      ]
+    },
+    {
+      "id": "social_image_posts",
+      "label": "Social image and pin posts",
+      "quota": 18,
+      "queries": [
+        {
+          "id": "image-post-design-products",
+          "query": "public Instagram posts or Pinterest pins about products outfits interiors gifts or visual inspiration",
+          "coverage_tags": [],
+          "expected_collections": ["Products", "Design Inspiration", "Gift Ideas", "Home & DIY"],
+          "includeDomains": ["instagram.com", "pinterest.com"]
+        },
+        {
+          "id": "image-post-food-travel",
+          "query": "public social image posts or pins about recipes restaurants travel itineraries or places to save",
+          "coverage_tags": ["location_only"],
+          "expected_collections": ["Recipes", "Restaurants & Cafes", "Travel & Trips", "Design Inspiration"],
+          "expected_visit_target_surface": "when the post names a concrete restaurant, cafe, hotel, venue, or destination",
+          "includeDomains": ["instagram.com", "pinterest.com"]
+        }
+      ]
+    },
+    {
+      "id": "forums_communities",
+      "label": "Forums and communities",
+      "quota": 30,
+      "queries": [
+        {
+          "id": "reddit-advice-threads",
+          "query": "Reddit discussion threads with recommendations advice trip planning gear products restaurants recipes or learning resources",
+          "coverage_tags": ["ambiguous_negative"],
+          "expected_collections": ["Products", "Restaurants & Cafes", "Recipes", "Articles & Guides", "Travel & Trips", "Personal Finance", "Parenting & Family"],
+          "includeDomains": ["reddit.com"]
+        },
+        {
+          "id": "community-technical-help",
+          "query": "community forum questions and answers that someone might save as a reference for a project",
+          "coverage_tags": [],
+          "expected_collections": ["Articles & Guides", "Software & Apps", "Work & Career"],
+          "includeDomains": ["stackoverflow.com", "superuser.com", "serverfault.com", "news.ycombinator.com"]
+        },
+        {
+          "id": "community-hobby-recommendations",
+          "query": "forum threads with hobby recommendations buying advice travel suggestions cooking tips or local ideas",
+          "coverage_tags": ["ambiguous_negative", "location_only"],
+          "expected_collections": ["Products", "Recipes", "Restaurants & Cafes", "Articles & Guides", "Home & DIY", "Fitness & Health", "Local Activities"],
+          "expected_visit_target_surface": "when the thread recommends a concrete real-world place"
+        }
+      ]
+    },
+    {
+      "id": "articles_guides",
+      "label": "Articles and guides",
+      "quota": 34,
+      "queries": [
+        {
+          "id": "practical-guides",
+          "query": "practical guides explainers how-to articles checklists and tutorials worth saving for later",
+          "coverage_tags": [],
+          "expected_collections": ["Articles & Guides", "Classes & Courses", "Work & Career"]
+        },
+        {
+          "id": "consumer-life-guides",
+          "query": "consumer articles about travel planning food home health finance parenting shopping or personal projects",
+          "coverage_tags": ["has_date_time"],
+          "expected_collections": ["Articles & Guides", "Products", "Recipes", "Travel & Trips", "Home & DIY", "Fitness & Health", "Personal Finance", "Parenting & Family"],
+          "expected_reminder_surface": "when the guide includes a future deadline, schedule, or time window"
+        },
+        {
+          "id": "reference-docs",
+          "query": "reference documentation pages tutorials or implementation guides for software product or creative projects",
+          "coverage_tags": [],
+          "expected_collections": ["Articles & Guides", "Software & Apps", "Design Inspiration", "Classes & Courses"]
+        }
+      ]
+    },
+    {
+      "id": "products_shopping",
+      "label": "Products and shopping",
+      "quota": 30,
+      "queries": [
+        {
+          "id": "product-pages-gifts-gear",
+          "query": "product pages for gifts gear home items clothing tools electronics or products someone might compare later",
+          "coverage_tags": [],
+          "expected_collections": ["Products", "Gift Ideas", "Home & DIY", "Beauty & Skincare"],
+          "includeDomains": ["amazon.com", "target.com", "bestbuy.com", "rei.com", "etsy.com", "wayfair.com"]
+        },
+        {
+          "id": "product-reviews-comparisons",
+          "query": "product reviews comparisons buying guides and recommendation pages for consumer purchases",
+          "coverage_tags": [],
+          "expected_collections": ["Products", "Articles & Guides", "Software & Apps", "Beauty & Skincare"]
+        },
+        {
+          "id": "independent-product-pages",
+          "query": "independent brand product pages for bags shoes kitchen gear furniture clothing or travel accessories",
+          "coverage_tags": [],
+          "expected_collections": ["Products", "Gift Ideas", "Travel & Trips", "Home & DIY"]
+        }
+      ]
+    },
+    {
+      "id": "places_events_travel",
+      "label": "Places, events, and travel",
+      "quota": 28,
+      "queries": [
+        {
+          "id": "specific-places-to-visit",
+          "query": "specific restaurants cafes museums parks hotels shops or venues someone might save to visit",
+          "coverage_tags": ["location_only"],
+          "expected_collections": ["Restaurants & Cafes", "Products", "Local Activities", "Travel & Trips"],
+          "expected_visit_target_surface": "specific maps-searchable venue, business, restaurant, shop, park, hotel, or event venue"
+        },
+        {
+          "id": "event-pages",
+          "query": "event pages concerts workshops festivals talks exhibits markets or activities with dates and locations",
+          "coverage_tags": ["has_date_time", "location_only"],
+          "expected_collections": ["Events & Tickets", "Local Activities", "Classes & Courses", "Music & Podcasts"],
+          "expected_reminder_surface": "event date, deadline, or time window",
+          "expected_visit_target_surface": "event venue or location"
+        },
+        {
+          "id": "travel-itineraries",
+          "query": "travel itinerary pages neighborhood guides city guides and destination lists with concrete places",
+          "coverage_tags": ["location_only"],
+          "expected_collections": ["Travel & Trips", "Restaurants & Cafes", "Local Activities", "Articles & Guides"],
+          "expected_visit_target_surface": "named place inside itinerary or destination list"
+        }
+      ]
+    },
+    {
+      "id": "recipes_food",
+      "label": "Recipes and food",
+      "quota": 20,
+      "queries": [
+        {
+          "id": "recipe-pages",
+          "query": "recipe pages with ingredients cooking instructions meal ideas desserts weeknight dinners or baking projects",
+          "coverage_tags": [],
+          "expected_collections": ["Recipes"]
+        },
+        {
+          "id": "restaurant-food-lists",
+          "query": "restaurant lists food guides menu pages or dining recommendations someone might save for later",
+          "coverage_tags": ["location_only"],
+          "expected_collections": ["Restaurants & Cafes", "Recipes", "Travel & Trips"],
+          "expected_visit_target_surface": "named restaurant, cafe, market, or food venue"
+        }
+      ]
+    },
+    {
+      "id": "media_entertainment",
+      "label": "Media and entertainment",
+      "quota": 18,
+      "queries": [
+        {
+          "id": "movie-show-recommendations",
+          "query": "movie show documentary podcast book or music recommendations reviews trailers and watch-later pages",
+          "coverage_tags": [],
+          "expected_collections": ["Movies & Shows", "Books & Reading", "Music & Podcasts"]
+        },
+        {
+          "id": "streaming-media-pages",
+          "query": "official streaming video music podcast book or creator pages someone may want to revisit",
+          "coverage_tags": [],
+          "expected_collections": ["Movies & Shows", "Music & Podcasts", "Books & Reading"]
+        }
+      ]
+    },
+    {
+      "id": "local_services_menus_pdfs",
+      "label": "Local services, menus, and PDFs",
+      "quota": 14,
+      "queries": [
+        {
+          "id": "menus-pdfs",
+          "query": "restaurant menu PDF event brochure schedule price list or local service document",
+          "coverage_tags": ["has_date_time", "location_only"],
+          "expected_collections": ["Restaurants & Cafes", "Articles & Guides", "Events & Tickets", "Classes & Courses"],
+          "expected_reminder_surface": "when the document includes a concrete event date, booking date, or schedule",
+          "expected_visit_target_surface": "named local venue, restaurant, cafe, class, or service location"
+        },
+        {
+          "id": "local-service-pages",
+          "query": "local service pages classes appointments workshops schedules policies or booking information",
+          "coverage_tags": ["has_date_time", "location_only"],
+          "expected_collections": ["Articles & Guides", "Products", "Classes & Courses", "Fitness & Health", "Work & Career"],
+          "expected_reminder_surface": "class, appointment, workshop, booking, deadline, or schedule",
+          "expected_visit_target_surface": "named service location or venue"
+        }
+      ]
+    },
+    {
+      "id": "opaque_short_edge_cases",
+      "label": "Opaque, short, and edge-case links",
+      "quota": 12,
+      "queries": [
+        {
+          "id": "short-links",
+          "query": "public shortened URLs and share links that redirect to articles videos products or events",
+          "coverage_tags": ["ambiguous_negative", "google_maps_location"],
+          "expected_collections": ["Articles & Guides", "Products", "Software & Apps", "Events & Tickets"],
+          "expected_visit_target_surface": "only when the resolved URL is a maps-searchable place",
+          "includeDomains": ["bit.ly", "t.co", "lnkd.in", "youtu.be", "maps.app.goo.gl"]
+        },
+        {
+          "id": "google-maps-share-links",
+          "query": "Google Maps share links for restaurants cafes shops parks hotels venues or places someone might save to visit",
+          "coverage_tags": ["google_maps_location", "location_only"],
+          "expected_collections": ["Restaurants & Cafes", "Products", "Local Activities", "Travel & Trips"],
+          "expected_visit_target_surface": "Google Maps or maps.app.goo.gl place link",
+          "includeDomains": ["maps.app.goo.gl", "google.com", "maps.google.com"]
+        },
+        {
+          "id": "access-limited-public-links",
+          "query": "public links that may have weak metadata login gates app share URLs or limited public previews",
+          "coverage_tags": ["ambiguous_negative"],
+          "expected_collections": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "responses": [
+    {
+      "stratum": "social_video_posts",
+      "query_id": "social-video-food-travel",
+      "response": {
+        "results": [
+          {
+            "id": "https://www.tiktok.com/@example/video/1234567890",
+            "url": "https://www.tiktok.com/@example/video/1234567890",
+            "title": "Neighborhood ramen spots to save",
+            "author": "Example Creator",
+            "highlights": ["A public short-form video recommending ramen spots."]
+          }
+        ],
+        "statuses": [
+          {
+            "id": "https://www.tiktok.com/@example/video/1234567890",
+            "status": "success"
+          }
+        ]
+      }
+    },
+    {
+      "stratum": "articles_guides",
+      "query_id": "practical-guides",
+      "response": {
+        "results": [
+          {
+            "id": "https://example.com/guides/weekend-trip",
+            "url": "https://example.com/guides/weekend-trip",
+            "title": "Weekend trip checklist",
+            "author": "Mina Park",
+            "highlights": ["A guide with practical trip-planning steps."]
+          }
+        ],
+        "statuses": [
+          {
+            "id": "https://example.com/guides/weekend-trip",
+            "status": "success"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -2,55 +2,55 @@
   {
     "key": "watch",
     "label": "Watch",
-    "llm_description": "Use when the saved item is primarily video, a stream, a show, a film, a talk, or another media item the user likely wants to watch.",
+    "llm_description": "Use when the saved item is primarily video, a stream, a show, a film, a talk, a documentary, or another media item the user likely wants to watch. If a video is mainly instructional and the medium is incidental, use Learn instead.",
     "active": true
   },
   {
     "key": "read",
     "label": "Read",
-    "llm_description": "Use when the saved item is primarily an article, post, document, newsletter, thread, book, or other text the user likely wants to read.",
+    "llm_description": "Use when the saved item is primarily an article, post, document, newsletter, thread, book, or other text the user likely wants to read or consume. If the clear purpose is learning a topic, skill, method, tutorial, explainer, or playbook, use Learn instead.",
     "active": true
   },
   {
     "key": "visit",
     "label": "Visit",
-    "llm_description": "Use when the saved item is a place, venue, restaurant, shop, destination, or location the user likely wants to physically visit.",
+    "llm_description": "Use when the saved item is primarily a concrete place, venue, restaurant, shop, destination, or location the user likely wants to physically visit. Do not use merely because an event, class, show, workout, or activity has a venue; use Do for the activity or Plan for logistics.",
     "active": true
   },
   {
     "key": "buy",
     "label": "Buy",
-    "llm_description": "Use when the saved item is a product, listing, deal, store page, or purchasing option the user likely wants to buy or consider buying.",
+    "llm_description": "Use when the saved item is a product, listing, deal, store page, or purchasing option the user likely wants to buy or consider buying. For reviews, comparisons, and buying guides, use Read or Learn unless one concrete purchase target dominates.",
     "active": true
   },
   {
     "key": "cook",
     "label": "Cook",
-    "llm_description": "Use when the saved item is a recipe, meal idea, cooking technique, grocery prep, or other food preparation the user likely wants to cook.",
+    "llm_description": "Use when the saved item is a recipe, meal idea, cooking technique, grocery prep, or other food preparation the user likely wants to cook. Use Visit for restaurants or cafes, and Learn only for food education where making the food is not the main action.",
     "active": true
   },
   {
     "key": "make",
     "label": "Make",
-    "llm_description": "Use when the saved item is a DIY project, craft, build guide, code pattern, or other created output. Do not use for recipes, workouts, stretches, routines, or physical therapy.",
+    "llm_description": "Use when the saved item is a DIY project, craft, build guide, code pattern, template, design, or other artifact the user likely wants to create. Do not use for recipes, workouts, stretches, routines, physical therapy, or pure conceptual learning.",
     "active": true
   },
   {
     "key": "do",
     "label": "Do",
-    "llm_description": "Use when the saved item is something the user likely wants to perform, including physical therapy, workouts, stretches, routines, practices, meditations, exercises, or drills.",
+    "llm_description": "Use when the saved item is something the user likely wants to perform, including physical therapy, workouts, stretches, routines, practices, meditations, exercises, drills, classes, concerts, workshops, performances, shows, or scheduled activities.",
     "active": true
   },
   {
     "key": "plan",
     "label": "Plan",
-    "llm_description": "Use when the saved item supports planning a trip, event, appointment, itinerary, booking, schedule, logistics, renewal, or admin follow-through.",
+    "llm_description": "Use when the saved item supports planning a trip, event, appointment, itinerary, booking, schedule, logistics, renewal, checklist, or admin follow-through. Do not use for generic text unless it clearly supports a future arrangement or decision.",
     "active": true
   },
   {
     "key": "learn",
     "label": "Learn",
-    "llm_description": "Use when the saved item is explanatory or educational material where understanding a topic, method, concept, or skill is the clear reason for saving.",
+    "llm_description": "Use when the saved item is explanatory or educational material where understanding a topic, method, concept, tutorial, playbook, or skill is the clear reason for saving. Learn takes precedence over Read when the text is mainly instructional or conceptual.",
     "active": true
   },
   {

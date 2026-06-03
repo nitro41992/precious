@@ -38,7 +38,7 @@ export const STARTER_COLLECTIONS = [
   },
 ] as const;
 
-export const PROMPT_VERSION = "precious-capture-analysis-v9";
+export const PROMPT_VERSION = "precious-capture-analysis-v10";
 export const SCHEMA_VERSION = "precious-capture-analysis-v8";
 export const PREFLIGHT_PROMPT_VERSION = "precious-capture-preflight-v1";
 export const CAPTURE_GATE_PROMPT_VERSION = "precious-capture-gate-v1";

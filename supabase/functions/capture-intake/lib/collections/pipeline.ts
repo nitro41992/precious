@@ -15,6 +15,7 @@ export {
 } from "./links.ts";
 export * from "./responses.ts";
 export * from "./retrieval.ts";
+export * from "./rerank.ts";
 export {
   acceptPendingCollectionDecisions,
   applyCollectionReviewDecisions,

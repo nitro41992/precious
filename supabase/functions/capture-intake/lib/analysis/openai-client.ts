@@ -11,10 +11,60 @@ export async function runOpenAi(
 ) {
   const started = Date.now();
   const model = Deno.env.get("OPENAI_MODEL") || "gpt-5-mini";
+  const imageUrls = visualInputImageUrls(capture, urlEvidence);
+  let requestBody = buildOpenAiRequestBody(
+    model,
+    capture,
+    urlEvidence,
+    retrievedCollections,
+    imageUrls,
+  );
+  let raw = await requestOpenAiAnalysis(requestBody);
+  let visualRetry: Record<string, unknown> | null = null;
+  if (!raw.ok && imageUrls.length && isVisualDownloadFailure(raw.body)) {
+    visualRetry = {
+      omitted_image_count: imageUrls.length,
+      error: openAiErrorMessage(raw.body, raw.status),
+    };
+    requestBody = buildOpenAiRequestBody(
+      model,
+      capture,
+      urlEvidence,
+      retrievedCollections,
+      [],
+    );
+    raw = await requestOpenAiAnalysis(requestBody);
+  }
+  if (!raw.ok) {
+    throw new Error(openAiErrorMessage(raw.body, raw.status));
+  }
+  const text = responseText(raw.body);
+  if (!text) throw new Error("OpenAI response did not include output text");
+  return {
+    analysis: JSON.parse(text),
+    model,
+    raw: raw.body,
+    requestBody,
+    latencyMs: Date.now() - started,
+    usage: raw.body.usage ?? {},
+    urlEvidence,
+    retrievedCollections,
+    visualRetry,
+  };
+}
+
+function buildOpenAiRequestBody(
+  model: string,
+  capture: CaptureRow,
+  urlEvidence: UrlEvidence | null,
+  retrievedCollections: RetrievedCollection[],
+  imageUrls: string[],
+) {
   const userContent = buildOpenAiUserContent(
     capture,
     urlEvidence,
     retrievedCollections,
+    imageUrls,
   );
   const requestBody: Record<string, unknown> = {
     model,
@@ -42,6 +92,10 @@ export async function runOpenAi(
     requestBody.tool_choice = "required";
     requestBody.include = ["web_search_call.action.sources"];
   }
+  return requestBody;
+}
+
+async function requestOpenAiAnalysis(requestBody: Record<string, unknown>) {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -50,30 +104,30 @@ export async function runOpenAi(
     },
     body: JSON.stringify(requestBody),
   });
-  const raw = await response.json();
-  if (!response.ok) {
-    throw new Error(
-      raw.error?.message || `OpenAI failed with ${response.status}`,
-    );
-  }
-  const text = responseText(raw);
-  if (!text) throw new Error("OpenAI response did not include output text");
   return {
-    analysis: JSON.parse(text),
-    model,
-    raw,
-    requestBody,
-    latencyMs: Date.now() - started,
-    usage: raw.usage ?? {},
-    urlEvidence,
-    retrievedCollections,
+    ok: response.ok,
+    status: response.status,
+    body: await response.json(),
   };
+}
+
+function openAiErrorMessage(raw: Record<string, unknown>, status: number) {
+  const error = raw.error && typeof raw.error === "object"
+    ? raw.error as Record<string, unknown>
+    : {};
+  return String(error.message || `OpenAI failed with ${status}`);
+}
+
+function isVisualDownloadFailure(raw: Record<string, unknown>) {
+  const message = openAiErrorMessage(raw, 0);
+  return /download(ing)? file|upstream status code|image_url/i.test(message);
 }
 
 export function buildOpenAiUserContent(
   capture: CaptureRow,
   urlEvidence: UrlEvidence | null,
   retrievedCollections: RetrievedCollection[],
+  imageUrls = visualInputImageUrls(capture, urlEvidence),
 ) {
   const userContent: Array<Record<string, unknown>> = [
     {
@@ -81,7 +135,7 @@ export function buildOpenAiUserContent(
       text: buildPrompt(capture, urlEvidence, retrievedCollections),
     },
   ];
-  for (const imageUrl of visualInputImageUrls(capture, urlEvidence)) {
+  for (const imageUrl of imageUrls) {
     userContent.push({ type: "input_image", image_url: imageUrl });
   }
   return userContent;

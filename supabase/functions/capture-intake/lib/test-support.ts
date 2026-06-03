@@ -36,8 +36,12 @@ import {
   shouldRunPreflight,
   shouldRejectContextlessLinkCapture,
   shouldUseLinkOnlyUrlEvidenceFallback,
+  validateReminderIdeas,
 } from "./analysis.ts";
 import {
+  COLLECTION_PROMPT_CANDIDATE_COUNT,
+  COLLECTION_RETRIEVAL_MATCH_COUNT,
+  promptCollectionsForAnalysis,
   shouldSeedStarterCollections,
   starterCollectionRows,
 } from "./collections.ts";
@@ -54,10 +58,12 @@ export const __urlEvidenceTest = {
   buildPrompt,
   captureGateMetadata,
   captureGateNeedsReviewAnalysis,
+  COLLECTION_RETRIEVAL_MATCH_COUNT,
   confirmedReminderFromInput,
   contentEvidenceProfile,
   captureGatePrompt,
   compactUrlEvidence,
+  COLLECTION_PROMPT_CANDIDATE_COUNT,
   evidenceQuality,
   evidenceSources,
   fetchExtractusOembedEvidence,
@@ -69,6 +75,7 @@ export const __urlEvidenceTest = {
   oembedMetadata,
   parseHtmlEvidence,
   platformForUrl,
+  promptCollectionsForAnalysis,
   productEvidenceStatus,
   resolveReviewTargets,
   reviewTargetsForAnalysis,
@@ -83,5 +90,6 @@ export const __urlEvidenceTest = {
   starterCollectionRows,
   starterCollections: STARTER_COLLECTIONS,
   tier1CanonicalCandidates,
+  validateReminderIdeas,
   weaknessReasons,
 };

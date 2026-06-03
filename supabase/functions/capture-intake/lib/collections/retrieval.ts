@@ -16,6 +16,9 @@ import type {
 } from "../types.ts";
 import { createEmbedding, embeddingLiteral } from "./embeddings.ts";
 
+export const COLLECTION_RETRIEVAL_MATCH_COUNT = 20;
+export const COLLECTION_PROMPT_CANDIDATE_COUNT = 8;
+
 export function retrievalQueryForCapture(
   capture: CaptureRow,
   urlEvidence: UrlEvidence | null,
@@ -60,7 +63,7 @@ export async function retrieveCollectionsForCapture(
     p_user_id: userId,
     p_query_text: queryText,
     p_query_embedding: embeddingLiteral(embedding),
-    p_match_count: 3,
+    p_match_count: COLLECTION_RETRIEVAL_MATCH_COUNT,
   });
   if (error) throw error;
   return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
@@ -80,5 +83,5 @@ export async function retrieveCollectionsForCapture(
       ? row.semantic_score
       : null,
     rrf_score: typeof row.rrf_score === "number" ? row.rrf_score : null,
-  })).slice(0, 3);
+  })).slice(0, COLLECTION_RETRIEVAL_MATCH_COUNT);
 }

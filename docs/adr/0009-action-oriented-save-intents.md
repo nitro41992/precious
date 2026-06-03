@@ -18,6 +18,14 @@ Save Intent is now an optional action signal. Active Intent Categories are limit
 
 When Capture Analysis cannot infer one of those concrete actions, it leaves intent blank and marks the Capture for review. Blank intent is valid after user review; it should not be replaced with a broad fallback such as `remember` or `reference`.
 
+Ambiguous captures use stable precedence rules:
+
+- `learn` wins over `read` for how-tos, tutorials, explainers, playbooks, concepts, methods, and skill-building material. `read` is for text where the main action is consuming the document.
+- `do` wins over `visit` for scheduled activities, classes, concerts, workshops, performances, shows, workouts, routines, practices, and drills. `visit` is for a concrete place, business, venue, restaurant, shop, or destination.
+- `plan` is for logistics, itineraries, bookings, schedules, checklists, renewals, trip or event planning, and admin follow-through.
+- `buy` is for product, listing, store, deal, and purchase-option pages. Reviews, comparisons, and buying guides use `read` or `learn` unless one concrete purchase target dominates.
+- `cook` is for recipes and food preparation. `make` creates an artifact, `do` performs an activity, and `learn` understands a method or concept.
+
 Legacy broad intents may remain in stored data for compatibility, but they are inactive and should not appear as selectable user-facing chips.
 
 ## Consequences

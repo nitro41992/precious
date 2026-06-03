@@ -16,6 +16,8 @@ _Avoid_: Source, category
 An optional action signal for what the saved thing clearly supports, such as watch, read, visit, buy, cook, make, do, plan, or learn. Save Intent should not duplicate Collection topic or project grouping, and it may be blank when Capture evidence does not support a concrete action.
 _Avoid_: Summary, tag, category
 
+Save Intent precedence keeps labels from overlapping: learn over read for instructional material; do over visit for scheduled activities or routines; visit for concrete places; plan for logistics or future arrangements; buy for concrete purchase targets; cook for food preparation; make for created artifacts.
+
 **Default Intent**:
 The Save Intent Sharebook assigns when Capture Analysis finishes and the user does not apply One-Tap Correction or add a Context Note. Default Intent may be blank when no active Intent Category is clearly inferable.
 _Avoid_: Unconfirmed tag, uncategorized

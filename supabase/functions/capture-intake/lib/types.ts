@@ -161,6 +161,10 @@ export type RetrievedCollection = {
   keyword_score?: number | null;
   semantic_score?: number | null;
   rrf_score?: number | null;
+  rerank_rank?: number | null;
+  rerank_confidence?: number | null;
+  rerank_fit?: "strong" | "possible" | "none" | null;
+  rerank_rationale?: string | null;
 };
 export type ContentEvidenceProfile = {
   content_limited: boolean;

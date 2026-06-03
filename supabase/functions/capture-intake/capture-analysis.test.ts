@@ -104,6 +104,61 @@ Deno.test("save intent catalog is small, active, and action-oriented", () => {
       prompt.includes("return null when no listed action is clearly supported"),
     "prompt should describe do/cook and allow blank intent",
   );
+  assert(
+    prompt.includes("learn over read for tutorials") &&
+      prompt.includes("Use do, not visit, for scheduled activities") &&
+      prompt.includes("Use plan for logistics") &&
+      prompt.includes("Use buy for product, listing, store, deal") &&
+      prompt.includes("Use make for creating an artifact"),
+    "prompt should include Save Intent precedence rules",
+  );
+});
+
+Deno.test("analysis prompt limits reminder and visit target overlap", () => {
+  const prompt = urlEvidence.buildPrompt(
+    captureFixture({
+      source_text:
+        "Neighborhood guide updated May 30, 2026 with restaurants around Austin.",
+    }),
+    null,
+    [],
+  );
+  assert(
+    prompt.includes("actionable future event window") &&
+      prompt.includes("Do not suggest a Reminder idea for publish dates") &&
+      prompt.includes("incidental date mentions"),
+    "prompt should distinguish actionable Reminder dates from incidental dates",
+  );
+  assert(
+    prompt.includes("Do not create a Visit Target for only a city") &&
+      prompt.includes("generic location list") &&
+      prompt.includes("named visitable place"),
+    "prompt should distinguish concrete Visit Targets from broad location evidence",
+  );
+});
+
+Deno.test("collection retrieval breadth uses twenty candidates and prompts eight", () => {
+  assertEqual(
+    urlEvidence.COLLECTION_RETRIEVAL_MATCH_COUNT,
+    20,
+    "collection retrieval should request enough candidates for reranking",
+  );
+  assertEqual(
+    urlEvidence.COLLECTION_PROMPT_CANDIDATE_COUNT,
+    8,
+    "main extraction should see only the top reranked candidates",
+  );
+  assertEqual(
+    urlEvidence.promptCollectionsForAnalysis(
+      Array.from({ length: 10 }, (_, index) => ({
+        id: `collection-${index}`,
+        title: `Collection ${index}`,
+        description: "",
+      })),
+    ).length,
+    8,
+    "prompt collection helper should cap candidates",
+  );
 });
 
 Deno.test("source fallback is allowed only when content evidence is limited", () => {
@@ -425,5 +480,40 @@ Deno.test("collection prompt is subject-first when social video content is avail
     prompt.includes('"title": "Articles & Guides"') &&
       prompt.includes('"title": "Movies & Shows"'),
     "prompt should still inject retrieved collection values",
+  );
+});
+
+Deno.test("reminder validation drops stale extracted reminder ideas", () => {
+  const analysis = urlEvidence.validateReminderIdeas(
+    {
+      suggested_reminders: [
+        {
+          trigger_type: "time",
+          trigger_value: "Presidents' Day sale",
+          start_date: "2025-02-16",
+          end_date: "2025-02-16",
+          rationale: "Sale ends February 16.",
+          confidence: 0.9,
+        },
+      ],
+      review_targets: ["reminder"],
+      review_rationale: {
+        reminder: "Reminder idea: sale ends February 16.",
+      },
+    },
+    "2026-06-03T12:00:00.000Z",
+  );
+  assert(
+    Array.isArray(analysis.suggested_reminders) &&
+      analysis.suggested_reminders.length === 0,
+    "validator should drop stale reminder ideas",
+  );
+  assert(
+    Array.isArray(analysis.review_targets) && analysis.review_targets.length === 0,
+    "validator should clear reminder review target when all reminders are dropped",
+  );
+  assert(
+    String(analysis.review_rationale?.reminder || "").includes("stale"),
+    "validator should explain why the reminder was dropped",
   );
 });

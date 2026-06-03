@@ -41,10 +41,13 @@ import {
   shouldRunCaptureGate,
   shouldRunPreflight,
   shouldRejectContextlessLinkCapture,
+  validateReminderIdeas,
 } from "./analysis.ts";
 import {
   autoLinkCollectionDecisions,
+  promptCollectionsForAnalysis,
   refreshCaptureEmbedding,
+  rerankCollectionsForCapture,
   retrieveCollectionsForCapture,
 } from "./collections.ts";
 import type {
@@ -397,13 +400,25 @@ export async function processCapture(captureId: string, userId: string) {
       urlEvidence,
     )
       .catch(() => []);
-    const result = await runOpenAi(
+    const rerankedCollections = await rerankCollectionsForCapture(
       captureForAnalysis,
       urlEvidence,
       retrievedCollections,
+    )
+      .catch((error) => {
+        console.warn("Collection rerank failed", errorMessage(error));
+        return retrievedCollections;
+      });
+    const promptCollections = promptCollectionsForAnalysis(
+      rerankedCollections,
+    );
+    const result = await runOpenAi(
+      captureForAnalysis,
+      urlEvidence,
+      promptCollections,
     );
     const analysisInput: AnalysisOutput = {
-      ...result.analysis,
+      ...validateReminderIdeas(result.analysis, captureForAnalysis.created_at),
       content_evidence_profile: contentEvidenceProfile(
         captureForAnalysis,
         urlEvidence,
@@ -423,7 +438,7 @@ export async function processCapture(captureId: string, userId: string) {
         userId,
         captureId,
         sanitizeAnalysisRationales(analysisInput),
-        retrievedCollections,
+        promptCollections,
       ),
     );
     const { data: run, error: runError } = await supabase
@@ -448,8 +463,11 @@ export async function processCapture(captureId: string, userId: string) {
           preflight_response: preflightResult?.raw || null,
           extraction_request: result.requestBody,
           response: result.raw,
+          visual_retry: result.visualRetry || null,
           url_evidence: result.urlEvidence,
-          retrieved_collections: result.retrievedCollections,
+          retrieved_collections: retrievedCollections,
+          reranked_collections: rerankedCollections,
+          prompt_collections: promptCollections,
         }),
       })
       .select("id")

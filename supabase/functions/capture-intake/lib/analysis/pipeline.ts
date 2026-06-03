@@ -4,5 +4,6 @@ export * from "./openai-client.ts";
 export * from "./preflight.ts";
 export * from "./prompts.ts";
 export * from "./rationales.ts";
+export * from "./reminder-validation.ts";
 export * from "./review-normalization.ts";
 export * from "./visit-targets.ts";

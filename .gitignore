@@ -14,6 +14,9 @@ android/local.properties
 android/app/debug.keystore
 server/data/
 supabase/.temp/
+eval/capture-accuracy/generated/
+eval/capture-accuracy/private/
+.DS_Store
 *.log
 *.hprof
 tsconfig.tsbuildinfo
