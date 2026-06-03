@@ -81,14 +81,13 @@ Capture Review must:
 - Feel like editing a saved memory, not inspecting an analysis report.
 - Lead with existing capture imagery or source media when available; tapping it opens the source URL when one is available.
 - Make the editable title the primary text under the media/source header.
-- Show optional Save Intent, Collections, and Reminder as quiet editable rows below the title rather than stacking prominent cards or pill-heavy controls.
+- Show optional Save Intent, Collections, and Reminder in one compact editable attribute rail below the title. Purpose may carry the strongest weight, while Collection and Later should read as quieter inline metadata. Use flat native-feeling controls with hairline separation or spacing rather than equal-weight stat cards, chunky pills, prose sentences, or form rows.
 - Show `Add intent` when no concrete action is inferable; blank intent should be a reviewable state, not a broad fallback label or selectable chip.
 - Show `Add collections` when no Collection is linked. A Capture may intentionally have no Collection.
 - Tapping Collections opens a focused full-screen selector for existing active Collections, including `No collection` as a valid clearing state.
 - Do not show AI Collection suggestions, `Use suggestion`, inline Collection creation, or per-row `Manage` actions inside Capture Review.
 - Offer toast undo for immediate collection removal when feasible.
-- Use `Reminder idea: [before Saturday]` for AI reminder suggestions. Use the `Reminder` row for user-approved scheduling edits.
-- Always show the `Reminder` row in Capture Review when the capture can be edited. When Capture Analysis found no Reminder idea, tapping the row opens the same manual reminder editor.
+- Use a consumer label such as `Later` for the main Reminder control; reserve `Reminder idea` for review rationale or detail surfaces when the AI suggested the timing. When Capture Analysis found no Reminder idea, tapping `Add reminder` opens the same manual reminder editor.
 - Show an `Open in Maps` action when Capture Analysis has a maps-searchable Visit Target and a native map provider passes an open check. This action opens the available Google Maps or Apple Maps search from the persisted Visit Target, preferring the target name when present and falling back to the saved query; Android must not show Apple Maps through a browser fallback, and the action must not imply a verified address, coordinates, place ID, or a first-class Map destination.
 - Include an `Add reminder` flow only when the selected reminder can at least persist as a capture-local or otherwise durable value. The editor must collect a start and end date, optional start and end time, and show the computed duration so date ranges, time ranges, and same-day time ranges are all editable. Do not imply notification delivery until it exists.
 - Include one consolidated `Review insight` rationale surface for Save Intent, Collections, and Reminder idea decisions, including cases where no Collection or no Reminder idea was applied. Its visible cue should point to the exact review decision rather than repeat a content summary.

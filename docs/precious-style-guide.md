@@ -266,17 +266,19 @@ Use:
 - `Choose collection`
 - `Open link once`
 
-Capture Review should read like an editable sentence. Save Intent is optional; when no concrete action is inferable, show `Add intent` in the edit row and use the review cue to ask for a quick look instead of showing a broad fallback label or selectable empty-intent chip.
+Capture Review should read like a polished saved-memory edit surface, not a form. Use one compact editable attribute rail for Purpose, Collection, and Later: Purpose can be the primary semantic handle, while Collection and Later read as quieter inline metadata. Save Intent is optional; when no concrete action is inferable, show `Add intent` and use the review cue to ask for a quick look instead of showing a broad fallback label or selectable empty-intent chip.
 
-`Saved as [try this place] in [NYC restaurants]. Reminder idea: [next Saturday afternoon].`
+`Purpose: Visit | Collection: NYC restaurants | Later: next Saturday afternoon`
 
-Each chip can expand into a small picker. Keep concise rationale visible only when it builds trust:
+The rail should feel embedded in the memory surface: use spacing, hairline separation, hierarchy, and pressed states rather than equal-weight stat cards, chunky pills, prose sentences, or boxed form rows.
+
+Each control can expand into a focused picker or editor. Keep concise rationale visible only when it builds trust:
 
 `Because the post mentions a SoHo ramen shop.`
 
 Capture Review should use one `Review insight` surface for AI rationale across Save Intent, Collections, and Reminder idea. The row should show a very short review cue that names the exact thing to check, such as `Confirm intent: visit or menu reference`, then open a native-feeling sheet led by one friendly because-style insight at body scale. When review targets are unresolved, the sheet should show an icon-led checklist for the exact targets that need a decision and let the user confirm or change each target from that surface. Follow the checklist with unframed rationale rows for Save Intent, Collections, and Reminder idea. Reminder editing should open the same start/end date and optional start/end time editor as the main Reminder row. Do not use nested cards, hero-sized rationale text, generic field-level fallback blocks, hidden-only long presses, duplicate blurbs, or model traces. Keep the primary sheet action clear of Android gesture navigation.
 
-When reminders are not fully implemented, use `Reminder idea: [before Saturday]` for AI proposals and `Reminder` for the user-approved editor. Do not use copy that implies notification delivery.
+When reminders are not fully implemented, use `Later` for the main Capture Review control and `Reminder idea` only in rationale or detail surfaces for AI proposals. Do not use copy that implies notification delivery.
 
 When a Capture has a maps-searchable Visit Target, Capture Review may show `Open in Maps` actions for Google Maps and Apple Maps. Treat this as a Maps search action from persisted Visit Target evidence, preferring the target name for launch when present, not a verified address, place ID, or top-level Map lens.
 

@@ -1590,29 +1590,31 @@ export const styles = StyleSheet.create({
     lineHeight: 20
   },
   quickEditBlock: {
-    gap: 12,
+    gap: 10,
     paddingHorizontal: 2
   },
   reviewInsightCard: {
     alignItems: "center",
-    backgroundColor: colors.surfaceContainerHigh,
     borderRadius: 8,
     flexDirection: "row",
-    gap: 11,
-    minHeight: 78,
-    paddingHorizontal: 13,
-    paddingVertical: 13
+    gap: 10,
+    minHeight: 56,
+    paddingHorizontal: 2,
+    paddingVertical: 8
   },
   reviewInsightCardReview: {
-    backgroundColor: colors.reviewSoft
+    backgroundColor: colors.reviewSoft,
+    minHeight: 68,
+    paddingHorizontal: 12,
+    paddingVertical: 12
   },
   reviewInsightIcon: {
     alignItems: "center",
-    backgroundColor: colors.accentSoft,
+    backgroundColor: "transparent",
     borderRadius: 8,
-    height: 34,
+    height: 32,
     justifyContent: "center",
-    width: 34
+    width: 32
   },
   reviewInsightIconReview: {
     backgroundColor: colors.surfaceContainerHigh
@@ -1686,94 +1688,95 @@ export const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18
   },
-  reviewSentence: {
-    alignItems: "flex-start",
+  reviewEditRail: {
+    alignItems: "stretch",
+    borderBottomColor: colors.line,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.line,
+    borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 7
+    minHeight: 88,
+    overflow: "hidden",
+    paddingVertical: 7
   },
-  reviewEditRows: {
-    gap: 2
+  reviewEditRailIntent: {
+    borderRadius: 6,
+    gap: 4,
+    justifyContent: "center",
+    minHeight: 72,
+    minWidth: 98,
+    paddingHorizontal: 10,
+    width: 108
   },
-  reviewEditRow: {
+  reviewEditRailIntentActive: {
+    backgroundColor: colors.accentSoft
+  },
+  reviewEditRailPressed: {
+    backgroundColor: colors.surfaceContainerHigh
+  },
+  reviewEditRailLabel: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0,
+    lineHeight: 14
+  },
+  reviewEditRailIntentValue: {
+    color: colors.ink,
+    fontSize: 23,
+    fontWeight: "800",
+    lineHeight: 29
+  },
+  reviewEditRailDivider: {
+    backgroundColor: colors.line,
+    marginVertical: 8,
+    width: StyleSheet.hairlineWidth
+  },
+  reviewEditRailDetails: {
+    flex: 1,
+    justifyContent: "center",
+    minWidth: 0,
+    paddingLeft: 8
+  },
+  reviewEditRailDetail: {
     alignItems: "center",
+    borderRadius: 6,
     flexDirection: "row",
-    gap: 12,
-    minHeight: 46,
+    gap: 10,
+    minHeight: 36,
+    minWidth: 0,
+    paddingHorizontal: 8,
     paddingVertical: 4
   },
-  editRowLabel: {
+  reviewEditRailDetailLabel: {
     color: colors.muted,
     flexShrink: 0,
-    fontSize: 13,
-    fontWeight: "700",
-    width: 92
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0,
+    lineHeight: 16,
+    width: 68
   },
-  editRowValue: {
-    alignItems: "center",
-    borderBottomColor: colors.accentLine,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flex: 1,
-    flexDirection: "row",
-    justifyContent: "flex-start",
-    minHeight: 38,
-    minWidth: 0,
-    paddingVertical: 4
-  },
-  editRowValueText: {
+  reviewEditRailDetailValue: {
     color: colors.ink,
-    flex: 1,
-    fontSize: 16,
-    fontWeight: "700",
-    lineHeight: 21
-  },
-  editRowPlaceholderText: {
-    color: colors.accent
-  },
-  editRowAction: {
-    color: colors.accent,
     flex: 1,
     fontSize: 15,
     fontWeight: "800",
-    lineHeight: 20
+    lineHeight: 20,
+    minWidth: 0
   },
-  reviewPhrase: {
-    alignItems: "center",
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    maxWidth: "100%"
+  reviewEditRailDetailDivider: {
+    backgroundColor: colors.line,
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 8,
+    marginRight: 8,
+    opacity: 0.72
   },
-  reviewSentenceText: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: "700",
-    lineHeight: 19
+  reviewEditRailPlaceholder: {
+    color: colors.accent
   },
-  sentenceChip: {
-    backgroundColor: colors.surfaceContainerHigh,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexShrink: 1,
-    justifyContent: "center",
-    maxWidth: "100%",
-    minHeight: 38,
-    paddingHorizontal: 10,
-    paddingVertical: 5
-  },
-  sentenceChipActive: {
-    borderBottomColor: colors.accent
-  },
-  sentenceChipMuted: {
-    borderBottomColor: colors.line,
-    opacity: 0.66
-  },
-  sentenceChipText: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: "700",
-    lineHeight: 19
+  editRowPlaceholderText: {
+    color: colors.accent
   },
   reviewSentenceSubtext: {
     color: colors.muted,
@@ -1806,18 +1809,6 @@ export const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 19,
     lineHeight: 27
-  },
-  quickChip: {
-    backgroundColor: colors.surfaceContainerHigh,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4
-  },
-  quickChipText: {
-    color: colors.ink,
-    fontSize: 18,
-    fontWeight: "700",
-    lineHeight: 24
   },
   quickOptions: {
     flexDirection: "row",

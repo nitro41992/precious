@@ -387,70 +387,78 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
               ) : null}
             </View>
             <View style={styles.quickEditBlock}>
-              <View style={styles.reviewEditRows}>
-                <View style={styles.reviewEditRow}>
-                  <Text style={styles.editRowLabel}>Intent</Text>
-                  <Pressable
-                    android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
-                    onLongPress={() => openReviewInsight(selectedReviewInsight)}
-                    onPress={() => setQuickIntentOpen((current) => !current)}
-                    style={({ pressed }) => [
-                      styles.editRowValue,
-                      quickIntentOpen && styles.sentenceChipActive,
-                      pressed && styles.subtlePressed
+              <View style={styles.reviewEditRail}>
+                <Pressable
+                  accessibilityHint="Opens Save Intent choices."
+                  accessibilityLabel={`Purpose: ${quickIntentLabel}`}
+                  accessibilityRole="button"
+                  android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
+                  onLongPress={() => openReviewInsight(selectedReviewInsight)}
+                  onPress={() => setQuickIntentOpen((current) => !current)}
+                  style={({ pressed }) => [
+                    styles.reviewEditRailIntent,
+                    quickIntentOpen && styles.reviewEditRailIntentActive,
+                    pressed && styles.reviewEditRailPressed
+                  ]}
+                  testID="pc.review.intent.open"
+                >
+                  <Text style={styles.reviewEditRailLabel}>Purpose</Text>
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      styles.reviewEditRailIntentValue,
+                      !quickIntentValue && styles.reviewEditRailPlaceholder
                     ]}
                   >
-                    <Text
-                      numberOfLines={1}
-                      style={[
-                        styles.editRowValueText,
-                        !quickIntentValue && styles.editRowPlaceholderText
-                      ]}
-                    >
-                      {quickIntentLabel}
-                    </Text>
-                  </Pressable>
-                </View>
-                <View style={styles.reviewEditRow}>
-                  <Text style={styles.editRowLabel}>Collections</Text>
+                    {quickIntentLabel}
+                  </Text>
+                </Pressable>
+                <View style={styles.reviewEditRailDivider} />
+                <View style={styles.reviewEditRailDetails}>
                   <Pressable
+                    accessibilityHint="Opens Collection selection."
+                    accessibilityLabel={`Collection: ${collectionRowLabel}`}
+                    accessibilityRole="button"
                     android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
                     onLongPress={() => openReviewInsight(selectedReviewInsight)}
                     onPress={() => void openCollectionPicker()}
                     style={({ pressed }) => [
-                      styles.editRowValue,
-                      pressed && styles.subtlePressed
+                      styles.reviewEditRailDetail,
+                      pressed && styles.reviewEditRailPressed
                     ]}
                     testID="pc.review.collections.open"
                   >
+                    <Text style={styles.reviewEditRailDetailLabel}>Collection</Text>
                     <Text
                       numberOfLines={1}
                       style={[
-                        styles.editRowValueText,
-                        !collectionRows.length && styles.editRowPlaceholderText
+                        styles.reviewEditRailDetailValue,
+                        !collectionRows.length && styles.reviewEditRailPlaceholder
                       ]}
                     >
                       {collectionRowLabel}
                     </Text>
                   </Pressable>
-                </View>
-                <View style={styles.reviewEditRow}>
-                  <Text style={styles.editRowLabel}>Reminder</Text>
+                  <View style={styles.reviewEditRailDetailDivider} />
                   <Pressable
+                    accessibilityHint="Opens the reminder editor."
+                    accessibilityLabel={`Later: ${reminderSentenceValue}`}
+                    accessibilityRole="button"
                     android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
                     onLongPress={() => openReviewInsight(selectedReviewInsight)}
                     onPress={() => setReminderSheetOpen(true)}
                     style={({ pressed }) => [
-                      styles.editRowValue,
-                      pressed && styles.subtlePressed
+                      styles.reviewEditRailDetail,
+                      pressed && styles.reviewEditRailPressed
                     ]}
                     testID="pc.review.reminder.open"
                   >
+                    <Text style={styles.reviewEditRailDetailLabel}>Later</Text>
                     <Text
                       numberOfLines={1}
                       style={[
-                        styles.editRowValueText,
-                        !primaryReminder && styles.editRowPlaceholderText
+                        styles.reviewEditRailDetailValue,
+                        !primaryReminder && styles.reviewEditRailPlaceholder
                       ]}
                     >
                       {reminderSentenceValue}
