@@ -4,8 +4,8 @@ import type { FlatListProps } from "react-native";
 import { ArrowLeft, Check, Folder, Search, X } from "lucide-react-native";
 
 import type { Capture, Collection, LoadPhase } from "../types";
+import { collectionSelectionActionState } from "../captureLogic";
 import { collectionCountLabel } from "../capturePresentation";
-import { sameStringSet } from "../remoteData";
 import { colors } from "../ui/theme";
 import { styles } from "../ui/styles";
 import { IconButton } from "../ui/components";
@@ -69,7 +69,7 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
 
   const currentCollectionIds = (selected.linkedCollections || []).map((collection) => collection.id);
   const selectedCollectionIds = new Set(collectionSelectionIds);
-  const selectionChanged = !sameStringSet(collectionSelectionIds, currentCollectionIds);
+  const selectionAction = collectionSelectionActionState(selected, collectionSelectionIds, currentCollectionIds);
   const selectionSaving = collectionChoiceSaving === "set-collections";
   const selectionTerm = collectionPickerQuery.trim().toLowerCase();
   const collectionSelectorColdLoading =
@@ -213,7 +213,7 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
         <Pressable
           disabled={selectionSaving}
           onPress={() => {
-            if (selectionChanged) saveCollectionSelection();
+            if (selectionAction.shouldSave) saveCollectionSelection();
             else closeCollectionPicker();
           }}
           style={({ pressed }) => [
@@ -223,9 +223,14 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
           ]}
           testID="pc.collection.select.save"
         >
-          <Text style={styles.primaryButtonText}>
-            {selectionSaving ? "Saving..." : selectionChanged ? "Save collections" : "Done"}
-          </Text>
+          <View style={styles.primaryButtonContent}>
+            {!selectionSaving && selectionAction.shouldSave ? (
+              <Check color={colors.onAccent} size={18} strokeWidth={2.8} />
+            ) : null}
+            <Text style={styles.primaryButtonText}>
+              {selectionSaving ? "Saving..." : selectionAction.label}
+            </Text>
+          </View>
         </Pressable>
       </View>
       {toast}

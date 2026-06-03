@@ -1108,7 +1108,8 @@ export function reviewChecklistTasksForCapture(capture: Capture): ReviewChecklis
         ? `Confirm ${intentValue} is the right action for this capture.`
         : "Choose an action only if the saved content clearly supports one."),
     confirmLabel: intentValue ? `Keep ${intentValue}` : "Keep no intent",
-    editLabel: intentValue ? "Change Save Intent" : "Choose Save Intent"
+    editLabel: intentValue ? "Change Save Intent" : "Choose Save Intent",
+    clearLabel: intentValue ? "Clear Save Intent" : undefined
   };
   const collectionsTask: ReviewChecklistTask = {
     target: "collections",
@@ -1121,7 +1122,8 @@ export function reviewChecklistTasksForCapture(capture: Capture): ReviewChecklis
         .find(Boolean) ||
       "Keep it unfiled unless one of your existing Collections fits.",
     confirmLabel: collectionsLabel === "Add collections" ? "Keep no collection" : `Keep ${collectionsLabel}`,
-    editLabel: "Change Collections"
+    editLabel: "Change Collections",
+    clearLabel: collectionsLabel === "Add collections" ? undefined : "Clear Collections"
   };
   const reminderTask: ReviewChecklistTask = {
     target: "reminder",
@@ -1132,7 +1134,8 @@ export function reviewChecklistTasksForCapture(capture: Capture): ReviewChecklis
       rationaleLine(primaryReminder?.rationale) ||
       "Confirm this only if the idea should stay with the capture.",
     confirmLabel: primaryReminder ? `Keep ${reminderLabel(primaryReminder)}` : "Keep no reminder",
-    editLabel: primaryReminder ? "Change Reminder" : "Add Reminder"
+    editLabel: primaryReminder ? "Change Reminder" : "Add Reminder",
+    clearLabel: primaryReminder ? "Remove reminder idea" : undefined
   };
   const analysisTask: ReviewChecklistTask = {
     target: "analysis",

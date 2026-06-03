@@ -162,6 +162,38 @@ function reviewTargetsForCapture(capture) {
   return inferredReviewTargets(capture);
 }
 
+function sameStringSet(left, right) {
+  const leftSet = new Set((left || []).map(String).filter(Boolean));
+  const rightSet = new Set((right || []).map(String).filter(Boolean));
+  if (leftSet.size !== rightSet.size) return false;
+  for (const item of leftSet) {
+    if (!rightSet.has(item)) return false;
+  }
+  return true;
+}
+
+function collectionSelectionActionState(capture, selectedCollectionIds, currentCollectionIds) {
+  const selectedIds = Array.isArray(selectedCollectionIds) ? selectedCollectionIds : [];
+  const currentIds = Array.isArray(currentCollectionIds)
+    ? currentCollectionIds
+    : (capture.linkedCollections || []).map((collection) => collection.id);
+  const selectionChanged = !sameStringSet(selectedIds, currentIds);
+  const pendingReview = reviewTargetsForCapture(capture).includes("collections");
+  const shouldSave = selectionChanged || pendingReview;
+  return {
+    pendingReview,
+    selectionChanged,
+    shouldSave,
+    label: selectionChanged
+      ? "Save collections"
+      : pendingReview && selectedIds.length === 0
+        ? "Confirm no collection"
+        : pendingReview
+          ? "Confirm collections"
+          : "Done"
+  };
+}
+
 function reviewReasons(capture) {
   return reviewTargetsForCapture(capture);
 }
@@ -263,6 +295,7 @@ module.exports = {
   capturesForListMode,
   capturesForSearchScope,
   capturesShareIdentity,
+  collectionSelectionActionState,
   displayStatus,
   extractHttpUrl,
   confidenceRequiresReview,

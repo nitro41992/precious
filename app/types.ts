@@ -35,6 +35,7 @@ export type ReviewChecklistTask = {
   rationale: string;
   confirmLabel: string;
   editLabel?: string;
+  clearLabel?: string;
 };
 
 export type RationaleSheet = {

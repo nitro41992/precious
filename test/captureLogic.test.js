@@ -7,6 +7,7 @@ const {
   capturesForListMode,
   capturesForSearchScope,
   capturesShareIdentity,
+  collectionSelectionActionState,
   displayStatus,
   extractHttpUrl,
   hostFromUrl,
@@ -148,6 +149,56 @@ test("review targets drive needs-review state and clear independently", () => {
   assert.deepEqual(
     reviewReasons(capture({ status: "needs_review", reviewTargets: ["reminder"] })),
     ["reminder"]
+  );
+});
+
+test("collection selection action treats no collection as review confirmation", () => {
+  const pendingNoCollection = capture({
+    status: "needs_review",
+    reviewTargets: ["collections"],
+    linkedCollections: []
+  });
+  assert.deepEqual(
+    collectionSelectionActionState(pendingNoCollection, []),
+    {
+      pendingReview: true,
+      selectionChanged: false,
+      shouldSave: true,
+      label: "Confirm no collection"
+    }
+  );
+
+  const pendingExistingCollection = capture({
+    status: "needs_review",
+    reviewTargets: ["collections"],
+    linkedCollections: [{ id: "collection-a" }]
+  });
+  assert.deepEqual(
+    collectionSelectionActionState(pendingExistingCollection, ["collection-a"]),
+    {
+      pendingReview: true,
+      selectionChanged: false,
+      shouldSave: true,
+      label: "Confirm collections"
+    }
+  );
+  assert.deepEqual(
+    collectionSelectionActionState(pendingExistingCollection, []),
+    {
+      pendingReview: true,
+      selectionChanged: true,
+      shouldSave: true,
+      label: "Save collections"
+    }
+  );
+  assert.deepEqual(
+    collectionSelectionActionState(capture({ linkedCollections: [] }), []),
+    {
+      pendingReview: false,
+      selectionChanged: false,
+      shouldSave: false,
+      label: "Done"
+    }
   );
 });
 

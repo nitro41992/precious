@@ -349,6 +349,45 @@ async function main() {
     assert(links.length === 0, "No collection selection did not clear active collection links.");
     assert((capture.analysis.collection_decisions || []).length === 0, "No collection selection did not keep legacy suggestions cleared.");
 
+    const noCollectionReviewCapture = await seedCapture({
+      supabaseUrl,
+      serviceRoleKey,
+      userId,
+      prefix,
+      existingCollection: suggested,
+      suffix: "no-collection-review"
+    });
+    cleanup.captures.push(noCollectionReviewCapture.id);
+    await requestJson(`${supabaseUrl}/rest/v1/captures?id=eq.${noCollectionReviewCapture.id}`, {
+      method: "PATCH",
+      headers: serviceHeaders(serviceRoleKey, {
+        "content-type": "application/json"
+      }),
+      body: JSON.stringify({
+        analysis_state: "needs_review",
+        analysis: {
+          ...noCollectionReviewCapture.analysis,
+          review_targets: ["collections"],
+          needs_review: true
+        }
+      })
+    });
+    await patchCollectionLinks({
+      apiUrl,
+      anonKey,
+      accessToken,
+      body: {
+        captureId: noCollectionReviewCapture.id,
+        action: "set_capture_collections",
+        collectionIds: []
+      }
+    });
+    capture = await fetchCapture({ supabaseUrl, serviceRoleKey, captureId: noCollectionReviewCapture.id });
+    links = await activeLinks({ supabaseUrl, serviceRoleKey, captureId: noCollectionReviewCapture.id });
+    assert(links.length === 0, "Confirming no collection created unexpected links.");
+    assert(capture.analysis_state === "ready", `Expected no collection confirmation to produce ready state, got ${capture.analysis_state}.`);
+    assert((capture.analysis.review_targets || []).length === 0, "No collection confirmation did not clear the collections review target.");
+
     const autoCapture = await seedCapture({
       supabaseUrl,
       serviceRoleKey,

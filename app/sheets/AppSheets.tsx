@@ -1,11 +1,12 @@
 import { Pressable, ScrollView, Text, View } from "react-native";
 import {
   Bell,
-  Check,
+  CircleCheck,
+  CircleX,
   Folder,
   Info,
   LogOut,
-  Pencil,
+  PencilLine,
   Target,
   X
 } from "lucide-react-native";
@@ -86,8 +87,44 @@ function rationaleSectionTarget(label: string): ReviewTarget | null {
   }
 }
 
+function ReviewTaskAction({
+  accessibilityLabel,
+  Icon,
+  label,
+  onPress,
+  tone = "default"
+}: {
+  accessibilityLabel?: string;
+  Icon: LucideIconComponent;
+  label: string;
+  onPress: () => void;
+  tone?: "default" | "primary" | "danger";
+}) {
+  const iconColor = tone === "primary"
+    ? colors.accent
+    : tone === "danger"
+      ? colors.danger
+      : colors.secondary;
+  return (
+    <Pressable
+      accessibilityLabel={accessibilityLabel || label}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.reviewTaskAction,
+        tone === "primary" && styles.reviewTaskActionPrimary,
+        tone === "danger" && styles.reviewTaskActionDanger,
+        pressed && styles.subtlePressed
+      ]}
+    >
+      <Icon color={iconColor} size={22} strokeWidth={2.35} />
+    </Pressable>
+  );
+}
+
 export function AppSheets({
   accountSheetOpen,
+  clearReviewTask,
   editReviewTask,
   onSignOut,
   rationaleEditTarget,
@@ -99,6 +136,7 @@ export function AppSheets({
   setRationaleSheet
 }: {
   accountSheetOpen: boolean;
+  clearReviewTask: (task: ReviewChecklistTask) => void;
   editReviewTask: (task: ReviewChecklistTask) => void;
   onSignOut: () => void;
   rationaleEditTarget: ReviewTarget | null;
@@ -217,47 +255,66 @@ export function AppSheets({
                             <Text style={styles.reviewChecklistValue}>{task.value}</Text>
                           </View>
                           <View style={styles.reviewChecklistActions}>
-                            {task.editLabel ? (
-                              <IconButton
-                                Icon={Pencil}
-                                label={task.editLabel}
-                                onPress={() => editReviewTask(task)}
-                              />
-                            ) : null}
-                            <IconButton
-                              Icon={Check}
-                              label={task.confirmLabel}
+                            <ReviewTaskAction
+                              accessibilityLabel={task.confirmLabel}
+                              Icon={CircleCheck}
+                              label="Confirm"
                               onPress={() => void resolveReviewTargets([task.target])}
                               tone="primary"
                             />
+                            {task.editLabel ? (
+                              <ReviewTaskAction
+                                accessibilityLabel={task.editLabel}
+                                Icon={PencilLine}
+                                label="Change"
+                                onPress={() => editReviewTask(task)}
+                              />
+                            ) : null}
+                            {task.clearLabel ? (
+                              <ReviewTaskAction
+                                accessibilityLabel={task.clearLabel}
+                                Icon={CircleX}
+                                label="Clear"
+                                onPress={() => clearReviewTask(task)}
+                                tone="danger"
+                              />
+                            ) : null}
                           </View>
                         </View>
                         <Text style={styles.rationaleSheetText}>{task.rationale}</Text>
                         {showIntentPicker ? (
                           <View style={styles.rationaleIntentOptions}>
-                            {INTENT_OPTIONS.map((intent) => (
-                              <Pressable
-                                accessibilityRole="button"
-                                key={intent}
-                                onPress={() => void resolveReviewTargets(["intent"], { currentSaveIntent: intent })}
-                                style={({ pressed }) => [
-                                  styles.rationaleIntentOption,
-                                  selected?.defaultIntent === intent && styles.rationaleIntentOptionSelected,
-                                  pressed && styles.subtlePressed
-                                ]}
-                              >
-                                <Text
-                                  style={[
-                                    styles.rationaleIntentOptionText,
-                                    selected?.defaultIntent === intent && styles.rationaleIntentOptionTextSelected
+                            {INTENT_OPTIONS.map((intent) => {
+                              const selectedIntent = selected?.defaultIntent === intent;
+                              return (
+                                <Pressable
+                                  accessibilityLabel={`Use ${activeIntentLabel(intent)} intent`}
+                                  accessibilityRole="button"
+                                  key={intent}
+                                  accessibilityState={{ selected: selectedIntent }}
+                                  onPress={() => void resolveReviewTargets(["intent"], { currentSaveIntent: intent })}
+                                  style={({ pressed }) => [
+                                    styles.rationaleIntentOption,
+                                    selectedIntent && styles.rationaleIntentOptionSelected,
+                                    pressed && styles.subtlePressed
                                   ]}
                                 >
-                                  {activeIntentLabel(intent)}
-                                </Text>
-                              </Pressable>
-                            ))}
+                                  <Text
+                                    numberOfLines={1}
+                                    style={[
+                                      styles.rationaleIntentOptionText,
+                                      selectedIntent && styles.rationaleIntentOptionTextSelected
+                                    ]}
+                                  >
+                                    {activeIntentLabel(intent)}
+                                  </Text>
+                                </Pressable>
+                              );
+                            })}
                             <Pressable
+                              accessibilityLabel="Use no intent"
                               accessibilityRole="button"
+                              accessibilityState={{ selected: !selected?.defaultIntent }}
                               onPress={() => void resolveReviewTargets(["intent"], { currentSaveIntent: null })}
                               style={({ pressed }) => [
                                 styles.rationaleIntentOption,
@@ -266,6 +323,7 @@ export function AppSheets({
                               ]}
                             >
                               <Text
+                                numberOfLines={1}
                                 style={[
                                   styles.rationaleIntentOptionText,
                                   !selected?.defaultIntent && styles.rationaleIntentOptionTextSelected
@@ -302,15 +360,6 @@ export function AppSheets({
               </View>
             ) : null}
           </ScrollView>
-          <Pressable
-            onPress={() => {
-              setRationaleSheet(null);
-              setRationaleEditTarget(null);
-            }}
-            style={styles.primaryButton}
-          >
-            <Text style={styles.primaryButtonText}>Done</Text>
-          </Pressable>
         </View>
       </View>
     );

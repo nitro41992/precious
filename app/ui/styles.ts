@@ -2135,7 +2135,7 @@ export const styles = StyleSheet.create({
   },
   reviewInsightScrollContent: {
     gap: 18,
-    paddingBottom: 2
+    paddingBottom: 20
   },
   reviewChecklist: {
     gap: 0,
@@ -2174,7 +2174,7 @@ export const styles = StyleSheet.create({
     borderTopColor: colors.line,
     borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
-    gap: 6,
+    gap: 8,
     minHeight: 88,
     paddingVertical: 14
   },
@@ -2203,37 +2203,51 @@ export const styles = StyleSheet.create({
   reviewChecklistActions: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 4
+    gap: 2
+  },
+  reviewTaskAction: {
+    alignItems: "center",
+    borderRadius: 8,
+    justifyContent: "center",
+    minHeight: 44,
+    minWidth: 38
+  },
+  reviewTaskActionPrimary: {
+    backgroundColor: "transparent"
+  },
+  reviewTaskActionDanger: {
+    backgroundColor: "transparent"
   },
   rationaleIntentOptions: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    paddingTop: 4
+    paddingTop: 8
   },
   rationaleIntentOption: {
     alignItems: "center",
-    backgroundColor: colors.surfaceContainer,
+    backgroundColor: "transparent",
     borderColor: colors.line,
-    borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8,
     justifyContent: "center",
-    minHeight: 40,
-    paddingHorizontal: 11,
-    paddingVertical: 7
+    minHeight: 42,
+    paddingHorizontal: 15,
+    paddingVertical: 8
   },
   rationaleIntentOptionSelected: {
-    backgroundColor: colors.accentSoft,
+    backgroundColor: colors.accent,
     borderColor: colors.accent
   },
   rationaleIntentOptionText: {
-    color: colors.secondary,
-    fontSize: 13,
+    color: colors.ink,
+    fontSize: 15,
     fontWeight: "800",
-    lineHeight: 17
+    lineHeight: 19,
+    textAlign: "center"
   },
   rationaleIntentOptionTextSelected: {
-    color: colors.accent
+    color: colors.onAccent
   },
   rationaleSheetHeader: {
     alignItems: "center",
@@ -2626,6 +2640,12 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     minHeight: 50,
     paddingVertical: 14
+  },
+  primaryButtonContent: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center"
   },
   primaryButtonPressed: {
     backgroundColor: "#9be6c2",

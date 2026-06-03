@@ -89,7 +89,6 @@ import {
   edgeResourceUrl,
   freshLocalProcessingCaptures,
   isFreshLocalProcessingCapture,
-  sameStringSet,
   sortCollectionCaptures
 } from "./remoteData";
 import { AuthScreen } from "./screens/AuthScreen";
@@ -102,6 +101,7 @@ import { SearchScreen } from "./screens/SearchScreen";
 
 import type { MapSearchCandidate } from "./captureLogic";
 import {
+  collectionSelectionActionState,
   capturesForListMode,
   extractHttpUrl,
   isDeleted,
@@ -1705,6 +1705,25 @@ export default function App() {
     }
   }
 
+  function clearReviewTask(task: ReviewChecklistTask) {
+    if (task.target === "collections") {
+      setRationaleSheet(null);
+      setRationaleEditTarget(null);
+      void updateCaptureCollections([], { closePicker: false, toastMessage: "Collections cleared." });
+      return;
+    }
+    if (task.target === "reminder") {
+      setRationaleSheet(null);
+      setRationaleEditTarget(null);
+      void dismissReminder(0);
+      return;
+    }
+    if (task.target === "intent") {
+      void resolveReviewTargets(["intent"], { currentSaveIntent: null });
+      return;
+    }
+  }
+
   async function collectionRequest<T>(
     resource: "collections" | "collection-links",
     input: { method: string; body?: unknown }
@@ -1737,13 +1756,11 @@ export default function App() {
     );
   }
 
-  async function saveCollectionSelection() {
+  async function updateCaptureCollections(
+    collectionIds: string[],
+    options: { closePicker?: boolean; toastMessage?: string } = {}
+  ) {
     if (!selected) return;
-    const currentIds = (selected.linkedCollections || []).map((collection) => collection.id);
-    if (sameStringSet(collectionSelectionIds, currentIds)) {
-      closeCollectionPicker();
-      return;
-    }
     if (!config?.apiUrl || !session?.accessToken) {
       showToast("Sign in to manage collections.", "error");
       return;
@@ -1756,7 +1773,7 @@ export default function App() {
         body: {
           action: "set_capture_collections",
           captureId: selected.remoteId || selected.id,
-          collectionIds: collectionSelectionIds
+          collectionIds
         }
       });
       const updatedCapture = captureFromRemote(json.capture);
@@ -1770,14 +1787,25 @@ export default function App() {
           "active"
         )
       );
-      closeCollectionPicker();
+      if (options.closePicker !== false) closeCollectionPicker();
       await loadCollections("active");
-      showToast("Collections updated.", "success");
+      showToast(options.toastMessage || "Collections updated.", "success");
     } catch (error) {
       showErrorToast(error, "Could not update collections.");
     } finally {
       setCollectionChoiceSaving(null);
     }
+  }
+
+  async function saveCollectionSelection() {
+    if (!selected) return;
+    const currentIds = (selected.linkedCollections || []).map((collection) => collection.id);
+    const selectionAction = collectionSelectionActionState(selected, collectionSelectionIds, currentIds);
+    if (!selectionAction.shouldSave) {
+      closeCollectionPicker();
+      return;
+    }
+    await updateCaptureCollections(collectionSelectionIds);
   }
 
   async function openCollectionPicker() {
@@ -2374,6 +2402,7 @@ export default function App() {
     return (
       <AppSheets
         accountSheetOpen={accountSheetOpen}
+        clearReviewTask={clearReviewTask}
         editReviewTask={editReviewTask}
         onSignOut={() => void signOut()}
         rationaleEditTarget={rationaleEditTarget}

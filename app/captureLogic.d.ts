@@ -21,6 +21,14 @@ type ReviewableCapture = {
     focus?: string;
   };
   defaultIntent?: string;
+  linkedCollections?: Array<{ id: string }>;
+};
+
+export type CollectionSelectionActionState = {
+  pendingReview: boolean;
+  selectionChanged: boolean;
+  shouldSave: boolean;
+  label: string;
 };
 
 type StatusCapture = ReviewableCapture & {
@@ -54,6 +62,11 @@ export function capturesShareIdentity(
   left?: { id?: string; remoteId?: string } | null,
   right?: { id?: string; remoteId?: string } | null
 ): boolean;
+export function collectionSelectionActionState(
+  capture: ReviewableCapture,
+  selectedCollectionIds?: string[],
+  currentCollectionIds?: string[]
+): CollectionSelectionActionState;
 export function confidenceRequiresReview(value?: string): boolean;
 export function displayStatus(capture: StatusCapture): CaptureStatus;
 export function extractHttpUrl(value?: string | null): string;
