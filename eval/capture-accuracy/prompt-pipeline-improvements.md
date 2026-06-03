@@ -40,6 +40,70 @@ Prompt and reranker should stay compact and dynamic:
   handled by clearer Collection descriptions, reranker features, or a validator,
   prefer that over another prompt instruction.
 
+## Hosted Eval Results, 2026-06-03
+
+The rerank, role, reminder, and location-context pipeline changes passed the
+reviewed 30-row gate directionally:
+
+- Reviewed gold v2, 20 Collections:
+  - Collection precision: 100.0%.
+  - Collection recall: 90.3%.
+  - Collection exact: 88.9%.
+  - Terminal outcome: 96.3%.
+  - Save Intent: 81.5%.
+  - Visit Target: 88.9%.
+  - Reminder: 100.0%.
+
+The combined 100-row run used 27 reviewed gold v2 anchors plus 73 Gemini silver
+rows:
+
+- Combined 100:
+  - Collection precision: 94.7%.
+  - Collection recall: 57.0%.
+  - Collection exact: 47.0%.
+  - Terminal outcome: 91.0%.
+  - Save Intent: 67.7%.
+  - Visit Target: 90.0%.
+  - Reminder: 93.0%.
+  - Terminal states: 91 ready, 5 needs-review, 4 failed.
+
+Interpretation:
+
+- The reviewed gold anchors support the reranking change: Collection precision
+  stayed high and recall improved materially against the old 5-Collection
+  baseline and the first 20-Collection rerank run.
+- The silver-heavy 100-row set still shows low Collection recall, mostly from
+  secondary Collection expectations. These include event pages expecting music
+  or local-activity Collections, travel articles expecting both travel and
+  guide/reference Collections, budget-travel articles expecting finance, and
+  visual/social rows expecting inspiration or project Collections.
+- Treat those silver false negatives as review candidates, not ground truth.
+  Some are likely Precious being too conservative, but many are Gemini being
+  eager about secondary Collections.
+- Reliability failures are a separate bucket: unsupported PDFs, timeouts,
+  blocked pages, and opaque shortlinks caused 4 failed rows. These should not be
+  mixed with Collection-quality disagreements.
+- The new `location_context` metric is wired into scoring, but this combined
+  label artifact has no expected location fields yet. Location extraction is
+  therefore unmeasured despite being available in predictions.
+
+Immediate next steps:
+
+- Hand-review the high-impact silver Collection misses before changing prompt
+  behavior. Focus first on cases where the missed Collection is an independent
+  saved value, not an incidental topic.
+- Add expected `location_context` labels for a small local-vs-travel slice so
+  future runs score city, region, country, source destination, and
+  away-from-user reasoning separately from `visit_target`.
+- Add reliability work for evidence failures: PDF text extraction or a PDF
+  fallback path, timeout/retry handling, and better shortlink resolution
+  diagnostics.
+- Improve review queue ranking so it does not mark every combined row for
+  review. Prioritize terminal failures, Collection false negatives on reviewed
+  gold, and silver disagreements with high business impact.
+- Keep prompt changes minimal. Add tests around repeated boundaries first, and
+  only promote a compact rule when review confirms Precious should change.
+
 ## Candidate Improvements
 
 ### Instructional Secondary Collections
