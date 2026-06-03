@@ -1,8 +1,11 @@
+import { useEffect, useRef, useState } from "react";
 import type { Dispatch, ReactNode, RefObject, SetStateAction } from "react";
+import type { GestureResponderEvent } from "react-native";
 import {
   Animated,
   Dimensions,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   SafeAreaView,
@@ -41,6 +44,9 @@ import {
   ADD_INTENT_LABEL,
   INTENT_OPTIONS,
   activeIntentLabel,
+  captureFullImageLoadKey,
+  captureFullImageUrl,
+  captureImageLoadKey,
   captureImageUrl,
   captureIntentLabel,
   captureOpenUrl,
@@ -49,6 +55,7 @@ import {
   formatDateTime,
   linkedCollectionsLabel,
   normalizeIntent,
+  isImageCapture,
   reminderDraftKey,
   reminderLabel,
   reviewChecklistCta,
@@ -120,6 +127,183 @@ type CaptureReviewScreenProps = {
   };
 };
 
+const MIN_IMAGE_SCALE = 1;
+const MAX_IMAGE_SCALE = 4;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function touchDistance(touches: ArrayLike<{ pageX: number; pageY: number }>) {
+  if (touches.length < 2) return 0;
+  const first = touches[0];
+  const second = touches[1];
+  return Math.hypot(second.pageX - first.pageX, second.pageY - first.pageY);
+}
+
+function CaptureImageViewer({
+  cacheKey,
+  imageUrl,
+  onClose,
+  title,
+  visible
+}: {
+  cacheKey: string;
+  imageUrl: string;
+  onClose: () => void;
+  title: string;
+  visible: boolean;
+}) {
+  const scaleValue = useRef(new Animated.Value(MIN_IMAGE_SCALE)).current;
+  const translateXValue = useRef(new Animated.Value(0)).current;
+  const translateYValue = useRef(new Animated.Value(0)).current;
+  const currentGestureRef = useRef({
+    scale: MIN_IMAGE_SCALE,
+    translateX: 0,
+    translateY: 0
+  });
+  const gestureRef = useRef({
+    startDistance: 0,
+    startScale: MIN_IMAGE_SCALE,
+    startTranslateX: 0,
+    startTranslateY: 0,
+    startX: 0,
+    startY: 0
+  });
+
+  function setViewerTransform(next: { scale?: number; translateX?: number; translateY?: number }) {
+    if (typeof next.scale === "number") {
+      currentGestureRef.current.scale = next.scale;
+      scaleValue.setValue(next.scale);
+    }
+    if (typeof next.translateX === "number") {
+      currentGestureRef.current.translateX = next.translateX;
+      translateXValue.setValue(next.translateX);
+    }
+    if (typeof next.translateY === "number") {
+      currentGestureRef.current.translateY = next.translateY;
+      translateYValue.setValue(next.translateY);
+    }
+  }
+
+  function resetZoom() {
+    setViewerTransform({ scale: MIN_IMAGE_SCALE, translateX: 0, translateY: 0 });
+  }
+
+  function beginImageTouch(event: GestureResponderEvent) {
+    const touches = event.nativeEvent.touches;
+    if (touches.length > 1) {
+      gestureRef.current.startDistance = touchDistance(touches);
+      gestureRef.current.startScale = currentGestureRef.current.scale;
+      return;
+    }
+    gestureRef.current.startX = touches[0]?.pageX ?? 0;
+    gestureRef.current.startY = touches[0]?.pageY ?? 0;
+    gestureRef.current.startTranslateX = currentGestureRef.current.translateX;
+    gestureRef.current.startTranslateY = currentGestureRef.current.translateY;
+  }
+
+  function moveImageTouch(event: GestureResponderEvent) {
+    const touches = event.nativeEvent.touches;
+    if (touches.length > 1) {
+      if (!gestureRef.current.startDistance) {
+        gestureRef.current.startDistance = touchDistance(touches);
+        gestureRef.current.startScale = currentGestureRef.current.scale;
+      }
+      const distance = touchDistance(touches);
+      const nextScale = clamp(
+        gestureRef.current.startScale * (distance / Math.max(gestureRef.current.startDistance, 1)),
+        MIN_IMAGE_SCALE,
+        MAX_IMAGE_SCALE
+      );
+      if (nextScale <= MIN_IMAGE_SCALE) {
+        setViewerTransform({ scale: MIN_IMAGE_SCALE, translateX: 0, translateY: 0 });
+        return;
+      }
+      setViewerTransform({ scale: nextScale });
+      return;
+    }
+    if (currentGestureRef.current.scale <= MIN_IMAGE_SCALE || !touches.length) return;
+    const nextX = gestureRef.current.startTranslateX + ((touches[0]?.pageX ?? 0) - gestureRef.current.startX);
+    const nextY = gestureRef.current.startTranslateY + ((touches[0]?.pageY ?? 0) - gestureRef.current.startY);
+    const panLimit = 170 * currentGestureRef.current.scale;
+    setViewerTransform({
+      translateX: clamp(nextX, -panLimit, panLimit),
+      translateY: clamp(nextY, -panLimit, panLimit)
+    });
+  }
+
+  function endImageTouch(event: GestureResponderEvent) {
+    const touches = event.nativeEvent.touches;
+    if (touches.length > 1) {
+      gestureRef.current.startDistance = touchDistance(touches);
+      gestureRef.current.startScale = currentGestureRef.current.scale;
+      return;
+    }
+    gestureRef.current.startDistance = 0;
+    if (touches.length === 1) {
+      gestureRef.current.startX = touches[0]?.pageX ?? 0;
+      gestureRef.current.startY = touches[0]?.pageY ?? 0;
+      gestureRef.current.startTranslateX = currentGestureRef.current.translateX;
+      gestureRef.current.startTranslateY = currentGestureRef.current.translateY;
+    }
+    if (currentGestureRef.current.scale <= MIN_IMAGE_SCALE + 0.02) resetZoom();
+  }
+
+  useEffect(() => {
+    if (!visible) return;
+    resetZoom();
+  }, [imageUrl, visible]);
+
+  return (
+    <Modal animationType="fade" onRequestClose={onClose} statusBarTranslucent transparent visible={visible}>
+      <View style={styles.imageViewerLayer}>
+        <View
+          onTouchCancel={endImageTouch}
+          onTouchEnd={endImageTouch}
+          onTouchMove={moveImageTouch}
+          onTouchStart={beginImageTouch}
+          style={styles.imageViewerSurface}
+        >
+          <Animated.View
+            style={[
+              styles.imageViewerImageWrap,
+              {
+                transform: [
+                  { translateX: translateXValue },
+                  { translateY: translateYValue },
+                  { scale: scaleValue }
+                ]
+              }
+            ]}
+          >
+            {imageUrl ? (
+              <Image
+                cachePolicy="memory-disk"
+                contentFit="contain"
+                source={cacheKey ? { uri: imageUrl, cacheKey } : { uri: imageUrl }}
+                style={styles.imageViewerImage}
+              />
+            ) : null}
+          </Animated.View>
+        </View>
+        <Pressable
+          accessibilityLabel="Close image"
+          accessibilityRole="button"
+          hitSlop={10}
+          onPress={onClose}
+          style={({ pressed }) => [styles.imageViewerClose, pressed && styles.subtlePressed]}
+        >
+          <X color={colors.ink} size={22} strokeWidth={2.4} />
+        </Pressable>
+        <View pointerEvents="none" style={styles.imageViewerCaption}>
+          <Text numberOfLines={1} style={styles.imageViewerCaptionText}>{title}</Text>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScreenProps) {
   const {
     appSheets,
@@ -179,6 +363,13 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const sourceValue = selected.sourceUrl || selected.sourceText;
   const selectedOpenUrl = captureOpenUrl(selected);
   const selectedImageUrl = captureImageUrl(selected);
+  const selectedImageLoadKey = captureImageLoadKey(selected);
+  const selectedFullImageUrl = captureFullImageUrl(selected);
+  const selectedFullImageLoadKey = captureFullImageLoadKey(selected);
+  const selectedMediaOpensImage = Boolean(selectedImageUrl && isImageCapture(selected));
+  const selectedMediaPressEnabled = selectedMediaOpensImage || Boolean(selectedOpenUrl);
+  const [imageViewerOpen, setImageViewerOpen] = useState(false);
+  const [imageViewerSource, setImageViewerSource] = useState<{ cacheKey: string; url: string } | null>(null);
   const selectedReviewReasons = reviewReasons(selected);
   const aiIntentValue = normalizeIntent(selected.defaultIntent);
   const quickIntentValue = draftIntentDirty ? draftIntent : aiIntentValue;
@@ -250,6 +441,15 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const noteSheetBottomInset = noteWindowAlreadyKeyboardSized ? 0 : captureKeyboardInset;
   const showStatus = displayStatus(selected) !== "ready";
 
+  useEffect(() => {
+    setImageViewerOpen(false);
+    setImageViewerSource(null);
+  }, [selected.id]);
+
+  function closeImageViewer() {
+    setImageViewerOpen(false);
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
@@ -311,15 +511,37 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
               ) : null}
             </View>
             <Pressable
-              accessibilityHint={selectedOpenUrl ? "Opens the saved source" : undefined}
-              accessibilityLabel={selectedOpenUrl ? "Open saved source" : undefined}
-              accessibilityRole={selectedOpenUrl ? "button" : undefined}
-              disabled={!selectedOpenUrl}
-              onPress={() => void openCaptureUrl(selectedOpenUrl)}
+              accessibilityHint={
+                selectedMediaOpensImage
+                  ? "Opens the full image viewer"
+                  : selectedOpenUrl
+                    ? "Opens the saved source"
+                    : undefined
+              }
+              accessibilityLabel={
+                selectedMediaOpensImage
+                  ? "Open full image"
+                  : selectedOpenUrl
+                    ? "Open saved source"
+                    : undefined
+              }
+              accessibilityRole={selectedMediaPressEnabled ? "button" : undefined}
+              disabled={!selectedMediaPressEnabled}
+              onPress={() => {
+                if (selectedMediaOpensImage) {
+                  setImageViewerSource({
+                    cacheKey: selectedFullImageUrl ? selectedFullImageLoadKey : selectedImageLoadKey,
+                    url: selectedFullImageUrl || selectedImageUrl
+                  });
+                  setImageViewerOpen(true);
+                  return;
+                }
+                if (selectedOpenUrl) void openCaptureUrl(selectedOpenUrl);
+              }}
               style={({ pressed }) => [
                 styles.reviewMediaHeader,
                 selectedImageUrl ? styles.reviewMediaHeaderImage : styles.reviewMediaHeaderFallback,
-                pressed && Boolean(selectedOpenUrl) && styles.subtlePressed
+                pressed && selectedMediaPressEnabled && styles.subtlePressed
               ]}
               testID="pc.review.media"
             >
@@ -328,9 +550,8 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                   <Image
                     cachePolicy="memory-disk"
                     contentFit="cover"
-                    source={{ uri: selectedImageUrl }}
+                    source={selectedImageLoadKey ? { uri: selectedImageUrl, cacheKey: selectedImageLoadKey } : { uri: selectedImageUrl }}
                     style={styles.reviewMediaImage}
-                    transition={120}
                   />
                   <View style={styles.reviewMediaOverlay}>
                     <View style={styles.reviewMediaSourcePill}>
@@ -738,6 +959,13 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
           </KeyboardAvoidingView>
         </View>
       ) : null}
+      <CaptureImageViewer
+        cacheKey={imageViewerSource?.cacheKey || ""}
+        imageUrl={imageViewerSource?.url || ""}
+        onClose={closeImageViewer}
+        title={draftTitle || selected.title}
+        visible={imageViewerOpen && Boolean(imageViewerSource?.url)}
+      />
       <ReminderEditorSheet
         onClose={() => setReminderSheetOpen(false)}
         onRemove={(reminderIndex) => {

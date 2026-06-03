@@ -18,7 +18,6 @@ import type {
 
 const PROCESSING_REFRESH_MS = 3000;
 const RECENT_FEED_REVEAL_COUNT = 8;
-const INITIAL_SKELETON_DELAY_MS = 180;
 
 export function useCaptureFeed({
   activeCapturesLoadedOnce,
@@ -70,12 +69,7 @@ export function useCaptureFeed({
   const visibleHomeRows: HomeListRow[] = homeRows;
 
   useEffect(() => {
-    if (!homeInitialLoading) {
-      setHomeColdSkeletonVisible(false);
-      return;
-    }
-    const timer = setTimeout(() => setHomeColdSkeletonVisible(true), INITIAL_SKELETON_DELAY_MS);
-    return () => clearTimeout(timer);
+    setHomeColdSkeletonVisible(homeInitialLoading);
   }, [homeInitialLoading]);
 
   const homeRevealCaptures = useMemo(

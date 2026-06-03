@@ -24,7 +24,7 @@ export type CaptureAssetRow = {
   mime_type: string | null;
 };
 
-export type CaptureImageVariant = "thumb" | "detail";
+export type CaptureImageVariant = "thumb" | "detail" | "viewer";
 
 export const CAPTURE_ASSET_SELECT =
   "id,user_id,capture_id,storage_path,public_url,mime_type,byte_size,created_at";

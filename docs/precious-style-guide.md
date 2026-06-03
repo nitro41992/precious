@@ -282,6 +282,8 @@ When reminders are not fully implemented, use `Later` for the main Capture Revie
 
 When a Capture has a maps-searchable Visit Target, Capture Review may show `Open in Maps` actions for Google Maps and Apple Maps. Treat this as a Maps search action from persisted Visit Target evidence, preferring the target name for launch when present, not a verified address, place ID, or top-level Map lens.
 
+Uploaded image and screenshot Captures should treat the media header as inspectable content: tapping it opens a full-screen viewer with pinch zoom and a high-resolution uncropped viewer image. Link/source preview media may still open the saved source URL instead.
+
 ### Collection Management
 
 Collections need an independent management surface so organization does not feel hidden inside Capture Review.
@@ -369,7 +371,8 @@ Search is a full-screen retrieval utility, not a chatbot default.
 
 - Loading should be inline inside the section that is loading.
 - Cached rows and known-empty states should render immediately while fresh data reloads in the background.
-- Skeleton rows are for cold unknown loads only, after a brief delay; they should not flash before an empty state.
+- The Recent Captures onboarding empty state should render only after the active feed has settled with an authoritative empty result; an empty array during cache hydration, app boot, or background fetch should stay in loading/quiet space.
+- Skeleton rows are for cold unknown loads only and should appear immediately during authenticated app boot; they should not flash before an authoritative empty state.
 - Preserve drafts during loading, sync, and app backgrounding.
 - Offline states should offer useful local behavior where possible: save locally, retry, or sync later.
 - Error messages should name the operation: `Could not save review`, `Could not load collections`, `Network connection dropped. Try again in a moment.`

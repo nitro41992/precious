@@ -79,7 +79,7 @@ New Capture must:
 Capture Review must:
 
 - Feel like editing a saved memory, not inspecting an analysis report.
-- Lead with existing capture imagery or source media when available; tapping it opens the source URL when one is available.
+- Lead with existing capture imagery or source media when available. Tapping uploaded image or screenshot media opens a full-screen image viewer with pinch zoom; tapping source/link preview media opens the source URL when one is available.
 - Make the editable title the primary text under the media/source header.
 - Show optional Save Intent, Collections, and Reminder in one compact editable attribute rail below the title. Purpose may carry the strongest weight, while Collection and Later should read as quieter inline metadata. Use flat native-feeling controls with hairline separation or spacing rather than equal-weight stat cards, chunky pills, prose sentences, or form rows.
 - Show `Add intent` when no concrete action is inferable; blank intent should be a reviewable state, not a broad fallback label or selectable chip.

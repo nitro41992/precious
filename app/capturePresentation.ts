@@ -710,9 +710,18 @@ export function captureImageUrl(capture: Capture) {
   );
 }
 
+export function captureFullImageUrl(capture: Capture) {
+  return capture.imageAssetFullUrl || capture.imageAssetUrl || capture.thumbnailUrl || capture.urlEvidence?.image_url || "";
+}
+
 export function captureImageLoadKey(capture: Capture) {
   const imageUri = captureImageUrl(capture);
   return imageUri ? capture.imageAssetCacheKey || imageUri : "";
+}
+
+export function captureFullImageLoadKey(capture: Capture) {
+  const imageUri = captureFullImageUrl(capture);
+  return imageUri ? capture.imageAssetFullCacheKey || capture.imageAssetCacheKey || imageUri : "";
 }
 
 export function captureRowRevealKey(capture: Capture) {

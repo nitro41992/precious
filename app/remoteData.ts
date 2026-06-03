@@ -32,6 +32,9 @@ export function captureFromRemote(row: Record<string, any>): Capture {
   const assetUrl = imageAsset
     ? nullableValue(imageAsset.signed_url || imageAsset.signedUrl || imageAsset.public_url || imageAsset.publicUrl)
     : undefined;
+  const assetFullUrl = imageAsset
+    ? nullableValue(imageAsset.signed_full_url || imageAsset.signedFullUrl || imageAsset.public_url || imageAsset.publicUrl)
+    : undefined;
   const archivedAtValue = row.archived_at || analysis.archived_at || null;
   const deletedAtValue =
     row.deleted_at ||
@@ -72,6 +75,10 @@ export function captureFromRemote(row: Record<string, any>): Capture {
     imageAssetUrl: assetUrl,
     imageAssetCacheKey: imageAsset
       ? nullableValue(imageAsset.signed_url_cache_key || imageAsset.signedUrlCacheKey)
+      : undefined,
+    imageAssetFullUrl: assetFullUrl,
+    imageAssetFullCacheKey: imageAsset
+      ? nullableValue(imageAsset.signed_full_url_cache_key || imageAsset.signedFullUrlCacheKey)
       : undefined,
     imageAssetMimeType: imageAsset ? nullableValue(imageAsset.mime_type || imageAsset.mimeType) : undefined,
     urlEvidence: analysis.url_evidence || row.urlEvidence || null,

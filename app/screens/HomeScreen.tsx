@@ -38,6 +38,7 @@ type HomeScreenProps = {
     capturesError: string;
     capturesLoading: boolean;
     capturesNextCursor: string | null;
+    activeCapturesLoadedOnce: boolean;
     homeColdSkeletonVisible: boolean;
     homeInitialLoading: boolean;
     keyboardHeight: number;
@@ -82,6 +83,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
     capturesError,
     capturesLoading,
     capturesNextCursor,
+    activeCapturesLoadedOnce,
     homeColdSkeletonVisible,
     homeInitialLoading,
     keyboardHeight,
@@ -108,7 +110,9 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
   } = actions;
 
   const homeCaptureRows = homeCaptures.flatMap((row) => row.type === "capture" ? [row.capture] : []);
-  const homeCountLabel = capturesLoading && !homeCaptureRows.length
+  const homeKnownEmpty = activeCapturesLoadedOnce && !capturesLoading && !capturesError && !homeCaptureRows.length;
+  const homeAwaitingCaptures = !capturesError && !homeCaptureRows.length && !homeKnownEmpty;
+  const homeCountLabel = homeAwaitingCaptures
     ? "Loading captures"
     : `${homeCaptureRows.length} recent ${homeCaptureRows.length === 1 ? "capture" : "captures"}`;
   const composerKeyboardVisible = showCaptureComposer && keyboardHeight > 0;
@@ -171,9 +175,9 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
             leadingItem?.type === "section" ? null : <View style={styles.separator} />
           }
           ListEmptyComponent={
-            homeInitialLoading && homeColdSkeletonVisible ? (
+            homeAwaitingCaptures && (homeInitialLoading || capturesLoading) && homeColdSkeletonVisible ? (
               renderCaptureSkeletonRows(5)
-            ) : homeInitialLoading ? (
+            ) : homeAwaitingCaptures ? (
               <View style={styles.loadingQuietSpace} />
             ) : capturesError ? (
               <View style={styles.empty}>
@@ -183,7 +187,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                   <Text style={styles.secondaryButtonText}>Try again</Text>
                 </Pressable>
               </View>
-            ) : (
+            ) : homeKnownEmpty ? (
               <View style={styles.homeEmpty}>
                 <View
                   accessibilityElementsHidden
@@ -245,7 +249,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                   </Text>
                 </View>
               </View>
-            )
+            ) : null
           }
           ListFooterComponent={
             visibleHomeRows.length && capturesLoading && capturesNextCursor

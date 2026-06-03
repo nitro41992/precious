@@ -310,10 +310,10 @@ export default function App() {
     if (canSeedActiveRows) {
       commitCaptureRows("active", (current) => sortCaptures(uniqueCaptures([...rows, ...current])));
       setCapturesNextCursor(page.nextCursor);
-      setActiveCapturesLoadedOnce(true);
+      if (rows.length) setActiveCapturesLoadedOnce(true);
       return true;
     }
-    setActiveCapturesLoadedOnce(true);
+    if (currentActiveRows.length) setActiveCapturesLoadedOnce(true);
     return false;
   }
 
@@ -444,6 +444,7 @@ export default function App() {
     authEmail,
     authLoading,
     authPendingEmail,
+    authReady,
     authScreen,
     backToSignIn,
     config,
@@ -467,6 +468,10 @@ export default function App() {
     const loadingSetter = mode === "archived" ? setArchivedCapturesLoading : setCapturesLoading;
     const phaseSetter = mode === "archived" ? setArchivedCapturesLoadPhase : setCapturesLoadPhase;
     const errorSetter = mode === "archived" ? setArchivedCapturesError : setCapturesError;
+    if (!authReady || (config?.apiUrl && !session?.accessToken)) {
+      if (!options.append) phaseSetter("cold");
+      return;
+    }
     const knownLoaded = mode === "archived"
       ? archivedCapturesLoadedRef.current
       : activeCapturesLoadedOnceRef.current;
@@ -552,7 +557,7 @@ export default function App() {
       if (succeeded) phaseSetter("ready");
       if (mode === "active" && !options.append) setActiveCapturesLoadedOnce(true);
     }
-  }, [config, session, withFreshAccessToken]);
+  }, [authReady, config, session, withFreshAccessToken]);
 
   const loadMoreCaptures = useCallback((mode: CaptureListMode = "active") => {
     const cursor = mode === "archived" ? archivedCapturesNextCursor : capturesNextCursor;
@@ -1078,10 +1083,14 @@ export default function App() {
   }, [handleAuthCallbackUrl, loadCaptures, selectCapture]);
 
   useEffect(() => {
+    if (!authReady || (config?.apiUrl && !session?.accessToken)) {
+      setCapturesLoadPhase("cold");
+      return;
+    }
     void loadCaptures().catch((error) => {
       setCapturesError((current) => current || friendlyError(error, "Could not load captures"));
     });
-  }, [loadCaptures]);
+  }, [authReady, config?.apiUrl, loadCaptures, session?.accessToken]);
 
   useEffect(() => {
     if (!config?.apiUrl || !session?.accessToken || collectionsPrefetchStartedRef.current) return;
@@ -2474,6 +2483,7 @@ export default function App() {
           capturesError,
           capturesLoading,
           capturesNextCursor,
+          activeCapturesLoadedOnce,
           homeColdSkeletonVisible,
           homeInitialLoading,
           keyboardHeight,
@@ -2608,7 +2618,7 @@ export default function App() {
     return renderCaptureReviewScreen(selected);
   }
 
-  if (config?.apiUrl && !session) {
+  if (authReady && config?.apiUrl && !session) {
     return (
       <AuthScreen
         actions={{

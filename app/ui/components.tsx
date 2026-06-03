@@ -244,7 +244,6 @@ export function SourceMark({
           }}
           source={imageLoadKey ? { uri: imageUri, cacheKey: imageLoadKey } : { uri: imageUri }}
           style={styles.captureThumbnailImage}
-          transition={90}
         />
       </View>
     );

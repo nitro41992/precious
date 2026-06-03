@@ -13,7 +13,6 @@ import {
   captureSupportLine,
   consumerSummary,
   formatDateTime,
-  isImageCapture,
   shouldGhostSourceMark
 } from "../capturePresentation";
 import { colors } from "./theme";
@@ -72,13 +71,6 @@ export function CaptureRow({
   const intentLabel = captureIntentLabel(item);
   const collectionTokens = showCollectionToken ? item.linkedCollections || [] : [];
   const ghostSourceMark = deferFallbackIcon || shouldGhostSourceMark(item);
-  const imageLoadingGhost = Boolean(
-    !ghostSourceMark &&
-      isImageCapture(item) &&
-      imageLoadKey &&
-      imageLoadState !== "loaded" &&
-      imageLoadState !== "failed"
-  );
   const sourceMark = (
     <SourceMark
       capture={item}
@@ -98,13 +90,6 @@ export function CaptureRow({
     >
       {ghostSourceMark ? (
         <SkeletonBlock style={styles.loadingThumbnailMark} />
-      ) : imageLoadingGhost ? (
-        <View style={styles.thumbnailRevealSlot}>
-          {sourceMark}
-          <View pointerEvents="none" style={styles.thumbnailGhostOverlay}>
-            <SkeletonBlock style={styles.loadingThumbnailMark} />
-          </View>
-        </View>
       ) : (
         sourceMark
       )}

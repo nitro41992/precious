@@ -1569,6 +1569,61 @@ export const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "800"
   },
+  imageViewerLayer: {
+    backgroundColor: "#000000",
+    flex: 1
+  },
+  imageViewerSurface: {
+    alignItems: "center",
+    bottom: 0,
+    justifyContent: "center",
+    left: 0,
+    overflow: "hidden",
+    position: "absolute",
+    right: 0,
+    top: 0
+  },
+  imageViewerImageWrap: {
+    alignItems: "center",
+    height: "100%",
+    justifyContent: "center",
+    width: "100%"
+  },
+  imageViewerImage: {
+    height: "100%",
+    width: "100%"
+  },
+  imageViewerClose: {
+    alignItems: "center",
+    backgroundColor: "rgba(16, 20, 17, 0.72)",
+    borderColor: "rgba(238, 245, 239, 0.18)",
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 44,
+    justifyContent: "center",
+    position: "absolute",
+    right: 18,
+    top: Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) + 12 : 18,
+    width: 44
+  },
+  imageViewerCaption: {
+    alignItems: "center",
+    bottom: 28,
+    left: 20,
+    position: "absolute",
+    right: 20
+  },
+  imageViewerCaptionText: {
+    backgroundColor: "rgba(16, 20, 17, 0.72)",
+    borderRadius: 8,
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 18,
+    overflow: "hidden",
+    paddingHorizontal: 10,
+    paddingVertical: 7
+  },
   reviewMediaFallbackContent: {
     alignItems: "center",
     flexDirection: "row",

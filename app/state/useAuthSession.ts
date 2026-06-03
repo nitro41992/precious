@@ -32,6 +32,8 @@ export function useAuthSession({
   const [authEmail, setAuthEmail] = useState("");
   const [authPendingEmail, setAuthPendingEmail] = useState("");
   const [authLoading, setAuthLoading] = useState<AuthLoadingState>(null);
+  const [configLoaded, setConfigLoaded] = useState(false);
+  const [sessionLoaded, setSessionLoaded] = useState(false);
   const pendingAuthCallbackUrlRef = useRef<string | null>(null);
 
   const persistSupabaseSession = useCallback(async (accessToken: string, refreshToken: string, expiresAt: number) => {
@@ -83,10 +85,14 @@ export function useAuthSession({
       setConfig(JSON.parse(raw || "{}") as AppConfig);
     }).catch(() => {
       setConfig({ apiUrl: "", supabaseUrl: "", supabaseAnonKey: "" });
+    }).finally(() => {
+      setConfigLoaded(true);
     });
     nativeAuth?.getSession().then((raw) => {
       if (raw) setSession(JSON.parse(raw) as AuthSession);
-    }).catch(() => setSession(null));
+    }).catch(() => setSession(null)).finally(() => {
+      setSessionLoaded(true);
+    });
     if (Platform.OS === "android" && Platform.Version >= 33) {
       void PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
     }
@@ -220,6 +226,7 @@ export function useAuthSession({
     authLoading,
     authPendingEmail,
     authScreen,
+    authReady: configLoaded && sessionLoaded,
     backToSignIn,
     config,
     handleAuthCallbackUrl,

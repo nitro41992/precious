@@ -102,12 +102,14 @@ export function withCaptureStates(rows: any[]) {
 }
 
 export const CAPTURE_ASSET_SIGNED_URL_TTL_SECONDS = 60 * 60;
+
 export const CAPTURE_IMAGE_TRANSFORMS: Record<
   CaptureImageVariant,
-  { width: number; height: number; resize: "cover"; quality: number }
+  { width: number; height: number; resize: "cover" | "contain"; quality: number }
 > = {
-  thumb: { width: 160, height: 160, resize: "cover", quality: 70 },
+  thumb: { width: 320, height: 320, resize: "cover", quality: 82 },
   detail: { width: 1280, height: 744, resize: "cover", quality: 82 },
+  viewer: { width: 2048, height: 2048, resize: "contain", quality: 88 },
 };
 
 export async function signedCaptureAssetUrl(
@@ -160,12 +162,17 @@ export async function withSignedCaptureAssets(
         storagePath,
         variant,
       );
+      const signedFullUrl = variant === "detail"
+        ? await signedCaptureAssetUrl(supabase, storagePath, "viewer")
+        : null;
       return {
         ...record,
         signed_url: signedUrl,
         signed_url_variant: variant,
         signed_url_expires_in: CAPTURE_ASSET_SIGNED_URL_TTL_SECONDS,
         signed_url_cache_key: `${storagePath}:${variant}`,
+        signed_full_url: signedFullUrl,
+        signed_full_url_cache_key: signedFullUrl ? `${storagePath}:viewer` : null,
       };
     }),
   );
