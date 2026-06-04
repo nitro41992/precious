@@ -557,9 +557,6 @@ export const styles = StyleSheet.create({
     height: 16,
     width: 16
   },
-  sourceFaviconOverlay: {
-    position: "absolute"
-  },
   captureThumbnailFrame: {
     backgroundColor: colors.surfaceContainer,
     borderColor: colors.line,

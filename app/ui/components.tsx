@@ -259,19 +259,17 @@ export function SourceMark({
         itemStatus === "failed" && styles.sourceMarkFailed
       ]}
     >
-      <Icon color={sourceIconColor(itemStatus)} size={iconSize} strokeWidth={2.3} />
       {faviconUri ? (
         <Image
           cachePolicy="memory-disk"
           contentFit="contain"
           onError={() => onFaviconFailure(host)}
           source={{ uri: faviconUri }}
-          style={[
-            styles.sourceFaviconOverlay,
-            size === "detail" ? styles.sourceFaviconDetail : styles.sourceFavicon
-          ]}
+          style={size === "detail" ? styles.sourceFaviconDetail : styles.sourceFavicon}
         />
-      ) : null}
+      ) : (
+        <Icon color={sourceIconColor(itemStatus)} size={iconSize} strokeWidth={2.3} />
+      )}
     </View>
   );
 }
