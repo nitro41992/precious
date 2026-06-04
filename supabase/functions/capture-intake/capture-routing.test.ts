@@ -9,6 +9,45 @@ import {
   imageAssetFixture,
   urlEvidence,
 } from "./url-evidence.test-support.ts";
+import { acceptPendingCollectionDecisions } from "./lib/collections/review-decisions.ts";
+
+function supabaseCollectionReviewMock() {
+  const inserts: Array<{ table: string; value: Record<string, unknown> }> = [];
+  return {
+    inserts,
+    from(table: string) {
+      const query: Record<string, any> = { table, filters: {} };
+      query.select = () => query;
+      query.eq = (key: string, value: unknown) => {
+        query.filters[key] = value;
+        return query;
+      };
+      query.is = () => query;
+      query.maybeSingle = () => {
+        if (table === "collections") {
+          return Promise.resolve({
+            data: {
+              id: query.filters.id,
+              status: "active",
+              deleted_at: null,
+            },
+            error: null,
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      };
+      query.insert = (value: Record<string, unknown>) => {
+        inserts.push({ table, value });
+        return {
+          select: () => ({
+            single: () => Promise.resolve({ data: { id: "link-1" }, error: null }),
+          }),
+        };
+      };
+      return query;
+    },
+  };
+}
 
 Deno.test("capture routing keeps URL evidence fallback link-only", () => {
   const imageOnly = captureFixture({
@@ -212,6 +251,54 @@ Deno.test("legacy broad intents normalize to blank intent and review", () => {
     reviewedBlank.needs_review,
     false,
     "user-reviewed blank intent should be allowed",
+  );
+});
+
+Deno.test("confirming collection review links pending existing collection suggestions", async () => {
+  const supabase = supabaseCollectionReviewMock();
+  await acceptPendingCollectionDecisions(
+    supabase as any,
+    "user-1",
+    "capture-1",
+    {
+      collection_decisions: [
+        {
+          type: "existing",
+          collection_id: "food-id",
+          title: "Food",
+          description: "Recipes and places to eat.",
+          rationale: "Food fits because this is a restaurant place.",
+          confidence: 0.87,
+        },
+        {
+          type: "new",
+          title: "AI should not create this",
+          rationale: "Legacy generated Collection suggestion.",
+          confidence: 0.77,
+        },
+      ],
+    },
+  );
+
+  assertEqual(
+    supabase.inserts.length,
+    1,
+    "only existing pending Collection decisions should be linked",
+  );
+  assertEqual(
+    supabase.inserts[0].table,
+    "collection_capture_links",
+    "pending Collection acceptance should create a link",
+  );
+  assertEqual(
+    supabase.inserts[0].value.collection_id,
+    "food-id",
+    "pending Collection acceptance should link the suggested existing Collection",
+  );
+  assertEqual(
+    supabase.inserts[0].value.created_by,
+    "analysis",
+    "accepted AI Collection matches should keep analysis provenance",
   );
 });
 

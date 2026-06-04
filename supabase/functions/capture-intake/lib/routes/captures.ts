@@ -199,7 +199,12 @@ export async function handleCapturesResource(
           error: "currentSaveIntent is not an active save intent",
         }, 400);
       }
-      if (resolvedTargets.includes("collections")) {
+      const acceptCollectionSuggestions =
+        body.acceptCollectionSuggestions !== false;
+      if (
+        resolvedTargets.includes("collections") &&
+        acceptCollectionSuggestions
+      ) {
         await acceptPendingCollectionDecisions(
           supabase,
           userId,
@@ -402,29 +407,48 @@ export async function handleCapturesResource(
       ) {
         resolvedTargets.add("intent");
       }
-      if (Array.isArray(body.collectionDecisions)) {
+      if (
+        Array.isArray(body.collectionDecisions) &&
+        body.collectionDecisions.length > 0
+      ) {
         resolvedTargets.add("collections");
       }
-      if (Array.isArray(body.reminderDecisions)) {
+      if (
+        Array.isArray(body.reminderDecisions) &&
+        body.reminderDecisions.length > 0
+      ) {
         resolvedTargets.add("reminder");
       }
       resolvedTargets.add("analysis");
-      const nextAnalysis = normalizedReviewAnalysis(
-        {
-          ...resolveReviewTargets(
-            analysisWithCurrentIntent(
-              currentAnalysis,
-              body.currentSaveIntent,
-            ),
-            [...resolvedTargets],
-          ),
+      const nextAnalysisBase = resolveReviewTargets(
+        analysisWithCurrentIntent(
+          currentAnalysis,
+          body.currentSaveIntent,
+        ),
+        [...resolvedTargets],
+      );
+      const hasCollectionDecisions = Array.isArray(body.collectionDecisions) &&
+        body.collectionDecisions.length > 0;
+      const hasReminderDecisions = Array.isArray(body.reminderDecisions) &&
+        body.reminderDecisions.length > 0;
+      const nextAnalysisWithCollections = hasCollectionDecisions
+        ? {
+          ...nextAnalysisBase,
           collection_decisions: [],
           suggested_collections: [],
+        }
+        : nextAnalysisBase;
+      const nextAnalysisWithReminders = hasReminderDecisions
+        ? {
+          ...nextAnalysisWithCollections,
           suggested_reminders: reviewReminderSuggestions(
             currentAnalysis,
             body.reminderDecisions,
           ),
-        },
+        }
+        : nextAnalysisWithCollections;
+      const nextAnalysis = normalizedReviewAnalysis(
+        nextAnalysisWithReminders,
         body.currentSaveIntent === null
           ? new Date().toISOString()
           : existingResult.data.review_confirmed_at,

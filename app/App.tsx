@@ -107,6 +107,7 @@ import {
   isDeleted,
   mergeRemoteCaptures,
   parseCaptureUrl,
+  reviewTargetsForCapture,
   sortCaptures
 } from "./captureLogic";
 
@@ -130,6 +131,38 @@ const COLLECTION_LIST_PERF_PROPS = {
   updateCellsBatchingPeriod: 40,
   windowSize: 7
 };
+
+function pendingDecisionLinkedCollections(capture: Capture): LinkedCollection[] {
+  const linkedIds = new Set((capture.linkedCollections || []).map((collection) => collection.id));
+  const next: LinkedCollection[] = [];
+  for (const decision of capture.collectionDecisions || []) {
+    if (decision.type !== "existing" || !decision.collectionId || linkedIds.has(decision.collectionId)) continue;
+    const title = decision.title.trim();
+    if (!title) continue;
+    linkedIds.add(decision.collectionId);
+    next.push({
+      id: decision.collectionId,
+      title,
+      description: decision.description || undefined,
+      createdBy: "analysis",
+      rationale: decision.rationale || null,
+      confidence: Number.isFinite(decision.confidence) ? decision.confidence : null,
+      linkedAt: Date.now()
+    });
+  }
+  return next;
+}
+
+function hasPendingCollectionDecision(capture: Capture) {
+  return pendingDecisionLinkedCollections(capture).length > 0;
+}
+
+function confirmedLinkedCollectionsForCapture(capture: Capture): LinkedCollection[] {
+  if (!reviewTargetsForCapture(capture).includes("collections")) {
+    return capture.linkedCollections || [];
+  }
+  return (capture.linkedCollections || []).filter((collection) => collection.createdBy !== "analysis");
+}
 
 export default function App() {
   const { height: windowHeight } = useWindowDimensions();
@@ -1553,6 +1586,15 @@ export default function App() {
 
     if (config?.apiUrl && session?.accessToken) {
       try {
+        const body: Record<string, unknown> = {
+          captureId: selected.remoteId || selected.id,
+          action: "save_review_decisions",
+          title: draftTitle.trim(),
+          note: draftNote.trim()
+        };
+        if (currentSaveIntent !== undefined) body.currentSaveIntent = currentSaveIntent;
+        if (reminderDecisions.length) body.reminderDecisions = reminderDecisions;
+        if (collectionDecisions.length) body.collectionDecisions = collectionDecisions;
         const json = await withFreshAccessToken((accessToken) =>
           requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
             method: "PATCH",
@@ -1561,15 +1603,7 @@ export default function App() {
               authorization: `Bearer ${accessToken}`,
               "content-type": "application/json"
             },
-            body: {
-              captureId: selected.remoteId || selected.id,
-              action: "save_review_decisions",
-              title: draftTitle.trim(),
-              note: draftNote.trim(),
-              currentSaveIntent,
-              reminderDecisions,
-              collectionDecisions
-            }
+            body
           })
         );
         const updatedCapture = captureFromRemote(json.capture);
@@ -1592,25 +1626,37 @@ export default function App() {
       selected.id,
       draftTitle.trim(),
       draftNote.trim(),
-      draftIntentDirty && draftIntent ? draftIntent : null
+      draftIntentDirty ? draftIntent || null : selected.defaultIntent || null
     );
+    const locallyResolvedTargets = new Set<ReviewTarget>(["analysis"]);
+    if (draftIntentDirty) locallyResolvedTargets.add("intent");
+    if (collectionDecisions.length) locallyResolvedTargets.add("collections");
+    if (reminderDecisions.length) locallyResolvedTargets.add("reminder");
     const next = (JSON.parse(raw || "[]") as Capture[]).map((capture) => {
       if (capture.id !== selected.id) return capture;
+      const reviewTargets = (capture.reviewTargets || []).filter((target) => !locallyResolvedTargets.has(target));
+      const stillNeedsReview = reviewTargets.length > 0;
       return {
         ...capture,
-        needsReview: false,
-        reviewTargets: [],
-        status: "ready" as const,
-        suggestedReminders: (capture.suggestedReminders || []).filter((reminder, index) => {
-          return reminderDrafts[reminderDraftKey(reminder, index)] !== "remove";
-        }),
-        linkedCollections: (capture.linkedCollections || []).filter((collection) => {
-          return collectionDrafts[linkedCollectionDraftKey(collection.id)] !== "remove";
-        }),
-        collectionDecisions: (capture.collectionDecisions || []).filter((collection, index) => {
-          const action = collectionDrafts[suggestedCollectionDraftKey(collection, index)] || "ignore";
-          return action !== "link" && action !== "create";
-        })
+        needsReview: stillNeedsReview,
+        reviewTargets,
+        status: stillNeedsReview ? capture.status : ("ready" as const),
+        suggestedReminders: reminderDecisions.length
+          ? (capture.suggestedReminders || []).filter((reminder, index) => {
+              return reminderDrafts[reminderDraftKey(reminder, index)] !== "remove";
+            })
+          : capture.suggestedReminders,
+        linkedCollections: collectionDecisions.length
+          ? (capture.linkedCollections || []).filter((collection) => {
+              return collectionDrafts[linkedCollectionDraftKey(collection.id)] !== "remove";
+            })
+          : capture.linkedCollections,
+        collectionDecisions: collectionDecisions.length
+          ? (capture.collectionDecisions || []).filter((collection, index) => {
+              const action = collectionDrafts[suggestedCollectionDraftKey(collection, index)] || "ignore";
+              return action !== "link" && action !== "create";
+            })
+          : capture.collectionDecisions
       };
     });
     replaceLocalCaptureLists(next);
@@ -1625,7 +1671,7 @@ export default function App() {
 
   async function resolveReviewTargets(
     targets: ReviewTarget[],
-    options: { currentSaveIntent?: string | null } = {}
+    options: { acceptCollectionSuggestions?: boolean; currentSaveIntent?: string | null } = {}
   ) {
     if (!selected) return;
     const resolvedTargets = [...new Set(targets)].filter((target): target is ReviewTarget =>
@@ -1641,6 +1687,11 @@ export default function App() {
         };
         if (Object.prototype.hasOwnProperty.call(options, "currentSaveIntent")) {
           body.currentSaveIntent = options.currentSaveIntent ?? null;
+        } else if (resolvedTargets.includes("intent")) {
+          body.currentSaveIntent = normalizeIntent(selected.defaultIntent) || null;
+        }
+        if (Object.prototype.hasOwnProperty.call(options, "acceptCollectionSuggestions")) {
+          body.acceptCollectionSuggestions = options.acceptCollectionSuggestions !== false;
         }
         const json = await withFreshAccessToken((accessToken) =>
           requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
@@ -1666,12 +1717,23 @@ export default function App() {
     }
 
     const resolved = new Set(resolvedTargets);
+    const shouldAcceptCollectionSuggestions = options.acceptCollectionSuggestions !== false;
+    const acceptedCollectionLinks = resolved.has("collections") && shouldAcceptCollectionSuggestions
+      ? pendingDecisionLinkedCollections(selected)
+      : [];
     const updatedCapture: Capture = {
       ...selected,
       defaultIntent: Object.prototype.hasOwnProperty.call(options, "currentSaveIntent")
         ? options.currentSaveIntent || undefined
+        : resolved.has("intent")
+        ? normalizeIntent(selected.defaultIntent) || undefined
         : selected.defaultIntent,
       reviewTargets: (selected.reviewTargets || []).filter((target) => !resolved.has(target)),
+      linkedCollections: resolved.has("collections")
+        ? [...(selected.linkedCollections || []), ...acceptedCollectionLinks]
+        : selected.linkedCollections,
+      collectionDecisions: resolved.has("collections") ? [] : selected.collectionDecisions,
+      suggestedCollections: resolved.has("collections") ? [] : selected.suggestedCollections,
       suggestedReminders: resolved.has("reminder")
         ? (selected.suggestedReminders || []).map((reminder) => ({ ...reminder, status: "confirmed" }))
         : selected.suggestedReminders
@@ -1709,18 +1771,46 @@ export default function App() {
     if (task.target === "collections") {
       setRationaleSheet(null);
       setRationaleEditTarget(null);
+      if (selected && hasPendingCollectionDecision(selected)) {
+        void resolveReviewTargets(["collections"], { acceptCollectionSuggestions: false });
+        return;
+      }
+      const confirmedCollectionIds = selected
+        ? confirmedLinkedCollectionsForCapture(selected).map((collection) => collection.id)
+        : [];
+      const hasUnconfirmedAnalysisLinks = Boolean(
+        selected?.linkedCollections?.some((collection) => collection.createdBy === "analysis")
+      );
+      if (hasUnconfirmedAnalysisLinks) {
+        void updateCaptureCollections(confirmedCollectionIds, {
+          closePicker: false,
+          toastMessage: "Collection suggestion cleared."
+        });
+        return;
+      }
+      if (!confirmedCollectionIds.length) {
+        void resolveReviewTargets(["collections"], { acceptCollectionSuggestions: false });
+        return;
+      }
       void updateCaptureCollections([], { closePicker: false, toastMessage: "Collections cleared." });
       return;
     }
     if (task.target === "reminder") {
       setRationaleSheet(null);
       setRationaleEditTarget(null);
+      if (!selected?.suggestedReminders?.length) {
+        void resolveReviewTargets(["reminder"]);
+        return;
+      }
       void dismissReminder(0);
       return;
     }
     if (task.target === "intent") {
       void resolveReviewTargets(["intent"], { currentSaveIntent: null });
       return;
+    }
+    if (task.target === "analysis") {
+      void resolveReviewTargets(["analysis"]);
     }
   }
 
@@ -1811,7 +1901,7 @@ export default function App() {
   async function openCollectionPicker() {
     if (!selected) return;
     setCollectionPickerQuery("");
-    setCollectionSelectionIds((selected.linkedCollections || []).map((collection) => collection.id));
+    setCollectionSelectionIds(confirmedLinkedCollectionsForCapture(selected).map((collection) => collection.id));
     setCollectionPickerOpen(true);
     try {
       await loadCollections("active");
@@ -2403,12 +2493,9 @@ export default function App() {
       <AppSheets
         accountSheetOpen={accountSheetOpen}
         clearReviewTask={clearReviewTask}
-        editReviewTask={editReviewTask}
         onSignOut={() => void signOut()}
-        rationaleEditTarget={rationaleEditTarget}
         rationaleSheet={rationaleSheet}
         resolveReviewTargets={resolveReviewTargets}
-        selected={selected}
         setAccountSheetOpen={setAccountSheetOpen}
         setRationaleEditTarget={setRationaleEditTarget}
         setRationaleSheet={setRationaleSheet}

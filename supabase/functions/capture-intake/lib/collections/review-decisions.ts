@@ -13,6 +13,7 @@ import { rationaleForAnalysis } from "../analysis/rationales.ts";
 import type { AnalysisOutput, RetrievedCollection } from "../types.ts";
 import { scheduleCaptureEmbeddingRefresh } from "./embeddings.ts";
 import {
+  activeCollectionDecisionRows,
   collectionDecisionKey,
   linkCaptureToCollection,
   normalizeCollectionDecision,
@@ -580,14 +581,35 @@ export async function applyCollectionReviewDecisions(
   }
 }
 
-export function acceptPendingCollectionDecisions(
+export async function acceptPendingCollectionDecisions(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
   captureId: string,
   analysis: Record<string, unknown>,
 ) {
-  void supabase;
-  void userId;
-  void captureId;
-  void analysis;
+  const decisions = activeCollectionDecisionRows(analysis)
+    .map((decision, index) => {
+      const normalized = normalizeCollectionDecision(decision);
+      return {
+        kind: "suggested",
+        index,
+        type: normalized.type,
+        collectionId: normalized.collection_id,
+        title: normalized.title,
+        description: normalized.description,
+        rationale: normalized.rationale,
+        confidence: normalized.confidence,
+        action: "link",
+      };
+    })
+    .filter((decision) =>
+      decision.type === "existing" && Boolean(decision.collectionId)
+    );
+  if (!decisions.length) return;
+  await applyCollectionReviewDecisions(
+    supabase,
+    userId,
+    captureId,
+    decisions,
+  );
 }

@@ -371,11 +371,17 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
   const [imageViewerSource, setImageViewerSource] = useState<{ cacheKey: string; url: string } | null>(null);
   const selectedReviewReasons = reviewReasons(selected);
+  const intentReviewPending = selectedReviewReasons.includes("intent");
+  const collectionReviewPending = selectedReviewReasons.includes("collections");
+  const reminderReviewPending = selectedReviewReasons.includes("reminder");
   const aiIntentValue = normalizeIntent(selected.defaultIntent);
-  const quickIntentValue = draftIntentDirty ? draftIntent : aiIntentValue;
+  const visibleIntentValue = intentReviewPending ? "" : aiIntentValue;
+  const quickIntentValue = draftIntentDirty ? draftIntent : visibleIntentValue;
   const quickIntentLabel = activeIntentLabel(quickIntentValue) || ADD_INTENT_LABEL;
-  const reminderRows = selected.suggestedReminders || [];
-  const collectionRows = selected.linkedCollections || [];
+  const reminderRows = reminderReviewPending ? [] : selected.suggestedReminders || [];
+  const collectionRows = collectionReviewPending
+    ? (selected.linkedCollections || []).filter((collection) => collection.createdBy !== "analysis")
+    : selected.linkedCollections || [];
   const collectionRowLabel = linkedCollectionsLabel(collectionRows);
   const primaryReminderIndex = reminderRows.findIndex((reminder, index) => {
     return reminderDrafts[reminderDraftKey(reminder, index)] !== "remove";
@@ -698,7 +704,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                       <Pressable
                         key={intent}
                         onPress={() => {
-                          const intentDirty = intent !== aiIntentValue;
+                          const intentDirty = intent !== visibleIntentValue || intentReviewPending;
                           setDraftIntentDirty(intentDirty);
                           setDraftIntent(intent);
                           updateSelectedReviewDraft({ intent, intentDirty });
@@ -712,20 +718,36 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                       </Pressable>
                     );
                   })}
+                  <Pressable
+                    onPress={() => {
+                      const intentDirty = Boolean(visibleIntentValue) || intentReviewPending;
+                      setDraftIntentDirty(intentDirty);
+                      setDraftIntent("");
+                      updateSelectedReviewDraft({ intent: "", intentDirty });
+                      setQuickIntentOpen(false);
+                    }}
+                    style={[styles.intentChip, !quickIntentValue && styles.intentChipSelected]}
+                  >
+                    <Text style={[styles.intentChipText, !quickIntentValue && styles.intentChipTextSelected]}>
+                      No intent
+                    </Text>
+                  </Pressable>
                 </View>
               ) : null}
               {draftIntentDirty ? (
                 <View style={styles.changeLine}>
                   <Text style={styles.changeText}>
-                    {aiIntentValue
-                      ? `Original suggestion: ${activeIntentLabel(aiIntentValue)}`
+                    {intentReviewPending && aiIntentValue
+                      ? `Suggestion: ${activeIntentLabel(aiIntentValue)}`
+                      : visibleIntentValue
+                      ? `Original: ${activeIntentLabel(visibleIntentValue)}`
                       : "Started without intent"}
                   </Text>
                   <Pressable
                     onPress={() => {
-                      setDraftIntent(aiIntentValue);
+                      setDraftIntent(visibleIntentValue);
                       setDraftIntentDirty(false);
-                      updateSelectedReviewDraft({ intent: aiIntentValue, intentDirty: false });
+                      updateSelectedReviewDraft({ intent: visibleIntentValue, intentDirty: false });
                     }}
                     hitSlop={8}
                   >

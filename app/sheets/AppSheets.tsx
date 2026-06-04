@@ -6,17 +6,11 @@ import {
   Folder,
   Info,
   LogOut,
-  PencilLine,
   Target,
   X
 } from "lucide-react-native";
 
-import {
-  INTENT_OPTIONS,
-  activeIntentLabel
-} from "../capturePresentation";
 import type {
-  Capture,
   LucideIconComponent,
   RationaleSheet,
   ReviewChecklistTask,
@@ -87,62 +81,24 @@ function rationaleSectionTarget(label: string): ReviewTarget | null {
   }
 }
 
-function ReviewTaskAction({
-  accessibilityLabel,
-  Icon,
-  label,
-  onPress,
-  tone = "default"
-}: {
-  accessibilityLabel?: string;
-  Icon: LucideIconComponent;
-  label: string;
-  onPress: () => void;
-  tone?: "default" | "primary" | "danger";
-}) {
-  const iconColor = tone === "primary"
-    ? colors.accent
-    : tone === "danger"
-      ? colors.danger
-      : colors.secondary;
-  return (
-    <Pressable
-      accessibilityLabel={accessibilityLabel || label}
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.reviewTaskAction,
-        tone === "primary" && styles.reviewTaskActionPrimary,
-        tone === "danger" && styles.reviewTaskActionDanger,
-        pressed && styles.subtlePressed
-      ]}
-    >
-      <Icon color={iconColor} size={22} strokeWidth={2.35} />
-    </Pressable>
-  );
-}
-
 export function AppSheets({
   accountSheetOpen,
   clearReviewTask,
-  editReviewTask,
   onSignOut,
-  rationaleEditTarget,
   rationaleSheet,
   resolveReviewTargets,
-  selected,
   setAccountSheetOpen,
   setRationaleEditTarget,
   setRationaleSheet
 }: {
   accountSheetOpen: boolean;
   clearReviewTask: (task: ReviewChecklistTask) => void;
-  editReviewTask: (task: ReviewChecklistTask) => void;
   onSignOut: () => void;
-  rationaleEditTarget: ReviewTarget | null;
   rationaleSheet: RationaleSheet | null;
-  resolveReviewTargets: (targets: ReviewTarget[], options?: { currentSaveIntent?: string | null }) => Promise<void> | void;
-  selected: Capture | null;
+  resolveReviewTargets: (
+    targets: ReviewTarget[],
+    options?: { acceptCollectionSuggestions?: boolean; currentSaveIntent?: string | null }
+  ) => Promise<void> | void;
   setAccountSheetOpen: (value: boolean) => void;
   setRationaleEditTarget: (value: ReviewTarget | null) => void;
   setRationaleSheet: (value: RationaleSheet | null) => void;
@@ -242,7 +198,6 @@ export function AppSheets({
                 </View>
                 {reviewTasks.map((task) => {
                   const TaskIcon = reviewTaskIcon(task.target);
-                  const showIntentPicker = task.target === "intent" && rationaleEditTarget === "intent";
                   return (
                     <View key={task.target} style={styles.reviewChecklistTask}>
                       <View style={[styles.rationaleSheetSectionIcon, reviewTaskIconStyle(task.target)]}>
@@ -254,86 +209,33 @@ export function AppSheets({
                             <Text style={styles.rationaleSheetLabel}>{task.title}</Text>
                             <Text style={styles.reviewChecklistValue}>{task.value}</Text>
                           </View>
-                          <View style={styles.reviewChecklistActions}>
-                            <ReviewTaskAction
-                              accessibilityLabel={task.confirmLabel}
-                              Icon={CircleCheck}
-                              label="Confirm"
-                              onPress={() => void resolveReviewTargets([task.target])}
-                              tone="primary"
-                            />
-                            {task.editLabel ? (
-                              <ReviewTaskAction
-                                accessibilityLabel={task.editLabel}
-                                Icon={PencilLine}
-                                label="Change"
-                                onPress={() => editReviewTask(task)}
-                              />
-                            ) : null}
-                            {task.clearLabel ? (
-                              <ReviewTaskAction
-                                accessibilityLabel={task.clearLabel}
-                                Icon={CircleX}
-                                label="Clear"
-                                onPress={() => clearReviewTask(task)}
-                                tone="danger"
-                              />
-                            ) : null}
-                          </View>
                         </View>
                         <Text style={styles.rationaleSheetText}>{task.rationale}</Text>
-                        {showIntentPicker ? (
-                          <View style={styles.rationaleIntentOptions}>
-                            {INTENT_OPTIONS.map((intent) => {
-                              const selectedIntent = selected?.defaultIntent === intent;
-                              return (
-                                <Pressable
-                                  accessibilityLabel={`Use ${activeIntentLabel(intent)} intent`}
-                                  accessibilityRole="button"
-                                  key={intent}
-                                  accessibilityState={{ selected: selectedIntent }}
-                                  onPress={() => void resolveReviewTargets(["intent"], { currentSaveIntent: intent })}
-                                  style={({ pressed }) => [
-                                    styles.rationaleIntentOption,
-                                    selectedIntent && styles.rationaleIntentOptionSelected,
-                                    pressed && styles.subtlePressed
-                                  ]}
-                                >
-                                  <Text
-                                    numberOfLines={1}
-                                    style={[
-                                      styles.rationaleIntentOptionText,
-                                      selectedIntent && styles.rationaleIntentOptionTextSelected
-                                    ]}
-                                  >
-                                    {activeIntentLabel(intent)}
-                                  </Text>
-                                </Pressable>
-                              );
-                            })}
-                            <Pressable
-                              accessibilityLabel="Use no intent"
-                              accessibilityRole="button"
-                              accessibilityState={{ selected: !selected?.defaultIntent }}
-                              onPress={() => void resolveReviewTargets(["intent"], { currentSaveIntent: null })}
-                              style={({ pressed }) => [
-                                styles.rationaleIntentOption,
-                                !selected?.defaultIntent && styles.rationaleIntentOptionSelected,
-                                pressed && styles.subtlePressed
-                              ]}
-                            >
-                              <Text
-                                numberOfLines={1}
-                                style={[
-                                  styles.rationaleIntentOptionText,
-                                  !selected?.defaultIntent && styles.rationaleIntentOptionTextSelected
-                                ]}
-                              >
-                                No intent
-                              </Text>
-                            </Pressable>
-                          </View>
-                        ) : null}
+                        <View style={styles.reviewChecklistDecisionRow}>
+                          <Pressable
+                            accessibilityLabel={task.confirmLabel}
+                            accessibilityRole="button"
+                            onPress={() => void resolveReviewTargets([task.target])}
+                            style={({ pressed }) => [
+                              styles.reviewDecisionButton,
+                              styles.reviewDecisionButtonYes,
+                              pressed && styles.primaryButtonPressed
+                            ]}
+                          >
+                            <CircleCheck color={colors.onAccent} size={22} strokeWidth={2.4} />
+                          </Pressable>
+                          <Pressable
+                            accessibilityLabel={task.clearLabel || `No, reject ${task.title}`}
+                            accessibilityRole="button"
+                            onPress={() => clearReviewTask(task)}
+                            style={({ pressed }) => [
+                              styles.reviewDecisionButton,
+                              pressed && styles.subtlePressed
+                            ]}
+                          >
+                            <CircleX color={colors.secondary} size={22} strokeWidth={2.4} />
+                          </Pressable>
+                        </View>
                       </View>
                     </View>
                   );

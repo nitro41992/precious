@@ -1045,6 +1045,24 @@ export function linkedCollectionsLabel(collections: LinkedCollection[]) {
   return `${collections[0].title} +${collections.length - 1}`;
 }
 
+function pendingExistingCollectionDecisions(capture: Capture) {
+  const linkedIds = new Set((capture.linkedCollections || []).map((collection) => collection.id));
+  return (capture.collectionDecisions || []).filter((decision) => {
+    return decision.type === "existing" &&
+      Boolean(decision.collectionId) &&
+      Boolean(decision.title.trim()) &&
+      !linkedIds.has(decision.collectionId || "");
+  });
+}
+
+function collectionDecisionsLabel(decisions: CollectionDecision[]) {
+  if (!decisions.length) return "";
+  const titles = uniqueStrings(decisions.map((decision) => decision.title.trim()));
+  if (!titles.length) return "";
+  if (titles.length === 1) return titles[0];
+  return `${titles[0]} +${titles.length - 1}`;
+}
+
 export function reviewRationaleFromRemote(value: unknown): ReviewRationale | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const record = value as Record<string, unknown>;
@@ -1096,55 +1114,78 @@ export function reviewChecklistTasksForCapture(capture: Capture): ReviewChecklis
   const rationale = capture.reviewRationale || {};
   const primaryReminder = (capture.suggestedReminders || [])[0];
   const collectionsLabel = linkedCollectionsLabel(capture.linkedCollections || []);
+  const pendingCollectionDecisions = pendingExistingCollectionDecisions(capture);
+  const pendingCollectionsLabel = collectionDecisionsLabel(pendingCollectionDecisions);
+  const collectionTaskValue = pendingCollectionsLabel
+    ? `Suggested: ${pendingCollectionsLabel}`
+    : collectionsLabel === "Add collections"
+      ? "No collection"
+      : collectionsLabel;
   const intentValue = activeIntentLabel(capture.defaultIntent);
   const intentTask: ReviewChecklistTask = {
     target: "intent",
     title: "Save Intent",
-    value: intentValue || "No intent",
+    value: intentValue ? `Use ${intentValue}?` : "Leave without intent?",
     rationale:
       rationaleLine(rationale.intent) ||
       rationaleLine(capture.intentRationale) ||
       (intentValue
         ? `Confirm ${intentValue} is the right action for this capture.`
         : "Choose an action only if the saved content clearly supports one."),
-    confirmLabel: intentValue ? `Keep ${intentValue}` : "Keep no intent",
+    confirmLabel: intentValue ? `Yes, use ${intentValue}` : "Yes, leave without intent",
     editLabel: intentValue ? "Change Save Intent" : "Choose Save Intent",
-    clearLabel: intentValue ? "Clear Save Intent" : undefined
+    clearLabel: intentValue ? "No, clear Save Intent" : "No, choose later from Purpose"
   };
   const collectionsTask: ReviewChecklistTask = {
     target: "collections",
     title: "Collections",
-    value: collectionsLabel === "Add collections" ? "No collection" : collectionsLabel,
+    value: pendingCollectionsLabel
+      ? `Add to ${pendingCollectionsLabel}?`
+      : collectionTaskValue === "No collection"
+        ? "Leave ungrouped?"
+        : `Keep ${collectionTaskValue}?`,
     rationale:
       rationaleLine(rationale.collections) ||
       (capture.linkedCollections || [])
         .map((collection) => rationaleLine(collection.rationale))
         .find(Boolean) ||
+      pendingCollectionDecisions
+        .map((decision) => rationaleLine(decision.rationale))
+        .find(Boolean) ||
       "Keep it unfiled unless one of your existing Collections fits.",
-    confirmLabel: collectionsLabel === "Add collections" ? "Keep no collection" : `Keep ${collectionsLabel}`,
+    confirmLabel: pendingCollectionsLabel
+      ? `Yes, add to ${pendingCollectionsLabel}`
+      : collectionsLabel === "Add collections"
+        ? "Yes, leave ungrouped"
+        : `Yes, keep ${collectionsLabel}`,
     editLabel: "Change Collections",
-    clearLabel: collectionsLabel === "Add collections" ? undefined : "Clear Collections"
+    clearLabel: pendingCollectionsLabel
+      ? "No, clear Collection suggestion"
+      : collectionsLabel === "Add collections"
+        ? "No, choose later from Collections"
+        : "No, clear Collections"
   };
   const reminderTask: ReviewChecklistTask = {
     target: "reminder",
     title: "Reminder",
-    value: primaryReminder ? reminderLabel(primaryReminder) : "Add reminder",
+    value: primaryReminder ? `Keep ${reminderLabel(primaryReminder)}?` : "Leave without reminder?",
     rationale:
       rationaleLine(rationale.reminder) ||
       rationaleLine(primaryReminder?.rationale) ||
       "Confirm this only if the idea should stay with the capture.",
-    confirmLabel: primaryReminder ? `Keep ${reminderLabel(primaryReminder)}` : "Keep no reminder",
+    confirmLabel: primaryReminder ? `Yes, keep ${reminderLabel(primaryReminder)}` : "Yes, leave without reminder",
     editLabel: primaryReminder ? "Change Reminder" : "Add Reminder",
-    clearLabel: primaryReminder ? "Remove reminder idea" : undefined
+    clearLabel: primaryReminder ? "No, remove reminder idea" : "No, choose later from Later"
   };
   const analysisTask: ReviewChecklistTask = {
     target: "analysis",
     title: "Analysis",
-    value: "Source details",
+    value: "Do these details look usable?",
     rationale:
       rationaleLine(rationale.summary) ||
       "Confirm the extracted details look usable, or edit the title and note before saving.",
-    confirmLabel: "Mark analysis reviewed"
+    confirmLabel: "Yes, mark reviewed",
+    clearLabel: "No, dismiss this review question"
   };
   const byTarget: Record<ReviewTarget, ReviewChecklistTask> = {
     intent: intentTask,

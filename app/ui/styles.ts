@@ -2202,6 +2202,37 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 2
   },
+  reviewChecklistDecisionRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    paddingTop: 4
+  },
+  reviewDecisionButton: {
+    alignItems: "center",
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: "center",
+    minHeight: 44,
+    minWidth: 54
+  },
+  reviewDecisionButtonYes: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent
+  },
+  reviewDecisionButtonText: {
+    color: colors.secondary,
+    fontSize: 15,
+    fontWeight: "800",
+    lineHeight: 19
+  },
+  reviewDecisionButtonYesText: {
+    color: colors.onAccent,
+    fontSize: 15,
+    fontWeight: "900",
+    lineHeight: 19
+  },
   reviewTaskAction: {
     alignItems: "center",
     borderRadius: 8,
