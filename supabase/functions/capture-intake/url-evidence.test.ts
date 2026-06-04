@@ -119,6 +119,237 @@ Deno.test("best URL evidence prefers rich oEmbed over generic shell metadata", (
   );
 });
 
+Deno.test("Exa contents response normalizes into first-class URL evidence", () => {
+  const sourceUrl = "https://example.com/menu.pdf";
+  const [evidence] = urlEvidence.normalizeExaContentsEvidence(sourceUrl, [
+    sourceUrl,
+  ], {
+    requestId: "exa-request-1",
+    results: [
+      {
+        id: sourceUrl,
+        url: sourceUrl,
+        title: "Ohlala Restaurant Week Menu",
+        author: "Ohlala French Bistro",
+        publishedDate: "2026-05-15T00:00:00.000Z",
+        image: "https://example.com/menu.png",
+        favicon: "https://example.com/favicon.ico",
+        summary:
+          "Restaurant Week menu with lunch and dinner pricing for June 2026.",
+        highlights: [
+          "Lunch prix fixe menu is available during Restaurant Week.",
+          "Dinner reservations run from June 1 through June 14.",
+        ],
+        text:
+          "Ohlala French Bistro Restaurant Week 2026 menu. Lunch $35. Dinner $55.",
+      },
+    ],
+    statuses: [{ id: sourceUrl, status: "success" }],
+  });
+
+  assert(evidence, "Exa evidence missing");
+  assertEqual(evidence.source, "exa_contents", "Exa source");
+  assertEqual(evidence.title, "Ohlala Restaurant Week Menu", "Exa title");
+  assertEqual(evidence.provider, "example.com", "Exa provider");
+  assertIncludes(
+    urlEvidence.evidenceSources(evidence),
+    "exa_contents",
+    "Exa should be an evidence source",
+  );
+  assertIncludes(
+    urlEvidence.evidenceSources(evidence),
+    "readable_text",
+    "Exa text should count as readable text",
+  );
+  assertEqual(
+    urlEvidence.productEvidenceStatus(evidence),
+    "extracted",
+    "Exa evidence should be extracted",
+  );
+  const compact = urlEvidence.compactUrlEvidence(evidence);
+  assert(compact, "compact Exa evidence missing");
+  assert(
+    Boolean(compact.readable_text_excerpt?.includes("Dinner reservations")),
+    "compact Exa evidence should include highlights",
+  );
+});
+
+Deno.test("Exa per-URL failure records failed evidence without throwing", () => {
+  const sourceUrl = "https://example.com/broken";
+  const [evidence] = urlEvidence.normalizeExaContentsEvidence(sourceUrl, [
+    sourceUrl,
+  ], {
+    requestId: "exa-request-2",
+    results: [],
+    statuses: [
+      {
+        id: sourceUrl,
+        status: "error",
+        error: {
+          tag: "SOURCE_NOT_AVAILABLE",
+          message: "Access forbidden",
+          httpStatusCode: 403,
+        },
+      },
+    ],
+  });
+
+  assert(evidence, "Exa failure evidence missing");
+  assertEqual(evidence.source, "exa_contents", "Exa failure source");
+  assertEqual(evidence.status, "failed", "Exa failure status");
+  assert(
+    Boolean(evidence.error?.includes("SOURCE_NOT_AVAILABLE")),
+    "Exa failure should include status tag",
+  );
+});
+
+Deno.test("Exa enrichment gate skips strong evidence and targets weak evidence", () => {
+  const rich = urlEvidence.oembedMetadata(
+    {
+      type: "video",
+      provider_name: "YouTube",
+      title: "Street food tour in Osaka",
+      author_name: "Creator",
+      thumbnail_url: "https://i.ytimg.com/vi/example/hqdefault.jpg",
+    },
+    "https://www.youtube.com/watch?v=example",
+  );
+  assert(rich, "rich evidence missing");
+  assert(
+    !urlEvidence.shouldAttemptExaEnrichment(rich),
+    "strong oEmbed evidence should not call Exa",
+  );
+
+  const medium = urlEvidence.parseHtmlEvidence(
+    "<html><head><title>Weekend picks in Paris</title><meta name=\"description\" content=\"A weekend guide with events, museums, and activities.\"></head><body>Weekend picks for June 5-7 with many listed activities.</body></html>",
+    "https://example.com/weekend-guide",
+    "https://example.com/weekend-guide",
+  );
+  assert(medium, "medium evidence missing");
+  assertEqual(
+    urlEvidence.evidenceQuality(medium),
+    "medium",
+    "HTML evidence should be medium before Exa enrichment",
+  );
+  assert(
+    urlEvidence.shouldAttemptExaEnrichment(medium),
+    "medium sparse URL evidence should call Exa",
+  );
+
+  const generic = urlEvidence.parseHtmlEvidence(
+    "<html><head><title>Instagram</title></head><body>Log in to continue.</body></html>",
+    "https://www.instagram.com/reel/DY0pJskIjoe/",
+    "https://www.instagram.com/reel/DY0pJskIjoe/",
+  );
+  assert(generic, "generic shell evidence missing");
+  assert(
+    urlEvidence.shouldAttemptExaEnrichment(generic),
+    "generic platform shell should call Exa",
+  );
+
+  const failed = urlEvidence.emptyUrlEvidence(
+    "https://example.com/file.pdf",
+    "failed",
+    "metadata_pipeline",
+    "Unsupported metadata content-type: application/pdf",
+  );
+  assert(
+    urlEvidence.shouldAttemptExaEnrichment(failed),
+    "failed URL evidence should call Exa",
+  );
+});
+
+Deno.test("Exa-aware cache reuse refreshes medium evidence once", () => {
+  const url = "https://example.com/weekend-guide";
+  const medium = urlEvidence.parseHtmlEvidence(
+    "<html><head><title>Weekend picks in Paris</title><meta name=\"description\" content=\"A weekend guide with events, museums, and activities.\"></head><body>Weekend picks for June 5-7 with many listed activities.</body></html>",
+    url,
+    url,
+  );
+  assert(medium, "medium evidence missing");
+  assert(
+    urlEvidence.shouldUseCachedEvidence(medium, url),
+    "medium cache should remain reusable without Exa refresh mode",
+  );
+  assert(
+    !urlEvidence.shouldUseCachedEvidence(medium, url, { refreshForExa: true }),
+    "medium cache should refresh when Exa can enrich it",
+  );
+
+  const exaAttempted = {
+    ...medium,
+    raw: {
+      ...(medium.raw || {}),
+      pipeline: {
+        extraction_sources_attempted: ["original_exa_contents"],
+      },
+    },
+  };
+  assert(
+    urlEvidence.shouldUseCachedEvidence(exaAttempted, url, {
+      refreshForExa: true,
+    }),
+    "cache should be reusable after an Exa attempt is recorded",
+  );
+
+  const rich = urlEvidence.oembedMetadata(
+    {
+      type: "video",
+      provider_name: "YouTube",
+      title: "Street food tour in Osaka",
+      author_name: "Creator",
+      thumbnail_url: "https://i.ytimg.com/vi/example/hqdefault.jpg",
+    },
+    "https://www.youtube.com/watch?v=example",
+  );
+  assert(rich, "rich evidence missing");
+  assert(
+    urlEvidence.shouldUseCachedEvidence(rich, rich.sourceUrl, {
+      refreshForExa: true,
+    }),
+    "strong cached evidence should not refresh for Exa",
+  );
+});
+
+Deno.test("Exa helpers bound request shape and skip when key is missing", async () => {
+  const body = urlEvidence.exaContentsRequestBody(["https://example.com"]);
+  assertEqual(Boolean((body as any).text), true, "Exa text should be top-level");
+  assertEqual(
+    Boolean((body as any).contents),
+    false,
+    "Exa contents endpoint should not nest content params",
+  );
+  assertEqual((body as any).maxAgeHours, 24, "Exa maxAgeHours");
+  assertEqual((body as any).livecrawlTimeout, 12000, "Exa timeout");
+  assertEqual(
+    urlEvidence.exaTargetUrlsForEnrichment([
+      "https://example.com/a",
+      "https://example.com/a#fragment",
+      "https://example.com/b",
+      "https://example.com/c",
+      "https://example.com/d",
+    ]).length,
+    3,
+    "Exa target URLs should be deduped and bounded",
+  );
+
+  const previous = Deno.env.get("EXA_API_KEY");
+  try {
+    Deno.env.delete("EXA_API_KEY");
+    assert(
+      !urlEvidence.isExaContentsConfigured(),
+      "Exa should be disabled without key",
+    );
+    const evidence = await urlEvidence.fetchExaContentsEvidence(
+      "https://example.com",
+      ["https://example.com"],
+    );
+    assertEqual(evidence.length, 0, "missing key should skip Exa");
+  } finally {
+    if (previous) Deno.env.set("EXA_API_KEY", previous);
+  }
+});
+
 Deno.test("domain evidence profiles make YouTube oEmbed beat HTML shell metadata", () => {
   const sourceUrl =
     "https://youtube.com/watch?v=oTJSHLRYBhE&si=ELKZ-57_rieHQKer";

@@ -39,11 +39,12 @@ PRECIOUS_E2E_EMAIL=precious-captures-e2e@example.com # optional
 ## Capture accuracy evals
 
 Use the Exa-seeded eval harness when you need a broader measurement of Capture
-Analysis quality across public links and a private real-capture slice. Exa is
-only a corpus source; Gemini drafts independent silver labels from the fixed
-evidence package, and human labels are the gold truth for Save Intent, entities,
-Visit Targets, Reminder ideas, Collections, terminal outcome, and rejection or
-review correctness.
+Analysis quality across public links and a private real-capture slice. Exa can
+source the public corpus and can be exercised as runtime URL evidence when the
+hosted backend has `EXA_API_KEY`; Gemini drafts independent silver labels from
+the fixed evidence package, and human labels are the gold truth for Save Intent,
+entities, Visit Targets, Reminder ideas, Collections, terminal outcome, and
+rejection or review correctness.
 
 Generate a 240-row public manifest and label template:
 
@@ -100,8 +101,11 @@ block, including titles, descriptions, and embeddings. For the 20-Collection
 accuracy eval, keep that set in the manifest so Precious hosted eval and Gemini
 silver use the same Collection descriptions for retrieval and selection. Pass
 `--no-seed-starter-collections` only when the user is already seeded. To
-evaluate the Exa supplement path, add `--supplement-public-evidence`; it keeps
-`sourceUrl` unchanged and adds bounded Exa evidence to eval-only `sourceText`.
+evaluate production-style runtime Exa enrichment, deploy `capture-intake` with
+`EXA_API_KEY` and add `--runtime-exa-evidence`; it keeps `sourceText` as the URL
+and lets the backend attach Exa as first-class `url_evidence`. The older
+`--supplement-public-evidence` flag remains available for fixed-evidence
+experiments that inject bounded Exa context into eval-only `sourceText`.
 
 For the reviewed 30-row pilot, keep the original reviewed gold as the
 five-Collection baseline and build the targeted 20-Collection v2 artifact:

@@ -42,6 +42,10 @@ _Avoid_: Location tracking, verified place, GPS history
 Optional source-specific details preserved from the capture surface, such as creator, caption, transcript, comment text, collection name, sender, post type, or URL metadata.
 _Avoid_: Required platform metadata, full integration data
 
+**Public URL Evidence Enrichment**:
+Backend-only retrieval of public evidence for a known Capture URL when local metadata is weak, such as HTML/oEmbed failure, generic platform metadata, public PDFs, JavaScript-heavy pages, or shortlinks. Enriched evidence is normalized into `url_evidence` with provider provenance and cache behavior. It is not client-side scraping, private-content access, broad web search, or a source of gold labels.
+_Avoid_: Client enrichment, private scraping, topic search, label truth
+
 **Explicit Capture**:
 A user-initiated act of adding something to Sharebook through share sheet, upload, paste, drag-and-drop, or manual entry.
 _Avoid_: Automatic import, background scraping

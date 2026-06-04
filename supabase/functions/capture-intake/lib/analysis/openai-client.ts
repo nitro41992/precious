@@ -118,9 +118,10 @@ function openAiErrorMessage(raw: Record<string, unknown>, status: number) {
   return String(error.message || `OpenAI failed with ${status}`);
 }
 
-function isVisualDownloadFailure(raw: Record<string, unknown>) {
+export function isVisualDownloadFailure(raw: Record<string, unknown>) {
   const message = openAiErrorMessage(raw, 0);
-  return /download(ing)? file|upstream status code|image_url/i.test(message);
+  return /download(ing)? file|upstream status code|image_url|image data.*valid image/i
+    .test(message);
 }
 
 export function buildOpenAiUserContent(

@@ -14,6 +14,12 @@ import {
   shouldUseCachedEvidence,
 } from "./cache.ts";
 import {
+  exaTargetUrlsForEnrichment,
+  fetchExaContentsEvidence,
+  isExaContentsConfigured,
+  shouldAttemptExaEnrichment,
+} from "./exa.ts";
+import {
   bestEvidence,
   clientResolutionNeededEvidence,
   emptyUrlEvidence,
@@ -147,6 +153,14 @@ export {
   persistUrlEvidence,
   shouldUseCachedEvidence,
 } from "./cache.ts";
+export {
+  exaContentsRequestBody,
+  exaTargetUrlsForEnrichment,
+  fetchExaContentsEvidence,
+  isExaContentsConfigured,
+  normalizeExaContentsEvidence,
+  shouldAttemptExaEnrichment,
+} from "./exa.ts";
 
 export function clientResolutionInput(
   fields: Record<string, unknown>,
@@ -219,7 +233,13 @@ export async function buildUrlEvidence(
   const cached = await loadCachedUrlEvidence(supabase, normalized).catch(() =>
     null
   );
-  if (cached && shouldUseCachedEvidence(cached, normalized)) {
+  const exaConfigured = isExaContentsConfigured();
+  if (
+    cached &&
+    shouldUseCachedEvidence(cached, normalized, {
+      refreshForExa: exaConfigured,
+    })
+  ) {
     return { ...cached, source: `${cached.source}:cache` };
   }
 
@@ -313,7 +333,17 @@ export async function buildUrlEvidence(
     if (html) candidates.push(html);
   }
 
-  const best = bestEvidence(candidates);
+  let exaTargetUrls: string[] = [];
+  let best = bestEvidence(candidates);
+  if (exaConfigured && shouldAttemptExaEnrichment(best)) {
+    exaTargetUrls = exaTargetUrlsForEnrichment(targetUrls);
+    const exaCandidates = await fetchExaContentsEvidence(
+      normalized,
+      exaTargetUrls,
+    );
+    candidates.push(...exaCandidates);
+    best = bestEvidence(candidates);
+  }
   const evidence = needsClientResolutionForEvidence(
       normalized,
       best,
@@ -349,7 +379,11 @@ export async function buildUrlEvidence(
       `${phaseForTargetUrl(targetUrl)}_extractus_oembed`,
       `${phaseForTargetUrl(targetUrl)}_known_oembed`,
       `${phaseForTargetUrl(targetUrl)}_html`,
-    ]),
+    ]).concat(
+      exaTargetUrls.map((targetUrl) =>
+        `${phaseForTargetUrl(targetUrl)}_exa_contents`
+      ),
+    ),
     candidate_sources: candidates.map((candidate) => ({
       source: candidate.source,
       status: candidate.status,

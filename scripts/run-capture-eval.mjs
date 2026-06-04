@@ -35,6 +35,7 @@ function parseArgs() {
     dryRun: process.argv.includes("--dry-run"),
     yes: process.argv.includes("--yes"),
     supplementPublicEvidence: process.argv.includes("--supplement-public-evidence"),
+    runtimeExaEvidence: process.argv.includes("--runtime-exa-evidence"),
     seedStarterCollections: !process.argv.includes("--no-seed-starter-collections")
   };
 }
@@ -345,6 +346,20 @@ function evidenceModeForSample(sample, supplementPublicEvidence) {
     : "direct_url";
 }
 
+function runEvidenceMode(options) {
+  if (options.runtimeExaEvidence) return "runtime_exa_url_evidence";
+  return options.supplementPublicEvidence
+    ? "public_evidence_supplement_for_exa_public"
+    : "direct_url";
+}
+
+function sampleEvidenceMode(sample, options) {
+  if (options.runtimeExaEvidence && sample.source_kind === "exa_public") {
+    return "runtime_exa_url_evidence";
+  }
+  return evidenceModeForSample(sample, options.supplementPublicEvidence);
+}
+
 async function postCapture({ apiUrl, anonKey, accessToken, clientCaptureKey, url, sourceText }) {
   const edge = isEdgeCaptureApi(apiUrl);
   const json = await requestJson(edge ? apiUrl : `${apiUrl}/api/captures`, {
@@ -456,6 +471,9 @@ async function mapLimit(items, limit, worker) {
 
 async function main() {
   const options = parseArgs();
+  if (options.runtimeExaEvidence && options.supplementPublicEvidence) {
+    throw new Error("--runtime-exa-evidence cannot be combined with --supplement-public-evidence.");
+  }
   if (!options.dryRun && !options.yes) {
     throw new Error("Refusing to create hosted eval captures without --yes. Use --dry-run to preview locally.");
   }
@@ -480,9 +498,7 @@ async function main() {
       run_id: options.runId,
       dry_run: true,
       selected_count: samples.length,
-      evidence_mode: options.supplementPublicEvidence
-        ? "public_evidence_supplement_for_exa_public"
-        : "direct_url",
+      evidence_mode: runEvidenceMode(options),
       starter_collections: evalCollections,
       samples: samples.map((sample, index) => ({
         ordinal: index + 1,
@@ -490,7 +506,7 @@ async function main() {
         stratum: sample.stratum,
         source_kind: sample.source_kind,
         url: sample.url,
-        evidence_mode: evidenceModeForSample(sample, options.supplementPublicEvidence),
+        evidence_mode: sampleEvidenceMode(sample, options),
         source_text_preview: sourceTextForSample(sample, options.supplementPublicEvidence).slice(0, 500)
       }))
     });
@@ -539,7 +555,7 @@ async function main() {
       ...sample,
       run_id: options.runId,
       client_capture_key: clientCaptureKey,
-      evidence_mode: evidenceModeForSample(sample, options.supplementPublicEvidence)
+      evidence_mode: sampleEvidenceMode(sample, options)
     };
     try {
       const sourceText = sourceTextForSample(sample, options.supplementPublicEvidence);
@@ -586,9 +602,7 @@ async function main() {
     api_url: apiUrl,
     eval_email: email,
     eval_user_id: evalUserId,
-    evidence_mode: options.supplementPublicEvidence
-      ? "public_evidence_supplement_for_exa_public"
-      : "direct_url",
+    evidence_mode: runEvidenceMode(options),
     starter_collections_seed: starterCollectionsSeed,
     starter_collections: evalCollections,
     sample_count: runSamples.length,

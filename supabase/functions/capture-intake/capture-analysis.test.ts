@@ -264,6 +264,18 @@ Deno.test("URL preview visual evidence only accepts HTTPS images", () => {
   assertEqual(content.length, 1, "HTTP preview images should not be attached");
 });
 
+Deno.test("visual retry catches invalid image data errors", () => {
+  assert(
+    urlEvidence.isVisualDownloadFailure({
+      error: {
+        message:
+          "The image data you provided does not represent a valid image. Please check your input and try again.",
+      },
+    }),
+    "invalid preview image data should retry without visual inputs",
+  );
+});
+
 Deno.test("reminder prompt prefers enclosing period for dated roundups", () => {
   const prompt = urlEvidence.buildPrompt(
     captureFixture({

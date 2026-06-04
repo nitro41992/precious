@@ -85,9 +85,22 @@ export async function loadCachedCanonicalUrl(
   return canonical && canonical !== originalUrl ? canonical : null;
 }
 
+function cachedEvidenceAttemptedExa(evidence: UrlEvidence) {
+  if (evidence.source === "exa_contents") return true;
+  const pipeline = evidence.raw?.pipeline &&
+      typeof evidence.raw.pipeline === "object"
+    ? evidence.raw.pipeline as Record<string, unknown>
+    : null;
+  const attempted = Array.isArray(pipeline?.extraction_sources_attempted)
+    ? pipeline.extraction_sources_attempted
+    : [];
+  return attempted.some((source) => String(source).includes("exa_contents"));
+}
+
 export function shouldUseCachedEvidence(
   evidence: UrlEvidence | null,
   normalizedUrl: string,
+  options: { refreshForExa?: boolean } = {},
 ) {
   if (!evidence) return false;
   if (
@@ -97,6 +110,14 @@ export function shouldUseCachedEvidence(
     evidence.status === "success" &&
     weaknessReasons(evidence).includes("generic_platform_metadata") &&
     hasItemSpecificUrlSignal(normalizedUrl)
+  ) {
+    return false;
+  }
+  if (
+    options.refreshForExa &&
+    evidence.status === "success" &&
+    evidenceQuality(evidence) !== "high" &&
+    !cachedEvidenceAttemptedExa(evidence)
   ) {
     return false;
   }

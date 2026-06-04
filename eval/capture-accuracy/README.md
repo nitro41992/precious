@@ -1,10 +1,10 @@
 # Capture Accuracy Eval
 
 This workspace builds a 300-row offline dataset for measuring Sharebook Capture
-Analysis. Exa is used only to source public URLs and reviewer context; it is not
-a runtime enrichment dependency and it is not the gold label source. Gemini
-silver labels reduce manual work, but human-reviewed gold labels are the
-primary accuracy truth.
+Analysis. Exa can source public URLs and reviewer context, and the hosted
+backend can use Exa as gated runtime URL evidence when `EXA_API_KEY` is
+configured. Exa is not the gold label source. Gemini silver labels reduce manual
+work, but human-reviewed gold labels are the primary accuracy truth.
 
 ## Truth Policy
 
@@ -82,7 +82,10 @@ primary accuracy truth.
    test whether fixed public evidence helps Precision without changing the
    production URL, add `--supplement-public-evidence`; the runner keeps
    `sourceUrl` unchanged and adds bounded Exa title/summary/highlights to
-   eval-only `sourceText`.
+   eval-only `sourceText`. To evaluate production-style runtime enrichment
+   after deploying the backend with `EXA_API_KEY`, use
+   `--runtime-exa-evidence` instead; it keeps `sourceText` as the URL and lets
+   `capture-intake` attach Exa as first-class `url_evidence`.
 
 6. Generate a human review queue:
 
@@ -136,7 +139,7 @@ primary accuracy truth.
 
     ```sh
     npm run eval:combined:build
-    npm run eval:capture:run -- --manifest eval/capture-accuracy/generated/combined-100-gold-v2-plus-silver-manifest.json --yes --supplement-public-evidence
+    npm run eval:capture:run -- --manifest eval/capture-accuracy/generated/combined-100-gold-v2-plus-silver-manifest.json --yes --runtime-exa-evidence
     npm run eval:capture:score -- --predictions eval/capture-accuracy/generated/capture-eval-predictions.json --labels eval/capture-accuracy/generated/combined-100-gold-v2-plus-silver-labels.json
     ```
 
