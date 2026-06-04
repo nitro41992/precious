@@ -1,0 +1,4 @@
+interface:
+  display_name: "System Architecture Mapper"
+  short_description: "Map repo architecture with evidence-backed docs"
+  default_prompt: "Use $system-architecture-mapper to generate evidence-backed architecture documentation for this repository."

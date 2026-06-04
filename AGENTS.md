@@ -12,6 +12,19 @@ Before product, UI, workflow, capture-review, search, collection, reminder, or n
 
 If a product decision changes, update the smallest relevant artifact immediately. Use `CONTEXT.md` only for domain language, use the acceptance doc for current UI criteria, use the style guide for visual/workflow rules, and create or update an ADR when the decision is durable, surprising without context, and the result of a real trade-off.
 
+## Architecture Documentation Expectations
+
+When documenting architecture, system flows, data flows, persistence, external integrations, or runtime boundaries:
+
+- Use the `$system-architecture-mapper` skill when available.
+- Write for a technical product person first and an engineer second.
+- Base claims on repository evidence.
+- Include Mermaid diagrams.
+- Include components, processes, persistence layers, integrations, config, and failure behavior.
+- Mark unclear areas as unknown rather than guessing.
+- Do not modify application behavior.
+- Do not expose secrets.
+
 ## Testing
 
 Use `docs/testing.md` as the source of truth for test commands, Android phone dev loops, hosted release smoke tests, and handoff install flows.
