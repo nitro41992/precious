@@ -1,10 +1,6 @@
 import { env } from "../common.ts";
 import { compactUrlEvidence } from "../url-evidence/quality.ts";
-import type {
-  CaptureRow,
-  RetrievedCollection,
-  UrlEvidence,
-} from "../types.ts";
+import type { CaptureRow, RetrievedCollection, UrlEvidence } from "../types.ts";
 import {
   contentEvidenceProfile,
   sourceFallbackEvidence,
@@ -88,18 +84,10 @@ function rerankPrompt(
     "Rerank existing active Collections for a saved Capture.",
     "Use only the provided evidence and Collection titles/descriptions.",
     captureRoleInstruction(),
-    "Collection matching is subject/purpose-first. Match the capture role and durable saved value to the user's Collection titles/descriptions.",
-    "Do not hard-code a taxonomy. The candidate Collections are dynamic user-owned objects; a title or description may be broad, narrow, renamed, or absent from any starter set.",
-    "Penalize weak matches caused only by source shape, platform, domain, URL path, media format, article/profile/directory shape, or incidental topic mentions.",
-    "A secondary Collection is strong only when it captures an independent saved value, not merely because the page is article-shaped or mentions another topic.",
-    "Broad directories, profiles, feeds, calendars, and roundups often contain many items. Prefer conservative matches unless the overall saved value strongly fits a Collection description.",
-    "Guide/tutorial/reference Collections can fit instructional captures when that framing is central. Do not rank them strongly just because the source is an article.",
-    "Shopping/product Collections can fit product roundups, rankings, listings, and buy links. Do not rank guide/reference Collections strongly when the saved value is mostly shopping.",
-    "Place/dining/travel Collections should distinguish a single place to visit from destination or trip-planning value. Trip/travel fit needs itinerary, route, access, booking, destination, or logistics evidence beyond a place mention.",
-    "Event/activity Collections should fit a specific attendable event, schedule, ticket page, workshop, class, performance, or coherent event series, not a regular place merely because it has hours or admission.",
-    "Software/tool Collections should fit app listings, software docs, developer repositories, SaaS products, or software workflows, not platform/forum mentions alone.",
-    "Course/class Collections require course-like evidence such as enrollment, curriculum, lesson series, workshop, training program, or class offering. A standalone tutorial or PDF is not enough by itself.",
-    "Project/execution Collections require steps, materials, sources, before/after evidence, or execution details. Visual inspiration alone is a weaker project fit.",
+    "Match the capture role and independent durable saved value to the user's dynamic Collection titles/descriptions, not a fixed starter taxonomy.",
+    "Penalize weak matches caused only by source shape, platform, domain, URL path, media format, or incidental topic mentions.",
+    "A secondary Collection is strong only when it captures a separate saved value supported by evidence.",
+    "For generic role boundaries, distinguish shopping from learning/reference, one place from trip-planning logistics, an attendable event from a directory, visual inspiration from project execution, and a platform mention from actual software/tool use.",
     "Return strong only when the saved content clearly belongs in the Collection. Use possible for plausible but weaker topical fit. Use none for generic or misleading fits.",
     "Do not invent Collections. Do not return Collection IDs outside the candidate list.",
     "",
@@ -164,23 +152,23 @@ function parseRerankResult(value: unknown): CollectionRerankResult {
       ? String(record.capture_role_rationale || "").slice(0, 240)
       : null,
     rankings: rankings
-    .map((item) => {
-      if (!item || typeof item !== "object" || Array.isArray(item)) {
-        return null;
-      }
-      const record = item as Record<string, unknown>;
-      const fit = String(record.fit || "") as CollectionFit;
-      if (!["strong", "possible", "none"].includes(fit)) return null;
-      return {
-        collection_id: String(record.collection_id || ""),
-        fit,
-        confidence: boundedConfidence(record.confidence),
-        rationale: String(record.rationale || "").slice(0, 240),
-      };
-    })
-    .filter((item): item is CollectionRerankItem =>
-      Boolean(item?.collection_id)
-    ),
+      .map((item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) {
+          return null;
+        }
+        const record = item as Record<string, unknown>;
+        const fit = String(record.fit || "") as CollectionFit;
+        if (!["strong", "possible", "none"].includes(fit)) return null;
+        return {
+          collection_id: String(record.collection_id || ""),
+          fit,
+          confidence: boundedConfidence(record.confidence),
+          rationale: String(record.rationale || "").slice(0, 240),
+        };
+      })
+      .filter((item): item is CollectionRerankItem =>
+        Boolean(item?.collection_id)
+      ),
   };
 }
 
@@ -234,7 +222,8 @@ export async function rerankCollectionsForCapture(
   const raw = await response.json();
   if (!response.ok) {
     throw new Error(
-      raw.error?.message || `OpenAI collection rerank failed with ${response.status}`,
+      raw.error?.message ||
+        `OpenAI collection rerank failed with ${response.status}`,
     );
   }
   const text = responseText(raw);
@@ -245,7 +234,9 @@ export async function rerankCollectionsForCapture(
     rerank_capture_role_confidence: parsed.capture_role_confidence,
     rerank_capture_role_rationale: parsed.capture_role_rationale,
   };
-  const byId = new Map(collections.map((collection) => [collection.id, collection]));
+  const byId = new Map(
+    collections.map((collection) => [collection.id, collection]),
+  );
   const seen = new Set<string>();
   const fitWeight = { strong: 0, possible: 1, none: 2 } satisfies Record<
     CollectionFit,

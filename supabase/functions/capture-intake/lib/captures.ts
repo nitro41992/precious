@@ -27,8 +27,8 @@ import {
   applyPreflightPolicy,
   captureGateMetadata,
   captureGateNeedsReviewAnalysis,
-  contentEvidenceProfile,
   captureRoleTraceFromCollections,
+  contentEvidenceProfile,
   firstCaptureAsset,
   normalizedReviewAnalysis,
   normalizedUrlEvidenceForCapture,
@@ -39,12 +39,13 @@ import {
   sanitizeAnalysisRationales,
   shouldAnalyzeAfterCaptureGate,
   shouldAttachUrlEvidence,
+  shouldRejectContextlessLinkCapture,
   shouldRunCaptureGate,
   shouldRunPreflight,
-  shouldRejectContextlessLinkCapture,
   validateReminderIdeas,
 } from "./analysis.ts";
 import {
+  applySecondaryCollectionRecovery,
   autoLinkCollectionDecisions,
   promptCollectionsForAnalysis,
   refreshCaptureEmbedding,
@@ -435,13 +436,18 @@ export async function processCapture(captureId: string, userId: string) {
     if (captureGateResult) {
       analysisInput.capture_gate = captureGateMetadata(captureGateResult.gate);
     }
+    const recoveredAnalysis = applySecondaryCollectionRecovery(
+      analysisInput,
+      rerankedCollections,
+      promptCollections,
+    );
     const analysis = normalizedReviewAnalysis(
       await autoLinkCollectionDecisions(
         supabase,
         userId,
         captureId,
-        sanitizeAnalysisRationales(analysisInput),
-        promptCollections,
+        sanitizeAnalysisRationales(recoveredAnalysis),
+        rerankedCollections,
       ),
     );
     const { data: run, error: runError } = await supabase

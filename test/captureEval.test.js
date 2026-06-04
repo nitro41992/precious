@@ -210,6 +210,52 @@ test("scoreCapturePredictions measures exact and set-based accuracy", async () =
   assert.equal(score.failures[0].metric, "entities");
 });
 
+
+test("scoreCapturePredictions classifies collection recall misses from diagnostics", async () => {
+  const { scoreCapturePredictions } = await evalLib();
+  const score = scoreCapturePredictions(
+    [
+      {
+        sample_id: "collection-recall",
+        stratum: "mixed",
+        url: "https://example.com/miss",
+        prediction: {
+          terminal_outcome: "ready",
+          collections: ["Products"],
+          collection_recall_diagnostics: {
+            prompt_collections: [
+              { collection_id: "articles-id", title: "Articles & Guides" }
+            ],
+            not_passed_collections: [
+              { collection_id: "travel-id", title: "Travel & Trips" }
+            ],
+            cap_blocked_decisions: [
+              { collection_id: "work-id", title: "Work & Career" }
+            ]
+          }
+        }
+      }
+    ],
+    [
+      {
+        sample_id: "collection-recall",
+        expected: {
+          collections: [
+            "Articles & Guides",
+            "Travel & Trips",
+            "Work & Career"
+          ]
+        }
+      }
+    ]
+  );
+
+  assert.equal(score.collection_recall_diagnostics.false_negative_count, 3);
+  assert.equal(score.collection_recall_diagnostics.by_cause.extraction_under_selection, 1);
+  assert.equal(score.collection_recall_diagnostics.by_cause.candidate_not_passed, 1);
+  assert.equal(score.collection_recall_diagnostics.by_cause.auto_link_cap, 1);
+});
+
 test("predictionFromCapture reads auto-linked Collections from analysis", async () => {
   const { predictionFromCapture } = await evalLib();
   const prediction = predictionFromCapture({

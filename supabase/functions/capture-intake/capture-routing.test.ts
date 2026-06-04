@@ -70,6 +70,28 @@ Deno.test("capture routing keeps URL evidence fallback link-only", () => {
     urlEvidence.shouldRejectContextlessLinkCapture(linkOnly, null, null),
     "link-only capture without useful context should be rejected",
   );
+  const exaEvidence = {
+    ...urlEvidence.emptyUrlEvidence(
+      "https://example.com/post/abc123",
+      "success",
+      "exa_contents",
+    ),
+    confidence: 0.9,
+    title: "Restaurant Week Menu",
+    description:
+      "A public menu page with dates, restaurant details, and reservation notes.",
+    text:
+      "Restaurant Week menu details with prix fixe dinner, booking window, venue address, and participating restaurant information.",
+    raw: { exa: { resultUrl: "https://example.com/post/abc123" } },
+  };
+  assert(
+    !urlEvidence.shouldRejectContextlessLinkCapture(
+      linkOnly,
+      null,
+      exaEvidence,
+    ),
+    "usable Exa evidence should keep link-only captures analyzable",
+  );
 
   const linkWithSharedText = captureFixture({
     capture_type: "link",
@@ -529,7 +551,9 @@ Deno.test("analysis prompt requires evidence-rich review rationale", () => {
   );
 
   assert(
-    prompt.includes("default_intent.rationale must name the concrete capture evidence"),
+    prompt.includes(
+      "default_intent.rationale must name the concrete capture evidence",
+    ),
     "Save Intent rationale should be analyzer-owned and evidence-specific",
   );
   assert(
@@ -541,7 +565,9 @@ Deno.test("analysis prompt requires evidence-rich review rationale", () => {
     "review rationale prompt should govern intent explanation",
   );
   assert(
-    prompt.includes("Never use generic wording that only says the action is supported"),
+    prompt.includes(
+      "Never use generic wording that only says the action is supported",
+    ),
     "prompt should reject generic intent rationale",
   );
   assert(
@@ -703,11 +729,23 @@ Deno.test("confirmed reminder input accepts date and time intervals", () => {
     trigger_text: "Early July",
   });
   assert(reminder, "valid structured reminder should normalize");
-  assertEqual(reminder.duration, 10, "date ranges should derive inclusive day duration");
+  assertEqual(
+    reminder.duration,
+    10,
+    "date ranges should derive inclusive day duration",
+  );
   assertEqual(reminder.duration_unit, "days", "date ranges should derive days");
-  assertEqual(reminder.start_date, "2026-07-01", "start date should be canonical");
+  assertEqual(
+    reminder.start_date,
+    "2026-07-01",
+    "start date should be canonical",
+  );
   assertEqual(reminder.end_date, "2026-07-10", "end date should be canonical");
-  assertEqual(reminder.status, "confirmed", "manual save should confirm reminder");
+  assertEqual(
+    reminder.status,
+    "confirmed",
+    "manual save should confirm reminder",
+  );
 
   const timed = urlEvidence.confirmedReminderFromInput({
     start_date: "2026-06-06",
@@ -716,7 +754,11 @@ Deno.test("confirmed reminder input accepts date and time intervals", () => {
     end_time: "22:00",
   });
   assert(timed, "same-day time range should normalize");
-  assertEqual(timed.end_date, "2026-06-06", "time-only duration should keep dates equal");
+  assertEqual(
+    timed.end_date,
+    "2026-06-06",
+    "time-only duration should keep dates equal",
+  );
   assertEqual(timed.duration, 3, "time range should derive duration");
   assertEqual(timed.duration_unit, "hours", "time range should derive hours");
 
@@ -771,7 +813,10 @@ Deno.test("saving a confirmed reminder replaces existing suggestions or inserts 
     },
     null,
   );
-  assert(inserted, "manual reminder should save without an existing suggestion");
+  assert(
+    inserted,
+    "manual reminder should save without an existing suggestion",
+  );
   assertEqual(inserted.length, 1, "manual reminder should be inserted");
 });
 

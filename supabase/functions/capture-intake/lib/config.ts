@@ -81,6 +81,7 @@ export const clientDiagnosticNumberFields = new Set([
 export const COLLECTION_AUTO_LINK_CONFIDENCE = Number(
   Deno.env.get("COLLECTION_AUTO_LINK_CONFIDENCE") || "0.82",
 );
+export const COLLECTION_AUTO_LINK_LIMIT = 2;
 export const USER_AGENT =
   "Mozilla/5.0 (compatible; PreciousCaptures/0.1; +https://sharebook.local)";
 export const METADATA_TIMEOUT_MS = 8000;

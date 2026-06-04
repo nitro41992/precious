@@ -1,5 +1,8 @@
 import { adminClient } from "../supabase.ts";
-import { COLLECTION_AUTO_LINK_CONFIDENCE } from "../config.ts";
+import {
+  COLLECTION_AUTO_LINK_CONFIDENCE,
+  COLLECTION_AUTO_LINK_LIMIT,
+} from "../config.ts";
 import { finiteNumber, stringValue } from "../common.ts";
 import {
   analysisRequiresReview,
@@ -7,10 +10,7 @@ import {
   resolveReviewTargets,
 } from "../analysis/review-normalization.ts";
 import { rationaleForAnalysis } from "../analysis/rationales.ts";
-import type {
-  AnalysisOutput,
-  RetrievedCollection,
-} from "../types.ts";
+import type { AnalysisOutput, RetrievedCollection } from "../types.ts";
 import { scheduleCaptureEmbeddingRefresh } from "./embeddings.ts";
 import {
   collectionDecisionKey,
@@ -96,7 +96,10 @@ function intervalDuration(
   if (startTime && endTime) {
     const minutes = Math.max(
       1,
-      Math.round((dateTimeMs(endDate, endTime) - dateTimeMs(startDate, startTime)) / (60 * 1000)),
+      Math.round(
+        (dateTimeMs(endDate, endTime) - dateTimeMs(startDate, startTime)) /
+          (60 * 1000),
+      ),
     );
     if (minutes % (7 * 24 * 60) === 0) {
       return { duration: minutes / (7 * 24 * 60), duration_unit: "weeks" };
@@ -111,7 +114,9 @@ function intervalDuration(
   }
   const days = Math.max(
     1,
-    Math.round((dateTimeMs(endDate) - dateTimeMs(startDate)) / (24 * 60 * 60 * 1000)) + 1,
+    Math.round(
+      (dateTimeMs(endDate) - dateTimeMs(startDate)) / (24 * 60 * 60 * 1000),
+    ) + 1,
   );
   if (days % 7 === 0) return { duration: days / 7, duration_unit: "weeks" };
   return { duration: days, duration_unit: "days" };
@@ -159,18 +164,30 @@ export function confirmedReminderFromInput(
       0,
     ),
   );
-  const inputDurationUnit = reminderString(record, "duration_unit", "durationUnit") ||
+  const inputDurationUnit =
+    reminderString(record, "duration_unit", "durationUnit") ||
     stringValue(fallback.duration_unit);
   if (!endDate && startDate && inputDuration > 0) {
-    if (inputDurationUnit === "days") endDate = addDays(startDate, inputDuration - 1);
-    if (inputDurationUnit === "weeks") endDate = addDays(startDate, inputDuration * 7 - 1);
+    if (inputDurationUnit === "days") {
+      endDate = addDays(startDate, inputDuration - 1);
+    }
+    if (inputDurationUnit === "weeks") {
+      endDate = addDays(startDate, inputDuration * 7 - 1);
+    }
   }
   if (!endDate) endDate = startDate;
   if (!endTime && startTime && inputDuration > 0) {
-    if (inputDurationUnit === "minutes") endTime = addMinutes(startTime, inputDuration);
-    if (inputDurationUnit === "hours") endTime = addMinutes(startTime, inputDuration * 60);
+    if (inputDurationUnit === "minutes") {
+      endTime = addMinutes(startTime, inputDuration);
+    }
+    if (inputDurationUnit === "hours") {
+      endTime = addMinutes(startTime, inputDuration * 60);
+    }
   }
-  if (inputDuration > 0 && inputDurationUnit && !reminderDurationUnits.has(inputDurationUnit)) {
+  if (
+    inputDuration > 0 && inputDurationUnit &&
+    !reminderDurationUnits.has(inputDurationUnit)
+  ) {
     return null;
   }
   const hasStartTime = Boolean(startTime);
@@ -196,7 +213,12 @@ export function confirmedReminderFromInput(
   ) {
     return null;
   }
-  const derived = intervalDuration(safeStartDate, safeEndDate, startTime, endTime);
+  const derived = intervalDuration(
+    safeStartDate,
+    safeEndDate,
+    startTime,
+    endTime,
+  );
   const duration = inputDuration > 0 &&
       inputDurationUnit &&
       reminderDurationUnits.has(inputDurationUnit)
@@ -207,24 +229,32 @@ export function confirmedReminderFromInput(
       reminderDurationUnits.has(inputDurationUnit)
     ? inputDurationUnit
     : derived.duration_unit;
-  const triggerValue = reminderString(record, "trigger_value", "triggerValue") ||
-    [safeStartDate === safeEndDate ? safeStartDate : `${safeStartDate}-${safeEndDate}`, startTime && endTime
-      ? `${startTime}-${endTime}`
-      : startTime].filter(Boolean).join(" ");
+  const triggerValue =
+    reminderString(record, "trigger_value", "triggerValue") ||
+    [
+      safeStartDate === safeEndDate
+        ? safeStartDate
+        : `${safeStartDate}-${safeEndDate}`,
+      startTime && endTime ? `${startTime}-${endTime}` : startTime,
+    ].filter(Boolean).join(" ");
   const triggerText = reminderString(record, "trigger_text", "triggerText") ||
     stringValue(fallback.trigger_text) ||
     stringValue(fallback.trigger_value);
-  const dateWindowStart = reminderString(record, "date_window_start", "dateWindowStart") ||
+  const dateWindowStart =
+    reminderString(record, "date_window_start", "dateWindowStart") ||
     stringValue(fallback.date_window_start) ||
     safeStartDate;
-  const dateWindowEnd = reminderString(record, "date_window_end", "dateWindowEnd") ||
+  const dateWindowEnd =
+    reminderString(record, "date_window_end", "dateWindowEnd") ||
     stringValue(fallback.date_window_end) ||
     safeEndDate;
-  let datePrecision = reminderString(record, "date_precision", "datePrecision") ||
+  let datePrecision =
+    reminderString(record, "date_precision", "datePrecision") ||
     stringValue(fallback.date_precision) ||
     (safeStartDate === safeEndDate ? "exact" : "date_range");
   if (!reminderDatePrecisions.has(datePrecision)) datePrecision = "unknown";
-  let timePrecision = reminderString(record, "time_precision", "timePrecision") ||
+  let timePrecision =
+    reminderString(record, "time_precision", "timePrecision") ||
     stringValue(fallback.time_precision) ||
     (startTime && endTime ? "time_range" : startTime ? "exact" : "unknown");
   if (!reminderTimePrecisions.has(timePrecision)) timePrecision = "unknown";
@@ -284,40 +314,64 @@ export async function autoLinkCollectionDecisions(
       normalizeCollectionDecision(item as Record<string, unknown>)
     )
     : [];
-  const linked: Array<Record<string, unknown>> = [];
-  for (const decision of decisions) {
-    if (
+  const linkableDecisions = decisions
+    .map((decision, index) => ({ decision, index }))
+    .filter(({ decision }) =>
       decision.type === "existing" &&
       decision.collection_id &&
       retrievedById.has(decision.collection_id) &&
       decision.confidence >= COLLECTION_AUTO_LINK_CONFIDENCE
-    ) {
-      const collection = retrievedById.get(decision.collection_id)!;
-      const rationale = rationaleForAnalysis(analysis, decision.rationale) ||
-        `Matched ${collection.title} because the saved content fits this Collection.`;
-      await linkCaptureToCollection(
-        supabase,
-        userId,
-        decision.collection_id,
-        captureId,
-        {
-          createdBy: "analysis",
-          rationale,
-          confidence: decision.confidence,
-        },
-      );
-      linked.push({
-        ...decision,
-        title: collection.title,
-        description: collection.description,
+    )
+    .sort((left, right) =>
+      right.decision.confidence - left.decision.confidence ||
+      left.index - right.index
+    );
+  const decisionsToLink = linkableDecisions.slice(
+    0,
+    COLLECTION_AUTO_LINK_LIMIT,
+  );
+  const capBlocked = linkableDecisions.slice(COLLECTION_AUTO_LINK_LIMIT)
+    .map(({ decision }) => decision);
+  const linked: Array<Record<string, unknown>> = [];
+  for (const { decision } of decisionsToLink) {
+    const collection = retrievedById.get(decision.collection_id!)!;
+    const rationale = rationaleForAnalysis(analysis, decision.rationale) ||
+      `Matched ${collection.title} because the saved content fits this Collection.`;
+    await linkCaptureToCollection(
+      supabase,
+      userId,
+      decision.collection_id!,
+      captureId,
+      {
+        createdBy: "analysis",
         rationale,
-      });
-    }
+        confidence: decision.confidence,
+      },
+    );
+    linked.push({
+      ...decision,
+      title: collection.title,
+      description: collection.description,
+      rationale,
+    });
   }
+  const diagnostics = analysis.collection_recall_diagnostics &&
+      typeof analysis.collection_recall_diagnostics === "object" &&
+      !Array.isArray(analysis.collection_recall_diagnostics)
+    ? analysis.collection_recall_diagnostics as Record<string, unknown>
+    : {};
   return {
     ...analysis,
     collection_decisions: [],
     linked_collections: linked,
+    collection_recall_diagnostics: {
+      ...diagnostics,
+      auto_link_limit: COLLECTION_AUTO_LINK_LIMIT,
+      auto_linked_collection_ids: linked.map((decision) =>
+        decision.collection_id
+      ),
+      auto_link_cap_blocked_decisions: capBlocked,
+    },
   };
 }
 
@@ -514,7 +568,10 @@ export async function applyCollectionReviewDecisions(
       .eq("id", collectionId)
       .maybeSingle();
     if (collection.error) throw collection.error;
-    if (!collection.data || collection.data.status === "archived" || collection.data.deleted_at) continue;
+    if (
+      !collection.data || collection.data.status === "archived" ||
+      collection.data.deleted_at
+    ) continue;
     await linkCaptureToCollection(supabase, userId, collectionId, captureId, {
       createdBy: "analysis",
       rationale,

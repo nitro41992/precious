@@ -9,15 +9,11 @@ import {
   substantiveDescription,
   substantiveText,
 } from "../url-evidence/platforms.ts";
-import type {
-  CaptureRow,
-  RetrievedCollection,
-  UrlEvidence,
-} from "../types.ts";
+import type { CaptureRow, RetrievedCollection, UrlEvidence } from "../types.ts";
 import { createEmbedding, embeddingLiteral } from "./embeddings.ts";
 
 export const COLLECTION_RETRIEVAL_MATCH_COUNT = 20;
-export const COLLECTION_PROMPT_CANDIDATE_COUNT = 8;
+export const COLLECTION_PROMPT_CANDIDATE_COUNT = 10;
 
 export function retrievalQueryForCapture(
   capture: CaptureRow,

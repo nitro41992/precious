@@ -18,7 +18,9 @@ export function buildPrompt(
 ) {
   const llmUrlEvidence = compactUrlEvidence(urlEvidence);
   const profile = contentEvidenceProfile(capture, urlEvidence);
-  const captureRoleTrace = captureRoleTraceFromCollections(retrievedCollections);
+  const captureRoleTrace = captureRoleTraceFromCollections(
+    retrievedCollections,
+  );
   return [
     "Infer why the user saved this item. Focus on intent, medium-term usefulness, reminders, and collection fit.",
     "Return concise structured data for a mobile quick-edit surface.",
@@ -77,22 +79,13 @@ export function buildPrompt(
     "For vague date phrases, return structured date windows instead of leaving only prose: early July means start_date July 1 and end_date July 10 with date_precision month_window; mid July means July 11-20; late July means July 21 through month end. Use captured_at as the reference date for year selection.",
     "If evidence gives a date range such as June 4-7, set start_date to June 4, end_date to June 7, and date_precision date_range. If evidence gives a time range such as 7-10pm without a date range, set start_time 19:00, end_time 22:00, time_precision time_range, and set start_date and end_date to the same date when a date is known.",
     "Use null when evidence does not provide that part; do not invent an exact date, time, or duration beyond mapping explicit vague phrases into their structured interval.",
-    "You may choose from only the reranked retrieved active collections listed below. If one fits strongly, return an existing collection decision with its exact collection_id and title.",
+    "You may choose from only the reranked retrieved active Collections listed below. If one fits strongly, return an existing Collection decision with its exact collection_id and title.",
     captureRoleInstruction(),
-    "Choose Collections based on the durable reason the user would save this capture, not merely because the source is an article, profile, directory, platform page, social post, video, or mentions a topic.",
-    "Collections are dynamic user-owned objects. Reason from retrieved Collection titles/descriptions, not a fixed starter taxonomy or hard-coded Collection names.",
-    "Match the capture role and saved value to the retrieved descriptions. Prefer the most specific strong fit and return at most 2 Collection decisions.",
-    "Select a secondary Collection only when it represents an independent saved value, not merely because the page is article-shaped or contains incidental examples.",
-    "Guide/tutorial/reference Collections can fit instructional captures when that framing is central. Do not select them merely because the source is an article or page.",
-    "Shopping/product Collections can fit product roundups, rankings, listings, stores, deals, and buy links. Do not add a guide/reference Collection when the saved value is mostly shopping.",
-    "Place/dining Collections can fit a single named place, menu, review, or place list. Trip/travel Collections need destination, itinerary, route, access, booking, or logistics value beyond one place mention.",
-    "Event/activity Collections fit specific time-bound attendable events, schedules, ticket pages, workshops, classes, performances, or coherent event series. Broad directories with unrelated events should be conservative.",
-    "Software/tool Collections fit app listings, SaaS products, developer repositories, software docs, and software workflows. Do not select them from platform/forum/domain mentions alone.",
-    "Course/class Collections require course-like evidence such as enrollment, curriculum, lesson series, workshop, training program, or class offering. A standalone tutorial, reference page, or PDF is not enough by itself.",
-    "Visual-inspiration Collections can fit aesthetic, design, style, moodboard, profile, portfolio, or creative reference value even when Save Intent is null. Project/execution Collections require steps, materials, sources, before/after evidence, or practical execution details.",
-    "Broad directories, profiles, feeds, calendars, and roundups often contain many items; prefer conservative Collection assignment unless the overall saved value strongly matches the Collection description.",
-    "Never invent a collection, propose a new collection name, or return a free-form collection. If no retrieved collection is a strong fit, return an empty collection_decisions array.",
-    "Use collection_decisions only for existing retrieved collections. Rerank metadata is advisory evidence, not permission to choose a weak fit. Return at most 2 decisions. Prefer no collection decision over a weak one.",
+    "Choose Collections based on independent durable saved value, using the retrieved Collection titles/descriptions; do not choose merely because of source shape, platform, domain, media format, or incidental topic mentions.",
+    "Collections are dynamic user-owned objects, so reason from their provided titles/descriptions rather than any fixed starter taxonomy.",
+    "Return at most 2 Collection decisions. Select a secondary Collection only when it represents a separate saved value supported by evidence.",
+    "Never invent a Collection, propose a new Collection name, or return a free-form Collection. Rerank metadata is advisory, not permission to choose a weak fit.",
+    "If no retrieved Collection is a strong fit, return an empty collection_decisions array. Prefer no Collection decision over a weak one.",
     "Review Insight copy is analyzer-authored. Backend validation only accepts bounded user-facing copy or replaces it with neutral review copy; do not rely on backend fallback prose.",
     "Always fill review_rationale with concise user-facing evidence for Capture Review. It is not chain-of-thought and must not mention models, prompts, scores, or hidden reasoning.",
     "Use app language in review_rationale: Save Intent, Collections, Reminder idea, No intent, and No collection.",
@@ -160,10 +153,10 @@ export function buildPrompt(
           confidence: collection.rerank_confidence ?? null,
           rationale: collection.rerank_rationale ?? null,
           capture_role: collection.rerank_capture_role ?? null,
-          capture_role_confidence:
-            collection.rerank_capture_role_confidence ?? null,
-          capture_role_rationale:
-            collection.rerank_capture_role_rationale ?? null,
+          capture_role_confidence: collection.rerank_capture_role_confidence ??
+            null,
+          capture_role_rationale: collection.rerank_capture_role_rationale ??
+            null,
         },
       })),
       null,

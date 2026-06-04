@@ -104,6 +104,32 @@ Immediate next steps:
 - Keep prompt changes minimal. Add tests around repeated boundaries first, and
   only promote a compact rule when review confirms Precious should change.
 
+## Collection Recall Recovery Plan, 2026-06-03
+
+The reviewed `gold-v4` 100-row baseline shows high Collection precision
+(`94.6%`) with lower recall (`62.9%`). The primary fix is conservative
+secondary-Collection recovery, not broader prompt prose.
+
+Implemented direction:
+
+- Retrieve up to 20 active Collections and pass the top 10 reranked candidates
+  into extraction.
+- Keep production auto-linking capped at 2 Collections.
+- Add a backend recovery pass after extraction that can add a high-confidence
+  secondary Collection only when rerank fit is strong, the Collection
+  description represents an independent saved value, and capture evidence
+  supports that value.
+- Record diagnostics for retrieved, prompt-passed, extraction-selected,
+  recovered, and cap-blocked Collections so eval failures can distinguish
+  candidate pass-through misses, extraction under-selection, and 2-link cap
+  misses.
+- Keep prompt language compact: the reusable rule is independent durable saved
+  value from dynamic Collection titles/descriptions, not source shape, platform,
+  domain, media format, or incidental topic mentions.
+
+Boundary coverage should live mainly in tests and validators. Avoid expanding
+the prompt with starter-Collection-specific examples unless repeated reviewed
+gold failures show the compact rule and recovery pass are insufficient.
 ## Candidate Improvements
 
 ### Instructional Secondary Collections

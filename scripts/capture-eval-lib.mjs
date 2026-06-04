@@ -614,7 +614,13 @@ export function predictionFromCapture(capture) {
     confidence_label: analysis.confidence_label || "",
     url_evidence_status: analysis.url_evidence?.status || "",
     url_evidence_quality: analysis.url_evidence?.evidence_quality || "",
-    review_targets: Array.isArray(analysis.review_targets) ? analysis.review_targets : []
+    review_targets: Array.isArray(analysis.review_targets) ? analysis.review_targets : [],
+    collection_recall_diagnostics:
+      analysis.collection_recall_diagnostics &&
+      typeof analysis.collection_recall_diagnostics === "object" &&
+      !Array.isArray(analysis.collection_recall_diagnostics)
+        ? analysis.collection_recall_diagnostics
+        : null
   };
 }
 
@@ -829,6 +835,95 @@ export function emptyScoreMetrics() {
   };
 }
 
+function emptyCollectionRecallDiagnostics() {
+  return {
+    false_negative_count: 0,
+    rows_with_collection_misses: 0,
+    by_cause: {
+      candidate_not_passed: 0,
+      extraction_under_selection: 0,
+      auto_link_cap: 0,
+      missing_from_retrieval_or_trace: 0
+    },
+    examples: []
+  };
+}
+
+function collectionTraceItems(trace, key) {
+  return trace && Array.isArray(trace[key]) ? trace[key] : [];
+}
+
+function traceItemName(item) {
+  if (typeof item === "string") return item;
+  if (item && typeof item === "object") {
+    return item.title || item.collection_title || item.name || item.label ||
+      item.collection_id || item.value || "";
+  }
+  return "";
+}
+
+function traceContainsCollection(trace, keys, title) {
+  const expected = normalizeText(title);
+  return keys.some((key) =>
+    collectionTraceItems(trace, key).some((item) =>
+      normalizeText(traceItemName(item)) === expected
+    )
+  );
+}
+
+function classifyCollectionFalseNegative(title, prediction) {
+  const trace = prediction?.collection_recall_diagnostics &&
+      typeof prediction.collection_recall_diagnostics === "object"
+    ? prediction.collection_recall_diagnostics
+    : null;
+  if (!trace) return "missing_from_retrieval_or_trace";
+  if (
+    traceContainsCollection(trace, [
+      "auto_link_cap_blocked_decisions",
+      "cap_blocked_decisions"
+    ], title)
+  ) {
+    return "auto_link_cap";
+  }
+  if (traceContainsCollection(trace, ["not_passed_collections"], title)) {
+    return "candidate_not_passed";
+  }
+  if (traceContainsCollection(trace, ["prompt_collections"], title)) {
+    return "extraction_under_selection";
+  }
+  if (traceContainsCollection(trace, ["retrieved_collections"], title)) {
+    return "candidate_not_passed";
+  }
+  return "missing_from_retrieval_or_trace";
+}
+
+function recordCollectionFalseNegatives(
+  diagnostics,
+  { sample, label, prediction, stratum, suitability }
+) {
+  const predicted = new Set(normalizeStringList(prediction.collections));
+  const missing = uniqueStringList(label.expected.collections)
+    .filter((title) => !predicted.has(normalizeText(title)));
+  if (!missing.length) return;
+  diagnostics.rows_with_collection_misses += 1;
+  for (const title of missing) {
+    const cause = classifyCollectionFalseNegative(title, prediction);
+    diagnostics.false_negative_count += 1;
+    diagnostics.by_cause[cause] = (diagnostics.by_cause[cause] || 0) + 1;
+    if (diagnostics.examples.length < 50) {
+      diagnostics.examples.push({
+        sample_id: sample.sample_id,
+        stratum,
+        suitability,
+        expected_collection: title,
+        cause,
+        predicted: prediction.collections,
+        url: sample.url || label.url || ""
+      });
+    }
+  }
+}
+
 export function scoreCapturePredictions(samples, labels) {
   const labelById = new Map(labels.map((label) => [label.sample_id, label]));
   const overall = emptyScoreMetrics();
@@ -840,6 +935,7 @@ export function scoreCapturePredictions(samples, labels) {
     by_domain: {},
     errors: []
   };
+  const collectionDiagnostics = emptyCollectionRecallDiagnostics();
   let labeledSamples = 0;
   let excludedLabels = 0;
 
@@ -921,6 +1017,15 @@ export function scoreCapturePredictions(samples, labels) {
           predicted: prediction[name],
           url: sample.url || label.url || ""
         });
+        if (name === "collections" && result.fn > 0) {
+          recordCollectionFalseNegatives(collectionDiagnostics, {
+            sample,
+            label,
+            prediction,
+            stratum,
+            suitability
+          });
+        }
       }
     }
   }
@@ -948,6 +1053,7 @@ export function scoreCapturePredictions(samples, labels) {
       Array.from(bySuitability.entries()).map(([name, metrics]) => [name, summarizeGroup(metrics)])
     ),
     terminal_diagnostics: terminalDiagnostics,
+    collection_recall_diagnostics: collectionDiagnostics,
     failures
   };
 }
@@ -1127,6 +1233,16 @@ function scoreSectionMarkdown(score, title) {
     lines.push(Object.entries(score.terminal_diagnostics.by_outcome)
       .map(([outcome, count]) => `${outcome}: ${count}`)
       .join("; ") || "No terminal outcomes.");
+    lines.push("");
+  }
+
+  if (score.collection_recall_diagnostics) {
+    const diagnostics = score.collection_recall_diagnostics;
+    lines.push("### Collection Recall Diagnostics", "");
+    lines.push(`Collection false negatives: ${diagnostics.false_negative_count || 0}`);
+    lines.push(Object.entries(diagnostics.by_cause || {})
+      .map(([cause, count]) => `${cause}: ${count}`)
+      .join("; ") || "No collection false negatives.");
     lines.push("");
   }
 

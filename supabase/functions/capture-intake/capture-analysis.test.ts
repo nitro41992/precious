@@ -10,6 +10,60 @@ import {
   urlEvidence,
 } from "./url-evidence.test-support.ts";
 
+function collectionFixture(
+  id: string,
+  title: string,
+  description: string,
+  overrides: Record<string, unknown> = {},
+): any {
+  return {
+    id,
+    title,
+    description,
+    rerank_rank: 1,
+    rerank_fit: "strong",
+    rerank_confidence: 0.92,
+    rerank_rationale: `${title} is a strong saved-value fit.`,
+    ...overrides,
+  };
+}
+
+function selectedCollectionDecision(collection: Record<string, unknown>) {
+  return {
+    type: "existing",
+    collection_id: collection.id,
+    title: collection.title,
+    description: collection.description,
+    rationale: "Selected by extraction.",
+    confidence: 0.9,
+  };
+}
+
+function recoveryAnalysisFixture(
+  selectedCollection: Record<string, unknown>,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    display_title: "Saved capture",
+    summary: "Useful saved content.",
+    capture_role: "learning_reference",
+    default_intent: {
+      category: "learn",
+      confidence: 0.84,
+      rationale: "Evidence supports learning or reference.",
+    },
+    entities: [],
+    search_phrases: [],
+    review_rationale: {
+      summary: "Looks useful to save.",
+      intent: "Save Intent fits the source evidence.",
+      collections: "Collection fit is based on source evidence.",
+    },
+    collection_decisions: [selectedCollectionDecision(selectedCollection)],
+    ...overrides,
+  };
+}
+
 Deno.test("Visit target normalization keeps map candidates unverified", () => {
   const normalized = urlEvidence.normalizeVisitTargetFields({
     visit_target_name: " Sanwits ",
@@ -136,14 +190,18 @@ Deno.test("analysis prompt limits reminder and visit target overlap", () => {
     "prompt should distinguish concrete Visit Targets from broad location evidence",
   );
   assert(
-    prompt.includes("Extract location_context as internal structured evidence") &&
+    prompt.includes(
+      "Extract location_context as internal structured evidence",
+    ) &&
       prompt.includes("is_destination_away_from_user must be null") &&
-      prompt.includes("Do not implement or imply continuous precise location tracking"),
+      prompt.includes(
+        "Do not implement or imply continuous precise location tracking",
+      ),
     "prompt should extract structured location without implying user tracking",
   );
 });
 
-Deno.test("collection retrieval breadth uses twenty candidates and prompts eight", () => {
+Deno.test("collection retrieval breadth uses twenty candidates and prompts ten", () => {
   assertEqual(
     urlEvidence.COLLECTION_RETRIEVAL_MATCH_COUNT,
     20,
@@ -151,19 +209,501 @@ Deno.test("collection retrieval breadth uses twenty candidates and prompts eight
   );
   assertEqual(
     urlEvidence.COLLECTION_PROMPT_CANDIDATE_COUNT,
-    8,
+    10,
     "main extraction should see only the top reranked candidates",
   );
   assertEqual(
     urlEvidence.promptCollectionsForAnalysis(
-      Array.from({ length: 10 }, (_, index) => ({
+      Array.from({ length: 12 }, (_, index) => ({
         id: `collection-${index}`,
         title: `Collection ${index}`,
         description: "",
       })),
     ).length,
-    8,
+    10,
     "prompt collection helper should cap candidates",
+  );
+});
+
+Deno.test("secondary collection recovery adds guide value for software docs", () => {
+  const software = collectionFixture(
+    "software-id",
+    "Software & Apps",
+    "Apps, software tools, SaaS products, developer repositories, technical docs, and software workflows.",
+  );
+  const guides = collectionFixture(
+    "guides-id",
+    "Articles & Guides",
+    "Long reads, how-tos, explainers, reference pages, and practical guides saved for later use.",
+    {
+      rerank_rank: 2,
+      rerank_rationale:
+        "The capture is a tutorial reference for configuring a software API.",
+    },
+  );
+  const result = urlEvidence.applySecondaryCollectionRecovery(
+    recoveryAnalysisFixture(software, {
+      summary:
+        "A developer tutorial explains setup steps and API reference details for the app workflow.",
+      default_intent: {
+        category: "learn",
+        confidence: 0.88,
+        rationale: "The source is useful as a tutorial and reference.",
+      },
+    }),
+    [software, guides],
+    [software, guides],
+  );
+
+  assertEqual(
+    result.collection_decisions.length,
+    2,
+    "software docs should recover a guide/reference Collection",
+  );
+  assertEqual(
+    result.collection_decisions[1].collection_id,
+    "guides-id",
+    "recovered Collection id",
+  );
+});
+
+Deno.test("secondary collection recovery boosts selected strong secondary decisions", () => {
+  const guides = collectionFixture(
+    "guides-id",
+    "Articles & Guides",
+    "Long reads, how-tos, explainers, reference pages, and practical guides saved for later use.",
+  );
+  const software = collectionFixture(
+    "software-id",
+    "Software & Apps",
+    "Apps, software tools, SaaS products, developer repositories, technical docs, and software workflows.",
+    {
+      rerank_rank: 2,
+      rerank_confidence: 0.88,
+      rerank_rationale:
+        "The selected secondary Collection fits the software tutorial evidence.",
+    },
+  );
+  const result = urlEvidence.applySecondaryCollectionRecovery(
+    recoveryAnalysisFixture(guides, {
+      summary:
+        "A developer tutorial explains setup steps, API docs, Expo web preview configuration, and a software workflow.",
+      collection_decisions: [
+        selectedCollectionDecision(guides),
+        {
+          ...selectedCollectionDecision(software),
+          confidence: 0.75,
+        },
+      ],
+    }),
+    [guides, software],
+    [guides, software],
+  );
+
+  assert(
+    result.collection_decisions[1].confidence >= 0.86,
+    "strong selected secondary Collection should be boosted above auto-link threshold",
+  );
+  assertEqual(
+    result.collection_recall_diagnostics.boosted_selected_decisions[0]
+      .collection_id,
+    "software-id",
+    "boosted selected decision should be diagnosed",
+  );
+});
+
+Deno.test("secondary collection recovery boosts selected possible secondary decisions with evidence", () => {
+  const travel = collectionFixture(
+    "travel-id",
+    "Travel & Trips",
+    "Trips, destinations, routes, hotels, flights, booking notes, and itineraries.",
+  );
+  const guides = collectionFixture(
+    "guides-id",
+    "Reference Shelf",
+    "Guides, checklists, how-tos, and reference pages saved for later use.",
+    {
+      rerank_rank: 2,
+      rerank_fit: "possible",
+      rerank_confidence: 0.75,
+      rerank_rationale:
+        "The selected secondary Collection may fit the travel planning article.",
+    },
+  );
+  const result = urlEvidence.applySecondaryCollectionRecovery(
+    recoveryAnalysisFixture(travel, {
+      capture_role: "trip_planning",
+      summary:
+        "A how-to travel article explains itinerary steps, route planning, access details, and a booking checklist.",
+      collection_decisions: [
+        selectedCollectionDecision(travel),
+        {
+          ...selectedCollectionDecision(guides),
+          confidence: 0.75,
+        },
+      ],
+    }),
+    [travel, guides],
+    [travel, guides],
+  );
+
+  assert(
+    result.collection_decisions[1].confidence >= 0.86,
+    "selected possible secondary Collection with evidence should be boosted",
+  );
+});
+
+Deno.test("secondary collection recovery adds guide value for travel logistics", () => {
+  const travel = collectionFixture(
+    "travel-id",
+    "Travel & Trips",
+    "Trips, destinations, routes, hotels, flights, booking notes, and itineraries.",
+  );
+  const guides = collectionFixture(
+    "guides-id",
+    "Reference Shelf",
+    "Guides, checklists, how-tos, and reference pages saved for later use.",
+    {
+      rerank_rank: 2,
+      rerank_rationale:
+        "The capture is a practical travel guide with route and access details.",
+    },
+  );
+  const result = urlEvidence.applySecondaryCollectionRecovery(
+    recoveryAnalysisFixture(travel, {
+      capture_role: "trip_planning",
+      summary:
+        "A destination guide with itinerary options, route planning, admission, access, and booking details.",
+      default_intent: {
+        category: "do",
+        confidence: 0.86,
+        rationale:
+          "The evidence supports trip planning and a practical checklist.",
+      },
+    }),
+    [travel, guides],
+    [travel, guides],
+  );
+
+  assertEqual(
+    result.collection_decisions[1].collection_id,
+    "guides-id",
+    "travel logistics should recover a guide/reference Collection",
+  );
+});
+
+Deno.test("secondary collection recovery adds class value for workshops", () => {
+  const events = collectionFixture(
+    "events-id",
+    "Events",
+    "Attendable events, performances, schedules, festivals, and ticketed happenings.",
+  );
+  const classes = collectionFixture(
+    "classes-id",
+    "Classes",
+    "Classes, courses, workshops, lessons, training programs, and curriculum.",
+    {
+      rerank_rank: 2,
+      rerank_rationale:
+        "The event is also a workshop with lesson-style training.",
+    },
+  );
+  const result = urlEvidence.applySecondaryCollectionRecovery(
+    recoveryAnalysisFixture(events, {
+      capture_role: "event_attendance",
+      summary:
+        "A dated workshop with tickets, training sessions, lessons, and class enrollment details.",
+      default_intent: {
+        category: "do",
+        confidence: 0.88,
+        rationale: "The user could attend the workshop.",
+      },
+    }),
+    [events, classes],
+    [events, classes],
+  );
+
+  assertEqual(
+    result.collection_decisions[1].collection_id,
+    "classes-id",
+    "workshop evidence should recover a class/work Collection",
+  );
+});
+
+Deno.test("secondary collection recovery adds music value for concerts", () => {
+  const events = collectionFixture(
+    "events-id",
+    "Events",
+    "Attendable events, schedules, festivals, concerts, performances, and ticket pages.",
+  );
+  const music = collectionFixture(
+    "music-id",
+    "Music Library",
+    "Music, podcasts, songs, albums, artists, playlists, and concerts as media.",
+    {
+      rerank_rank: 2,
+      rerank_rationale:
+        "The event is a concert festival centered on artists and music.",
+    },
+  );
+  const result = urlEvidence.applySecondaryCollectionRecovery(
+    recoveryAnalysisFixture(events, {
+      capture_role: "event_attendance",
+      summary:
+        "A ticketed music festival concert with artists, DJ sets, playlists, and performance schedule.",
+      default_intent: {
+        category: "do",
+        confidence: 0.9,
+        rationale: "The user could attend the concert.",
+      },
+    }),
+    [events, music],
+    [events, music],
+  );
+
+  assertEqual(
+    result.collection_decisions[1].collection_id,
+    "music-id",
+    "concert evidence should recover music when it is independent",
+  );
+});
+
+Deno.test("secondary collection recovery does not boost selected guide for product roundups", () => {
+  const products = collectionFixture(
+    "products-id",
+    "Products",
+    "Products, shopping, buy links, deals, gear, gifts, stores, and purchase comparisons.",
+  );
+  const guides = collectionFixture(
+    "guides-id",
+    "Articles & Guides",
+    "Long reads, how-tos, explainers, reference pages, and practical guides saved for later use.",
+    {
+      rerank_rank: 2,
+      rerank_confidence: 0.78,
+      rerank_rationale: "The source is a buying guide roundup for products.",
+    },
+  );
+  const result = urlEvidence.applySecondaryCollectionRecovery(
+    recoveryAnalysisFixture(products, {
+      capture_role: "shopping",
+      summary:
+        "A best robot vacuum buying guide ranks products with prices, sale notes, buy links, and comparisons.",
+      default_intent: {
+        category: "read",
+        confidence: 0.78,
+        rationale:
+          "The model framed the shopping roundup as reference reading.",
+      },
+      collection_decisions: [
+        selectedCollectionDecision(products),
+        {
+          ...selectedCollectionDecision(guides),
+          confidence: 0.78,
+        },
+      ],
+    }),
+    [products, guides],
+    [products, guides],
+  );
+
+  assert(
+    result.collection_decisions[1].confidence < 0.86,
+    "shopping roundup guide should remain below auto-link threshold",
+  );
+  assertEqual(
+    result.collection_recall_diagnostics.boosted_selected_decisions.length,
+    0,
+    "blocked shopping guide should not be diagnosed as boosted",
+  );
+});
+
+Deno.test("secondary collection recovery keeps shopping roundups product-only", () => {
+  const products = collectionFixture(
+    "products-id",
+    "Products",
+    "Products, shopping, buy links, deals, gear, gifts, stores, and purchase comparisons.",
+  );
+  const guides = collectionFixture(
+    "guides-id",
+    "Articles & Guides",
+    "Long reads, how-tos, explainers, reference pages, and practical guides saved for later use.",
+    {
+      rerank_rank: 2,
+      rerank_rationale: "The source is a buying guide roundup for products.",
+    },
+  );
+  const result = urlEvidence.applySecondaryCollectionRecovery(
+    recoveryAnalysisFixture(products, {
+      capture_role: "shopping",
+      summary:
+        "A best backpacks buying guide with ranked products, prices, sale notes, buy links, and comparison details.",
+      default_intent: {
+        category: "buy",
+        confidence: 0.91,
+        rationale: "The saved value is shopping and purchase comparison.",
+      },
+    }),
+    [products, guides],
+    [products, guides],
+  );
+
+  assertEqual(
+    result.collection_decisions.length,
+    1,
+    "product roundup should not add guide only because it is article-shaped",
+  );
+  assertEqual(
+    result.collection_recall_diagnostics.recovery_candidates[0].reason,
+    "shopping_roundup_does_not_need_independent_guide_collection",
+    "shopping-only guide risk should be diagnosed",
+  );
+});
+
+Deno.test("secondary collection recovery does not add travel for one restaurant", () => {
+  const dining = collectionFixture(
+    "dining-id",
+    "Restaurants & Cafes",
+    "Restaurants, cafes, bars, menus, dining, and places to eat or drink.",
+  );
+  const travel = collectionFixture(
+    "travel-id",
+    "Travel & Trips",
+    "Trips, destination planning, routes, hotels, flights, booking, and itinerary logistics.",
+    {
+      rerank_rank: 2,
+      rerank_rationale:
+        "The page mentions a city but does not provide route or trip planning.",
+    },
+  );
+  const result = urlEvidence.applySecondaryCollectionRecovery(
+    recoveryAnalysisFixture(dining, {
+      capture_role: "place_visit",
+      summary:
+        "A single cafe video with menu details, coffee drinks, and a named restaurant to visit.",
+      default_intent: {
+        category: "visit",
+        confidence: 0.89,
+        rationale: "The user could visit the cafe.",
+      },
+    }),
+    [dining, travel],
+    [dining, travel],
+  );
+
+  assertEqual(
+    result.collection_decisions.length,
+    1,
+    "single restaurant/cafe evidence should not recover travel planning",
+  );
+});
+
+Deno.test("secondary collection recovery separates inspiration from execution", () => {
+  const design = collectionFixture(
+    "design-id",
+    "Design Inspiration",
+    "Design, inspiration, visual style, interiors, fashion, creative references, and moodboards.",
+  );
+  const projects = collectionFixture(
+    "projects-id",
+    "Home Projects",
+    "Home, DIY, repair, decor projects, gardening, crafts, builds, materials, and before/after work.",
+    {
+      rerank_rank: 2,
+      rerank_rationale:
+        "Project fit requires execution evidence such as materials and steps.",
+    },
+  );
+  const inspiration = urlEvidence.applySecondaryCollectionRecovery(
+    recoveryAnalysisFixture(design, {
+      capture_role: "visual_inspiration",
+      summary:
+        "An interiors profile with visual inspiration, color palette, styling ideas, and moodboard value.",
+      default_intent: {
+        category: null,
+        confidence: 0.62,
+        rationale: "The saved value is visual inspiration.",
+      },
+    }),
+    [design, projects],
+    [design, projects],
+  );
+  assertEqual(
+    inspiration.collection_decisions.length,
+    1,
+    "visual inspiration alone should not recover project execution",
+  );
+
+  const execution = urlEvidence.applySecondaryCollectionRecovery(
+    recoveryAnalysisFixture(design, {
+      capture_role: "project_execution",
+      summary:
+        "A before and after renovation guide with materials, steps, sources, installation details, and DIY build notes.",
+      default_intent: {
+        category: "do",
+        confidence: 0.89,
+        rationale: "The saved value includes executing the project.",
+      },
+    }),
+    [design, projects],
+    [design, projects],
+  );
+  assertEqual(
+    execution.collection_decisions[1].collection_id,
+    "projects-id",
+    "execution evidence should recover project/home Collection",
+  );
+});
+
+Deno.test("secondary collection recovery records cap-blocked matches", () => {
+  const software = collectionFixture(
+    "software-id",
+    "Software & Apps",
+    "Apps, software tools, APIs, developer repositories, and workflows.",
+  );
+  const guides = collectionFixture(
+    "guides-id",
+    "Guides",
+    "How-tos, tutorials, reference docs, manuals, and checklists.",
+    {
+      rerank_rank: 2,
+      rerank_rationale: "The capture is a software tutorial reference.",
+    },
+  );
+  const work = collectionFixture(
+    "work-id",
+    "Work",
+    "Work, career, business, professional operations, management, and startup notes.",
+    {
+      rerank_rank: 3,
+      rerank_rationale:
+        "The capture also describes professional workflow operations.",
+    },
+  );
+  const result = urlEvidence.applySecondaryCollectionRecovery(
+    recoveryAnalysisFixture(software, {
+      summary:
+        "A professional developer tutorial with API docs, setup checklist, business workflow, operations, and management details.",
+      default_intent: {
+        category: "learn",
+        confidence: 0.88,
+        rationale:
+          "The source is tutorial reference for a professional workflow.",
+      },
+    }),
+    [software, guides, work],
+    [software, guides],
+  );
+
+  assertEqual(
+    result.collection_decisions.length,
+    urlEvidence.COLLECTION_AUTO_LINK_LIMIT,
+    "recovery should preserve the two-link production cap",
+  );
+  assertEqual(
+    result.collection_recall_diagnostics.cap_blocked_decisions[0].collection_id,
+    "work-id",
+    "extra strong matches should be diagnosed as cap-blocked",
   );
 });
 
@@ -408,7 +948,9 @@ Deno.test("reminder schema and prompt only allow time interval suggestions", () 
   );
   assert(
     schema.required.includes("location_context") &&
-      schema.properties.location_context.required.includes("source_destination"),
+      schema.properties.location_context.required.includes(
+        "source_destination",
+      ),
     "analysis schema should include structured location context",
   );
   assert(
@@ -504,10 +1046,10 @@ Deno.test("collection prompt is subject-first when social video content is avail
   );
   assert(
     prompt.includes(
-      "Choose Collections based on the durable reason the user would save this capture",
+      "Choose Collections based on independent durable saved value",
     ) &&
       prompt.includes(
-        "source is an article, profile, directory, platform page, social post, video, or mentions a topic",
+        "source shape, platform, domain, media format, or incidental topic mentions",
       ),
     "prompt should forbid source-shape collection matches",
   );
@@ -585,7 +1127,8 @@ Deno.test("reminder validation drops stale extracted reminder ideas", () => {
     "validator should drop stale reminder ideas",
   );
   assert(
-    Array.isArray(analysis.review_targets) && analysis.review_targets.length === 0,
+    Array.isArray(analysis.review_targets) &&
+      analysis.review_targets.length === 0,
     "validator should clear reminder review target when all reminders are dropped",
   );
   assert(

@@ -16,6 +16,7 @@ export {
 export * from "./responses.ts";
 export * from "./retrieval.ts";
 export * from "./rerank.ts";
+export * from "./secondary-recovery.ts";
 export {
   acceptPendingCollectionDecisions,
   applyCollectionReviewDecisions,
