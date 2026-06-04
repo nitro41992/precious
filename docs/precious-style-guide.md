@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Precious Captures should feel like a native mobile memory surface: calm, fast, private, and useful when a saved thing needs to be found or edited. This guide translates reference patterns from Apple Health, Gentler Streak, Stoic, and Tiimo into implementation rules for Precious UI work.
+Precious Captures should feel like a native mobile memory surface: bold, fast, private, and useful when a saved thing needs to be found or edited. This guide translates reference patterns from Apple Health, Gentler Streak, Stoic, Tiimo, and the bold flat dark reference direction into implementation rules for Precious UI work.
 
-Use this guide when designing or reviewing capture intake, capture lists, Capture Review, collections, search, reminders, empty states, loading states, and error recovery. It is not a marketing direction and should not introduce decorative AI chrome, dashboard density, or manual organization before the product has earned trust.
+Use this guide when designing or reviewing capture intake, capture lists, Capture Review, collections, search, reminders, empty states, loading states, and error recovery. It is not a marketing direction and should not introduce decorative AI chrome, dashboard clutter, gradients, or manual organization before the product has earned trust.
 
 ## Current Product Direction
 
@@ -13,7 +13,9 @@ The current consumer UI target is search-first memory retrieval:
 - The default home screen is `Recent Captures`, a beautiful active-capture list ordered by most recently captured.
 - Search is a full-screen Retrieval Lens opened from a compact, prominent Recent Captures action, not a small embedded filter field.
 - Capture rows should feel rich and consumer-facing, while audit-like extraction details remain hidden from the row and available to Search.
-- The top-level app shell uses a Material 3-inspired bottom app bar for Recent, Collections, and Settings, with a separate contextual floating `+` action.
+- The visual system evolves from calm dark Material 3 to bold flat dark: matte dark backgrounds, oversized display type, flat saturated semantic blocks, modern line icons, minimal shadows, and content-first imagery.
+- Use Space Grotesk for expressive display moments and Inter for body, metadata, controls, inputs, and dense review copy.
+- The top-level app shell uses a native bottom app bar for Recent, Collections, and Settings, with a separate contextual floating `+` action.
 - Collections is a top-level management destination, but Recent Captures remains the default home and Search remains the primary retrieval lens.
 - Map, Agenda, and full reminder delivery are deferred. Agenda depends on functioning Confirmed Reminders.
 - Smooth transitions, loading states, press feedback, draft-preserving saves, and toast undo are part of the expected product quality.
@@ -54,15 +56,23 @@ Mobbin access was limited during research: the supplied pages exposed title shel
 - Make replanning gentle: "Move later", "Review later", "Carry forward", and "Delete" are better than failure language when removal is intended.
 - Break complex workflows into small steps when needed, especially capture review, reminder confirmation, and collection cleanup.
 
+### Bold Flat Dark References
+
+- Use oversized Space Grotesk display type for the first read on major surfaces, balanced by Inter for scannable rows, controls, and review copy.
+- Prefer matte dark fields, flat saturated semantic blocks, crisp dividers, and modern Lucide line icons over elevation, gradients, glass, or decorative illustration.
+- Let saved thumbnails, screenshots, uploaded images, and source previews carry visual richness. Product content should be the image layer; abstract decoration should not.
+- Build identity through asymmetric archive-shaped surfaces, source monograms, collection initials, and sparse high-contrast marks rather than repeated generic icon tiles.
+- Keep the surface content-first: one strong title, one clear action or scanning purpose, and no dashboard-style grids of disconnected metrics.
+
 ## Design Principles
 
-- **Native Calm:** Use restrained native mobile patterns, compact hierarchy, dark neutral tonal surfaces, and clear state labels.
+- **Bold Native Memory:** Use native mobile patterns with oversized hierarchy, matte dark surfaces, crisp line icons, and clear state labels.
 - **Capture First:** Saving must feel durable and immediate. Analysis and review happen after capture, not before it.
 - **Quiet Confidence:** Persist low-risk, reversible AI decisions quietly; ask before creating reminders, obligations, or new organizational structures.
 - **Guided Review:** Correction should feel like editing meaning with chips and short rationale, not filling out an analysis report.
 - **Search-First Retrieval:** Home should make Search feel primary while still giving users a rich recent-memory list.
 - **Owned Organization:** Collections should feel user-owned and manageable without turning organization into the main product surface.
-- **Semantic Color:** Color communicates state, confidence, or category. Avoid decorative gradients, color fields, and ornamental backgrounds.
+- **Semantic Blocks:** Saturated flat color blocks communicate state, confidence, source, or action. Avoid decorative gradients, ornamental color fields, and dashboard clutter.
 - **Scan Before Explain:** Rows and summaries should be legible in a two-second scan. Long rationale belongs behind an intentional affordance.
 - **Private By Default:** AI and sync behavior should be legible, especially around source content, notes, images, and reminders.
 - **Thumb-Aware:** Primary actions should be reachable, tap targets should be at least 44-48px, and bottom insets must be respected.
@@ -72,51 +82,62 @@ Mobbin access was limited during research: the supplied pages exposed title shel
 
 ### Color Roles
 
-Use the dark neutral palette as the default app base and add state colors sparingly. The prior warm-paper palette is no longer the primary consumer shell direction.
+Use matte dark neutrals as the default app base and add saturated state colors as semantic blocks. The prior warm-paper and calm dark Material 3 palettes are no longer the primary consumer shell direction.
 
 | Role | Token | Use |
 | --- | --- | --- |
-| Paper | `#101411` | App background and sticky footers |
-| Surface | `#171c18` | Bounded review blocks or grouped surfaces only |
-| Surface Container | `#1d241f` | Search bars, sheets, rows with emphasis |
-| Surface Container High | `#252d27` | Pressed states, dense inputs, secondary panels |
-| Ink | `#eef5ef` | Primary text and high-emphasis actions |
-| Muted | `#a6b3aa` | Metadata, helper text, secondary labels |
-| Line | `#37413a` | Hairline dividers and subtle borders |
-| Accent | `#7bd7ad` | Primary action, ready, selected positive state |
-| Accent Soft | `#17382b` | Selected chip or successful quiet state |
-| Processing | `#9fc6e3` | Analyzing, syncing, queued |
-| Review | `#e2bd76` | Needs review, maybe, action needed |
-| Review Soft | `#342713` | Review callouts and changed suggestions |
-| Danger | `#ffb4a8` | Failed, destructive, could not save |
-| Deleted | `#ffb4a8` | Destructive delete actions and pending-delete undo |
+| Paper | `#090a0c` | Matte app background and sticky footers |
+| Surface | `#141519` | Bounded review blocks or grouped surfaces only |
+| Surface Container | `#1c1e24` | Search bars, sheets, rows with emphasis |
+| Surface Container High | `#252830` | Pressed states, dense inputs, secondary panels |
+| Ink | `#f4f1e8` | Primary text and high-emphasis actions |
+| Muted | `#a7a59d` | Metadata, helper text, secondary labels |
+| Line | `#363942` | Hairline dividers and subtle borders |
+| Accent | `#d6ff3f` | Primary action, ready, selected positive state |
+| Accent Soft | `#26320c` | Selected chip or successful quiet state |
+| Processing | `#39b8ff` | Analyzing, syncing, queued |
+| Review | `#ffb84d` | Needs review, maybe, action needed |
+| Review Soft | `#3b2607` | Review callouts and changed suggestions |
+| Danger | `#ff5c5c` | Failed, destructive, could not save |
+| Deleted | `#ff5c5c` | Destructive delete actions and pending-delete undo |
 
 Rules:
 
-- Use one dominant accent per screen.
+- Use one dominant saturated block color per screen, plus state color only where it improves recognition.
 - Do not use confidence percentages or red/yellow/green scoring.
 - Pair color with text labels such as `Ready`, `Analyzing`, `Needs review`, `Failed`, or `Deleted`.
-- Avoid pure black, pure white as the whole page background, purple gradients, glass effects, and decorative blobs.
+- Pair saturated blocks with text or a Lucide icon; color alone must not carry meaning.
+- Avoid pure black, pure white as the whole page background, purple gradients, glass effects, decorative blobs, and dashboard-style color panels.
 - Treat available source imagery, thumbnails, screenshots, and shared image assets as product content. Use them for rows and Capture Review headers when already persisted; do not add decorative imagery or new extraction work only to fill space.
 
 ### Typography
 
-- Use native system fonts.
-- Page title: 26-28px, 700 weight, tight but readable line height.
-- Section title: 17-19px, 700 weight.
-- Row title: 17-18px, 600-700 weight, usually one line.
+- Use Space Grotesk for display headings, major lens titles, empty-state title lines, and rare high-emphasis labels.
+- Use Inter for body copy, capture rows, metadata, controls, forms, sheets, and dense review surfaces.
+- Display title: 34-42px, 700 weight, tight but readable line height. Use the smaller end on compact screens and inside focused flows.
+- Page title in dense screens: 28-34px, 700 weight.
+- Section title: 18-20px, 700 weight.
+- Row title: 17-19px, 600-700 weight, usually one line.
 - Body: 15-16px, 21-23px line height.
 - Metadata: 12-13px, muted, often 700 when used as a label.
 - Inputs: at least 16px to avoid tiny mobile form text.
 - Use sentence case for user-facing labels. Uppercase is acceptable only for compact metadata labels.
 - Letter spacing should stay `0`.
 
+### Icons And Imagery
+
+- Use modern Lucide line icons for common actions, tabs, empty states, status cues, and sheet headers.
+- Icons should clarify action or state; do not use icons as decorative wallpaper.
+- Existing capture imagery should be uncropped enough to recognize the saved content. Use flat image treatments and minimal shadow.
+- Do not generate or fetch imagery merely to decorate an empty area.
+
 ### Spacing And Shape
 
 - Use a compact spacing scale: 4, 8, 12, 16, 22 or 24, 32.
 - Default horizontal screen padding: 22px unless a native component requires otherwise.
-- Default radius: 8px. Segments may use 6px. Avoid large pill-heavy UI unless the element is truly a chip.
-- Use hairline dividers for list separation.
+- Default radius: 8px, but key capture and collection surfaces should use asymmetric archive cuts so the system has a recognizable shape. Avoid making every control a uniform squircle.
+- Use spacing, grouped copy, color marks, and asymmetric shape before adding separators. Hairline dividers are allowed for dense sheets, but they should not dominate major screens.
+- Keep layering flat. Shadows should be minimal and functional, not a default way to create hierarchy.
 - Do not put cards inside cards.
 - Prefer grouping and spacing before adding borders.
 
@@ -128,6 +149,7 @@ Rules:
 - Put one screen title at the top. Avoid stacking multiple hero-like headings.
 - Keep account, settings, or sign-out as small contextual actions, not primary workflow controls.
 - Use the bottom app bar for top-level `Recent`, `Collections`, and contextual `Settings`, with a separate floating `+` beside the bar. On Recent it opens New Capture; on Collections it opens New Collection.
+- Bottom app bar selection is shown by the icon glyph itself, not by a selected background pill, label, dot, or extra container. Selected Recent and Collections icons may use filled accent glyphs with dark negative details; unselected icons stay muted line icons.
 - Hide the bottom app bar on Search, Capture Review, collection detail, authentication, and modal-focused flows.
 - Use a sticky bottom action only when the screen has one clear completion action.
 
@@ -144,8 +166,9 @@ Capture rows should follow this order:
 
 Rules:
 
-- Rows should feel tappable without heavy card styling.
-- Use separators or grouped surfaces, not thick borders.
+- Rows should feel tappable without heavy card styling. Prefer asymmetric row slabs, source monograms, and thumbnails over repeated bordered cards.
+- Avoid rows that depend on generic source icons for identity. Use recognizable source labels such as `IG`, `MAP`, `RED`, `WEB`, `IMG`, or collection initials when imagery is absent.
+- Use separators sparingly; repeated dividers should give way to stronger spacing rhythm.
 - Keep row tap targets at least 44px high.
 - Use stable row structure for `processing`, `ready`, `needs_review`, and `failed`; deleted rows disappear immediately with toast undo.
 - Do not show model/provider details, analysis mode, confidence percentages, or generic `Analyzed` metadata in Recent Captures rows.
@@ -156,7 +179,7 @@ Rules:
 
 - Chips represent editable meaning: Save Intent, Collection, Reminder, source filter, or review state.
 - Chips must have visible text and at least 44px effective height when interactive.
-- Selected chips may use `Accent Soft` or `Ink`; unselected chips use `Soft` or paper with a line border.
+- Selected chips may use `Accent Soft` or `Ink`; unselected chips use `Surface Container` or paper with a line border.
 - Long-press rationale is allowed, but the primary tap should still perform the obvious edit or selection.
 
 ### Buttons And Actions
@@ -222,6 +245,7 @@ Rules:
 - Deleted Captures are hidden from Recent Captures and Search immediately.
 - Place a compact Search action in the top bar.
 - Tapping Search opens full-screen Search.
+- The review queue control filters the visible Recent Captures rows to items needing review or failed analysis. It should toggle between all captures and review-only captures, preserve recency grouping, and never jump directly to the first review item.
 - Rows should include source and date/time metadata, not only time.
 - Extraction details should remain persisted and searchable without being rendered as audit metadata.
 - Collections, Map, Agenda, and reminder modules should not appear as home sections. Collections lives in the bottom app bar; Map and Agenda remain deferred.
@@ -266,17 +290,19 @@ Use:
 - `Choose collection`
 - `Open link once`
 
-Capture Review should read like a polished saved-memory edit surface, not a form. Use one compact editable attribute rail for Purpose, Collection, and Later: Purpose can be the primary semantic handle, while Collection and Later read as quieter inline metadata. Save Intent is optional; when no concrete action is inferable, show `Add intent` and use the review cue to ask for a quick look instead of showing a broad fallback label or selectable empty-intent chip.
+Capture Review should read like a polished saved-memory edit surface, not a form. Use one compact decision dock for Purpose, Collection, Later, and the review rationale entry point. Purpose can carry the strongest semantic weight, while Collection and Later read as quieter decision tiles. Save Intent is optional; when no concrete action is inferable, show `Add intent` and use the review cue to ask for a quick look instead of showing a broad fallback label or selectable empty-intent chip.
 
 `Purpose: Visit | Collection: NYC restaurants | Later: next Saturday afternoon`
 
-The rail should feel embedded in the memory surface: use spacing, hairline separation, hierarchy, and pressed states rather than equal-weight stat cards, chunky pills, prose sentences, or boxed form rows.
+The dock should feel embedded in the memory surface: use spacing, hierarchy, asymmetric shape, semantic color, and pressed states rather than equal-weight stat cards, chunky pills, prose sentences, divider-heavy rails, or boxed form rows.
 
 Each control can expand into a focused picker or editor. Keep concise rationale visible only when it builds trust:
 
 `Because the post mentions a SoHo ramen shop.`
 
-Capture Review should use one `Review insight` surface for AI rationale across Save Intent, Collections, and Reminder idea. The row should show a very short review cue that names the exact thing to check, such as `Confirm intent: visit or menu reference`, then open a native-feeling sheet led by one friendly because-style insight at body scale. When review targets are unresolved, the sheet should show an icon-led checklist for the exact targets that need a decision and let the user confirm or change each target from that surface. Follow the checklist with unframed rationale rows for Save Intent, Collections, and Reminder idea. Reminder editing should open the same start/end date and optional start/end time editor as the main Reminder row. Do not use nested cards, hero-sized rationale text, generic field-level fallback blocks, hidden-only long presses, duplicate blurbs, or model traces. Keep the primary sheet action clear of Android gesture navigation.
+Capture Review should use one `Review insight` rationale surface for Save Intent, Collections, and Reminder idea. The visible entry should live inside the decision dock as a compact `Why` action, not as a second competing card below the metadata controls. When review targets are unresolved, the sheet should show an icon-led checklist for the exact targets that need a decision and let the user confirm or change each target from that surface. Follow the checklist with unframed rationale rows for Save Intent, Collections, and Reminder idea. Do not use nested cards, hero-sized rationale text, generic field-level fallback blocks, hidden-only long presses, duplicate blurbs, or model traces. Keep the primary sheet action clear of Android gesture navigation.
+
+Capture Review should not use a sticky footer merely to open review confirmation. The decision dock owns review entry through `Why`; dirty edits may show an inline `Save changes` action inside the dock header.
 
 When reminders are not fully implemented, use `Later` for the main Capture Review control and `Reminder idea` only in rationale or detail surfaces for AI proposals. Do not use copy that implies notification delivery.
 
@@ -343,6 +369,7 @@ Collections are ongoing purpose groups, not folders.
 - If the user removes or changes an AI-applied Collection, do not reattach it automatically.
 - Do not show `Use suggestion`, inline Collection creation, or per-row `Manage` actions in Capture Review.
 - Collection removal should offer immediate toast undo when feasible.
+- In collection detail, removal should live inside the capture row as a compact trailing action. Do not render a detached removal button below the row.
 - Collection management is a top-level bottom-bar destination, but Recent Captures and Search remain the primary retrieval surfaces.
 
 ### Search
@@ -363,6 +390,7 @@ Search is a full-screen retrieval utility, not a chatbot default.
 - Suggested reminders are review items, not scheduled obligations.
 - Capture Review should always offer `Add reminder` when a capture can be edited, even when Capture Analysis found no Reminder idea.
 - Use review language until the user accepts: `Reminder idea`, `Add reminder`, `Choose date and time`.
+- Reminder editing should start with fast preset choices such as today, tomorrow, this weekend, morning, afternoon, evening, short duration, or no time, then offer manual date/time pickers as a secondary precision path. Avoid presenting reminder creation as a slow row-by-row form.
 - A capture-local Confirmed Reminder should store a structured interval: start date, end date, optional start time, optional end time, timezone, date precision, time precision, and derived duration. Date ranges cover days or weeks; time ranges cover minutes or hours; if only time duration is present, start date and end date are the same. Location, venue, and proximity evidence belongs in Visit Targets and Maps actions, not Reminders.
 - Do not imply notification delivery until notification delivery exists.
 - Agenda is deferred until Confirmed Reminders function.
@@ -419,10 +447,11 @@ Before shipping a Precious UI change, verify:
 - AI rationale is concise and user-facing; model/provider/debug details are hidden.
 - Suggested reminders require confirmation, and new Collections require explicit user creation.
 - The UI respects safe areas and bottom insets.
-- No nested cards, decorative gradients, or dashboard-style density were introduced.
+- Bold flat dark styling is present: Space Grotesk display moments, Inter readable text, Lucide icons, matte dark surfaces, and saturated semantic blocks.
+- No nested cards, decorative gradients, decorative imagery, heavy shadows, or dashboard-style density were introduced.
 - Recent Captures rows include date/time metadata and hide audit-like extraction details.
 - Search opens as a full-screen lens and can match persisted extraction details.
-- Collections, Map, Agenda, and Upcoming are not primary navigation destinations for this pass.
+- Collections remains a top-level management destination; Map, Agenda, and Upcoming are not primary navigation destinations for this pass.
 - Collection removal offers immediate toast undo where feasible.
 - Animations and loading states feel smooth without delaying capture or retrieval.
 

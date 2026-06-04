@@ -50,6 +50,9 @@ export function AuthScreen({ actions, data, state }: AuthScreenProps) {
         {authScreen === "signin" ? (
           <>
             <Text style={[styles.title, styles.authTitle]}>Precious Captures</Text>
+            <Text style={[styles.supportingText, styles.authSupportingText]}>
+              Save links, screenshots, posts, and notes. Find them again by why you kept them.
+            </Text>
             <Pressable
               disabled={Boolean(authLoading)}
               onPress={startGoogleSignIn}
@@ -97,6 +100,9 @@ export function AuthScreen({ actions, data, state }: AuthScreenProps) {
                 {authLoading === "magiclink" ? "Sending..." : "Send sign-in link"}
               </Text>
             </Pressable>
+            <Text style={[styles.supportingText, styles.authSupportingText]}>
+              Use the same email with Google and email links to keep one account.
+            </Text>
             {message ? <Text style={styles.errorText}>{message}</Text> : null}
           </>
         ) : (

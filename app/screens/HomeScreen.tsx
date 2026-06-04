@@ -14,7 +14,6 @@ import {
 import type { FlatListProps, ListRenderItemInfo } from "react-native";
 import { Check, Image as ImageIcon, Info, Link2, Plus, Search, StickyNote, X } from "lucide-react-native";
 
-import { displayStatus } from "../captureLogic";
 import type { CaptureComposerMode, HomeListRow } from "../types";
 import { colors } from "../ui/theme";
 import { styles } from "../ui/styles";
@@ -41,6 +40,7 @@ type HomeScreenProps = {
     activeCapturesLoadedOnce: boolean;
     homeColdSkeletonVisible: boolean;
     homeInitialLoading: boolean;
+    homeReviewFilterActive: boolean;
     keyboardHeight: number;
     pickingCaptureImage: boolean;
     quickLookCount: number;
@@ -54,7 +54,6 @@ type HomeScreenProps = {
     closeCaptureComposer: () => void;
     loadCaptures: () => void;
     loadMoreActiveCaptures: () => void;
-    openCapture: (captureId: string) => void;
     openCaptureComposer: () => void;
     openSearch: () => void;
     renderCaptureSkeletonRows: (count?: number, withRemoveAction?: boolean) => ReactElement | null;
@@ -62,6 +61,7 @@ type HomeScreenProps = {
     renderListLoadingFooter: (label?: string) => ReactElement | null;
     saveCaptureSource: () => void;
     setSourceDraft: (value: string) => void;
+    toggleHomeReviewFilter: () => void;
   };
 };
 
@@ -86,6 +86,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
     activeCapturesLoadedOnce,
     homeColdSkeletonVisible,
     homeInitialLoading,
+    homeReviewFilterActive,
     keyboardHeight,
     pickingCaptureImage,
     quickLookCount,
@@ -99,21 +100,23 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
     closeCaptureComposer,
     loadCaptures,
     loadMoreActiveCaptures,
-    openCapture,
     openCaptureComposer,
     openSearch,
     renderCaptureSkeletonRows,
     renderHomeRow,
     renderListLoadingFooter,
     saveCaptureSource,
-    setSourceDraft
+    setSourceDraft,
+    toggleHomeReviewFilter
   } = actions;
 
-  const homeCaptureRows = homeCaptures.flatMap((row) => row.type === "capture" ? [row.capture] : []);
+  const homeCaptureRows = visibleHomeRows.flatMap((row) => row.type === "capture" ? [row.capture] : []);
   const homeKnownEmpty = activeCapturesLoadedOnce && !capturesLoading && !capturesError && !homeCaptureRows.length;
   const homeAwaitingCaptures = !capturesError && !homeCaptureRows.length && !homeKnownEmpty;
   const homeCountLabel = homeAwaitingCaptures
     ? "Loading captures"
+    : homeReviewFilterActive
+    ? `${homeCaptureRows.length} review ${homeCaptureRows.length === 1 ? "item" : "items"}`
     : `${homeCaptureRows.length} recent ${homeCaptureRows.length === 1 ? "capture" : "captures"}`;
   const composerKeyboardVisible = showCaptureComposer && keyboardHeight > 0;
   const screenHeight = Dimensions.get("screen").height;
@@ -148,18 +151,28 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
           {quickLookCount ? (
             <Pressable
               accessibilityRole="button"
-              onPress={() => {
-                const first = homeCaptureRows.find(
-                  (capture) => displayStatus(capture) === "needs_review" || displayStatus(capture) === "failed"
-                );
-                if (first) openCapture(first.id);
-              }}
-              style={({ pressed }) => [styles.quickLookSummary, pressed && styles.subtlePressed]}
+              accessibilityState={{ selected: homeReviewFilterActive }}
+              onPress={toggleHomeReviewFilter}
+              style={({ pressed }) => [
+                styles.reviewQueueFilter,
+                homeReviewFilterActive && styles.reviewQueueFilterActive,
+                pressed && styles.subtlePressed
+              ]}
               testID="pc.home.quick-look"
             >
-              <Info color={colors.review} size={15} strokeWidth={2.4} />
-              <Text style={styles.quickLookSummaryText}>
-                {quickLookCount === 1 ? "1 needs a quick look" : `${quickLookCount} need a quick look`}
+              <View style={styles.reviewQueueMark}>
+                <Info color={colors.onAccent} size={16} strokeWidth={2.5} />
+              </View>
+              <View style={styles.reviewQueueCopy}>
+                <Text style={styles.reviewQueueTitle}>
+                  {homeReviewFilterActive ? "Showing review queue" : "Review queue"}
+                </Text>
+                <Text style={styles.reviewQueueMeta}>
+                  {quickLookCount === 1 ? "1 item needs a quick look" : `${quickLookCount} items need a quick look`}
+                </Text>
+              </View>
+              <Text style={styles.reviewQueueAction}>
+                {homeReviewFilterActive ? "Show all" : "Filter"}
               </Text>
             </Pressable>
           ) : null}
@@ -203,7 +216,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                   <View style={styles.homeEmptyTileStack}>
                     <View style={[styles.homeEmptyTile, styles.homeEmptyTilePrimary]}>
                       <View style={styles.homeEmptyIconMark}>
-                        <Link2 color={colors.accent} size={19} strokeWidth={2.4} />
+                        <Link2 color={colors.onAccent} size={19} strokeWidth={2.4} />
                       </View>
                       <View style={styles.homeEmptyLineGroup}>
                         <View style={styles.homeEmptyLineStrong} />
@@ -225,7 +238,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                     </View>
                   </View>
                   <View style={styles.homeEmptySearchHint}>
-                    <Search color={colors.muted} size={16} strokeWidth={2.2} />
+                    <Search color={colors.paper} size={16} strokeWidth={2.2} />
                   </View>
                 </View>
                 <View style={styles.homeEmptyCopy}>

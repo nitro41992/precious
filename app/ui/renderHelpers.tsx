@@ -142,6 +142,7 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     deferFallbackIcon?: boolean;
     deferMediaUntilLoaded?: boolean;
     forceSkeleton?: boolean;
+    rowAction?: ReactElement | null;
   }) {
     return (
       <CaptureRow
@@ -170,23 +171,30 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     return (
       <SkeletonRevealFrame pending={deferRowUntilImageReady} skeleton={renderCaptureRowInlineSkeleton(true)}>
         <Animated.View style={[styles.collectionCaptureRow, { opacity: input.collectionRowsFade }]}>
-          <View style={styles.collectionCaptureMain}>
-            {renderCaptureRow({
-              showCollectionToken: false,
-              item,
-              onPress: () => {
-                if (input.selectedCollection) input.onOpenCaptureFromCollection(item, input.selectedCollection.id);
-              }
-            })}
-          </View>
-          <Pressable
-            onPress={() => {
-              if (input.selectedCollection) input.onUnlinkCaptureFromCollection(input.selectedCollection.id, item);
-            }}
-            style={styles.removeButton}
-          >
-            <Text style={styles.inlineAction}>Remove</Text>
-          </Pressable>
+          {renderCaptureRow({
+            showCollectionToken: false,
+            item,
+            onPress: () => {
+              if (input.selectedCollection) input.onOpenCaptureFromCollection(item, input.selectedCollection.id);
+            },
+            rowAction: (
+              <Pressable
+                accessibilityLabel="Remove from collection"
+                accessibilityRole="button"
+                hitSlop={8}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  if (input.selectedCollection) input.onUnlinkCaptureFromCollection(input.selectedCollection.id, item);
+                }}
+                style={({ pressed }) => [
+                  styles.collectionRowRemoveAction,
+                  pressed && styles.subtlePressed
+                ]}
+              >
+                <Text style={styles.collectionRowRemoveActionText}>Remove</Text>
+              </Pressable>
+            )
+          })}
         </Animated.View>
       </SkeletonRevealFrame>
     );

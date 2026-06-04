@@ -19,6 +19,11 @@ import type {
 const PROCESSING_REFRESH_MS = 3000;
 const RECENT_FEED_REVEAL_COUNT = 8;
 
+function needsQuickLook(capture: Capture) {
+  const status = displayStatus(capture);
+  return status === "needs_review" || status === "failed";
+}
+
 export function useCaptureFeed({
   activeCapturesLoadedOnce,
   captureRowRevealStatesRef,
@@ -45,6 +50,7 @@ export function useCaptureFeed({
   setHomeFeedReadyKey: (value: string) => void;
 }) {
   const [homeColdSkeletonVisible, setHomeColdSkeletonVisible] = useState(false);
+  const [homeReviewFilterActive, setHomeReviewFilterActive] = useState(false);
   const hasProcessingCapture = useMemo(
     () => captures.some((capture) => displayStatus(capture) === "processing"),
     [captures]
@@ -62,22 +68,32 @@ export function useCaptureFeed({
 
   const homeCaptures = useMemo(() => capturesForListMode(captures, "active"), [captures]);
   const homeRows = useMemo(() => groupedCaptureRows(homeCaptures), [homeCaptures]);
+  const reviewQueueCaptures = useMemo(
+    () => homeCaptures.filter(needsQuickLook),
+    [homeCaptures]
+  );
+  const quickLookCount = reviewQueueCaptures.length;
+  const visibleHomeCaptures = homeReviewFilterActive ? reviewQueueCaptures : homeCaptures;
+  const visibleHomeRows = useMemo(() => groupedCaptureRows(visibleHomeCaptures), [visibleHomeCaptures]);
   const homeInitialLoading = (capturesLoadPhase === "cold" || capturesLoadPhase === "idle") &&
     !activeCapturesLoadedOnce &&
     !capturesError &&
     !homeRows.length;
-  const visibleHomeRows: HomeListRow[] = homeRows;
 
   useEffect(() => {
     setHomeColdSkeletonVisible(homeInitialLoading);
   }, [homeInitialLoading]);
 
+  useEffect(() => {
+    if (!quickLookCount && homeReviewFilterActive) setHomeReviewFilterActive(false);
+  }, [homeReviewFilterActive, quickLookCount]);
+
   const homeRevealCaptures = useMemo(
     () =>
-      homeRows
+      visibleHomeRows
         .flatMap((row) => row.type === "capture" ? [row.capture] : [])
         .slice(0, RECENT_FEED_REVEAL_COUNT),
-    [homeRows]
+    [visibleHomeRows]
   );
   const homeFeedRevealKey = useMemo(
     () =>
@@ -94,27 +110,23 @@ export function useCaptureFeed({
       !activeCapturesLoadedOnce
   );
   const visibleHomeCapturesForReveal = useMemo(
-    () => homeCaptures,
-    [homeCaptures]
-  );
-  const quickLookCount = useMemo(
-    () => homeCaptures.filter((capture) => displayStatus(capture) === "needs_review" || displayStatus(capture) === "failed").length,
-    [homeCaptures]
+    () => visibleHomeCaptures,
+    [visibleHomeCaptures]
   );
 
   useEffect(() => {
-    if (capturesLoading && !activeCapturesLoadedOnce && !homeRows.length) {
+    if (capturesLoading && !activeCapturesLoadedOnce && !visibleHomeRows.length) {
       homeRowsFade.setValue(0);
       return;
     }
-    if (!activeCapturesLoadedOnce && !homeRows.length) return;
+    if (!activeCapturesLoadedOnce && !visibleHomeRows.length) return;
     Animated.timing(homeRowsFade, {
       duration: 180,
       easing: Easing.out(Easing.cubic),
       toValue: 1,
       useNativeDriver: true
     }).start();
-  }, [activeCapturesLoadedOnce, capturesLoading, homeRows.length, homeRowsFade]);
+  }, [activeCapturesLoadedOnce, capturesLoading, homeRowsFade, visibleHomeRows.length]);
 
   useEffect(() => {
     const revealKeys = uniqueStrings(visibleHomeCapturesForReveal.map(captureRowRevealKey))
@@ -154,8 +166,10 @@ export function useCaptureFeed({
     homeFeedRevealKey,
     homeFeedRevealPending,
     homeInitialLoading,
+    homeReviewFilterActive,
     homeRows,
     quickLookCount,
+    setHomeReviewFilterActive,
     visibleHomeCapturesForReveal,
     visibleHomeRows
   };

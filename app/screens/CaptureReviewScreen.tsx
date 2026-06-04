@@ -19,7 +19,6 @@ import { Image } from "expo-image";
 import {
   ArrowLeft,
   Check,
-  ChevronRight,
   Copy,
   ExternalLink,
   Info,
@@ -397,10 +396,15 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const selectedSourceMeta = `${captureSourceLabel(selected)} · ${formatDateTime(selected.createdAt)}`;
   const selectedReviewInsight = reviewInsightForCapture(selected);
   const selectedReviewTasks = reviewChecklistTasksForCapture(selected);
+  const reviewChecklistLabel = reviewChecklistCta(selectedReviewTasks);
   const selectedNeedsReview = displayStatus(selected) === "needs_review";
   const selectedReviewState = selectedNeedsReview
     ? selectedReviewInsight.focus
     : reviewStatusCue(selected, selectedReviewReasons.length > 0);
+  const decisionDockTitle = selectedReviewTasks.length ? reviewChecklistLabel : "Capture decisions";
+  const decisionDockSummary = selectedReviewTasks.length
+    ? selectedReviewInsight.focus
+    : selectedReviewInsight.summary || selectedReviewState;
   const showReviewStateText = selectedReviewState !== "Ready" && selectedReviewState !== captureStatusLabel(selected);
   const showReviewInsight = Boolean(
     selectedNeedsReview ||
@@ -427,14 +431,12 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       draftIntentDirty ||
       Object.keys(reminderDrafts).length
   );
-  const reviewConfirmOnly = selectedNeedsReview && !reviewHasPendingChanges && !collectionActionPending;
-  const reviewChecklistLabel = reviewChecklistCta(selectedReviewTasks);
+  const reviewChangeActionVisible = reviewHasPendingChanges || collectionActionPending;
   const reviewSupportText = draftIntentDirty
     ? aiIntentValue
       ? `Changed from ${activeIntentLabel(aiIntentValue)}`
       : "Added intent"
     : "";
-  const showReviewFooter = reviewHasPendingChanges || collectionActionPending || reviewConfirmOnly;
   const noteSheetKeyboardVisible = noteSheetOpen && keyboardHeight > 0;
   const noteWindowAlreadyKeyboardSized =
     noteSheetKeyboardVisible && Math.abs(windowHeight + keyboardHeight - Dimensions.get("screen").height) < 96;
@@ -483,7 +485,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
             contentContainerStyle={[
               styles.detail,
               styles.reviewDetail,
-              !showReviewFooter && styles.reviewDetailNoFooter
+              styles.reviewDetailNoFooter
             ]}
             keyboardShouldPersistTaps="handled"
             showsHorizontalScrollIndicator={false}
@@ -614,34 +616,92 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
               ) : null}
             </View>
             <View style={styles.quickEditBlock}>
-              <View style={styles.reviewEditRail}>
-                <Pressable
-                  accessibilityHint="Opens Save Intent choices."
-                  accessibilityLabel={`Purpose: ${quickIntentLabel}`}
-                  accessibilityRole="button"
-                  android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
-                  onLongPress={() => openReviewInsight(selectedReviewInsight)}
-                  onPress={() => setQuickIntentOpen((current) => !current)}
-                  style={({ pressed }) => [
-                    styles.reviewEditRailIntent,
-                    quickIntentOpen && styles.reviewEditRailIntentActive,
-                    pressed && styles.reviewEditRailPressed
-                  ]}
-                  testID="pc.review.intent.open"
-                >
-                  <Text style={styles.reviewEditRailLabel}>Purpose</Text>
-                  <Text
-                    numberOfLines={1}
-                    style={[
-                      styles.reviewEditRailIntentValue,
-                      !quickIntentValue && styles.reviewEditRailPlaceholder
+              <View
+                accessibilityLabel={decisionDockTitle}
+                accessible
+                style={[
+                  styles.reviewDecisionDock,
+                  selectedNeedsReview && styles.reviewDecisionDockReview
+                ]}
+              >
+                <View style={styles.reviewDecisionHeader}>
+                  <View style={[
+                    styles.reviewDecisionSignal,
+                    selectedNeedsReview && styles.reviewDecisionSignalReview
+                  ]}>
+                    {selectedNeedsReview ? (
+                      <Info color={colors.review} size={18} strokeWidth={2.5} />
+                    ) : (
+                      <Check color={colors.onAccent} size={18} strokeWidth={2.7} />
+                    )}
+                  </View>
+                  <View style={styles.reviewDecisionHeaderCopy}>
+                    <Text style={styles.reviewDecisionEyebrow}>{decisionDockTitle}</Text>
+                    <Text numberOfLines={2} style={styles.reviewDecisionSummary}>
+                      {decisionDockSummary}
+                    </Text>
+                  </View>
+                  {reviewChangeActionVisible ? (
+                    <Pressable
+                      accessibilityLabel={collectionActionPending ? "Updating collection" : "Save changes"}
+                      accessibilityRole="button"
+                      disabled={collectionActionPending}
+                      onPress={saveReviewDecisions}
+                      style={({ pressed }) => [
+                        styles.reviewInlineSaveButton,
+                        pressed && !collectionActionPending && styles.primaryButtonPressed,
+                        collectionActionPending && styles.disabledButton
+                      ]}
+                      testID="pc.review.save"
+                    >
+                      <Text style={styles.reviewInlineSaveText}>
+                        {collectionActionPending ? "Updating" : "Save changes"}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {showReviewInsight ? (
+                    <Pressable
+                      accessibilityHint="Shows why these decisions were suggested."
+                      accessibilityLabel="Review insight"
+                      accessibilityRole="button"
+                      onPress={() => openReviewInsight(selectedReviewInsight)}
+                      style={({ pressed }) => [
+                        styles.reviewInsightButton,
+                        pressed && styles.subtlePressed
+                      ]}
+                      testID="pc.review.insight"
+                    >
+                      <Text style={styles.reviewInsightButtonText}>Why</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+                <View style={styles.reviewDecisionTiles}>
+                  <Pressable
+                    accessibilityHint="Opens Save Intent choices."
+                    accessibilityLabel={`Purpose: ${quickIntentLabel}`}
+                    accessibilityRole="button"
+                    android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
+                    onLongPress={() => openReviewInsight(selectedReviewInsight)}
+                    onPress={() => setQuickIntentOpen((current) => !current)}
+                    style={({ pressed }) => [
+                      styles.reviewDecisionTile,
+                      styles.reviewDecisionTilePrimary,
+                      quickIntentOpen && styles.reviewEditRailIntentActive,
+                      pressed && styles.reviewEditRailPressed
                     ]}
+                    testID="pc.review.intent.open"
                   >
-                    {quickIntentLabel}
-                  </Text>
-                </Pressable>
-                <View style={styles.reviewEditRailDivider} />
-                <View style={styles.reviewEditRailDetails}>
+                    <Text style={styles.reviewEditRailLabel}>Purpose</Text>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.reviewDecisionTileValuePrimary,
+                        !quickIntentValue && styles.reviewEditRailPlaceholder
+                      ]}
+                    >
+                      {quickIntentLabel}
+                    </Text>
+                  </Pressable>
                   <Pressable
                     accessibilityHint="Opens Collection selection."
                     accessibilityLabel={`Collection: ${collectionRowLabel}`}
@@ -650,23 +710,22 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                     onLongPress={() => openReviewInsight(selectedReviewInsight)}
                     onPress={() => void openCollectionPicker()}
                     style={({ pressed }) => [
-                      styles.reviewEditRailDetail,
+                      styles.reviewDecisionTile,
                       pressed && styles.reviewEditRailPressed
                     ]}
                     testID="pc.review.collections.open"
                   >
-                    <Text style={styles.reviewEditRailDetailLabel}>Collection</Text>
+                    <Text style={styles.reviewDecisionTileLabel}>Collection</Text>
                     <Text
                       numberOfLines={1}
                       style={[
-                        styles.reviewEditRailDetailValue,
+                        styles.reviewDecisionTileValue,
                         !collectionRows.length && styles.reviewEditRailPlaceholder
                       ]}
                     >
                       {collectionRowLabel}
                     </Text>
                   </Pressable>
-                  <View style={styles.reviewEditRailDetailDivider} />
                   <Pressable
                     accessibilityHint="Opens the reminder editor."
                     accessibilityLabel={`Later: ${reminderSentenceValue}`}
@@ -675,16 +734,16 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                     onLongPress={() => openReviewInsight(selectedReviewInsight)}
                     onPress={() => setReminderSheetOpen(true)}
                     style={({ pressed }) => [
-                      styles.reviewEditRailDetail,
+                      styles.reviewDecisionTile,
                       pressed && styles.reviewEditRailPressed
                     ]}
                     testID="pc.review.reminder.open"
                   >
-                    <Text style={styles.reviewEditRailDetailLabel}>Later</Text>
+                    <Text style={styles.reviewDecisionTileLabel}>Later</Text>
                     <Text
                       numberOfLines={1}
                       style={[
-                        styles.reviewEditRailDetailValue,
+                        styles.reviewDecisionTileValue,
                         !primaryReminder && styles.reviewEditRailPlaceholder
                       ]}
                     >
@@ -756,43 +815,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                 </View>
               ) : null}
             </View>
-            {showReviewInsight ? (
-              <Pressable
-                accessibilityHint="Shows why the suggested intent, collection, and reminder were chosen."
-                accessibilityLabel="Review insight"
-                accessibilityRole="button"
-                onPress={() => openReviewInsight(selectedReviewInsight)}
-                style={({ pressed }) => [
-                  styles.reviewInsightCard,
-                  selectedNeedsReview && styles.reviewInsightCardReview,
-                  pressed && styles.subtlePressed
-                ]}
-                testID="pc.review.insight"
-              >
-                <View style={[styles.reviewInsightIcon, selectedNeedsReview && styles.reviewInsightIconReview]}>
-                  <Info color={selectedNeedsReview ? colors.review : colors.accent} size={17} strokeWidth={2.4} />
-                </View>
-                <View style={styles.reviewInsightCopy}>
-                  <View style={styles.reviewInsightHeader}>
-                    <Text style={styles.reviewInsightTitle}>
-                      {selectedReviewTasks.length ? reviewChecklistLabel : "Review insight"}
-                    </Text>
-                    {selectedReviewTasks.length ? (
-                      <View style={styles.reviewInsightCountBadge}>
-                        <Text style={styles.reviewInsightCountText}>{selectedReviewTasks.length}</Text>
-                      </View>
-                    ) : null}
-                    <Text style={styles.reviewInsightAction}>
-                      {selectedReviewTasks.length ? "Open" : "Details"}
-                    </Text>
-                  </View>
-                  <Text numberOfLines={2} style={styles.reviewInsightSummary}>
-                    {selectedReviewTasks.length ? selectedReviewInsight.focus : selectedReviewInsight.summary}
-                  </Text>
-                </View>
-                <ChevronRight color={colors.muted} size={18} strokeWidth={2.4} />
-              </Pressable>
-            ) : null}
             {selectedVisitTarget && selectedVisitTargetMapCandidates.length ? (
               <View style={styles.sourceBlock}>
                 <Text style={styles.meta}>Open in Maps</Text>
@@ -889,28 +911,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
               <Text style={styles.dangerButtonText}>Delete capture</Text>
             </Pressable>
           </ScrollView>
-          {showReviewFooter ? (
-            <View style={styles.reviewFooter}>
-              <Pressable
-                disabled={collectionActionPending}
-                onPress={() => {
-                  if (reviewConfirmOnly) openReviewInsight(selectedReviewInsight);
-                  else saveReviewDecisions();
-                }}
-                style={({ pressed }) => [
-                  styles.primaryButton,
-                  reviewConfirmOnly && styles.reviewConfirmButton,
-                  pressed && !collectionActionPending && styles.primaryButtonPressed,
-                  collectionActionPending && styles.disabledButton
-                ]}
-                testID={reviewConfirmOnly ? "pc.review.checklist.open" : "pc.review.save"}
-              >
-                <Text style={styles.primaryButtonText}>
-                  {collectionActionPending ? "Updating collection..." : reviewConfirmOnly ? reviewChecklistLabel : "Save review"}
-                </Text>
-              </Pressable>
-            </View>
-          ) : null}
         </KeyboardAvoidingView>
       </Animated.View>
       {noteSheetOpen ? (

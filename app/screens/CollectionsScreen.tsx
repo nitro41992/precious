@@ -66,7 +66,7 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
         <View style={styles.collectionsTitleBlock}>
           <Text style={styles.title}>Collections</Text>
           <Text style={styles.sourceText}>
-            Keep projects, trips, recipes, and purchase decisions tidy without making them the main way to browse.
+            Create, rename, and remove collections. Captures can belong to more than one, or none.
           </Text>
         </View>
         {collectionsError ? <Text style={styles.errorText}>{collectionsError}</Text> : null}
@@ -93,7 +93,7 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
                   <View style={styles.collectionsEmptyFolder}>
                     <View style={styles.collectionsEmptyFolderTab} />
                     <Folder
-                      color={colors.accent}
+                      color={colors.onAccent}
                       size={28}
                       strokeWidth={2.2}
                     />
@@ -107,9 +107,9 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
                   </View>
                 </View>
                 <View style={styles.collectionsEmptyCopy}>
-                  <Text style={[styles.emptyTitle, styles.homeEmptyTitle]}>No collections yet.</Text>
+                  <Text style={[styles.emptyTitle, styles.homeEmptyTitle]}>Start a collection.</Text>
                   <Text style={[styles.emptyText, styles.homeEmptyText]}>
-                    Create one when a group of captures starts to have a purpose.
+                    Create one when a saved thing belongs somewhere specific.
                   </Text>
                 </View>
                 <Pressable

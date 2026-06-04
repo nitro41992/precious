@@ -94,12 +94,12 @@ export function SearchScreen({ actions, data, state }: SearchScreenProps) {
             <View style={styles.searchBarRow}>
               <IconButton Icon={ArrowLeft} label="Back" onPress={closeSearch} />
               <View style={styles.searchInputWrap}>
-                <Search color={colors.muted} size={19} strokeWidth={2.3} />
+                <Search color={colors.paper} size={19} strokeWidth={2.3} />
                 <TextInput
                   autoFocus
                   onChangeText={setSearchQuery}
-                  placeholder="Search saved things"
-                  placeholderTextColor={colors.muted}
+                  placeholder="Search every capture"
+                  placeholderTextColor={colors.surfaceContainerHighest}
                   returnKeyType="search"
                   style={styles.searchInputNative}
                   testID="pc.search.input"
@@ -112,12 +112,22 @@ export function SearchScreen({ actions, data, state }: SearchScreenProps) {
                     hitSlop={8}
                     onPress={() => setSearchQuery("")}
                   >
-                    <X color={colors.muted} size={18} strokeWidth={2.4} />
+                    <X color={colors.paper} size={18} strokeWidth={2.4} />
                   </Pressable>
                 ) : null}
               </View>
             </View>
-            {searchProgressLabel ? renderSearchProgress(searchProgressLabel) : null}
+            {searchProgressLabel ? (
+              renderSearchProgress(searchProgressLabel)
+            ) : (
+              <View style={styles.searchAssistRow}>
+                <Text style={styles.searchScopeLabel}>
+                  {remoteSearchActive
+                    ? "Refining across saved context."
+                    : "Titles, notes, sources, Collections, and saved context."}
+                </Text>
+              </View>
+            )}
           </View>
           <FlatList
             {...listPerfProps}
@@ -130,8 +140,8 @@ export function SearchScreen({ actions, data, state }: SearchScreenProps) {
             ListEmptyComponent={
               searchIsLoading && searchQuery.trim() ? (
                 <View style={styles.searchEmpty}>
-                  <Text style={styles.emptyTitle}>Searching saved things...</Text>
-                  <Text style={styles.emptyText}>Checking titles, notes, sources, Collections, and saved details.</Text>
+                  <Text style={styles.emptyTitle}>Searching captures...</Text>
+                  <Text style={styles.emptyText}>Checking titles, notes, sources, Collections, and saved context.</Text>
                 </View>
               ) : (
                 <View style={styles.searchEmpty}>

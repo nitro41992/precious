@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { DateTimePicker } from "@expo/ui/community/datetime-picker";
 import { Bell, CalendarDays, Clock, X } from "lucide-react-native";
 
@@ -18,7 +18,7 @@ import {
 } from "../capturePresentation";
 import { IconButton } from "../ui/components";
 import { styles } from "../ui/styles";
-import { colors } from "../ui/theme";
+import { colors, fonts, radii, spacing } from "../ui/theme";
 
 type PickerMode = "date" | "time" | null;
 type PickerTarget = "startDate" | "endDate" | "startTime" | "endTime" | null;
@@ -35,6 +35,42 @@ function addMinutes(value: string, minutes: number) {
   const next = current + minutes;
   if (next >= 24 * 60) return "";
   return `${String(Math.floor(next / 60)).padStart(2, "0")}:${String(next % 60).padStart(2, "0")}`;
+}
+
+function addDays(value: Date, days: number) {
+  const next = new Date(value);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function addMinutesToDate(value: Date, minutes: number) {
+  const next = new Date(value);
+  next.setMinutes(next.getMinutes() + minutes);
+  return next;
+}
+
+function roundUpToFiveMinutes(value: Date) {
+  const next = new Date(value);
+  next.setSeconds(0, 0);
+  next.setMilliseconds(0);
+  const remainder = next.getMinutes() % 5;
+  if (remainder > 0) next.setMinutes(next.getMinutes() + (5 - remainder));
+  return next;
+}
+
+function thisWeekendRange(referenceDate: Date) {
+  const day = referenceDate.getDay();
+  const startOffset = day === 0 ? 0 : day === 6 ? 0 : 6 - day;
+  const start = addDays(referenceDate, startOffset);
+  const end = day === 0 ? start : addDays(start, 1);
+  return { start, end };
+}
+
+function nextWeekRange(referenceDate: Date) {
+  const day = referenceDate.getDay();
+  const startOffset = day === 0 ? 1 : 8 - day;
+  const start = addDays(referenceDate, startOffset);
+  return { start, end: addDays(start, 6) };
 }
 
 function datePrecision(startDate: string, endDate: string): ReminderDatePrecision {
@@ -111,6 +147,10 @@ export function ReminderEditorSheet({
       ? draft.startTime || "09:00"
       : draft.startTime;
   const pickerValue = dateFromReminderParts(pickerDate, pickerTime);
+  const today = new Date();
+  const tomorrow = addDays(today, 1);
+  const weekend = thisWeekendRange(today);
+  const nextWeek = nextWeekRange(today);
 
   function setDateRange(startDate: string, endDate: string) {
     setDraft((current) => ({
@@ -122,6 +162,23 @@ export function ReminderEditorSheet({
     }));
   }
 
+  function setFullRange(startDate: string, endDate: string, startTime: string, endTime: string) {
+    setDraft((current) => ({
+      ...current,
+      startDate,
+      endDate,
+      startTime,
+      endTime,
+      datePrecision: datePrecision(startDate, endDate),
+      timePrecision: timePrecision(startTime, endTime),
+      timezone: current.timezone || deviceTimeZone()
+    }));
+  }
+
+  function setDateRangeFromDates(startDate: Date, endDate = startDate) {
+    setDateRange(dateStringFromDate(startDate), dateStringFromDate(endDate));
+  }
+
   function setTimeRange(startTime: string, endTime: string) {
     setDraft((current) => ({
       ...current,
@@ -131,6 +188,98 @@ export function ReminderEditorSheet({
       timezone: current.timezone || deviceTimeZone()
     }));
   }
+
+  function setTimeWindow(startTime: string, endTime: string) {
+    const startDate = draft.startDate || dateStringFromDate(new Date());
+    const endDate = draft.endDate || startDate;
+    setFullRange(startDate, endDate, startTime, endTime);
+  }
+
+  function setRelativeReminder(minutesFromNow: number) {
+    const start = roundUpToFiveMinutes(addMinutesToDate(new Date(), minutesFromNow));
+    const end = addMinutesToDate(start, 30);
+    setFullRange(
+      dateStringFromDate(start),
+      dateStringFromDate(end),
+      timeStringFromDate(start),
+      timeStringFromDate(end)
+    );
+  }
+
+  const datePresets = [
+    {
+      id: "today",
+      label: "Today",
+      meta: "Same day",
+      active: draft.startDate === dateStringFromDate(today) && draft.endDate === dateStringFromDate(today),
+      onPress: () => setDateRangeFromDates(today)
+    },
+    {
+      id: "tomorrow",
+      label: "Tomorrow",
+      meta: "Next day",
+      active: draft.startDate === dateStringFromDate(tomorrow) && draft.endDate === dateStringFromDate(tomorrow),
+      onPress: () => setDateRangeFromDates(tomorrow)
+    },
+    {
+      id: "weekend",
+      label: "Weekend",
+      meta: "Sat-Sun",
+      active: draft.startDate === dateStringFromDate(weekend.start) && draft.endDate === dateStringFromDate(weekend.end),
+      onPress: () => setDateRangeFromDates(weekend.start, weekend.end)
+    },
+    {
+      id: "next-week",
+      label: "Next week",
+      meta: "Mon-Sun",
+      active: draft.startDate === dateStringFromDate(nextWeek.start) && draft.endDate === dateStringFromDate(nextWeek.end),
+      onPress: () => setDateRangeFromDates(nextWeek.start, nextWeek.end)
+    }
+  ];
+  const timePresets = [
+    {
+      id: "morning",
+      label: "Morning",
+      meta: "9-10",
+      active: draft.startTime === "09:00" && draft.endTime === "10:00",
+      onPress: () => setTimeWindow("09:00", "10:00")
+    },
+    {
+      id: "afternoon",
+      label: "Afternoon",
+      meta: "2-3",
+      active: draft.startTime === "14:00" && draft.endTime === "15:00",
+      onPress: () => setTimeWindow("14:00", "15:00")
+    },
+    {
+      id: "evening",
+      label: "Evening",
+      meta: "6-7",
+      active: draft.startTime === "18:00" && draft.endTime === "19:00",
+      onPress: () => setTimeWindow("18:00", "19:00")
+    },
+    {
+      id: "no-time",
+      label: "No time",
+      meta: "All day",
+      active: !draft.startTime && !draft.endTime,
+      onPress: () => setTimeRange("", "")
+    }
+  ];
+  const soonPresets = [
+    {
+      id: "thirty",
+      label: "30 min",
+      meta: "From now",
+      onPress: () => setRelativeReminder(30)
+    },
+    {
+      id: "one-hour",
+      label: "1 hr",
+      meta: "From now",
+      onPress: () => setRelativeReminder(60)
+    }
+  ];
 
   function handlePickerValue(date: Date) {
     if (pickerTarget === "startDate") {
@@ -188,20 +337,96 @@ export function ReminderEditorSheet({
           <IconButton Icon={X} label="Close reminder editor" onPress={onClose} />
         </View>
         <ScrollView
-          contentContainerStyle={styles.reminderSheetScrollContent}
+          contentContainerStyle={[styles.reminderSheetScrollContent, reminderFlowStyles.scrollContent]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           style={styles.reviewInsightScroll}
         >
-          <View style={styles.reminderFieldGroup}>
-            <View style={styles.reminderFieldSectionHeader}>
+          <View style={reminderFlowStyles.presetBoard}>
+            <View style={reminderFlowStyles.presetBoardHeader}>
+              <Text style={reminderFlowStyles.presetBoardEyebrow}>Fast set</Text>
+              <Text style={reminderFlowStyles.presetBoardTitle}>
+                {preview}
+              </Text>
+            </View>
+            <View style={reminderFlowStyles.presetLane}>
+              <Text style={reminderFlowStyles.presetLaneLabel}>Date</Text>
+              <View style={reminderFlowStyles.presetGrid}>
+                {datePresets.map((preset) => (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: preset.active }}
+                    key={preset.id}
+                    onPress={preset.onPress}
+                    style={({ pressed }) => [
+                      reminderFlowStyles.presetChip,
+                      preset.active && reminderFlowStyles.presetChipActive,
+                      pressed && styles.subtlePressed
+                    ]}
+                  >
+                    <Text style={[reminderFlowStyles.presetChipText, preset.active && reminderFlowStyles.presetChipTextActive]}>
+                      {preset.label}
+                    </Text>
+                    <Text style={[reminderFlowStyles.presetChipMeta, preset.active && reminderFlowStyles.presetChipMetaActive]}>
+                      {preset.meta}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+            <View style={reminderFlowStyles.presetLane}>
+              <Text style={reminderFlowStyles.presetLaneLabel}>Time</Text>
+              <View style={reminderFlowStyles.presetGrid}>
+                {timePresets.map((preset) => (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: preset.active }}
+                    key={preset.id}
+                    onPress={preset.onPress}
+                    style={({ pressed }) => [
+                      reminderFlowStyles.presetChip,
+                      preset.active && reminderFlowStyles.presetChipActive,
+                      pressed && styles.subtlePressed
+                    ]}
+                  >
+                    <Text style={[reminderFlowStyles.presetChipText, preset.active && reminderFlowStyles.presetChipTextActive]}>
+                      {preset.label}
+                    </Text>
+                    <Text style={[reminderFlowStyles.presetChipMeta, preset.active && reminderFlowStyles.presetChipMetaActive]}>
+                      {preset.meta}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+            <View style={reminderFlowStyles.soonRail}>
+              {soonPresets.map((preset) => (
+                <Pressable
+                  accessibilityRole="button"
+                  key={preset.id}
+                  onPress={preset.onPress}
+                  style={({ pressed }) => [reminderFlowStyles.soonChip, pressed && styles.subtlePressed]}
+                >
+                  <Text style={reminderFlowStyles.soonChipText}>{preset.label}</Text>
+                  <Text style={reminderFlowStyles.soonChipMeta}>{preset.meta}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          <View style={reminderFlowStyles.manualPickerHeader}>
+            <Text style={reminderFlowStyles.manualPickerTitle}>Fine tune</Text>
+            <Text style={reminderFlowStyles.manualPickerCopy}>Use exact dates and times when the presets are close but not quite right.</Text>
+          </View>
+          <View style={[styles.reminderFieldGroup, reminderFlowStyles.manualGroup]}>
+            <View style={[styles.reminderFieldSectionHeader, reminderFlowStyles.manualSectionHeader]}>
               <CalendarDays color={colors.muted} size={18} strokeWidth={2.3} />
               <Text style={styles.reminderFieldLabel}>Date</Text>
             </View>
             <Pressable
               accessibilityRole="button"
               onPress={() => setPickerTarget((current) => (current === "startDate" ? null : "startDate"))}
-              style={({ pressed }) => [styles.reminderFieldRow, pressed && styles.subtlePressed]}
+              style={({ pressed }) => [styles.reminderFieldRow, reminderFlowStyles.manualRow, pressed && styles.subtlePressed]}
               testID="pc.reminder.start-date"
             >
               <View style={styles.reminderFieldCopy}>
@@ -212,7 +437,7 @@ export function ReminderEditorSheet({
             <Pressable
               accessibilityRole="button"
               onPress={() => setPickerTarget((current) => (current === "endDate" ? null : "endDate"))}
-              style={({ pressed }) => [styles.reminderFieldRow, pressed && styles.subtlePressed]}
+              style={({ pressed }) => [styles.reminderFieldRow, reminderFlowStyles.manualRow, pressed && styles.subtlePressed]}
               testID="pc.reminder.end-date"
             >
               <View style={styles.reminderFieldCopy}>
@@ -221,8 +446,8 @@ export function ReminderEditorSheet({
               </View>
             </Pressable>
           </View>
-          <View style={styles.reminderFieldGroup}>
-            <View style={styles.reminderFieldSectionHeader}>
+          <View style={[styles.reminderFieldGroup, reminderFlowStyles.manualGroup]}>
+            <View style={[styles.reminderFieldSectionHeader, reminderFlowStyles.manualSectionHeader]}>
               <Clock color={colors.muted} size={18} strokeWidth={2.3} />
               <Text style={styles.reminderFieldLabel}>Time</Text>
               {draft.startTime || draft.endTime ? (
@@ -234,7 +459,7 @@ export function ReminderEditorSheet({
             <Pressable
               accessibilityRole="button"
               onPress={() => setPickerTarget((current) => (current === "startTime" ? null : "startTime"))}
-              style={({ pressed }) => [styles.reminderFieldRow, pressed && styles.subtlePressed]}
+              style={({ pressed }) => [styles.reminderFieldRow, reminderFlowStyles.manualRow, pressed && styles.subtlePressed]}
               testID="pc.reminder.start-time"
             >
               <View style={styles.reminderFieldCopy}>
@@ -247,7 +472,7 @@ export function ReminderEditorSheet({
             <Pressable
               accessibilityRole="button"
               onPress={() => setPickerTarget((current) => (current === "endTime" ? null : "endTime"))}
-              style={({ pressed }) => [styles.reminderFieldRow, pressed && styles.subtlePressed]}
+              style={({ pressed }) => [styles.reminderFieldRow, reminderFlowStyles.manualRow, pressed && styles.subtlePressed]}
               testID="pc.reminder.end-time"
             >
               <View style={styles.reminderFieldCopy}>
@@ -259,7 +484,7 @@ export function ReminderEditorSheet({
             </Pressable>
           </View>
           {pickerMode ? (
-            <View style={styles.reminderNativePickerWrap}>
+            <View style={[styles.reminderNativePickerWrap, reminderFlowStyles.nativePickerWrap]}>
               <DateTimePicker
                 accentColor={colors.accent}
                 display={pickerMode === "date" && Platform.OS === "ios" ? "inline" : "default"}
@@ -281,7 +506,7 @@ export function ReminderEditorSheet({
               ) : null}
             </View>
           ) : null}
-          <View style={styles.reminderSummaryBlock}>
+          <View style={[styles.reminderSummaryBlock, reminderFlowStyles.summaryBlock]}>
             <Text style={styles.reminderFieldLabel}>Duration</Text>
             <Text style={styles.reminderSummaryText}>
               {invalidPartialTime
@@ -319,3 +544,167 @@ export function ReminderEditorSheet({
     </View>
   );
 }
+
+const reminderFlowStyles = StyleSheet.create({
+  scrollContent: {
+    gap: 16
+  },
+  presetBoard: {
+    backgroundColor: colors.surfaceContainer,
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 8,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 26,
+    gap: 16,
+    padding: 14
+  },
+  presetBoardHeader: {
+    gap: 4
+  },
+  presetBoardEyebrow: {
+    color: colors.cyan,
+    fontFamily: fonts.bodyBold,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 16
+  },
+  presetBoardTitle: {
+    color: colors.ink,
+    fontFamily: fonts.displaySemi,
+    fontSize: 22,
+    fontWeight: "800",
+    lineHeight: 27
+  },
+  presetLane: {
+    gap: 8
+  },
+  presetLaneLabel: {
+    color: colors.muted,
+    fontFamily: fonts.bodyBold,
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 17
+  },
+  presetGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  presetChip: {
+    backgroundColor: colors.surfaceContainerHigh,
+    borderBottomLeftRadius: 14,
+    borderBottomRightRadius: 6,
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 18,
+    flexGrow: 1,
+    minHeight: 58,
+    minWidth: "47%",
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  presetChipActive: {
+    backgroundColor: colors.accent
+  },
+  presetChipText: {
+    color: colors.ink,
+    fontFamily: fonts.bodyBold,
+    fontSize: 15,
+    fontWeight: "800",
+    lineHeight: 19
+  },
+  presetChipTextActive: {
+    color: colors.onAccent
+  },
+  presetChipMeta: {
+    color: colors.muted,
+    fontFamily: fonts.bodySemi,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 16,
+    marginTop: 2
+  },
+  presetChipMetaActive: {
+    color: colors.onAccent
+  },
+  soonRail: {
+    flexDirection: "row",
+    gap: 8
+  },
+  soonChip: {
+    backgroundColor: colors.create,
+    borderBottomLeftRadius: 7,
+    borderBottomRightRadius: 18,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 7,
+    flex: 1,
+    minHeight: 54,
+    paddingHorizontal: 12,
+    paddingVertical: 9
+  },
+  soonChipText: {
+    color: colors.onCreate,
+    fontFamily: fonts.bodyBold,
+    fontSize: 15,
+    fontWeight: "800",
+    lineHeight: 19
+  },
+  soonChipMeta: {
+    color: colors.onCreate,
+    fontFamily: fonts.bodySemi,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 16,
+    opacity: 0.82
+  },
+  manualPickerHeader: {
+    gap: 3,
+    marginTop: spacing.xs
+  },
+  manualPickerTitle: {
+    color: colors.ink,
+    fontFamily: fonts.bodyBold,
+    fontSize: 16,
+    fontWeight: "800",
+    lineHeight: 21
+  },
+  manualPickerCopy: {
+    color: colors.muted,
+    fontFamily: fonts.body,
+    fontSize: 13,
+    lineHeight: 18
+  },
+  manualGroup: {
+    backgroundColor: colors.surface,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: radii.lg,
+    borderBottomRightRadius: radii.sm,
+    borderTopLeftRadius: radii.sm,
+    borderTopRightRadius: radii.lg,
+    overflow: "hidden",
+    paddingHorizontal: 12,
+    paddingVertical: 6
+  },
+  manualSectionHeader: {
+    minHeight: 38,
+    paddingBottom: 2,
+    paddingTop: 4
+  },
+  manualRow: {
+    borderBottomWidth: 0,
+    minHeight: 58,
+    paddingVertical: 8
+  },
+  nativePickerWrap: {
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 8,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 18
+  },
+  summaryBlock: {
+    borderWidth: 0,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 18,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 8
+  }
+});

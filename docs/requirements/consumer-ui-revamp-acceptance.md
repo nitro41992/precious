@@ -4,16 +4,19 @@
 
 This artifact records the agreed scope for the current Precious consumer UI revamp. Use it with `docs/precious-style-guide.md`, `docs/requirements/CONTEXT.md`, and `docs/requirements/PRODUCT.md` before implementing or reviewing UI work.
 
-Related ADRs: `docs/adr/0001-recent-captures-and-full-screen-search.md`, `docs/adr/0005-bottom-app-bar-and-top-level-collections.md`, `docs/adr/0006-existing-only-multi-collection-assignment.md`, `docs/adr/0008-starter-collections-for-empty-accounts.md`, and `docs/adr/0009-action-oriented-save-intents.md`.
+Related ADRs: `docs/adr/0001-recent-captures-and-full-screen-search.md`, `docs/adr/0005-bottom-app-bar-and-top-level-collections.md`, `docs/adr/0006-existing-only-multi-collection-assignment.md`, `docs/adr/0008-starter-collections-for-empty-accounts.md`, `docs/adr/0009-action-oriented-save-intents.md`, and `docs/adr/0015-bold-flat-dark-visual-language.md`.
 
 ## Product Shape
 
 - The app should feel like a polished consumer memory surface, not a dogfooding, audit, or extraction-review tool.
-- The consumer shell uses a calm dark Material 3 Expressive-inspired surface hierarchy by default, not the earlier warm paper shell.
-- Material 3 Expressive emphasis should clarify review decisions through purposeful size, shape, tonal containment, motion, and semantic color while preserving familiar native controls and Precious' calm dark tone.
+- The consumer shell uses a bold flat dark visual system by default, superseding the calm dark Material 3 Expressive-inspired treatment and the earlier warm paper shell.
+- The visual system should use matte dark backgrounds, oversized Space Grotesk display type, Inter for readable UI text, modern Lucide line icons, saturated semantic blocks, content-first imagery, and minimal shadows.
+- Bold emphasis should clarify review decisions through purposeful type, flat shape, motion, and semantic color while preserving familiar native controls and Precious' calm, practical tone.
+- The product identity should come from asymmetric archive-shaped surfaces, source/collection monograms, sparse semantic color, and saved content imagery, not from repeated generic icon tiles, uniform squircles, or divider-heavy cards.
 - The default screen is `Recent Captures`: active Captures only, ordered by most recently captured.
 - Search is a primary product function and opens as its own full-screen Retrieval Lens.
 - The top-level app shell uses a bottom app bar with `Recent`, `Collections`, and `Settings`, plus a separate contextual floating `+` action.
+- Bottom app bar selection is icon-only: no selected background pill, label, dot, or extra selected container. Selected top-level icons should read as accent-filled negative glyphs; unselected icons remain muted line icons.
 - Search opens from a compact top action on `Recent Captures`, replacing the prior top-right Settings affordance.
 - Settings/account actions stay small and contextual, opening a bottom sheet rather than a primary screen in this pass.
 - Collections is a top-level management destination, while Map, Agenda, Library, Upcoming, and deleted-item browsing are not top-level destinations in this pass.
@@ -44,6 +47,7 @@ Home must:
 - Hide audit-like extraction details from rows, including model/provider names, analysis mode, confidence percentages, generic `Analyzed` labels, and debug state.
 - Keep extraction details persisted and searchable.
 - Preserve the Recent Captures scroll position when a user opens Capture Review from a Recent row and returns by in-screen, hardware, or gesture back.
+- Provide a `Review queue` control that toggles the Recent Captures list between all active captures and only captures whose visible status is `Needs review` or `Failed`; it must not navigate directly to the first review item.
 - Provide designed loading, empty, error, long-content, processing, failed, and delete-undo states.
 
 Home must not:
@@ -81,7 +85,7 @@ Capture Review must:
 - Feel like editing a saved memory, not inspecting an analysis report.
 - Lead with existing capture imagery or source media when available. Tapping uploaded image or screenshot media opens a full-screen image viewer with pinch zoom; tapping source/link preview media opens the source URL when one is available.
 - Make the editable title the primary text under the media/source header.
-- Show optional Save Intent, Collections, and Reminder in one compact editable attribute rail below the title. Purpose may carry the strongest weight, while Collection and Later should read as quieter inline metadata. Use flat native-feeling controls with hairline separation or spacing rather than equal-weight stat cards, chunky pills, prose sentences, or form rows.
+- Show optional Save Intent, Collections, Reminder, and rationale entry in one compact editable decision dock below the title. Purpose may carry the strongest weight, while Collection and Later should read as quieter decision tiles. Use flat native-feeling controls with asymmetric shape and spacing rather than equal-weight stat cards, chunky pills, prose sentences, divider-heavy rails, or form rows.
 - Show `Add intent` when no concrete action is inferable; blank intent should be a reviewable state, not a broad fallback label or selectable chip.
 - Show `Add collections` when no Collection is linked. A Capture may intentionally have no Collection.
 - Tapping Collections opens a focused full-screen selector for existing active Collections, including `No collection` as a valid clearing state.
@@ -90,12 +94,14 @@ Capture Review must:
 - Use a consumer label such as `Later` for the main Reminder control; reserve `Reminder idea` for review rationale or detail surfaces when the AI suggested the timing. When Capture Analysis found no Reminder idea, tapping `Add reminder` opens the same manual reminder editor.
 - Show an `Open in Maps` action when Capture Analysis has a maps-searchable Visit Target and a native map provider passes an open check. This action opens the available Google Maps or Apple Maps search from the persisted Visit Target, preferring the target name when present and falling back to the saved query; Android must not show Apple Maps through a browser fallback, and the action must not imply a verified address, coordinates, place ID, or a first-class Map destination.
 - Include an `Add reminder` flow only when the selected reminder can at least persist as a capture-local or otherwise durable value. The editor must collect a start and end date, optional start and end time, and show the computed duration so date ranges, time ranges, and same-day time ranges are all editable. Do not imply notification delivery until it exists.
-- Include one consolidated `Review insight` rationale surface for Save Intent, Collections, and Reminder idea decisions, including cases where no Collection or no Reminder idea was applied. Its visible cue should point to the exact review decision rather than repeat a content summary.
-- When a Capture has unresolved review targets, `Review insight` owns the checklist. The main footer should open that checklist with a target count, and the sheet should let users confirm or change each unresolved target without hunting for what dismisses `Needs a quick look`.
+- Include one consolidated `Review insight` rationale surface for Save Intent, Collections, and Reminder idea decisions, including cases where no Collection or no Reminder idea was applied. Its visible cue should live with the decision dock and point to the exact review decision rather than repeat a content summary.
+- When a Capture has unresolved review targets, `Review insight` owns the checklist. The decision dock `Why` action should open that checklist with a target count, and the sheet should let users confirm or change each unresolved target without hunting for what dismisses `Needs a quick look`.
+- Capture Review should not render a sticky bottom footer just to open review confirmation. Dirty edits should save from an inline decision-dock action.
 - `Review insight` should explain the AI decision in friendly user language, using active Save Intents and existing Collection names as context rather than merely repeating field values.
 - The expanded `Review insight` sheet should lead with the same friendly insight from the row at readable body scale, then show a visually prominent but calm checklist for unresolved Save Intent, Collections, Reminder idea, or analysis targets. Below the checklist it may show unframed rationale rows, including why no Collection or Reminder idea was selected when that is the outcome. The sheet action must leave comfortable space above Android gesture navigation.
 - When Capture Review asks the user to check Save Intent, Collections, or a future Reminder idea, the unresolved suggestion must appear as a binary question in `Review insight`, not as already-applied main-rail data. The check action confirms the exact suggested value and makes it visible in the main rail; the X action rejects or clears that suggestion and leaves the field empty/unchanged so the user can add a value from the main control if needed.
 - Choosing `No intent`, `No collection`, or no Reminder must stay available through the main Purpose, Collection, or Later controls. `Needs a quick look` remains only if another review target is still unresolved.
+- Reminder editing must offer fast preset choices before manual pickers so users can create common resurfacing intervals without stepping through several rows of inputs. Manual start/end date and optional time editing must remain available for precision.
 - Keep raw source, destructive delete actions, and detailed rationale visually secondary.
 - Use modality-specific evidence in review copy. Image and note captures without a source URL must not show Link evidence fallback copy or a `Link evidence` module; they should show `Needs review` / `Couldn't tell` language when saved content needs more context.
 
@@ -113,6 +119,7 @@ Collection management must:
 - Allow a Capture to belong to multiple Collections.
 - Avoid making Collection browsing the default retrieval surface; Search remains the primary retrieval lens.
 - Use toast undo for reversible/destructive collection changes where feasible.
+- In collection detail, removal must appear as a compact in-row action on the capture row, not as a detached button below each card.
 
 ## Trust Rules
 
@@ -130,7 +137,7 @@ Collection management must:
 - Use inline loading placeholders or skeleton rows instead of debug spinners where possible.
 - Preserve drafts during loading, app backgrounding, and navigation.
 - Use toasts for reversible actions such as collection removal or delete when feasible.
-- Avoid decorative motion, heavy gesture systems, or animation that delays capture or retrieval.
+- Avoid decorative motion, heavy gesture systems, decorative gradients, dashboard clutter, or animation that delays capture or retrieval.
 
 ## Out Of Scope For This Pass
 

@@ -1,6 +1,6 @@
 import { Platform, StatusBar, StyleSheet } from "react-native";
 
-import { colors } from "./theme";
+import { colors, fonts, radii, type as typeScale } from "./theme";
 
 export const styles = StyleSheet.create({
   safe: {
@@ -24,14 +24,14 @@ export const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 22,
-    paddingTop: 16
+    paddingTop: 18
   },
   keyboardScreen: {
     flex: 1
   },
   header: {
-    gap: 4,
-    paddingBottom: 14
+    gap: 10,
+    paddingBottom: 18
   },
   headerRow: {
     alignItems: "flex-start",
@@ -41,55 +41,90 @@ export const styles = StyleSheet.create({
   },
   headerCopy: {
     flex: 1,
-    gap: 4
+    gap: 2
   },
   kicker: {
+    ...typeScale.label,
     color: colors.muted,
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0
+    textTransform: "uppercase"
   },
   title: {
+    ...typeScale.display,
     color: colors.ink,
-    fontSize: 26,
-    fontWeight: "700",
-    letterSpacing: 0,
-    lineHeight: 31
   },
   iconButton: {
     alignItems: "center",
-    backgroundColor: "transparent",
-    borderRadius: 8,
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    borderWidth: StyleSheet.hairlineWidth,
     justifyContent: "center",
-    minHeight: 44,
-    minWidth: 44
+    minHeight: 46,
+    minWidth: 46
   },
   iconButtonSelected: {
-    backgroundColor: colors.accentSoft
+    backgroundColor: colors.accent,
+    borderColor: colors.accent
   },
   iconButtonDisabled: {
     opacity: 0.42
   },
-  quickLookSummary: {
+  reviewQueueFilter: {
     alignItems: "center",
-    alignSelf: "flex-start",
-    backgroundColor: colors.reviewSoft,
-    borderRadius: 8,
+    alignSelf: "stretch",
+    backgroundColor: colors.surfaceContainer,
     flexDirection: "row",
-    gap: 6,
+    gap: 10,
     marginTop: 10,
-    minHeight: 36,
-    paddingHorizontal: 10
+    minHeight: 62,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    ...radii.archive
   },
-  quickLookSummaryText: {
-    color: colors.review,
+  reviewQueueFilterActive: {
+    backgroundColor: colors.reviewSoft
+  },
+  reviewQueueMark: {
+    alignItems: "center",
+    backgroundColor: colors.review,
+    height: 38,
+    justifyContent: "center",
+    width: 38,
+    ...radii.stamp
+  },
+  reviewQueueCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0
+  },
+  reviewQueueTitle: {
+    color: colors.ink,
+    fontFamily: fonts.bodyBold,
+    fontSize: 15,
+    fontWeight: "900",
+    lineHeight: 19
+  },
+  reviewQueueMeta: {
+    color: colors.muted,
+    fontFamily: fonts.bodySemi,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 16
+  },
+  reviewQueueAction: {
+    color: colors.accent,
+    fontFamily: fonts.bodyBold,
     fontSize: 13,
-    fontWeight: "700"
+    fontWeight: "900",
+    lineHeight: 17
   },
   search: {
-    backgroundColor: colors.soft,
-    borderRadius: 8,
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.line,
+    borderRadius: radii.sm,
+    borderWidth: StyleSheet.hairlineWidth,
     color: colors.ink,
+    fontFamily: fonts.body,
     fontSize: 16,
     marginBottom: 12,
     paddingHorizontal: 14,
@@ -99,7 +134,7 @@ export const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     paddingBottom: Platform.OS === "android" ? 34 : 28,
-    paddingHorizontal: 40,
+    paddingHorizontal: 26,
     position: "absolute",
     right: 0,
     zIndex: 24
@@ -112,17 +147,17 @@ export const styles = StyleSheet.create({
   },
   bottomNavBar: {
     alignItems: "center",
-    backgroundColor: colors.surfaceContainer,
-    borderColor: colors.line,
+    backgroundColor: "#15161b",
+    borderColor: "#474b56",
     borderRadius: 30,
     borderWidth: StyleSheet.hairlineWidth,
     flex: 1,
     flexDirection: "row",
     gap: 6,
     justifyContent: "space-between",
-    minHeight: 60,
+    minHeight: 64,
     paddingHorizontal: 8,
-    paddingVertical: 6
+    paddingVertical: 7
   },
   bottomNavItem: {
     alignItems: "center",
@@ -138,22 +173,21 @@ export const styles = StyleSheet.create({
   bottomNavIconWrap: {
     alignItems: "center",
     borderRadius: 22,
-    height: 42,
+    height: 44,
     justifyContent: "center",
     minWidth: 54,
     paddingHorizontal: 12
   },
-  bottomNavIconWrapSelected: {},
   bottomNavFab: {
     alignItems: "center",
-    backgroundColor: colors.accent,
+    backgroundColor: colors.create,
     borderRadius: 30,
     justifyContent: "center",
-    height: 60,
-    width: 60
+    height: 62,
+    width: 62
   },
   bottomNavFabPressed: {
-    backgroundColor: "#96e5bf",
+    backgroundColor: "#ff7a63",
     transform: [{ scale: 0.965 }]
   },
   searchScreen: {
@@ -161,8 +195,8 @@ export const styles = StyleSheet.create({
   },
   searchTop: {
     paddingHorizontal: 22,
-    paddingTop: 14,
-    paddingBottom: 6
+    paddingTop: 16,
+    paddingBottom: 10
   },
   searchBarRow: {
     alignItems: "center",
@@ -171,17 +205,18 @@ export const styles = StyleSheet.create({
   },
   searchInputWrap: {
     alignItems: "center",
-    backgroundColor: colors.surfaceContainer,
-    borderRadius: 8,
+    backgroundColor: colors.ink,
+    borderRadius: radii.pill,
     flex: 1,
     flexDirection: "row",
     gap: 8,
-    minHeight: 50,
-    paddingHorizontal: 12
+    minHeight: 54,
+    paddingHorizontal: 16
   },
   searchInputNative: {
-    color: colors.ink,
+    color: colors.paper,
     flex: 1,
+    fontFamily: fonts.bodySemi,
     fontSize: 17,
     fontWeight: "600",
     minHeight: 48,
@@ -197,6 +232,7 @@ export const styles = StyleSheet.create({
   searchScopeLabel: {
     color: colors.muted,
     flex: 1,
+    fontFamily: fonts.bodyBold,
     fontSize: 11,
     fontWeight: "700",
     lineHeight: 15
@@ -205,7 +241,9 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     alignSelf: "flex-start",
     backgroundColor: colors.processingSoft,
-    borderRadius: 8,
+    borderColor: "#256983",
+    borderRadius: radii.sm,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 8,
     marginTop: 10,
@@ -214,6 +252,7 @@ export const styles = StyleSheet.create({
   },
   searchProgressText: {
     color: colors.processing,
+    fontFamily: fonts.bodyBold,
     fontSize: 12,
     fontWeight: "700",
     lineHeight: 16
@@ -242,7 +281,7 @@ export const styles = StyleSheet.create({
   },
   scopeChip: {
     alignItems: "center",
-    borderRadius: 6,
+    borderRadius: radii.xs,
     justifyContent: "center",
     minHeight: 28,
     paddingHorizontal: 7
@@ -252,6 +291,7 @@ export const styles = StyleSheet.create({
   },
   scopeChipText: {
     color: colors.muted,
+    fontFamily: fonts.bodyBold,
     fontSize: 11,
     fontWeight: "700"
   },
@@ -259,9 +299,12 @@ export const styles = StyleSheet.create({
     color: colors.ink
   },
   captureInput: {
-    backgroundColor: colors.soft,
-    borderRadius: 8,
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: radii.sm,
+    borderWidth: StyleSheet.hairlineWidth,
     color: colors.ink,
+    fontFamily: fonts.body,
     fontSize: 16,
     lineHeight: 22,
     maxHeight: 124,
@@ -291,9 +334,9 @@ export const styles = StyleSheet.create({
   },
   captureModeChip: {
     alignItems: "center",
-    backgroundColor: colors.paper,
+    backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     borderWidth: StyleSheet.hairlineWidth,
     flex: 1,
     flexDirection: "row",
@@ -304,17 +347,18 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 8
   },
   captureModeChipSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent
+    backgroundColor: colors.ink,
+    borderColor: colors.ink
   },
   captureModeText: {
     color: colors.ink,
+    fontFamily: fonts.bodyBold,
     flexShrink: 1,
     fontSize: 14,
     fontWeight: "800"
   },
   captureModeTextSelected: {
-    color: colors.onAccent
+    color: colors.paper
   },
   captureImagePanel: {
     alignItems: "stretch"
@@ -324,7 +368,7 @@ export const styles = StyleSheet.create({
     alignSelf: "stretch",
     backgroundColor: colors.surfaceContainerHighest,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 8,
@@ -337,6 +381,7 @@ export const styles = StyleSheet.create({
   },
   captureImageButtonText: {
     color: colors.ink,
+    fontFamily: fonts.bodyBold,
     fontSize: 15,
     fontWeight: "800"
   },
@@ -367,15 +412,15 @@ export const styles = StyleSheet.create({
     top: 0
   },
   actionSheet: {
-    backgroundColor: colors.surfaceContainer,
-    borderTopColor: colors.line,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: colors.surface,
+    borderTopColor: "#454955",
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 12,
     paddingBottom: Platform.OS === "android" ? 20 : 28,
     paddingHorizontal: 22,
-    paddingTop: 8
+    paddingTop: 10
   },
   sheetBackdrop: {
     backgroundColor: colors.scrim,
@@ -391,15 +436,15 @@ export const styles = StyleSheet.create({
     width: "100%"
   },
   captureSheet: {
-    backgroundColor: colors.surfaceContainer,
-    borderTopColor: colors.line,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: colors.surface,
+    borderTopColor: "#454955",
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 14,
     paddingBottom: Platform.OS === "android" ? 18 : 26,
     paddingHorizontal: 22,
-    paddingTop: 8
+    paddingTop: 10
   },
   captureSheetCompact: {
     gap: 10,
@@ -451,6 +496,7 @@ export const styles = StyleSheet.create({
   },
   sheetActionTitle: {
     color: colors.ink,
+    fontFamily: fonts.bodyBold,
     fontSize: 16,
     fontWeight: "800"
   },
@@ -459,6 +505,7 @@ export const styles = StyleSheet.create({
   },
   sheetActionText: {
     color: colors.muted,
+    fontFamily: fonts.body,
     fontSize: 13,
     lineHeight: 18
   },
@@ -466,7 +513,7 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.dangerSoft,
     borderColor: "#704038",
-    borderRadius: 12,
+    borderRadius: radii.sm,
     borderWidth: StyleSheet.hairlineWidth,
     height: 46,
     justifyContent: "center",
@@ -487,23 +534,24 @@ export const styles = StyleSheet.create({
     paddingTop: 28
   },
   groupHeader: {
+    ...typeScale.label,
     color: colors.muted,
-    fontSize: 12,
-    fontWeight: "800",
     paddingBottom: 2,
-    paddingTop: 16
+    paddingTop: 18,
+    textTransform: "uppercase"
   },
   captureRow: {
     alignItems: "flex-start",
+    backgroundColor: colors.surfaceContainer,
     flexDirection: "row",
-    gap: 10,
-    minHeight: 76,
-    paddingHorizontal: 0,
-    paddingVertical: 14
+    gap: 12,
+    minHeight: 92,
+    paddingHorizontal: 12,
+    paddingVertical: 13,
+    ...radii.archive
   },
   captureRowPressed: {
-    backgroundColor: colors.surfaceContainer,
-    borderRadius: 8,
+    backgroundColor: colors.surfaceContainerHigh,
     transform: [{ scale: 0.995 }]
   },
   subtlePressed: {
@@ -516,38 +564,34 @@ export const styles = StyleSheet.create({
   },
   sourceMark: {
     alignItems: "center",
-    backgroundColor: colors.accentSoft,
-    borderColor: colors.accentLine,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 52,
+    backgroundColor: colors.accent,
+    height: 60,
     justifyContent: "center",
     marginTop: 2,
     overflow: "hidden",
-    width: 52
+    width: 60,
+    ...radii.stamp
   },
   sourceMarkDetail: {
     alignItems: "center",
     backgroundColor: colors.accentSoft,
-    borderColor: colors.accentLine,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
     height: 28,
     justifyContent: "center",
     overflow: "hidden",
-    width: 28
+    width: 28,
+    ...radii.stamp
   },
   sourceMarkProcessing: {
-    backgroundColor: colors.processingSoft,
-    borderColor: "#2b526b"
+    backgroundColor: colors.processing,
+    borderColor: colors.processing
   },
   sourceMarkReview: {
-    backgroundColor: colors.reviewSoft,
-    borderColor: "#6c5324"
+    backgroundColor: colors.review,
+    borderColor: colors.review
   },
   sourceMarkFailed: {
-    backgroundColor: colors.dangerSoft,
-    borderColor: "#704038"
+    backgroundColor: colors.danger,
+    borderColor: colors.danger
   },
   sourceFavicon: {
     height: 22,
@@ -557,24 +601,33 @@ export const styles = StyleSheet.create({
     height: 16,
     width: 16
   },
+  sourceMarkText: {
+    color: colors.onAccent,
+    fontFamily: fonts.display,
+    fontSize: 17,
+    fontWeight: "900",
+    lineHeight: 22
+  },
+  sourceMarkTextLong: {
+    fontSize: 14,
+    lineHeight: 18
+  },
   captureThumbnailFrame: {
     backgroundColor: colors.surfaceContainer,
-    borderColor: colors.line,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 58,
+    height: 64,
     marginTop: 1,
     overflow: "hidden",
-    width: 58
+    width: 64,
+    ...radii.stamp
   },
   captureThumbnailImage: {
     height: "100%",
     width: "100%"
   },
   thumbnailRevealSlot: {
-    height: 60,
+    height: 66,
     position: "relative",
-    width: 58
+    width: 64
   },
   thumbnailGhostOverlay: {
     bottom: 0,
@@ -586,11 +639,11 @@ export const styles = StyleSheet.create({
   statusGlyph: {
     alignItems: "center",
     backgroundColor: colors.soft,
-    borderRadius: 8,
     flexShrink: 0,
     height: 28,
     justifyContent: "center",
-    width: 28
+    width: 28,
+    ...radii.stamp
   },
   statusGlyphProcessing: {
     backgroundColor: colors.processingSoft,
@@ -601,6 +654,7 @@ export const styles = StyleSheet.create({
   },
   statusGlyphProcessingText: {
     color: colors.processing,
+    fontFamily: fonts.bodyBold,
     fontSize: 12,
     fontWeight: "800",
     lineHeight: 16
@@ -613,7 +667,7 @@ export const styles = StyleSheet.create({
   },
   rowContent: {
     flex: 1,
-    gap: 4,
+    gap: 5,
     minWidth: 0
   },
   rowTop: {
@@ -627,15 +681,23 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8
   },
+  rowTitleActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexShrink: 0,
+    gap: 6
+  },
   captureTitle: {
     color: colors.ink,
     flex: 1,
-    fontSize: 17,
-    fontWeight: "600",
-    lineHeight: 22
+    fontFamily: fonts.bodyBold,
+    fontSize: 18,
+    fontWeight: "800",
+    lineHeight: 23
   },
   status: {
     color: colors.ink,
+    fontFamily: fonts.bodyBold,
     fontSize: 12,
     fontWeight: "700"
   },
@@ -651,21 +713,25 @@ export const styles = StyleSheet.create({
   meta: {
     color: colors.muted,
     flexShrink: 1,
+    fontFamily: fonts.bodySemi,
     fontSize: 13,
     lineHeight: 18
   },
   notePreview: {
     color: colors.ink,
+    fontFamily: fonts.body,
     fontSize: 15,
     lineHeight: 21
   },
   summaryPreview: {
     color: colors.muted,
+    fontFamily: fonts.body,
     fontSize: 14,
     lineHeight: 20
   },
   supportPreview: {
     color: colors.muted,
+    fontFamily: fonts.bodySemi,
     fontSize: 13,
     fontWeight: "600",
     lineHeight: 19
@@ -687,23 +753,21 @@ export const styles = StyleSheet.create({
   meaningTokenText: {
     color: colors.muted,
     flexShrink: 1,
+    fontFamily: fonts.bodyBold,
     fontSize: 12,
     fontWeight: "700",
     lineHeight: 17
   },
   collectionMeaningToken: {
-    backgroundColor: colors.surfaceContainer,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: colors.surfaceContainerHigh,
     minHeight: 26,
     paddingLeft: 7,
     paddingRight: 8,
-    paddingVertical: 4
+    paddingVertical: 4,
+    ...radii.stamp
   },
   collectionMeaningTokenMulti: {
     backgroundColor: colors.accentSoft,
-    borderColor: colors.accentLine,
     paddingRight: 4
   },
   collectionMeaningTokenText: {
@@ -712,7 +776,7 @@ export const styles = StyleSheet.create({
   collectionOverflowBadge: {
     alignItems: "center",
     backgroundColor: colors.accent,
-    borderRadius: 6,
+    borderRadius: radii.xs,
     flexShrink: 0,
     justifyContent: "center",
     minHeight: 18,
@@ -721,19 +785,21 @@ export const styles = StyleSheet.create({
   },
   collectionOverflowText: {
     color: colors.onAccent,
+    fontFamily: fonts.bodyBold,
     fontSize: 11,
     fontWeight: "800",
     lineHeight: 14
   },
   searchMatchText: {
-    color: colors.accent,
+    color: colors.cyan,
+    fontFamily: fonts.bodyBold,
     fontSize: 13,
     fontWeight: "700",
     lineHeight: 18
   },
   separator: {
-    backgroundColor: colors.line,
-    height: StyleSheet.hairlineWidth
+    backgroundColor: "transparent",
+    height: 8
   },
   emptyContent: {
     flexGrow: 1,
@@ -770,7 +836,7 @@ export const styles = StyleSheet.create({
   homeEmptyRailDotActive: {
     backgroundColor: colors.accent,
     borderColor: colors.accentLine,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     borderWidth: StyleSheet.hairlineWidth,
     height: 16,
     width: 16
@@ -798,7 +864,7 @@ export const styles = StyleSheet.create({
   homeEmptyTile: {
     backgroundColor: colors.surfaceContainer,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: "hidden"
   },
@@ -806,7 +872,7 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: 12,
-    minHeight: 82,
+    minHeight: 88,
     paddingHorizontal: 14,
     paddingVertical: 12
   },
@@ -821,15 +887,15 @@ export const styles = StyleSheet.create({
     padding: 13
   },
   homeEmptyTileImage: {
-    backgroundColor: colors.processingSoft
+    backgroundColor: colors.cyanSoft
   },
   homeEmptyIconMark: {
     alignItems: "center",
-    backgroundColor: colors.accentSoft,
-    borderRadius: 8,
-    height: 44,
+    backgroundColor: colors.accent,
+    borderRadius: radii.sm,
+    height: 48,
     justifyContent: "center",
-    width: 44
+    width: 48
   },
   homeEmptyLineGroup: {
     flex: 1,
@@ -837,7 +903,7 @@ export const styles = StyleSheet.create({
     minWidth: 0
   },
   homeEmptyLineStrong: {
-    backgroundColor: colors.secondary,
+    backgroundColor: colors.ink,
     borderRadius: 6,
     height: 13,
     width: "76%"
@@ -865,18 +931,18 @@ export const styles = StyleSheet.create({
   },
   homeEmptyImageFrame: {
     alignSelf: "stretch",
-    backgroundColor: "rgba(159, 198, 227, 0.18)",
-    borderColor: "rgba(159, 198, 227, 0.32)",
-    borderRadius: 8,
+    backgroundColor: "rgba(148, 235, 255, 0.18)",
+    borderColor: "rgba(148, 235, 255, 0.34)",
+    borderRadius: radii.sm,
     borderWidth: StyleSheet.hairlineWidth,
     flex: 1,
     minHeight: 34
   },
   homeEmptySearchHint: {
     alignItems: "center",
-    backgroundColor: colors.surfaceContainerHigh,
-    borderColor: colors.line,
-    borderRadius: 8,
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+    borderRadius: radii.pill,
     borderWidth: StyleSheet.hairlineWidth,
     bottom: 0,
     height: 42,
@@ -901,13 +967,16 @@ export const styles = StyleSheet.create({
     paddingTop: 22
   },
   emptyTitle: {
+    fontFamily: fonts.display,
     color: colors.ink,
-    fontSize: 22,
-    fontWeight: "700",
+    fontSize: 27,
+    fontWeight: "800",
+    lineHeight: 32,
     marginBottom: 8
   },
   emptyText: {
     color: colors.muted,
+    fontFamily: fonts.body,
     fontSize: 15,
     lineHeight: 22,
     maxWidth: 280
@@ -921,8 +990,10 @@ export const styles = StyleSheet.create({
   },
   promptChip: {
     alignItems: "center",
-    backgroundColor: colors.soft,
-    borderRadius: 8,
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.line,
+    borderRadius: radii.sm,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 6,
     justifyContent: "center",
@@ -931,11 +1002,13 @@ export const styles = StyleSheet.create({
   },
   promptChipText: {
     color: colors.ink,
+    fontFamily: fonts.bodyBold,
     fontSize: 13,
     fontWeight: "700"
   },
   emptyCue: {
     color: colors.muted,
+    fontFamily: fonts.bodySemi,
     flex: 1,
     fontSize: 13,
     lineHeight: 19,
@@ -945,7 +1018,7 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     alignSelf: "center",
     backgroundColor: colors.accent,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     flexDirection: "row",
     gap: 8,
     justifyContent: "center",
@@ -956,11 +1029,12 @@ export const styles = StyleSheet.create({
     width: "100%"
   },
   homeEmptyPrimaryPressed: {
-    backgroundColor: "#9be6c2",
+    backgroundColor: "#e8ff77",
     transform: [{ scale: 0.99 }]
   },
   homeEmptyPrimaryText: {
     color: colors.onAccent,
+    fontFamily: fonts.bodyBold,
     fontSize: 16,
     fontWeight: "800"
   },
@@ -993,7 +1067,7 @@ export const styles = StyleSheet.create({
     top: 0
   },
   skeletonBlock: {
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: "#30333d",
     overflow: "hidden"
   },
   skeletonSheen: {
@@ -1005,19 +1079,18 @@ export const styles = StyleSheet.create({
   },
   captureSkeletonRow: {
     alignItems: "flex-start",
-    borderBottomColor: colors.line,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    backgroundColor: colors.surfaceContainer,
     flexDirection: "row",
     gap: 12,
     minHeight: 132,
-    paddingVertical: 16
+    paddingHorizontal: 12,
+    paddingVertical: 16,
+    ...radii.archive
   },
   collectionCaptureSkeletonRow: {
-    alignItems: "flex-start",
-    borderBottomColor: colors.line,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    gap: 12,
+    alignItems: "stretch",
+    flexDirection: "column",
+    gap: 8,
     minHeight: 156,
     paddingVertical: 16
   },
@@ -1036,15 +1109,18 @@ export const styles = StyleSheet.create({
   },
   captureRowSkeletonInline: {
     alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 10,
-    minHeight: 76,
-    paddingVertical: 14
-  },
-  collectionCaptureSkeletonInline: {
-    alignItems: "flex-start",
+    backgroundColor: colors.surfaceContainer,
     flexDirection: "row",
     gap: 12,
+    minHeight: 92,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    ...radii.archive
+  },
+  collectionCaptureSkeletonInline: {
+    alignItems: "stretch",
+    flexDirection: "column",
+    gap: 8,
     minHeight: 108,
     paddingVertical: 16
   },
@@ -1061,7 +1137,7 @@ export const styles = StyleSheet.create({
     gap: 7
   },
   collectionListSkeletonIcon: {
-    borderRadius: 8,
+    ...radii.stamp,
     height: 36,
     width: 36
   },
@@ -1098,20 +1174,16 @@ export const styles = StyleSheet.create({
     width: 34
   },
   loadingSourceMark: {
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
     height: 52,
     marginTop: 2,
-    width: 52
+    width: 52,
+    ...radii.stamp
   },
   loadingThumbnailMark: {
-    borderColor: colors.line,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 58,
+    height: 64,
     marginTop: 1,
-    width: 58
+    width: 64,
+    ...radii.stamp
   },
   collectionLoadingTitle: {
     borderRadius: 6,
@@ -1138,7 +1210,16 @@ export const styles = StyleSheet.create({
     borderRadius: 6,
     height: 16,
     marginTop: 9,
-    width: 58
+    marginLeft: "auto",
+    width: 128
+  },
+  collectionLoadingActionInline: {
+    alignSelf: "flex-start",
+    borderRadius: 6,
+    flexShrink: 0,
+    height: 30,
+    marginLeft: 4,
+    width: 72
   },
   listLoadingFooter: {
     alignItems: "center",
@@ -1155,19 +1236,21 @@ export const styles = StyleSheet.create({
     paddingBottom: 8
   },
   collectionCaptureRow: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 12,
-    paddingVertical: 16
+    alignItems: "stretch",
+    flexDirection: "column",
+    paddingVertical: 10
   },
   collectionCaptureMain: {
-    flex: 1,
-    gap: 7
+    gap: 7,
+    width: "100%"
   },
   collectionRow: {
+    backgroundColor: colors.surfaceContainer,
     gap: 7,
-    minHeight: 74,
-    paddingVertical: 15
+    minHeight: 92,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    ...radii.archive
   },
   collectionRowTop: {
     alignItems: "center",
@@ -1176,16 +1259,29 @@ export const styles = StyleSheet.create({
   },
   collectionIconMark: {
     alignItems: "center",
-    backgroundColor: colors.accentSoft,
-    borderRadius: 8,
-    height: 36,
+    backgroundColor: colors.cyan,
+    height: 42,
     justifyContent: "center",
-    width: 36
+    width: 42,
+    ...radii.stamp
+  },
+  collectionInitialMark: {
+    alignItems: "center",
+    height: 48,
+    justifyContent: "center",
+    width: 48,
+    ...radii.stamp
+  },
+  collectionInitialText: {
+    fontFamily: fonts.display,
+    fontSize: 16,
+    fontWeight: "900",
+    lineHeight: 20
   },
   collectionNoCollectionIconMark: {
     alignItems: "center",
     backgroundColor: colors.surfaceContainerHigh,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     height: 36,
     justifyContent: "center",
     width: 36
@@ -1197,8 +1293,21 @@ export const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0
   },
-  removeButton: {
-    paddingVertical: 4
+  collectionRowRemoveAction: {
+    alignItems: "center",
+    backgroundColor: colors.createSoft,
+    justifyContent: "center",
+    minHeight: 32,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    ...radii.stamp
+  },
+  collectionRowRemoveActionText: {
+    color: colors.create,
+    fontFamily: fonts.bodyBold,
+    fontSize: 12,
+    fontWeight: "900",
+    lineHeight: 16
   },
   collectionEmpty: {
     paddingBottom: 24,
@@ -1219,7 +1328,7 @@ export const styles = StyleSheet.create({
   collectionsEmptyFolderBack: {
     backgroundColor: colors.surfaceContainer,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     borderWidth: StyleSheet.hairlineWidth,
     bottom: 20,
     left: 18,
@@ -1231,9 +1340,9 @@ export const styles = StyleSheet.create({
   },
   collectionsEmptyFolder: {
     alignItems: "flex-start",
-    backgroundColor: colors.surfaceContainerHigh,
-    borderColor: colors.line,
-    borderRadius: 8,
+    backgroundColor: colors.review,
+    borderColor: colors.review,
+    borderRadius: radii.sm,
     borderWidth: StyleSheet.hairlineWidth,
     bottom: 10,
     gap: 16,
@@ -1246,9 +1355,9 @@ export const styles = StyleSheet.create({
     top: 18
   },
   collectionsEmptyFolderTab: {
-    backgroundColor: colors.accentSoft,
-    borderColor: colors.accentLine,
-    borderRadius: 8,
+    backgroundColor: colors.create,
+    borderColor: colors.create,
+    borderRadius: radii.sm,
     borderWidth: StyleSheet.hairlineWidth,
     height: 28,
     left: 22,
@@ -1274,9 +1383,9 @@ export const styles = StyleSheet.create({
   },
   collectionsEmptyBadge: {
     alignItems: "center",
-    backgroundColor: colors.accent,
+    backgroundColor: colors.ink,
     borderColor: colors.paper,
-    borderRadius: 8,
+    borderRadius: radii.pill,
     borderWidth: 3,
     bottom: 0,
     height: 48,
@@ -1299,9 +1408,9 @@ export const styles = StyleSheet.create({
   },
   collectionsScreen: {
     flex: 1,
-    gap: 14,
+    gap: 16,
     paddingHorizontal: 22,
-    paddingTop: 16
+    paddingTop: 18
   },
   collectionsTitleBlock: {
     gap: 6
@@ -1333,8 +1442,10 @@ export const styles = StyleSheet.create({
   },
   collectionSelectorSearchInput: {
     alignItems: "center",
-    backgroundColor: colors.surfaceContainer,
-    borderRadius: 8,
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.line,
+    borderRadius: radii.sm,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 8,
     minHeight: 50,
@@ -1362,7 +1473,7 @@ export const styles = StyleSheet.create({
   collectionSelectionControl: {
     alignItems: "center",
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     borderWidth: 1,
     flexShrink: 0,
     height: 34,
@@ -1390,7 +1501,8 @@ export const styles = StyleSheet.create({
     alignItems: "stretch",
     flexGrow: 1,
     justifyContent: "center",
-    paddingBottom: 82
+    paddingBottom: 82,
+    paddingTop: 38
   },
   authHeaderRow: {
     alignItems: "center",
@@ -1402,6 +1514,8 @@ export const styles = StyleSheet.create({
     gap: 4
   },
   authTitle: {
+    fontSize: 42,
+    lineHeight: 45,
     marginBottom: 8,
     textAlign: "center"
   },
@@ -1409,15 +1523,15 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     alignSelf: "center",
     backgroundColor: colors.accent,
-    borderRadius: 8,
-    height: 52,
+    borderRadius: radii.sm,
+    height: 58,
     justifyContent: "center",
-    width: 52
+    width: 58
   },
   authGoogleButton: {
     alignItems: "center",
     backgroundColor: colors.ink,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     flexDirection: "row",
     gap: 12,
     justifyContent: "center",
@@ -1432,18 +1546,20 @@ export const styles = StyleSheet.create({
   authGoogleMark: {
     alignItems: "center",
     backgroundColor: colors.paper,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     height: 32,
     justifyContent: "center",
     width: 32
   },
   authGoogleMarkText: {
     color: colors.ink,
+    fontFamily: fonts.display,
     fontSize: 18,
     fontWeight: "900"
   },
   authGoogleButtonText: {
     color: colors.paper,
+    fontFamily: fonts.bodyBold,
     fontSize: 16,
     fontWeight: "800"
   },
@@ -1460,15 +1576,17 @@ export const styles = StyleSheet.create({
   },
   authDividerText: {
     color: colors.muted,
+    fontFamily: fonts.bodyBold,
     fontSize: 13,
     fontWeight: "700"
   },
   authEmailInput: {
-    backgroundColor: colors.surfaceContainer,
+    backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     borderWidth: StyleSheet.hairlineWidth,
     color: colors.ink,
+    fontFamily: fonts.body,
     fontSize: 16,
     minHeight: 54,
     paddingHorizontal: 14,
@@ -1477,7 +1595,7 @@ export const styles = StyleSheet.create({
   authEmailButton: {
     alignItems: "center",
     backgroundColor: colors.accent,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     flexDirection: "row",
     gap: 9,
     justifyContent: "center",
@@ -1497,14 +1615,6 @@ export const styles = StyleSheet.create({
   reviewDetailNoFooter: {
     paddingBottom: 44
   },
-  reviewFooter: {
-    backgroundColor: colors.paper,
-    borderTopColor: colors.line,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingBottom: Platform.OS === "android" ? 16 : 22,
-    paddingHorizontal: 22,
-    paddingTop: 10
-  },
   detailHeader: {
     alignItems: "center",
     flexDirection: "row",
@@ -1516,11 +1626,13 @@ export const styles = StyleSheet.create({
   },
   textButtonText: {
     color: colors.ink,
+    fontFamily: fonts.bodySemi,
     fontSize: 16,
     fontWeight: "600"
   },
   titleInput: {
     color: colors.ink,
+    fontFamily: fonts.display,
     fontSize: 28,
     fontWeight: "700",
     lineHeight: 34,
@@ -1528,17 +1640,16 @@ export const styles = StyleSheet.create({
   },
   reviewMediaHeader: {
     backgroundColor: colors.surfaceContainer,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: "hidden"
+    overflow: "hidden",
+    ...radii.archive
   },
   reviewMediaHeaderImage: {
-    aspectRatio: 1.72
+    aspectRatio: 1.55
   },
   reviewMediaHeaderFallback: {
-    minHeight: 94,
-    padding: 16
+    backgroundColor: colors.surfaceContainerHigh,
+    minHeight: 118,
+    padding: 18
   },
   reviewMediaImage: {
     height: "100%",
@@ -1553,16 +1664,15 @@ export const styles = StyleSheet.create({
   reviewMediaSourcePill: {
     alignSelf: "flex-start",
     backgroundColor: "rgba(3, 7, 5, 0.68)",
-    borderColor: "rgba(238, 245, 239, 0.18)",
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
     maxWidth: "100%",
     minHeight: 34,
     paddingHorizontal: 10,
-    paddingVertical: 7
+    paddingVertical: 7,
+    ...radii.stamp
   },
   reviewMediaSourceText: {
     color: colors.ink,
+    fontFamily: fonts.bodyBold,
     fontSize: 13,
     fontWeight: "800"
   },
@@ -1612,8 +1722,9 @@ export const styles = StyleSheet.create({
   },
   imageViewerCaptionText: {
     backgroundColor: "rgba(16, 20, 17, 0.72)",
-    borderRadius: 8,
+    borderRadius: radii.sm,
     color: colors.ink,
+    fontFamily: fonts.bodyBold,
     fontSize: 13,
     fontWeight: "800",
     lineHeight: 18,
@@ -1633,11 +1744,13 @@ export const styles = StyleSheet.create({
   },
   reviewMediaFallbackTitle: {
     color: colors.ink,
+    fontFamily: fonts.bodyBold,
     fontSize: 17,
     fontWeight: "800"
   },
   reviewMediaFallbackText: {
     color: colors.muted,
+    fontFamily: fonts.body,
     fontSize: 14,
     lineHeight: 20
   },
@@ -1645,76 +1758,125 @@ export const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 2
   },
-  reviewInsightCard: {
+  reviewDecisionDock: {
+    backgroundColor: colors.surfaceContainer,
+    gap: 12,
+    padding: 10,
+    ...radii.archive
+  },
+  reviewDecisionDockReview: {
+    backgroundColor: colors.reviewSoft
+  },
+  reviewDecisionHeader: {
     alignItems: "center",
-    borderRadius: 8,
     flexDirection: "row",
     gap: 10,
-    minHeight: 56,
-    paddingHorizontal: 2,
-    paddingVertical: 8
+    minHeight: 52
   },
-  reviewInsightCardReview: {
-    backgroundColor: colors.reviewSoft,
-    minHeight: 68,
-    paddingHorizontal: 12,
-    paddingVertical: 12
-  },
-  reviewInsightIcon: {
+  reviewDecisionSignal: {
     alignItems: "center",
-    backgroundColor: "transparent",
-    borderRadius: 8,
-    height: 32,
+    backgroundColor: colors.accent,
+    height: 42,
     justifyContent: "center",
-    width: 32
+    width: 42,
+    ...radii.stamp
   },
-  reviewInsightIconReview: {
-    backgroundColor: colors.surfaceContainerHigh
+  reviewDecisionSignalReview: {
+    backgroundColor: colors.review
   },
-  reviewInsightCopy: {
+  reviewDecisionHeaderCopy: {
     flex: 1,
-    gap: 4,
+    gap: 2,
     minWidth: 0
   },
-  reviewInsightHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "space-between"
-  },
-  reviewInsightTitle: {
+  reviewDecisionEyebrow: {
     color: colors.ink,
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "800",
-    lineHeight: 19
-  },
-  reviewInsightAction: {
-    color: colors.accent,
-    fontSize: 12,
-    fontWeight: "800",
-    lineHeight: 16
-  },
-  reviewInsightCountBadge: {
-    alignItems: "center",
-    backgroundColor: colors.surfaceContainerHigh,
-    borderRadius: 8,
-    justifyContent: "center",
-    minHeight: 24,
-    minWidth: 24,
-    paddingHorizontal: 7
-  },
-  reviewInsightCountText: {
-    color: colors.review,
-    fontSize: 12,
-    fontWeight: "800",
-    lineHeight: 16
-  },
-  reviewInsightSummary: {
-    color: colors.muted,
+    fontFamily: fonts.bodyBold,
     fontSize: 13,
-    fontWeight: "600",
-    lineHeight: 19
+    fontWeight: "900",
+    lineHeight: 17
+  },
+  reviewDecisionSummary: {
+    color: colors.muted,
+    fontFamily: fonts.bodySemi,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18
+  },
+  reviewInsightButton: {
+    alignItems: "center",
+    backgroundColor: colors.paper,
+    justifyContent: "center",
+    minHeight: 44,
+    minWidth: 54,
+    paddingHorizontal: 12,
+    ...radii.stamp
+  },
+  reviewInsightButtonText: {
+    color: colors.accent,
+    fontFamily: fonts.bodyBold,
+    fontSize: 13,
+    fontWeight: "900",
+    lineHeight: 17
+  },
+  reviewInlineSaveButton: {
+    alignItems: "center",
+    backgroundColor: colors.accent,
+    justifyContent: "center",
+    minHeight: 44,
+    minWidth: 92,
+    paddingHorizontal: 12,
+    ...radii.stamp
+  },
+  reviewInlineSaveText: {
+    color: colors.onAccent,
+    fontFamily: fonts.bodyBold,
+    fontSize: 13,
+    fontWeight: "900",
+    lineHeight: 17
+  },
+  reviewDecisionTiles: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  reviewDecisionTile: {
+    backgroundColor: colors.surfaceContainerHigh,
+    flex: 1,
+    gap: 4,
+    justifyContent: "center",
+    minHeight: 68,
+    minWidth: 118,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    ...radii.stamp
+  },
+  reviewDecisionTilePrimary: {
+    backgroundColor: colors.accent,
+    flexBasis: "100%",
+    minHeight: 76
+  },
+  reviewDecisionTileLabel: {
+    color: colors.muted,
+    fontFamily: fonts.bodyBold,
+    fontSize: 11,
+    fontWeight: "900",
+    lineHeight: 14,
+    textTransform: "uppercase"
+  },
+  reviewDecisionTileValue: {
+    color: colors.ink,
+    fontFamily: fonts.bodyBold,
+    fontSize: 15,
+    fontWeight: "900",
+    lineHeight: 20
+  },
+  reviewDecisionTileValuePrimary: {
+    color: colors.onAccent,
+    fontFamily: fonts.display,
+    fontSize: 27,
+    fontWeight: "900",
+    lineHeight: 32
   },
   reviewPrimaryBlock: {
     gap: 8,
@@ -1722,9 +1884,10 @@ export const styles = StyleSheet.create({
   },
   reviewTitleInput: {
     color: colors.ink,
-    fontSize: 27,
+    fontFamily: fonts.display,
+    fontSize: 34,
     fontWeight: "800",
-    lineHeight: 33,
+    lineHeight: 39,
     padding: 0,
     paddingVertical: 2
   },
@@ -1737,45 +1900,47 @@ export const styles = StyleSheet.create({
   reviewSourceMeta: {
     color: colors.muted,
     flex: 1,
+    fontFamily: fonts.bodySemi,
     fontSize: 13,
     lineHeight: 18
   },
   reviewEditRail: {
     alignItems: "stretch",
-    borderBottomColor: colors.line,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.line,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    backgroundColor: colors.surfaceContainer,
     flexDirection: "row",
-    minHeight: 88,
+    minHeight: 96,
     overflow: "hidden",
-    paddingVertical: 7
+    padding: 8,
+    ...radii.archive
   },
   reviewEditRailIntent: {
-    borderRadius: 6,
+    backgroundColor: colors.accent,
     gap: 4,
     justifyContent: "center",
-    minHeight: 72,
-    minWidth: 98,
+    minHeight: 78,
+    minWidth: 112,
     paddingHorizontal: 10,
-    width: 108
+    width: 118,
+    ...radii.stamp
   },
   reviewEditRailIntentActive: {
-    backgroundColor: colors.accentSoft
+    backgroundColor: colors.cyan
   },
   reviewEditRailPressed: {
     backgroundColor: colors.surfaceContainerHigh
   },
   reviewEditRailLabel: {
-    color: colors.muted,
+    color: colors.onAccent,
+    fontFamily: fonts.bodyBold,
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 0,
     lineHeight: 14
   },
   reviewEditRailIntentValue: {
-    color: colors.ink,
-    fontSize: 23,
+    color: colors.onAccent,
+    fontFamily: fonts.display,
+    fontSize: 22,
     fontWeight: "800",
     lineHeight: 29
   },
@@ -1792,17 +1957,18 @@ export const styles = StyleSheet.create({
   },
   reviewEditRailDetail: {
     alignItems: "center",
-    borderRadius: 6,
     flexDirection: "row",
     gap: 10,
     minHeight: 36,
     minWidth: 0,
     paddingHorizontal: 8,
-    paddingVertical: 4
+    paddingVertical: 4,
+    ...radii.stamp
   },
   reviewEditRailDetailLabel: {
     color: colors.muted,
     flexShrink: 0,
+    fontFamily: fonts.bodyBold,
     fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0,
@@ -1812,6 +1978,7 @@ export const styles = StyleSheet.create({
   reviewEditRailDetailValue: {
     color: colors.ink,
     flex: 1,
+    fontFamily: fonts.bodyBold,
     fontSize: 15,
     fontWeight: "800",
     lineHeight: 20,
@@ -1825,13 +1992,14 @@ export const styles = StyleSheet.create({
     opacity: 0.72
   },
   reviewEditRailPlaceholder: {
-    color: colors.accent
+    color: colors.cyan
   },
   editRowPlaceholderText: {
     color: colors.accent
   },
   reviewSentenceSubtext: {
     color: colors.muted,
+    fontFamily: fonts.bodySemi,
     fontSize: 13,
     fontWeight: "700",
     lineHeight: 19
@@ -1859,6 +2027,7 @@ export const styles = StyleSheet.create({
   },
   quickSentenceText: {
     color: colors.ink,
+    fontFamily: fonts.bodySemi,
     fontSize: 19,
     lineHeight: 27
   },
@@ -1887,7 +2056,7 @@ export const styles = StyleSheet.create({
   changeLine: {
     alignItems: "center",
     backgroundColor: colors.surfaceContainerHigh,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     flexDirection: "row",
     gap: 8,
     justifyContent: "space-between",
@@ -1896,6 +2065,7 @@ export const styles = StyleSheet.create({
   },
   changeText: {
     color: colors.muted,
+    fontFamily: fonts.bodySemi,
     flex: 1,
     fontSize: 13,
     fontWeight: "700"
@@ -1903,7 +2073,7 @@ export const styles = StyleSheet.create({
   rationaleBlock: {
     alignItems: "center",
     backgroundColor: colors.soft,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     flexDirection: "row",
     gap: 10,
     justifyContent: "space-between",
@@ -1912,13 +2082,14 @@ export const styles = StyleSheet.create({
   },
   becauseText: {
     color: colors.muted,
+    fontFamily: fonts.body,
     flex: 1,
     fontSize: 14,
     lineHeight: 20
   },
   reviewCallout: {
     backgroundColor: colors.reviewSoft,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     paddingHorizontal: 12,
     paddingVertical: 10
   },
@@ -1927,12 +2098,14 @@ export const styles = StyleSheet.create({
   },
   reviewCalloutLabel: {
     color: colors.review,
+    fontFamily: fonts.bodyBold,
     fontSize: 12,
     fontWeight: "800",
     textTransform: "uppercase"
   },
   reviewCalloutText: {
     color: colors.ink,
+    fontFamily: fonts.bodyBold,
     fontSize: 14,
     fontWeight: "700",
     lineHeight: 20
@@ -1943,7 +2116,7 @@ export const styles = StyleSheet.create({
   collectionPicker: {
     backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     borderWidth: StyleSheet.hairlineWidth,
     gap: 12,
     padding: 12
@@ -1959,12 +2132,14 @@ export const styles = StyleSheet.create({
     gap: 3
   },
   sheetTitle: {
+    fontFamily: fonts.display,
     color: colors.ink,
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: "800"
   },
   sheetSubtitle: {
     color: colors.muted,
+    fontFamily: fonts.body,
     fontSize: 13,
     lineHeight: 18
   },
@@ -1982,7 +2157,7 @@ export const styles = StyleSheet.create({
     gap: 15,
     maxHeight: "90%",
     paddingBottom: Platform.OS === "android" ? 36 : 44,
-    paddingTop: 8
+    paddingTop: 10
   },
   reminderSheet: {
     gap: 14,
@@ -1991,7 +2166,7 @@ export const styles = StyleSheet.create({
     paddingTop: 8
   },
   reminderSheetHeaderIcon: {
-    backgroundColor: colors.accentSoft
+    backgroundColor: colors.cyan
   },
   reminderSheetScrollContent: {
     gap: 14,
@@ -2025,18 +2200,21 @@ export const styles = StyleSheet.create({
   },
   reminderFieldLabel: {
     color: colors.muted,
+    fontFamily: fonts.bodyBold,
     fontSize: 13,
     fontWeight: "800",
     lineHeight: 17
   },
   reminderFieldValue: {
     color: colors.ink,
+    fontFamily: fonts.bodyBold,
     fontSize: 16,
     fontWeight: "800",
     lineHeight: 21
   },
   reminderInlineAction: {
     color: colors.accent,
+    fontFamily: fonts.bodyBold,
     fontSize: 13,
     fontWeight: "800",
     marginLeft: "auto"
@@ -2044,7 +2222,7 @@ export const styles = StyleSheet.create({
   reminderNativePickerWrap: {
     backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     borderWidth: StyleSheet.hairlineWidth,
     gap: 10,
     overflow: "hidden",
@@ -2053,13 +2231,14 @@ export const styles = StyleSheet.create({
   reminderSummaryBlock: {
     backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     borderWidth: StyleSheet.hairlineWidth,
     gap: 4,
     padding: 12
   },
   reminderSummaryText: {
     color: colors.ink,
+    fontFamily: fonts.bodyBold,
     fontSize: 16,
     fontWeight: "800",
     lineHeight: 21
@@ -2067,7 +2246,7 @@ export const styles = StyleSheet.create({
   reminderDurationBlock: {
     backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     borderWidth: StyleSheet.hairlineWidth,
     gap: 12,
     padding: 12
@@ -2085,9 +2264,10 @@ export const styles = StyleSheet.create({
   reminderDurationInput: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     borderWidth: StyleSheet.hairlineWidth,
     color: colors.ink,
+    fontFamily: fonts.bodyBold,
     fontSize: 18,
     fontWeight: "800",
     minHeight: 48,
@@ -2106,7 +2286,7 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.surfaceContainer,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     borderWidth: StyleSheet.hairlineWidth,
     flexGrow: 1,
     justifyContent: "center",
@@ -2120,6 +2300,7 @@ export const styles = StyleSheet.create({
   },
   reminderUnitText: {
     color: colors.secondary,
+    fontFamily: fonts.bodyBold,
     fontSize: 13,
     fontWeight: "800",
     lineHeight: 17
@@ -2147,6 +2328,7 @@ export const styles = StyleSheet.create({
   },
   reviewChecklistLabel: {
     color: colors.review,
+    fontFamily: fonts.bodyBold,
     fontSize: 13,
     fontWeight: "800",
     lineHeight: 17
@@ -2154,7 +2336,7 @@ export const styles = StyleSheet.create({
   reviewChecklistCount: {
     alignItems: "center",
     backgroundColor: colors.reviewSoft,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     justifyContent: "center",
     minHeight: 24,
     minWidth: 24,
@@ -2162,6 +2344,7 @@ export const styles = StyleSheet.create({
   },
   reviewChecklistCountText: {
     color: colors.review,
+    fontFamily: fonts.bodyBold,
     fontSize: 12,
     fontWeight: "800",
     lineHeight: 16
@@ -2193,6 +2376,7 @@ export const styles = StyleSheet.create({
   },
   reviewChecklistValue: {
     color: colors.ink,
+    fontFamily: fonts.bodyBold,
     fontSize: 16,
     fontWeight: "800",
     lineHeight: 21
@@ -2235,7 +2419,7 @@ export const styles = StyleSheet.create({
   },
   reviewTaskAction: {
     alignItems: "center",
-    borderRadius: 8,
+    borderRadius: radii.sm,
     justifyContent: "center",
     minHeight: 44,
     minWidth: 38
@@ -2254,10 +2438,10 @@ export const styles = StyleSheet.create({
   },
   rationaleIntentOption: {
     alignItems: "center",
-    backgroundColor: "transparent",
+    backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     justifyContent: "center",
     minHeight: 42,
     paddingHorizontal: 15,
@@ -2269,6 +2453,7 @@ export const styles = StyleSheet.create({
   },
   rationaleIntentOptionText: {
     color: colors.ink,
+    fontFamily: fonts.bodyBold,
     fontSize: 15,
     fontWeight: "800",
     lineHeight: 19,
@@ -2285,7 +2470,7 @@ export const styles = StyleSheet.create({
   rationaleSheetHeaderIcon: {
     alignItems: "center",
     backgroundColor: colors.accentSoft,
-    borderRadius: 16,
+    borderRadius: radii.sm,
     height: 52,
     justifyContent: "center",
     width: 52
@@ -2300,12 +2485,14 @@ export const styles = StyleSheet.create({
   },
   rationaleSheetKicker: {
     color: colors.muted,
+    fontFamily: fonts.bodySemi,
     fontSize: 13,
     fontWeight: "700",
     lineHeight: 18
   },
   rationaleSheetLead: {
     color: colors.ink,
+    fontFamily: fonts.bodySemi,
     fontSize: 16,
     fontWeight: "700",
     lineHeight: 23,
@@ -2320,6 +2507,7 @@ export const styles = StyleSheet.create({
   },
   rationaleSheetSectionHeader: {
     color: colors.muted,
+    fontFamily: fonts.bodyBold,
     fontSize: 13,
     fontWeight: "800",
     lineHeight: 17,
@@ -2337,7 +2525,7 @@ export const styles = StyleSheet.create({
   },
   rationaleSheetSectionIcon: {
     alignItems: "center",
-    borderRadius: 14,
+    borderRadius: radii.sm,
     height: 42,
     justifyContent: "center",
     marginRight: 8,
@@ -2362,12 +2550,14 @@ export const styles = StyleSheet.create({
   },
   rationaleSheetLabel: {
     color: colors.accent,
+    fontFamily: fonts.bodyBold,
     fontSize: 13,
     fontWeight: "800",
     lineHeight: 17
   },
   rationaleSheetText: {
     color: colors.secondary,
+    fontFamily: fonts.bodySemi,
     fontSize: 15,
     fontWeight: "600",
     lineHeight: 21
@@ -2375,7 +2565,7 @@ export const styles = StyleSheet.create({
   currentChoiceRow: {
     alignItems: "center",
     backgroundColor: colors.accentSoft,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     flexDirection: "row",
     gap: 10,
     minHeight: 58,
@@ -2400,7 +2590,7 @@ export const styles = StyleSheet.create({
   suggestionPill: {
     alignItems: "center",
     backgroundColor: colors.surfaceContainerHigh,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     flexDirection: "row",
     gap: 8,
     paddingHorizontal: 10,
@@ -2415,6 +2605,7 @@ export const styles = StyleSheet.create({
   },
   suggestionLabel: {
     color: colors.muted,
+    fontFamily: fonts.bodyBold,
     fontSize: 12,
     fontWeight: "700",
     minWidth: 72,
@@ -2422,6 +2613,7 @@ export const styles = StyleSheet.create({
   },
   suggestionState: {
     color: colors.muted,
+    fontFamily: fonts.bodyBold,
     fontSize: 11,
     fontWeight: "700"
   },
@@ -2433,6 +2625,7 @@ export const styles = StyleSheet.create({
   },
   suggestionText: {
     color: colors.ink,
+    fontFamily: fonts.bodyBold,
     fontSize: 15,
     fontWeight: "700",
     lineHeight: 20
@@ -2443,6 +2636,7 @@ export const styles = StyleSheet.create({
   },
   suggestionAction: {
     color: colors.ink,
+    fontFamily: fonts.bodyBold,
     fontSize: 13,
     fontWeight: "700"
   },
@@ -2455,6 +2649,7 @@ export const styles = StyleSheet.create({
   },
   fieldLabel: {
     color: colors.ink,
+    fontFamily: fonts.bodyBold,
     fontSize: 13,
     fontWeight: "700"
   },
@@ -2465,7 +2660,7 @@ export const styles = StyleSheet.create({
   },
   intentChip: {
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 8
@@ -2476,6 +2671,7 @@ export const styles = StyleSheet.create({
   },
   intentChipText: {
     color: colors.ink,
+    fontFamily: fonts.bodyBold,
     fontSize: 13,
     fontWeight: "700"
   },
@@ -2483,18 +2679,24 @@ export const styles = StyleSheet.create({
     color: colors.onAccent
   },
   noteInput: {
-    backgroundColor: colors.soft,
-    borderRadius: 8,
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.line,
+    borderRadius: radii.sm,
+    borderWidth: StyleSheet.hairlineWidth,
     color: colors.ink,
+    fontFamily: fonts.body,
     fontSize: 15,
     minHeight: 104,
     padding: 14,
     textAlignVertical: "top"
   },
   detailInput: {
-    backgroundColor: colors.soft,
-    borderRadius: 8,
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.line,
+    borderRadius: radii.sm,
+    borderWidth: StyleSheet.hairlineWidth,
     color: colors.ink,
+    fontFamily: fonts.body,
     fontSize: 16,
     lineHeight: 22,
     minHeight: 56,
@@ -2502,10 +2704,10 @@ export const styles = StyleSheet.create({
     textAlignVertical: "top"
   },
   sourceBlock: {
-    borderTopColor: colors.line,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    backgroundColor: colors.surfaceContainer,
     gap: 8,
-    paddingTop: 16
+    padding: 14,
+    ...radii.archive
   },
   mapTargetRow: {
     alignItems: "center",
@@ -2526,14 +2728,14 @@ export const styles = StyleSheet.create({
   },
   mapActionButton: {
     alignSelf: "flex-start",
-    borderRadius: 8,
+    borderRadius: radii.sm,
     justifyContent: "center",
     minHeight: 44,
     paddingHorizontal: 2
   },
   compactActionRow: {
     alignItems: "center",
-    borderRadius: 8,
+    borderRadius: radii.sm,
     flexDirection: "row",
     gap: 10,
     justifyContent: "space-between",
@@ -2543,6 +2745,7 @@ export const styles = StyleSheet.create({
   compactActionText: {
     color: colors.ink,
     flex: 1,
+    fontFamily: fonts.bodyBold,
     fontSize: 15,
     fontWeight: "700"
   },
@@ -2559,6 +2762,7 @@ export const styles = StyleSheet.create({
   },
   noteActionPreview: {
     color: colors.muted,
+    fontFamily: fonts.body,
     fontSize: 13,
     lineHeight: 18
   },
@@ -2600,18 +2804,21 @@ export const styles = StyleSheet.create({
     justifyContent: "space-between"
   },
   inlineAction: {
-    color: colors.ink,
+    color: colors.accent,
+    fontFamily: fonts.bodyBold,
     fontSize: 13,
     fontWeight: "700"
   },
   hintText: {
     color: colors.muted,
+    fontFamily: fonts.bodyBold,
     fontSize: 12,
     fontWeight: "700",
     textTransform: "uppercase"
   },
   noteSaveState: {
     color: colors.muted,
+    fontFamily: fonts.bodyBold,
     fontSize: 12,
     fontWeight: "700"
   },
@@ -2620,11 +2827,13 @@ export const styles = StyleSheet.create({
   },
   sourceText: {
     color: colors.ink,
+    fontFamily: fonts.body,
     fontSize: 15,
     lineHeight: 22
   },
   supportingText: {
     color: colors.muted,
+    fontFamily: fonts.body,
     fontSize: 14,
     lineHeight: 21
   },
@@ -2645,7 +2854,7 @@ export const styles = StyleSheet.create({
   smallButton: {
     alignSelf: "flex-start",
     backgroundColor: colors.accent,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     justifyContent: "center",
     minHeight: 44,
     paddingHorizontal: 12,
@@ -2653,20 +2862,23 @@ export const styles = StyleSheet.create({
   },
   smallButtonText: {
     color: colors.onAccent,
+    fontFamily: fonts.bodyBold,
     fontSize: 13,
     fontWeight: "700"
   },
   errorText: {
     color: colors.danger,
+    fontFamily: fonts.bodySemi,
     fontSize: 14,
     lineHeight: 21
   },
   primaryButton: {
     alignItems: "center",
     backgroundColor: colors.accent,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     justifyContent: "center",
-    minHeight: 50,
+    minHeight: 54,
+    paddingHorizontal: 16,
     paddingVertical: 14
   },
   primaryButtonContent: {
@@ -2676,32 +2888,32 @@ export const styles = StyleSheet.create({
     justifyContent: "center"
   },
   primaryButtonPressed: {
-    backgroundColor: "#9be6c2",
+    backgroundColor: "#e8ff77",
     transform: [{ scale: 0.99 }]
-  },
-  reviewConfirmButton: {
-    minHeight: 56
   },
   disabledButton: {
     opacity: 0.45
   },
   primaryButtonText: {
     color: colors.onAccent,
+    fontFamily: fonts.bodyBold,
     fontSize: 16,
-    fontWeight: "700"
+    fontWeight: "800"
   },
   destructiveButton: {
     backgroundColor: colors.danger
   },
   destructiveButtonText: {
     color: "#2d0b08",
+    fontFamily: fonts.bodyBold,
     fontSize: 16,
     fontWeight: "800"
   },
   secondaryButton: {
     alignItems: "center",
+    backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     borderWidth: 1,
     justifyContent: "center",
     minHeight: 50,
@@ -2709,20 +2921,24 @@ export const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: colors.ink,
+    fontFamily: fonts.bodyBold,
     fontSize: 16,
     fontWeight: "700"
   },
   dangerButtonText: {
     color: colors.danger,
+    fontFamily: fonts.bodyBold,
     fontSize: 16,
     fontWeight: "700"
   },
   toast: {
     alignItems: "center",
-    backgroundColor: colors.surfaceContainerHighest,
-    borderRadius: 12,
+    backgroundColor: colors.surfaceContainer,
+    borderColor: "#474b56",
+    borderRadius: radii.sm,
     bottom: Platform.OS === "android" ? 16 : 22,
-    elevation: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    elevation: 4,
     flexDirection: "row",
     gap: 10,
     justifyContent: "space-between",
@@ -2733,9 +2949,9 @@ export const styles = StyleSheet.create({
     position: "absolute",
     right: 22,
     shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.28,
-    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
     zIndex: 32
   },
   toastAboveBottomNav: {
@@ -2746,7 +2962,7 @@ export const styles = StyleSheet.create({
   },
   toastIconWell: {
     alignItems: "center",
-    borderRadius: 8,
+    borderRadius: radii.sm,
     height: 34,
     justifyContent: "center",
     width: 34
@@ -2766,19 +2982,21 @@ export const styles = StyleSheet.create({
   toastText: {
     color: colors.ink,
     flex: 1,
+    fontFamily: fonts.bodySemi,
     fontSize: 14,
     fontWeight: "700",
     lineHeight: 19
   },
   toastActionButton: {
     alignItems: "center",
-    borderRadius: 8,
+    borderRadius: radii.sm,
     justifyContent: "center",
     minHeight: 36,
     paddingHorizontal: 8
   },
   toastAction: {
     color: colors.accent,
+    fontFamily: fonts.bodyBold,
     fontSize: 14,
     fontWeight: "800"
   },

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Animated, Easing, Pressable, Text, View } from "react-native";
 import { Image } from "expo-image";
-import { AlertTriangle, Check, Clock3, Folder, Info, Plus } from "lucide-react-native";
+import { AlertTriangle, Check, Clock3, Folder, Info, Plus, Settings } from "lucide-react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 
 import type {
@@ -22,6 +22,7 @@ import {
   captureImageUrl,
   captureSourceHost,
   captureStatusLabel,
+  isImageCapture,
   isMapSource,
   sourceFaviconUrl,
   sourceIconForCapture,
@@ -30,68 +31,90 @@ import {
 import { colors } from "./theme";
 import { styles } from "./styles";
 
-const SETTINGS_ICON_PATH = "M19.43 12.98c.04-.32.07-.65.07-.98s-.02-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.37-.31-.6-.22l-2.49 1a7.28 7.28 0 0 0-1.69-.98l-.38-2.65A.5.5 0 0 0 14 2h-4a.5.5 0 0 0-.5.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1a.5.5 0 0 0-.6.22l-2 3.46a.5.5 0 0 0 .12.64l2.11 1.65c-.05.32-.08.65-.08.98s.03.66.08.98l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46c.12.22.37.31.6.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.48 0 .6-.22l2-3.46a.5.5 0 0 0-.12-.64l-2.11-1.65ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z";
+function LucideNavIcon({
+  Icon,
+  color,
+  selected = false,
+  size = 24
+}: NavIconProps & { Icon: LucideIconComponent }) {
+  return <Icon color={color} size={size} strokeWidth={selected ? 2.65 : 2.25} />;
+}
+
+function sourceMonogramFromHost(host: string) {
+  const cleaned = host
+    .replace(/^www\./i, "")
+    .replace(/^m\./i, "")
+    .toLowerCase();
+  const brand = cleaned
+    .split(".")
+    .find((part) => part && !["app", "co", "com", "go", "goo", "gl", "io", "ly", "net", "org"].includes(part));
+  if (!brand) return "";
+  if (brand.length === 1) return brand.toUpperCase();
+  return brand.slice(0, 3).toUpperCase();
+}
+
+function sourceMonogramForCapture(capture: Capture, host: string) {
+  const source = `${host} ${capture.siteName || ""} ${capture.sourceUrl || ""}`.toLowerCase();
+  const captureType = String(capture.captureType || "").toLowerCase();
+  if (isMapSource(capture)) return "MAP";
+  if (source.includes("instagram")) return "IG";
+  if (source.includes("reddit")) return "RED";
+  if (source.includes("facebook") || source.includes("fb.watch")) return "FB";
+  if (source.includes("tiktok")) return "TT";
+  if (source.includes("youtube") || source.includes("youtu.be")) return "YT";
+  if (source.includes("substack")) return "SUB";
+  if (source.includes("medium")) return "MED";
+  if (source.includes("amazon")) return "AMZ";
+  if (source.includes("etsy")) return "ETSY";
+  if (source.includes("threads")) return "THR";
+  if (source.includes("x.com") || source.includes("twitter")) return "X";
+  if (captureType === "note" || (!capture.sourceUrl && !isImageCapture(capture))) return "NOTE";
+  if (isImageCapture(capture)) return "IMG";
+  return sourceMonogramFromHost(host) || "WEB";
+}
 
 export function RecentNavIcon({ color, selected = false, size = 24 }: NavIconProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      {selected ? (
+  if (selected) {
+    return (
+      <Svg height={size} viewBox="0 0 24 24" width={size}>
+        <Circle cx="12" cy="12" fill={color} r="9.5" />
         <Path
-          d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 5h-2v6l5.25 3.15.75-1.23-4-2.37V7Z"
-          fill={color}
-          fillRule="evenodd"
-          clipRule="evenodd"
+          d="M12 7.2v5.05l3.45 2.08"
+          fill="none"
+          stroke={colors.paper}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2.35"
         />
-      ) : (
-        <>
-          <Circle cx="12" cy="12" r="8.5" stroke={color} strokeWidth="2.1" />
-          <Path
-            d="M12 7.2v5.1l3.55 2.13"
-            stroke={color}
-            strokeWidth="2.1"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </>
-      )}
-    </Svg>
-  );
+      </Svg>
+    );
+  }
+  return <LucideNavIcon Icon={Clock3} color={color} selected={selected} size={size} />;
 }
 
 export function CollectionsNavIcon({ color, selected = false, size = 24 }: NavIconProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      {selected ? (
+  if (selected) {
+    return (
+      <Svg height={size} viewBox="0 0 24 24" width={size}>
         <Path
-          d="M3 6.75A2.75 2.75 0 0 1 5.75 4h3.42c.78 0 1.51.35 2 .95l1.05 1.3h6.03A2.75 2.75 0 0 1 21 9v7.25A2.75 2.75 0 0 1 18.25 19H5.75A2.75 2.75 0 0 1 3 16.25v-9.5Z"
+          d="M3.25 7.15A2.65 2.65 0 0 1 5.9 4.5h3.4c.72 0 1.4.32 1.86.88l1.08 1.32h5.86a2.65 2.65 0 0 1 2.65 2.65v6.9a2.65 2.65 0 0 1-2.65 2.65H5.9a2.65 2.65 0 0 1-2.65-2.65v-9.1Z"
           fill={color}
         />
-      ) : (
         <Path
-          d="M3.5 6.9A2.4 2.4 0 0 1 5.9 4.5h3.18c.68 0 1.33.31 1.77.84l1.13 1.36h6.12a2.4 2.4 0 0 1 2.4 2.4v7a2.4 2.4 0 0 1-2.4 2.4H5.9a2.4 2.4 0 0 1-2.4-2.4V6.9Z"
-          stroke={color}
-          strokeWidth="2.1"
-          strokeLinejoin="round"
+          d="M7.2 11.35h9.6"
+          fill="none"
+          stroke={colors.paper}
+          strokeLinecap="round"
+          strokeWidth="2.25"
         />
-      )}
-    </Svg>
-  );
+      </Svg>
+    );
+  }
+  return <LucideNavIcon Icon={Folder} color={color} selected={selected} size={size} />;
 }
 
 export function SettingsNavIcon({ color, selected = false, size = 24 }: NavIconProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d={SETTINGS_ICON_PATH}
-        fill={selected ? color : "none"}
-        stroke={selected ? "none" : color}
-        strokeWidth={selected ? 0 : 1.35}
-        strokeLinejoin="round"
-        fillRule="evenodd"
-        clipRule="evenodd"
-      />
-    </Svg>
-  );
+  return <LucideNavIcon Icon={Settings} color={color} selected={selected} size={size} />;
 }
 
 export function IconButton({
@@ -226,6 +249,8 @@ export function SourceMark({
   const itemStatus = displayStatus(capture);
   const markStyle = size === "detail" ? styles.sourceMarkDetail : styles.sourceMark;
   const iconSize = size === "detail" ? 16 : 20;
+  const iconColor = sourceIconColor(itemStatus, size);
+  const sourceMonogram = sourceMonogramForCapture(capture, host);
   if (imageUri) {
     return (
       <View
@@ -267,18 +292,30 @@ export function SourceMark({
           source={{ uri: faviconUri }}
           style={size === "detail" ? styles.sourceFaviconDetail : styles.sourceFavicon}
         />
+      ) : size === "row" ? (
+        <Text
+          adjustsFontSizeToFit
+          minimumFontScale={0.72}
+          numberOfLines={1}
+          style={[
+            styles.sourceMarkText,
+            sourceMonogram.length > 3 && styles.sourceMarkTextLong,
+            { color: iconColor }
+          ]}
+        >
+          {sourceMonogram}
+        </Text>
       ) : (
-        <Icon color={sourceIconColor(itemStatus)} size={iconSize} strokeWidth={2.3} />
+        <Icon color={iconColor} size={iconSize} strokeWidth={2.3} />
       )}
     </View>
   );
 }
 
-export function sourceIconColor(status: CaptureStatus) {
-  if (status === "processing") return colors.processing;
-  if (status === "needs_review") return colors.review;
-  if (status === "failed") return colors.danger;
-  return colors.accent;
+export function sourceIconColor(status: CaptureStatus, size: "row" | "detail" = "row") {
+  if (status === "processing" || status === "failed") return colors.paper;
+  if (size === "detail" && status === "ready") return colors.accent;
+  return colors.onAccent;
 }
 
 export function StatusGlyph({ capture }: { capture: Capture }) {
@@ -518,7 +555,7 @@ export function BottomAppBar({
               ]}
               testID={testID}
             >
-              <View style={[styles.bottomNavIconWrap, selected && styles.bottomNavIconWrapSelected]}>
+              <View style={styles.bottomNavIconWrap}>
                 <Icon
                   color={selected ? colors.accent : colors.muted}
                   selected={selected}
@@ -535,7 +572,7 @@ export function BottomAppBar({
           style={({ pressed }) => [styles.bottomNavFab, pressed && styles.bottomNavFabPressed]}
           testID={collectionAction ? "pc.nav.collection-create" : "pc.nav.capture"}
         >
-          <Plus color={colors.onAccent} size={24} strokeWidth={2.55} />
+          <Plus color={colors.onCreate} size={24} strokeWidth={2.55} />
         </Pressable>
       </View>
     </View>

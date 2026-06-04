@@ -1161,8 +1161,10 @@ export default function App() {
     homeColdSkeletonVisible,
     homeFeedRevealPending,
     homeInitialLoading,
+    homeReviewFilterActive,
     homeRows,
     quickLookCount,
+    setHomeReviewFilterActive,
     visibleHomeCapturesForReveal,
     visibleHomeRows
   } = useCaptureFeed({
@@ -2573,14 +2575,14 @@ export default function App() {
           closeCaptureComposer,
           loadCaptures: () => void loadCaptures(),
           loadMoreActiveCaptures: () => loadMoreCaptures("active"),
-          openCapture: openRecentCapture,
           openCaptureComposer,
           openSearch,
           renderCaptureSkeletonRows,
           renderHomeRow,
           renderListLoadingFooter,
           saveCaptureSource: () => void saveCaptureSource(),
-          setSourceDraft
+          setSourceDraft,
+          toggleHomeReviewFilter: () => setHomeReviewFilterActive((current) => !current)
         }}
         data={{
           appSheets: includeChrome ? renderAppSheets() : null,
@@ -2602,6 +2604,7 @@ export default function App() {
           activeCapturesLoadedOnce,
           homeColdSkeletonVisible,
           homeInitialLoading,
+          homeReviewFilterActive,
           keyboardHeight,
           pickingCaptureImage,
           quickLookCount,

@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { Animated, Pressable, Text, View } from "react-native";
-import { BookOpen, Folder, StickyNote } from "lucide-react-native";
+import { BookOpen, StickyNote } from "lucide-react-native";
 
 import { displayStatus } from "../captureLogic";
 import type { Capture, CaptureImageLoadState, Collection } from "../types";
@@ -15,7 +15,7 @@ import {
   formatDateTime,
   shouldGhostSourceMark
 } from "../capturePresentation";
-import { colors } from "./theme";
+import { identityMarks } from "./theme";
 import { styles } from "./styles";
 import { CollectionMeaningToken, MeaningToken, SkeletonRevealFrame, SourceMark, StatusGlyph } from "./components";
 
@@ -34,6 +34,7 @@ type CaptureRowProps = {
   onImageLoadState: (key: string, state: CaptureImageLoadState) => void;
   onPress: () => void;
   renderInlineSkeleton: () => ReactElement | null;
+  rowAction?: ReactElement | null;
   showCollectionToken?: boolean;
   SkeletonBlock: SkeletonBlockRenderer;
   testID?: string;
@@ -52,6 +53,7 @@ export function CaptureRow({
   onImageLoadState,
   onPress,
   renderInlineSkeleton,
+  rowAction,
   showCollectionToken = true,
   SkeletonBlock,
   testID
@@ -98,7 +100,10 @@ export function CaptureRow({
           <Text numberOfLines={2} style={styles.captureTitle}>
             {captureDisplayTitle(item)}
           </Text>
-          <StatusGlyph capture={item} />
+          <View style={styles.rowTitleActions}>
+            <StatusGlyph capture={item} />
+            {rowAction}
+          </View>
         </View>
         <Text numberOfLines={1} style={styles.meta}>
           {captureSourceLabel(item)} · {formatDateTime(item.createdAt)}
@@ -155,17 +160,12 @@ export function CaptureRowInlineSkeleton({
       </View>
     </>
   );
-  if (withRemoveAction) {
-    return (
-      <View style={styles.collectionCaptureSkeletonInline}>
-        <View style={styles.collectionCaptureMain}>
-          <View style={styles.captureRowSkeletonInline}>{body}</View>
-        </View>
-        <SkeletonBlock style={styles.collectionLoadingAction} />
-      </View>
-    );
-  }
-  return <View style={styles.captureRowSkeletonInline}>{body}</View>;
+  return (
+    <View style={styles.captureRowSkeletonInline}>
+      {body}
+      {withRemoveAction ? <SkeletonBlock style={styles.collectionLoadingActionInline} /> : null}
+    </View>
+  );
 }
 
 function CaptureSkeletonRow({
@@ -177,18 +177,30 @@ function CaptureSkeletonRow({
   keyValue?: number;
   withRemoveAction?: boolean;
 }) {
-  return (
-    <View key={keyValue} style={withRemoveAction ? styles.collectionCaptureSkeletonRow : styles.captureSkeletonRow}>
-      <View style={styles.collectionCaptureSkeletonMain}>
-        <SkeletonBlock style={styles.loadingThumbnailMark} />
-        <View style={styles.collectionCaptureSkeletonCopy}>
-          <SkeletonBlock style={styles.collectionLoadingTitle} />
-          <SkeletonBlock style={styles.collectionLoadingLine} />
-          <SkeletonBlock style={styles.collectionLoadingLineShort} />
-          <SkeletonBlock style={styles.collectionLoadingToken} />
+  const body = (
+    <>
+      <SkeletonBlock style={styles.loadingThumbnailMark} />
+      <View style={styles.collectionCaptureSkeletonCopy}>
+        <SkeletonBlock style={styles.collectionLoadingTitle} />
+        <SkeletonBlock style={styles.collectionLoadingLine} />
+        <SkeletonBlock style={styles.collectionLoadingLineShort} />
+        <SkeletonBlock style={styles.collectionLoadingToken} />
+      </View>
+    </>
+  );
+  if (withRemoveAction) {
+    return (
+      <View key={keyValue} style={styles.collectionCaptureSkeletonRow}>
+        <View style={styles.captureRowSkeletonInline}>
+          {body}
+          <SkeletonBlock style={styles.collectionLoadingActionInline} />
         </View>
       </View>
-      {withRemoveAction ? <SkeletonBlock style={styles.collectionLoadingAction} /> : null}
+    );
+  }
+  return (
+    <View key={keyValue} style={styles.captureSkeletonRow}>
+      {body}
     </View>
   );
 }
@@ -219,6 +231,24 @@ export function CaptureSkeletonRows({
 function collectionSkeletonDescriptionLines(collection: Collection | undefined, index: number) {
   if (collection) return String(collection.description || "").length > 58 ? 2 : 1;
   return index === 0 || index === 2 || index === 5 ? 2 : 1;
+}
+
+function collectionInitials(title: string) {
+  const words = title.match(/[A-Za-z0-9]+/g) || [];
+  if (!words.length) return "PC";
+  const first = words[0] || "";
+  if (words.length === 1) return first.slice(0, 3).toUpperCase();
+  if (first.length <= 3 && first === first.toUpperCase()) return first;
+  return words.slice(0, 2).map((word) => word[0]).join("").toUpperCase();
+}
+
+function collectionIdentityMark(item: Collection) {
+  const seed = `${item.id}:${item.title}`;
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
+  }
+  return identityMarks[hash % identityMarks.length] || identityMarks[0];
 }
 
 export function CollectionSkeletonRows({
@@ -271,6 +301,7 @@ export function CollectionRow({
   item: Collection;
   onPress: () => void;
 }) {
+  const mark = collectionIdentityMark(item);
   return (
     <Animated.View style={{ opacity: collectionListFade }}>
       <Pressable
@@ -279,8 +310,14 @@ export function CollectionRow({
         testID={`pc.collection.row.${item.id}`}
       >
         <View style={styles.collectionRowTop}>
-          <View style={styles.collectionIconMark}>
-            <Folder color={colors.accent} size={18} strokeWidth={2.2} />
+          <View
+            accessibilityLabel={`Collection mark: ${collectionInitials(item.title)}`}
+            accessible
+            style={[styles.collectionInitialMark, { backgroundColor: mark.bg }]}
+          >
+            <Text style={[styles.collectionInitialText, { color: mark.fg }]}>
+              {collectionInitials(item.title)}
+            </Text>
           </View>
           <View style={styles.collectionRowCopy}>
             <Text numberOfLines={1} style={styles.captureTitle}>
