@@ -5,7 +5,7 @@ import {
 import { finiteNumber, jsonObject, stringValue } from "../common.ts";
 import type { AnalysisOutput } from "../types.ts";
 import {
-  reviewRationaleFromAnalysis,
+  reviewRationaleValidation,
   sanitizeAnalysisRationales,
 } from "./rationales.ts";
 import { normalizeVisitTargetFields } from "./visit-targets.ts";
@@ -108,6 +108,9 @@ export function analysisRequiresReview(
   analysis: Record<string, unknown>,
   reviewConfirmedAt?: unknown,
 ) {
+  if (!reviewConfirmedAt && !reviewRationaleValidation(analysis).valid) {
+    return true;
+  }
   return reviewTargetsForAnalysis(analysis, reviewConfirmedAt).length > 0;
 }
 
@@ -314,19 +317,19 @@ export function normalizedReviewAnalysis(
       sanitized.suggested_reminders,
     ),
   };
-  const needsReview = analysisRequiresReview(
-    normalizedAnalysis,
-    reviewConfirmedAt,
-  );
-  const reviewTargets = reviewTargetsForAnalysis(
-    normalizedAnalysis,
-    reviewConfirmedAt,
-  );
+  const reviewRationale = reviewRationaleValidation(normalizedAnalysis);
+  const reviewTargets = normalizedReviewTargets([
+    ...reviewTargetsForAnalysis(
+      normalizedAnalysis,
+      reviewConfirmedAt,
+    ),
+    ...(!reviewConfirmedAt && !reviewRationale.valid ? ["analysis"] : []),
+  ]);
   return {
     ...normalizedAnalysis,
     ...normalizeVisitTargetFields(normalizedAnalysis),
-    review_rationale: reviewRationaleFromAnalysis(normalizedAnalysis),
+    review_rationale: reviewRationale.rationale,
     review_targets: reviewTargets,
-    needs_review: needsReview,
+    needs_review: reviewTargets.length > 0,
   };
 }

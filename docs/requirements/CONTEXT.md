@@ -75,7 +75,7 @@ The focused single-Capture surface opened from a Capture Completion Notification
 _Avoid_: Analysis report, debug view, model score screen
 
 **Review Insight**:
-A concise, user-facing explanation in Capture Review for why Capture Analysis chose the Save Intent, Collection outcome, and Reminder idea. Its visible cue should point to the exact review decision and should reference active Intent Categories, existing Collection names, No intent, No collection, or Reminder idea rather than loose analyzer labels. It is evidence/rationale, not hidden model reasoning.
+A concise, analyzer-authored user-facing explanation in Capture Review for why Capture Analysis chose the Save Intent, Collection outcome, and Reminder idea. Its visible cue should point to the exact review decision and should reference active Intent Categories, existing Collection names, No intent, No collection, or Reminder idea rather than loose analyzer labels. Backend validation may reject unsafe, debug-like, source-only, generic, or malformed Review Insight copy, but the fallback should be neutral review copy rather than synthesized rationale from titles or summaries. It is evidence/rationale, not hidden model reasoning.
 _Avoid_: Chain-of-thought, audit report, model trace, confidence percentage
 
 **Retrieval Lens**:

@@ -411,6 +411,15 @@ Deno.test("reminder schema and prompt only allow time interval suggestions", () 
       schema.properties.location_context.required.includes("source_destination"),
     "analysis schema should include structured location context",
   );
+  assert(
+    schema.properties.review_rationale.properties.summary.description.includes(
+      "analyzer-authored",
+    ) &&
+      schema.properties.review_rationale.properties.intent.description.includes(
+        "concrete capture evidence",
+      ),
+    "review rationale schema fields should describe analyzer-owned copy bounds",
+  );
 
   const prompt = urlEvidence.buildPrompt(
     captureFixture({

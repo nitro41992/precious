@@ -227,8 +227,184 @@ Deno.test("review rationale drops source-format explanations when source fallbac
   );
   assertEqual(
     normalized.review_rationale.collections,
-    "No Collection was selected because none of your existing Collections matched this capture strongly enough.",
-    "sanitized collection rationale should use product fallback language",
+    "Review the Collection decision.",
+    "invalid analyzer rationale should use neutral product copy",
+  );
+  assertIncludes(
+    normalized.review_targets,
+    "analysis",
+    "invalid analyzer rationale should add an analysis review target",
+  );
+  assertEqual(
+    normalized.needs_review,
+    true,
+    "invalid analyzer rationale should keep the capture reviewable",
+  );
+});
+
+Deno.test("valid analyzer review rationale is preserved exactly", () => {
+  const reviewRationale = {
+    focus: "Save Intent looks ready",
+    summary: "Looks like a cafe drink to try, so I saved it as Visit.",
+    intent:
+      "The capture names a caffeparadiso.nyc coffee drink, which supports Visit.",
+    collections:
+      "Food fits because the capture is about a cafe menu item.",
+    reminder:
+      "No Reminder idea because there is no future date, deadline, or booking window.",
+  };
+  const normalized = urlEvidence.normalizedReviewAnalysis({
+    display_title: "caffeparadiso.nyc coffee drink",
+    summary:
+      "A caffeparadiso.nyc salted brown butter and oat latte to try.",
+    default_intent: {
+      category: "visit",
+      confidence: 0.86,
+      rationale: "The capture names a cafe drink the user may want to try.",
+    },
+    review_rationale: reviewRationale,
+    review_targets: [],
+    confidence_label: "Looks right",
+    needs_review: false,
+  });
+
+  assertEqual(
+    JSON.stringify(normalized.review_rationale),
+    JSON.stringify(reviewRationale),
+    "valid analyzer-authored Review Insight should be stored without rewriting",
+  );
+  assertEqual(
+    normalized.needs_review,
+    false,
+    "valid analyzer rationale should not add review by itself",
+  );
+});
+
+Deno.test("invalid review rationale does not synthesize clipped fallback copy", () => {
+  const normalized = urlEvidence.normalizedReviewAnalysis({
+    display_title: "caffeparadiso.nyc latte",
+    summary:
+      "saved an Instagram reel highlighting a viral caffeparadiso.nyc coffee drink to try",
+    default_intent: {
+      category: "visit",
+      confidence: 0.86,
+      rationale: "The capture names a cafe drink the user may want to try.",
+    },
+    review_rationale: {
+      focus: "Confirm Save Intent: Visit",
+      summary:
+        "saved an Instagram reel highlighting a viral caffeparadiso.nyc coffee drink to t",
+      intent:
+        "saved an Instagram reel highlighting a viral caffeparadiso.nyc coffee drink to t",
+      collections: "Food fits because the capture is about a cafe menu item.",
+      reminder:
+        "No Reminder idea because there is no future date, deadline, or booking window.",
+    },
+    review_targets: [],
+    confidence_label: "Looks right",
+    needs_review: false,
+  });
+  const rationaleText = JSON.stringify(normalized.review_rationale);
+  assert(
+    !rationaleText.includes("drink to t"),
+    "neutral fallback should not include clipped analyzer or summary fragments",
+  );
+  assert(
+    !rationaleText.includes("Looks like"),
+    "neutral fallback should not synthesize polished explanation copy",
+  );
+  assertEqual(
+    normalized.review_rationale.summary,
+    "Review the suggested details.",
+    "malformed rationale should use neutral summary copy",
+  );
+  assertIncludes(
+    normalized.review_targets,
+    "analysis",
+    "malformed rationale should add an analysis review target",
+  );
+  assertEqual(
+    normalized.default_intent.category,
+    "visit",
+    "invalid rationale should not change Save Intent data",
+  );
+});
+
+Deno.test("debug-like review rationale is neutral without changing extracted data", () => {
+  const normalized = urlEvidence.normalizedReviewAnalysis({
+    display_title: "Weekend cafe popup",
+    summary: "A weekend cafe popup with a listed date and address.",
+    default_intent: {
+      category: "visit",
+      confidence: 0.9,
+      rationale: "The capture names a cafe popup the user may visit.",
+    },
+    collection_decisions: [
+      {
+        type: "existing",
+        collection_id: "food-id",
+        title: "Food",
+        description: "Places to eat and drink.",
+        rationale: "Food fits because the capture is about a cafe.",
+        confidence: 0.88,
+      },
+    ],
+    suggested_reminders: [
+      {
+        trigger_type: "time",
+        trigger_value: "2026-06-06",
+        start_date: "2026-06-06",
+        end_date: "2026-06-06",
+        rationale: "The capture lists June 6.",
+        confidence: 0.82,
+      },
+    ],
+    visit_target_name: "Weekend Cafe Popup",
+    visit_target_query: "Weekend Cafe Popup",
+    visit_target_confidence: "high",
+    visit_target_evidence: ["The capture names a popup."],
+    verified_place: false,
+    review_rationale: {
+      focus: "Save Intent and Reminder idea look ready",
+      summary: "The model confidence score says this extraction is ready.",
+      intent: "The capture names a cafe popup, which supports Visit.",
+      collections: "Food fits because the capture is about a cafe.",
+      reminder: "The June 6 date supports a Reminder idea.",
+    },
+    review_targets: [],
+    confidence_label: "Looks right",
+    needs_review: false,
+  });
+
+  assertEqual(
+    normalized.review_rationale.summary,
+    "Review the suggested details.",
+    "debug-like rationale should use neutral summary copy",
+  );
+  assertIncludes(
+    normalized.review_targets,
+    "analysis",
+    "debug-like rationale should add an analysis review target",
+  );
+  assertEqual(
+    normalized.default_intent.category,
+    "visit",
+    "invalid rationale should not change Save Intent",
+  );
+  assertEqual(
+    normalized.collection_decisions[0].collection_id,
+    "food-id",
+    "invalid rationale should not change Collection decisions",
+  );
+  assertEqual(
+    normalized.suggested_reminders.length,
+    1,
+    "invalid rationale should not drop valid Reminder ideas",
+  );
+  assertEqual(
+    normalized.visit_target_name,
+    "Weekend Cafe Popup",
+    "invalid rationale should not change Visit Target data",
   );
 });
 
@@ -357,12 +533,23 @@ Deno.test("analysis prompt requires evidence-rich review rationale", () => {
     "Save Intent rationale should be analyzer-owned and evidence-specific",
   );
   assert(
+    prompt.includes("Review Insight copy is analyzer-authored"),
+    "prompt should make the analyzer own Review Insight copy",
+  );
+  assert(
     prompt.includes("review_rationale.intent explains the Save Intent"),
     "review rationale prompt should govern intent explanation",
   );
   assert(
     prompt.includes("Never use generic wording that only says the action is supported"),
     "prompt should reject generic intent rationale",
+  );
+  assert(
+    prompt.includes("Bad review_rationale examples") &&
+      prompt.includes("source-format-only") &&
+      prompt.includes("coffee drink to t") &&
+      prompt.includes("debug copy"),
+    "prompt should include concrete bad Review Insight examples",
   );
   assert(
     prompt.includes("never return only 'No collection'"),
@@ -430,6 +617,14 @@ Deno.test("review targets drive review state and allow reviewed blank intent", (
       category: null,
       confidence: 0,
       rationale: "No clear Save Intent was found.",
+    },
+    review_rationale: {
+      focus: "No Save Intent",
+      summary: "No clear action was found, so this can stay without intent.",
+      intent:
+        "No intent applies because the saved note is not clearly actionable.",
+      collections: "No Collection matched this saved note strongly enough.",
+      reminder: "No Reminder idea because there is no future date or deadline.",
     },
     review_targets: [],
     confidence_label: "Looks right",

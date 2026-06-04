@@ -1,10 +1,36 @@
-import { activeSaveIntents } from "../config.ts";
-import { compactText, jsonObject, stringValue } from "../common.ts";
-import {
-  activeIntentCategory,
-  confidenceRequiresReview,
-  reviewTargetsForAnalysis,
-} from "./review-normalization.ts";
+import { jsonObject, stringValue } from "../common.ts";
+
+export const neutralReviewRationale = {
+  focus: "Review insight",
+  summary: "Review the suggested details.",
+  intent: "Review the Save Intent suggestion.",
+  collections: "Review the Collection decision.",
+  reminder: "Review the Reminder idea.",
+} as const;
+
+const reviewRationaleKeys = [
+  "focus",
+  "summary",
+  "intent",
+  "collections",
+  "reminder",
+] as const;
+const reviewRationaleMaxLength: Record<
+  (typeof reviewRationaleKeys)[number],
+  number
+> = {
+  focus: 100,
+  summary: 180,
+  intent: 260,
+  collections: 260,
+  reminder: 260,
+};
+const debugLikeRationalePattern =
+  /\b(model|prompt|schema|json|llm|gpt|openai|system message|chain[- ]of[- ]thought|hidden reasoning|confidence (?:score|percentage)|score)\b/i;
+const genericRationalePattern =
+  /\b(?:action|save intent|intent|collection fit|collection decision|reminder idea|suggestion)\s+(?:is\s+)?(?:supported|fits|matches|based on)\b/i;
+const malformedRationalePattern =
+  /(?:\.\.\.|[,;:\u2013\u2014-]\s*$|\b[a-z]\s*$)/;
 
 export function firstRationale(records: unknown) {
   if (!Array.isArray(records)) return null;
@@ -14,17 +40,6 @@ export function firstRationale(records: unknown) {
     if (rationale) return rationale;
   }
   return null;
-}
-
-export function intentLabelFromKey(value: unknown) {
-  const key = stringValue(value);
-  if (!key) return null;
-  const configured = activeSaveIntents.find((intent) => intent.key === key);
-  if (configured?.label) return configured.label;
-  return key.replace(/_/g, " ").replace(
-    /\b\w/g,
-    (letter) => letter.toUpperCase(),
-  );
 }
 
 export function sourceFallbackAllowedFromAnalysis(
@@ -101,90 +116,52 @@ export function sanitizeAnalysisRationales(analysis: Record<string, unknown>) {
   };
 }
 
-export function reviewRationaleFromAnalysis(analysis: Record<string, unknown>) {
-  const reviewRationale = jsonObject(analysis.review_rationale);
-  const defaultIntent = jsonObject(analysis.default_intent);
-  const hasActiveIntent = Boolean(activeIntentCategory(defaultIntent.category));
-  const intentLabel = intentLabelFromKey(defaultIntent.category);
-  const collectionRationale = firstRationale(analysis.linked_collections) ||
-    firstRationale(analysis.collection_decisions) ||
-    firstRationale(analysis.suggested_collections);
-  const reminderRationale = firstRationale(analysis.suggested_reminders);
-  const subject = reviewSubjectFromAnalysis(analysis);
-  const linkedCollectionTitle =
-    firstCollectionTitle(analysis.linked_collections) ||
-    firstCollectionTitle(analysis.collection_decisions) ||
-    firstCollectionTitle(analysis.suggested_collections);
-  const intent = rationaleForAnalysis(analysis, reviewRationale.intent) ||
-    rationaleForAnalysis(analysis, defaultIntent.rationale) ||
-    (hasActiveIntent
-      ? `Looks like ${subject}, so I saved it as ${intentLabel}.`
-      : "No clear Save Intent was found. Choose one if it fits.");
-  const collections =
-    rationaleForAnalysis(analysis, reviewRationale.collections) ||
-    rationaleForAnalysis(analysis, collectionRationale) ||
-    (linkedCollectionTitle
-      ? `It matched ${linkedCollectionTitle} from your existing Collections.`
-      : "No Collection was selected because none of your existing Collections matched this capture strongly enough.");
-  const reminder = rationaleForAnalysis(analysis, reviewRationale.reminder) ||
-    rationaleForAnalysis(analysis, reminderRationale) ||
-    "No Reminder idea was suggested because the capture did not include a clear future date, time, deadline, or time window.";
-  const summary = rationaleForAnalysis(analysis, reviewRationale.summary) ||
-    summaryReviewRationale(subject, intentLabel, linkedCollectionTitle);
-  const reviewTargets = reviewTargetsForAnalysis(analysis);
-  const focus = rationaleForAnalysis(analysis, reviewRationale.focus) ||
-    (reviewTargets.includes("collections")
-      ? `Check Collections${
-        linkedCollectionTitle ? `: ${linkedCollectionTitle}` : ""
-      }`
-      : reviewTargets.includes("reminder")
-      ? "Confirm Reminder idea"
-      : !hasActiveIntent &&
-          (analysis.needs_review ||
-            confidenceRequiresReview(analysis.confidence_label) ||
-            reviewTargets.includes("intent"))
-      ? "Choose a Save Intent"
-      : confidenceRequiresReview(analysis.confidence_label)
-      ? `Confirm Save Intent: ${intentLabel || "suggested intent"}`
-      : analysis.needs_review
-      ? "Review the suggested fields"
-      : "Review insight available");
-  return { focus, summary, intent, collections, reminder };
-}
-
-function reviewSubjectFromAnalysis(analysis: Record<string, unknown>) {
-  const text = compactText([
-    stringValue(analysis.summary),
-    stringValue(analysis.display_title),
-  ], 80);
-  return text
-    ? text.charAt(0).toLowerCase() + text.slice(1)
-    : "this saved item";
-}
-
-function firstCollectionTitle(records: unknown) {
-  if (!Array.isArray(records)) return "";
-  for (const item of records) {
-    const record = jsonObject(item);
-    const title = stringValue(record.title);
-    if (title) return title;
+export function invalidReviewRationaleReason(
+  analysis: Record<string, unknown>,
+  key: (typeof reviewRationaleKeys)[number],
+  value: unknown,
+) {
+  const text = stringValue(value);
+  if (!text) return "missing";
+  if (text.length > reviewRationaleMaxLength[key]) return "too_long";
+  if (debugLikeRationalePattern.test(text)) return "debug_like";
+  if (genericRationalePattern.test(text)) return "generic";
+  if (sourceOnlyRationale(text)) return "source_only";
+  if (malformedRationalePattern.test(text)) return "malformed";
+  if (
+    !sourceFallbackAllowedFromAnalysis(analysis) &&
+    !rationaleForAnalysis(analysis, text)
+  ) {
+    return "source_fallback_disallowed";
   }
   return "";
 }
 
-function summaryReviewRationale(
-  subject: string,
-  intentLabel: string | null,
-  collectionTitle: string,
+export function reviewRationaleValidation(
+  analysis: Record<string, unknown>,
 ) {
-  if (intentLabel && collectionTitle) {
-    return `Looks like ${subject}, so I saved it as ${intentLabel} and matched ${collectionTitle}.`;
+  const reviewRationale = jsonObject(analysis.review_rationale);
+  const next: Record<(typeof reviewRationaleKeys)[number], string> = {
+    ...neutralReviewRationale,
+  };
+  for (const key of reviewRationaleKeys) {
+    const reason = invalidReviewRationaleReason(
+      analysis,
+      key,
+      reviewRationale[key],
+    );
+    if (reason) {
+      return {
+        valid: false,
+        reason,
+        rationale: { ...neutralReviewRationale },
+      };
+    }
+    next[key] = stringValue(reviewRationale[key]) || "";
   }
-  if (intentLabel) {
-    return `Looks like ${subject}, so I saved it as ${intentLabel}.`;
-  }
-  if (collectionTitle) {
-    return `Looks like ${subject}, so I matched ${collectionTitle}.`;
-  }
-  return "I could not find a strong existing Collection or time-based reminder from the saved content.";
+  return { valid: true, reason: "", rationale: next };
+}
+
+export function reviewRationaleFromAnalysis(analysis: Record<string, unknown>) {
+  return reviewRationaleValidation(analysis).rationale;
 }
