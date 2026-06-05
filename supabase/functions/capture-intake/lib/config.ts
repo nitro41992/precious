@@ -8,7 +8,7 @@ export const CAPTURE_LIST_SELECT =
   `capture_assets(${CAPTURE_ASSET_SELECT})`;
 export const CAPTURE_DETAIL_SELECT = "*,capture_assets(*)";
 export const COLLECTION_LIST_SELECT =
-  "id,user_id,title,description,status,created_by,archived_at,deleted_at,delete_purge_after,created_at,updated_at";
+  "id,user_id,title,description,status,created_by,collection_preview_captures,collection_preview_updated_at,archived_at,deleted_at,delete_purge_after,created_at,updated_at";
 export const STARTER_COLLECTION_CREATED_BY = "starter";
 export const STARTER_COLLECTIONS = [
   {

@@ -7,7 +7,6 @@ import {
   AppState,
   Dimensions,
   Easing,
-  FlatList,
   InteractionManager,
   Keyboard,
   Linking,
@@ -16,6 +15,8 @@ import {
   View,
   useWindowDimensions
 } from "react-native";
+import { Image } from "expo-image";
+import type { FlashListRef } from "@shopify/flash-list";
 
 import { AppSheets } from "./sheets/AppSheets";
 import { CollectionComposerSheet } from "./sheets/CollectionComposerSheet";
@@ -59,6 +60,7 @@ import {
 import {
   authCallbackPayload,
   captureDraftKey,
+  captureImageUrl,
   cleanedReviewDraft,
   friendlyError,
   isCaptureImageCancel,
@@ -125,6 +127,14 @@ const COLLECTION_LIST_PERF_PROPS = {
   updateCellsBatchingPeriod: 40,
   windowSize: 7
 };
+
+function prefetchImageUrls(urls: string[]) {
+  const unique = Array.from(new Set(urls.map((url) => String(url || "").trim()).filter(Boolean)));
+  if (!unique.length) return;
+  void Image.prefetch(unique.slice(0, 16), "memory-disk").catch(() => {
+    // Prefetch is opportunistic; normal image rendering still handles failures.
+  });
+}
 
 function pendingDecisionLinkedCollections(capture: Capture): LinkedCollection[] {
   const linkedIds = new Set((capture.linkedCollections || []).map((collection) => collection.id));
@@ -254,7 +264,7 @@ export default function App() {
   const sourceInputRef = useRef<TextInput>(null);
   const noteInputRef = useRef<TextInput>(null);
   const collectionTitleInputRef = useRef<TextInput>(null);
-  const collectionDetailListRef = useRef<FlatList<Capture>>(null);
+  const collectionDetailListRef = useRef<FlashListRef<Capture>>(null);
   const lastKeyboardHeightRef = useRef(0);
   const captureComposerClosingRef = useRef(false);
   const captureImagePickerActiveRef = useRef(false);
@@ -1186,6 +1196,19 @@ export default function App() {
   const selectedCollection = selectedCollectionId
     ? collections.find((collection) => collection.id === selectedCollectionId) ?? null
     : null;
+
+  useEffect(() => {
+    prefetchImageUrls(
+      collections.flatMap((collection) =>
+        (collection.previewCaptures || []).map((capture) => capture.imageAssetUrl || capture.thumbnailUrl || "")
+      )
+    );
+  }, [collections]);
+
+  useEffect(() => {
+    if (!selectedCollectionId || collectionCapturesForId !== selectedCollectionId) return;
+    prefetchImageUrls(collectionCaptures.slice(0, 12).map(captureImageUrl));
+  }, [collectionCaptures, collectionCapturesForId, selectedCollectionId]);
 
   const { visitTargetMapCandidates } = useCaptureReview({ selected });
 

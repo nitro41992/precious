@@ -2,10 +2,6 @@ import type { ReactElement } from "react";
 import { Animated, Pressable, Text, View } from "react-native";
 
 import { matchReasonForCapture } from "../capturePresentation";
-import {
-  captureImageLoadKey,
-  captureRowRevealKey
-} from "../capturePresentation";
 import type {
   Capture,
   CaptureImageLoadState,
@@ -17,14 +13,13 @@ import type {
 } from "../types";
 import {
   BottomAppBar,
-  SkeletonRevealFrame,
   ToastHost
 } from "./components";
 import {
+  CollectionCard,
   CaptureRow,
   CaptureRowInlineSkeleton,
   CaptureSkeletonRows,
-  CollectionRow,
   CollectionSkeletonRows
 } from "./rows";
 import { styles } from "./styles";
@@ -158,43 +153,32 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
   }
 
   function renderCollectionCapture({ item }: { item: Capture }) {
-    const imageLoadKey = captureImageLoadKey(item);
-    const imageLoadState = imageLoadKey ? input.captureImageLoadStates[imageLoadKey] : undefined;
-    const revealKey = captureRowRevealKey(item);
-    const rowRevealed = Boolean(input.captureRowRevealStates[revealKey]);
-    const deferRowUntilImageReady = Boolean(
-      input.collectionFeedRevealPending ||
-        (!rowRevealed &&
-          (imageLoadKey ? !imageLoadState : true))
-    );
     return (
-      <SkeletonRevealFrame pending={deferRowUntilImageReady} skeleton={renderCaptureRowInlineSkeleton(true)}>
-        <Animated.View style={[styles.collectionCaptureRow, { opacity: input.collectionRowsFade }]}>
-          <View style={styles.collectionCaptureMain}>
-            {renderCaptureRow({
-              showCollectionToken: false,
-              item,
-              onPress: () => {
-                if (input.selectedCollection) input.onOpenCaptureFromCollection(item, input.selectedCollection.id);
-              }
-            })}
-          </View>
-          <Pressable
-            onPress={() => {
-              if (input.selectedCollection) input.onUnlinkCaptureFromCollection(input.selectedCollection.id, item);
-            }}
-            style={styles.removeButton}
-          >
-            <Text style={styles.inlineAction}>Remove</Text>
-          </Pressable>
-        </Animated.View>
-      </SkeletonRevealFrame>
+      <Animated.View style={[styles.collectionCaptureRow, { opacity: input.collectionRowsFade }]}>
+        <View style={styles.collectionCaptureMain}>
+          {renderCaptureRow({
+            showCollectionToken: false,
+            item,
+            onPress: () => {
+              if (input.selectedCollection) input.onOpenCaptureFromCollection(item, input.selectedCollection.id);
+            }
+          })}
+        </View>
+        <Pressable
+          onPress={() => {
+            if (input.selectedCollection) input.onUnlinkCaptureFromCollection(input.selectedCollection.id, item);
+          }}
+          style={styles.removeButton}
+        >
+          <Text style={styles.inlineAction}>Remove</Text>
+        </Pressable>
+      </Animated.View>
     );
   }
 
   function renderCollection({ item }: { item: Collection }) {
     return (
-      <CollectionRow
+      <CollectionCard
         collectionListFade={input.collectionListFade}
         item={item}
         onPress={() => {

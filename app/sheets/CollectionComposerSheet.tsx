@@ -80,6 +80,9 @@ export function CollectionComposerSheet({
           <View style={styles.captureSheetHeader}>
             <View style={styles.sheetHeaderCopy}>
               <Text style={styles.sheetTitle}>New collection</Text>
+              <Text style={styles.sheetSubtitle}>
+                Keep projects, trips, recipes, and purchase decisions tidy without making them the main way to browse.
+              </Text>
             </View>
             <View style={styles.sheetActions}>
               <IconButton Icon={X} label="Close" onPress={onClose} />

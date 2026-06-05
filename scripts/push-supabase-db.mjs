@@ -15,9 +15,16 @@ function loadEnvFile(path) {
   }
 }
 
-[".env", ".env.local"].forEach((path) => loadEnvFile(resolve(path)));
+[
+  ".env",
+  ".env.local",
+  "../.env",
+  "../.env.local",
+  "../precious-captures/.env",
+  "../precious-captures/.env.local"
+].forEach((path) => loadEnvFile(resolve(path)));
 
-const result = spawnSync("npx", ["supabase", "db", "push"], {
+const result = spawnSync("npx", ["supabase", "db", "push", "--linked"], {
   cwd: process.cwd(),
   env: process.env,
   stdio: "inherit"

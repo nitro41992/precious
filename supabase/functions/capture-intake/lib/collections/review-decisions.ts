@@ -17,6 +17,7 @@ import {
   collectionDecisionKey,
   linkCaptureToCollection,
   normalizeCollectionDecision,
+  refreshCollectionPreviewAfterCaptureRemoval,
   sameCollectionDecision,
 } from "./links.ts";
 
@@ -550,6 +551,12 @@ export async function applyCollectionReviewDecisions(
         .eq("capture_id", captureId)
         .is("unlinked_at", null);
       if (error) throw error;
+      await refreshCollectionPreviewAfterCaptureRemoval(
+        supabase,
+        userId,
+        decision.collectionId,
+        [captureId],
+      );
       continue;
     }
 

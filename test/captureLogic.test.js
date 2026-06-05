@@ -5,6 +5,7 @@ const {
   LOCAL_PROCESSING_GRACE_MS,
   captureIdentityAliases,
   captureIntentPatchBody,
+  collectionCollageSlots,
   capturesForListMode,
   capturesForSearchScope,
   capturesShareIdentity,
@@ -231,6 +232,35 @@ test("collection selection action ignores field review targets", () => {
       shouldSave: false,
       label: "Done"
     }
+  );
+});
+
+test("collectionCollageSlots returns up to four unique preview captures", () => {
+  const captures = [
+    { id: "a", title: "A", thumbnailUrl: "https://example.com/a.jpg" },
+    { id: "b", title: "B", imageAssetUrl: "https://example.com/b.jpg" },
+    { id: "a", title: "A duplicate", thumbnailUrl: "https://example.com/a2.jpg" },
+    { id: "c", title: "C", thumbnailUrl: "https://example.com/c.jpg" },
+    { id: "d", title: "D", thumbnailUrl: "https://example.com/d.jpg" },
+    { id: "e", title: "E", thumbnailUrl: "https://example.com/e.jpg" }
+  ];
+  assert.deepEqual(
+    collectionCollageSlots(captures).map((item) => item.id),
+    ["a", "b", "c", "d"]
+  );
+  assert.deepEqual(collectionCollageSlots(null), []);
+});
+
+test("collectionCollageSlots skips captures without usable thumbnail media", () => {
+  const captures = [
+    { id: "a", title: "A" },
+    { id: "b", title: "B", thumbnailUrl: "" },
+    { id: "c", title: "C", thumbnail_url: "https://example.com/c.jpg" },
+    { id: "d", title: "D", urlEvidenceImageUrl: "https://example.com/d.jpg" }
+  ];
+  assert.deepEqual(
+    collectionCollageSlots(captures).map((item) => item.id),
+    ["c", "d"]
   );
 });
 

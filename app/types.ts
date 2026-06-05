@@ -180,11 +180,24 @@ export type Collection = {
   description: string;
   status: "active" | "archived";
   captureCount: number;
+  previewCaptures: CollectionPreviewCapture[];
   archivedAt?: string | null;
   deletedAt?: string | null;
   deletePurgeAfter?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+};
+
+export type CollectionPreviewCapture = {
+  id: string;
+  remoteId?: string;
+  title: string;
+  sourceUrl: string | null;
+  thumbnailUrl?: string;
+  imageAssetUrl?: string;
+  imageAssetCacheKey?: string;
+  imageAssetMimeType?: string;
+  linkedAt?: number | null;
 };
 
 export type ReminderSuggestion = NonNullable<Capture["suggestedReminders"]>[number];

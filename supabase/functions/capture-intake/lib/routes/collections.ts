@@ -2,11 +2,76 @@ import { adminClient } from "../supabase.ts";
 import { COLLECTION_LIST_SELECT } from "../config.ts";
 import { boundedLimit } from "../common.ts";
 import { json } from "../http.ts";
+import { signedCaptureAssetUrl } from "../capture-records.ts";
 import { activeCollectionCounts, collectionFromRow, linkCaptureToCollection } from "../collections/links.ts";
 import { scheduleCaptureEmbeddingRefresh, scheduleCollectionCaptureEmbeddingsRefresh, upsertCollectionEmbedding } from "../collections/embeddings.ts";
 import { markCollectionDecisionAccepted } from "../collections/review-decisions.ts";
 import { cleanRequiredText } from "../collections/responses.ts";
 import { seedStarterCollectionsIfNeeded } from "../collections/starter-collections.ts";
+
+async function signedCollectionPreviewCaptures(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  value: unknown,
+) {
+  if (!Array.isArray(value)) return [];
+  const items = await Promise.all(
+    value
+      .filter((item): item is Record<string, unknown> =>
+        Boolean(item && typeof item === "object" && !Array.isArray(item))
+      )
+      .slice(0, 4)
+      .map(async (item) => {
+        const storagePath = typeof item.image_asset_storage_path === "string"
+          ? item.image_asset_storage_path
+          : "";
+        const publicUrl = typeof item.image_asset_public_url === "string"
+          ? item.image_asset_public_url
+          : "";
+        const mimeType = typeof item.image_asset_mime_type === "string"
+          ? item.image_asset_mime_type
+          : "";
+        const signedUrl = storagePath && mimeType.startsWith("image/")
+          ? await signedCaptureAssetUrl(supabase, storagePath, "thumb")
+          : null;
+        return {
+          id: String(item.id || item.remote_id || ""),
+          remote_id: String(item.remote_id || item.id || ""),
+          title: String(item.title || item.source_url || "Untitled capture"),
+          source_url: typeof item.source_url === "string"
+            ? item.source_url
+            : null,
+          thumbnail_url: item.thumbnail_url || null,
+          image_asset_url: signedUrl || publicUrl || null,
+          image_asset_cache_key: storagePath ? `${storagePath}:thumb` : null,
+          image_asset_mime_type: item.image_asset_mime_type || null,
+          linked_at: item.linked_at || null,
+        };
+      }),
+  );
+  return items.filter((item) => item.id);
+}
+
+async function collectionResponseRows(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  rows: Array<Record<string, unknown>>,
+  counts: Map<string, number>,
+) {
+  return await Promise.all(
+    rows.map(async (row) => {
+      const collection = collectionFromRow(row, counts);
+      return {
+        ...collection,
+        preview_captures: await signedCollectionPreviewCaptures(
+          supabase,
+          userId,
+          collection.preview_captures,
+        ),
+      };
+    }),
+  );
+}
 
 export async function handleCollectionsResource(
   request: Request,
@@ -38,7 +103,7 @@ export async function handleCollectionsResource(
       rows.map((row) => String(row.id)),
     );
     return json({
-      collections: rows.map((row) => collectionFromRow(row, counts)),
+      collections: await collectionResponseRows(supabase, userId, rows, counts),
       next_cursor: fetchedRows.length > limit
         ? rows[rows.length - 1]?.created_at || null
         : null,

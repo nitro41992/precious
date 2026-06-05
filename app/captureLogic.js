@@ -249,6 +249,32 @@ function collectionSelectionActionState(capture, selectedCollectionIds, currentC
   };
 }
 
+function collectionCollageSlots(previewCaptures, limit = 4) {
+  if (!Array.isArray(previewCaptures)) return [];
+  const max = Math.max(1, Math.min(Number(limit) || 4, 4));
+  const seen = new Set();
+  const slots = [];
+  for (const capture of previewCaptures) {
+    if (!capture || typeof capture !== "object") continue;
+    const imageUri = String(
+      capture.imageAssetUrl ||
+        capture.image_asset_url ||
+        capture.thumbnailUrl ||
+        capture.thumbnail_url ||
+        capture.urlEvidenceImageUrl ||
+        capture.url_evidence_image_url ||
+        ""
+    ).trim();
+    if (!imageUri) continue;
+    const id = String(capture.id || capture.remoteId || "");
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    slots.push(capture);
+    if (slots.length >= max) break;
+  }
+  return slots;
+}
+
 function captureFieldState(input = {}) {
   const kind = input.kind;
   const value = String(input.value || "").trim();
@@ -367,6 +393,7 @@ module.exports = {
   capturesForSearchScope,
   capturesShareIdentity,
   collectionSelectionActionState,
+  collectionCollageSlots,
   displayStatus,
   extractHttpUrl,
   confidenceRequiresReview,

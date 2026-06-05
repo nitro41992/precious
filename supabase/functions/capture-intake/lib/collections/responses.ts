@@ -19,6 +19,7 @@ import {
   collectionChoiceOverrides,
   collectionDecisionKey,
   linkCaptureToCollection,
+  refreshCollectionPreviewAfterCaptureRemoval,
   sameCollectionDecision,
 } from "./links.ts";
 
@@ -301,6 +302,12 @@ export async function undoCollectionChoice(
     .is("unlinked_at", null);
   const unlink = await unlinkQuery.eq("collection_id", collectionId);
   if (unlink.error) throw unlink.error;
+  await refreshCollectionPreviewAfterCaptureRemoval(
+    supabase,
+    userId,
+    collectionId,
+    [captureId],
+  );
 
   const nextDecisions = [...activeCollectionDecisionRows(currentAnalysis)];
   for (const restored of restoredDecisions) {

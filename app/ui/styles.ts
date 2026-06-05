@@ -145,6 +145,9 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 10
   },
   bottomNavIconWrapSelected: {},
+  bottomNavIconWrapSelectedCollection: {
+    backgroundColor: colors.collectionAccentSoft
+  },
   bottomNavFab: {
     alignItems: "center",
     backgroundColor: colors.accent,
@@ -156,6 +159,12 @@ export const styles = StyleSheet.create({
   bottomNavFabPressed: {
     backgroundColor: "#96e5bf",
     transform: [{ scale: 0.965 }]
+  },
+  bottomNavFabCollection: {
+    backgroundColor: colors.collectionAccent
+  },
+  bottomNavFabCollectionPressed: {
+    backgroundColor: "#e4cf92"
   },
   searchScreen: {
     flex: 1
@@ -1275,6 +1284,119 @@ export const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0
   },
+  collectionCardWrap: {
+    flex: 1,
+    padding: 5
+  },
+  collectionCard: {
+    gap: 9,
+    minHeight: 0
+  },
+  collectionCardPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.985 }]
+  },
+  collectionCollageFrame: {
+    aspectRatio: 1,
+    backgroundColor: colors.surfaceContainer,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden",
+    width: "100%"
+  },
+  collectionCollageEmpty: {
+    backgroundColor: colors.surfaceContainer,
+    borderColor: colors.surfaceContainerHigh
+  },
+  collectionCollagePending: {
+    alignItems: "center",
+    backgroundColor: colors.surfaceContainerHigh,
+    gap: 8,
+    justifyContent: "center",
+    paddingHorizontal: 18
+  },
+  collectionCollagePendingLine: {
+    backgroundColor: colors.surfaceContainerHighest,
+    borderRadius: 6,
+    height: 9,
+    width: "66%"
+  },
+  collectionCollagePendingLineShort: {
+    backgroundColor: colors.surfaceContainer,
+    borderRadius: 6,
+    height: 9,
+    width: "42%"
+  },
+  collectionCollageRow: {
+    flex: 1,
+    flexDirection: "row",
+    gap: 2
+  },
+  collectionCollageGrid: {
+    flex: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 2
+  },
+  collectionCollageTile: {
+    alignItems: "center",
+    backgroundColor: colors.surfaceContainerHigh,
+    justifyContent: "center",
+    overflow: "hidden"
+  },
+  collectionCollageFillTile: {
+    height: "100%",
+    width: "100%"
+  },
+  collectionCollageHalfTile: {
+    flex: 1
+  },
+  collectionCollageLargeTile: {
+    flex: 1.35
+  },
+  collectionCollageStack: {
+    flex: 1,
+    gap: 2
+  },
+  collectionCollageStackTile: {
+    flex: 1
+  },
+  collectionCollageGridTile: {
+    height: "50%",
+    width: "49.4%"
+  },
+  collectionCollageImage: {
+    height: "100%",
+    width: "100%"
+  },
+  collectionCollageFallbackTile: {
+    gap: 5,
+    paddingHorizontal: 6
+  },
+  collectionCollageFallbackHost: {
+    color: colors.muted,
+    fontSize: 10,
+    fontWeight: "700",
+    lineHeight: 12,
+    maxWidth: "100%"
+  },
+  collectionCardCopy: {
+    gap: 2,
+    minWidth: 0,
+    paddingHorizontal: 1
+  },
+  collectionCardTitle: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "700",
+    lineHeight: 19
+  },
+  collectionCardMeta: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18
+  },
   removeButton: {
     paddingVertical: 4
   },
@@ -1394,7 +1516,11 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 10
   },
   collectionsListContent: {
-    paddingBottom: 132
+    paddingBottom: 132,
+    paddingTop: 1
+  },
+  collectionsGridRow: {
+    marginHorizontal: -5
   },
   collectionsEmptyContent: {
     flexGrow: 1,

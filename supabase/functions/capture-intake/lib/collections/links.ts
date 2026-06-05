@@ -1,10 +1,13 @@
 import { adminClient } from "../supabase.ts";
+import { CAPTURE_LIST_SELECT } from "../config.ts";
 import {
   analysisRequiresReview,
   normalizedReviewAnalysis,
   resolveReviewTargets,
 } from "../analysis/review-normalization.ts";
 import { scheduleCaptureEmbeddingRefresh } from "./embeddings.ts";
+
+const COLLECTION_PREVIEW_CAPTURE_LIMIT = 4;
 
 export {
   applyCollectionChoice,
@@ -96,6 +99,263 @@ export function collectionChoiceOverrideId(
   return collectionId || `suggestion:${collectionDecisionKey(decision, index)}`;
 }
 
+function schemaCacheMissingPreviewColumn(error: unknown) {
+  const message = String(
+    (error as { message?: unknown; details?: unknown })?.message ||
+      (error as { details?: unknown })?.details ||
+      error ||
+      "",
+  );
+  return /collection_preview_captures|collection_preview_updated_at|schema cache|column/i
+    .test(message);
+}
+
+function previewSnapshotItemFromCapture(
+  row: Record<string, unknown>,
+  linkedAt: unknown,
+) {
+  const analysis = row.analysis && typeof row.analysis === "object"
+    ? row.analysis as Record<string, unknown>
+    : {};
+  const urlEvidence = analysis.url_evidence && typeof analysis.url_evidence === "object"
+    ? analysis.url_evidence as Record<string, unknown>
+    : {};
+  const assets = Array.isArray(row.capture_assets) ? row.capture_assets : [];
+  const imageAsset = assets.find((asset) => {
+    if (!asset || typeof asset !== "object") return false;
+    const record = asset as Record<string, unknown>;
+    const mimeType = String(record.mime_type || record.mimeType || "");
+    const storagePath = record.storage_path || record.storagePath;
+    const publicUrl = record.public_url || record.publicUrl;
+    return mimeType.startsWith("image/") &&
+      (typeof storagePath === "string" && storagePath.trim() ||
+        typeof publicUrl === "string" && publicUrl.trim());
+  }) as Record<string, unknown> | undefined;
+  return {
+    id: String(row.client_capture_key || row.id || ""),
+    remote_id: String(row.id || row.client_capture_key || ""),
+    title: String(
+      row.display_title ||
+        row.title ||
+        analysis.display_title ||
+        row.source_url ||
+        "Untitled capture",
+    ),
+    source_url: typeof row.source_url === "string" ? row.source_url : null,
+    thumbnail_url: row.thumbnail_url || analysis.thumbnail_url ||
+      urlEvidence.image_url ||
+      (analysis.resolved_place &&
+          typeof analysis.resolved_place === "object"
+        ? (analysis.resolved_place as Record<string, unknown>).thumbnail_url
+        : null) ||
+      null,
+    image_asset_storage_path: imageAsset
+      ? imageAsset.storage_path || imageAsset.storagePath || null
+      : null,
+    image_asset_public_url: imageAsset
+      ? imageAsset.public_url || imageAsset.publicUrl || null
+      : null,
+    image_asset_mime_type: imageAsset
+      ? imageAsset.mime_type || imageAsset.mimeType || null
+      : null,
+    linked_at: linkedAt || null,
+  };
+}
+
+function previewItemIdentity(item: Record<string, unknown>) {
+  return String(item.id || item.remote_id || item.remoteId || "");
+}
+
+function previewSnapshotItemHasImage(item: Record<string, unknown>) {
+  return [
+    item.thumbnail_url,
+    item.thumbnailUrl,
+    item.image_asset_storage_path,
+    item.imageAssetStoragePath,
+    item.image_asset_public_url,
+    item.imageAssetPublicUrl,
+    item.image_asset_url,
+    item.imageAssetUrl,
+  ].some((value) => typeof value === "string" && value.trim());
+}
+
+async function updateCollectionPreviewForNewCapture(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  collectionId: string,
+  captureId: string,
+) {
+  const collection = await supabase
+    .from("collections")
+    .select("collection_preview_captures")
+    .eq("user_id", userId)
+    .eq("id", collectionId)
+    .maybeSingle();
+  if (collection.error) {
+    if (schemaCacheMissingPreviewColumn(collection.error)) return;
+    throw collection.error;
+  }
+
+  const capture = await supabase
+    .from("captures")
+    .select(CAPTURE_LIST_SELECT)
+    .eq("user_id", userId)
+    .eq("id", captureId)
+    .maybeSingle();
+  if (capture.error) throw capture.error;
+  if (!capture.data) return;
+
+  const linked = await supabase
+    .from("collection_capture_links")
+    .select("linked_at")
+    .eq("user_id", userId)
+    .eq("collection_id", collectionId)
+    .eq("capture_id", captureId)
+    .is("unlinked_at", null)
+    .maybeSingle();
+  if (linked.error) throw linked.error;
+
+  const nextItem = previewSnapshotItemFromCapture(
+    capture.data as unknown as Record<string, unknown>,
+    linked.data?.linked_at || new Date().toISOString(),
+  );
+  if (!nextItem.id) return;
+
+  const existing = Array.isArray(collection.data?.collection_preview_captures)
+    ? collection.data.collection_preview_captures as Array<Record<string, unknown>>
+    : [];
+  const existingWithImages = existing.filter(previewSnapshotItemHasImage);
+  if (!previewSnapshotItemHasImage(nextItem)) {
+    if (existingWithImages.length !== existing.length) {
+      const updated = await supabase
+        .from("collections")
+        .update({
+          collection_preview_captures: existingWithImages.slice(
+            0,
+            COLLECTION_PREVIEW_CAPTURE_LIMIT,
+          ),
+          collection_preview_updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", userId)
+        .eq("id", collectionId);
+      if (updated.error && !schemaCacheMissingPreviewColumn(updated.error)) {
+        throw updated.error;
+      }
+    }
+    return;
+  }
+  const nextId = previewItemIdentity(nextItem);
+  const nextPreview = [
+    nextItem,
+    ...existingWithImages.filter((item) => previewItemIdentity(item) !== nextId),
+  ].slice(0, COLLECTION_PREVIEW_CAPTURE_LIMIT);
+
+  const updated = await supabase
+    .from("collections")
+    .update({
+      collection_preview_captures: nextPreview,
+      collection_preview_updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId)
+    .eq("id", collectionId);
+  if (updated.error && !schemaCacheMissingPreviewColumn(updated.error)) {
+    throw updated.error;
+  }
+}
+
+function previewItemMatchesCaptureId(
+  item: Record<string, unknown>,
+  captureIds: Set<string>,
+) {
+  const aliases = [
+    item.remote_id,
+    item.remoteId,
+    item.id,
+  ].map((value) => String(value || "")).filter(Boolean);
+  return aliases.some((alias) => captureIds.has(alias));
+}
+
+async function collectionPreviewFromActiveLinks(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  collectionId: string,
+) {
+  const links = await supabase
+    .from("collection_capture_links")
+    .select(`linked_at, captures(${CAPTURE_LIST_SELECT})`)
+    .eq("user_id", userId)
+    .eq("collection_id", collectionId)
+    .is("unlinked_at", null)
+    .order("linked_at", { ascending: false })
+    .limit(100);
+  if (links.error) throw links.error;
+
+  const preview: Array<Record<string, unknown>> = [];
+  for (const row of links.data ?? []) {
+    const record = row as Record<string, unknown>;
+    const captures = record.captures;
+    const capture = Array.isArray(captures) ? captures[0] : captures;
+    if (!capture || typeof capture !== "object") continue;
+    const captureRow = capture as Record<string, unknown>;
+    if (
+      captureRow.archived_at || captureRow.deleted_at || captureRow.rejected_at
+    ) {
+      continue;
+    }
+    const item = previewSnapshotItemFromCapture(captureRow, record.linked_at);
+    if (item.id && previewSnapshotItemHasImage(item)) preview.push(item);
+    if (preview.length >= COLLECTION_PREVIEW_CAPTURE_LIMIT) break;
+  }
+  return preview;
+}
+
+export async function refreshCollectionPreviewAfterCaptureRemoval(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  collectionId: string,
+  captureIds: string[],
+) {
+  const removedIds = new Set(captureIds.map((id) => id.trim()).filter(Boolean));
+  if (!removedIds.size) return;
+
+  const collection = await supabase
+    .from("collections")
+    .select("collection_preview_captures")
+    .eq("user_id", userId)
+    .eq("id", collectionId)
+    .maybeSingle();
+  if (collection.error) {
+    if (schemaCacheMissingPreviewColumn(collection.error)) return;
+    throw collection.error;
+  }
+
+  const existing = Array.isArray(collection.data?.collection_preview_captures)
+    ? collection.data.collection_preview_captures as Array<Record<string, unknown>>
+    : [];
+  if (
+    !existing.some((item) => previewItemMatchesCaptureId(item, removedIds))
+  ) {
+    return;
+  }
+
+  const nextPreview = await collectionPreviewFromActiveLinks(
+    supabase,
+    userId,
+    collectionId,
+  );
+  const updated = await supabase
+    .from("collections")
+    .update({
+      collection_preview_captures: nextPreview,
+      collection_preview_updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId)
+    .eq("id", collectionId);
+  if (updated.error && !schemaCacheMissingPreviewColumn(updated.error)) {
+    throw updated.error;
+  }
+}
+
 export async function linkCaptureToCollection(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
@@ -131,6 +391,12 @@ export async function linkCaptureToCollection(
     .select("id")
     .single();
   if (error) throw error;
+  await updateCollectionPreviewForNewCapture(
+    supabase,
+    userId,
+    collectionId,
+    captureId,
+  );
   scheduleCaptureEmbeddingRefresh(supabase, userId, captureId);
   return data;
 }
@@ -152,6 +418,10 @@ export function collectionFromRow(
     created_at: row.created_at || null,
     updated_at: row.updated_at || null,
     capture_count: captureCounts.get(id) || 0,
+    preview_captures: Array.isArray(row.collection_preview_captures)
+      ? row.collection_preview_captures
+      : [],
+    collection_preview_updated_at: row.collection_preview_updated_at || null,
   };
 }
 

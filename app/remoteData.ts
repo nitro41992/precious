@@ -3,6 +3,7 @@ import type {
   Collection,
   CollectionChoiceOverride,
   CollectionDecision,
+  CollectionPreviewCapture,
   ReminderSuggestion,
   LinkedCollection,
   ResolvedPlace,
@@ -347,12 +348,33 @@ export function collectionFromRemote(row: Record<string, any>): Collection {
     description: String(row.description || ""),
     status: row.status === "archived" ? "archived" : "active",
     captureCount: Number(row.capture_count || row.captureCount || 0),
+    previewCaptures: collectionPreviewCapturesFromRemote(row.preview_captures || row.previewCaptures),
     archivedAt: nullableValue(row.archived_at),
     deletedAt: nullableValue(row.deleted_at),
     deletePurgeAfter: nullableValue(row.delete_purge_after),
     createdAt: nullableValue(row.created_at),
     updatedAt: nullableValue(row.updated_at)
   };
+}
+
+export function collectionPreviewCapturesFromRemote(value: unknown): CollectionPreviewCapture[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is Record<string, any> =>
+      Boolean(item && typeof item === "object" && !Array.isArray(item))
+    )
+    .map((item) => ({
+      id: String(item.id || item.client_capture_key || item.remoteId || item.remote_id || ""),
+      remoteId: nullableValue(item.remote_id || item.remoteId) || undefined,
+      title: String(item.title || item.display_title || item.source_url || "Untitled capture"),
+      sourceUrl: nullableValue(item.source_url || item.sourceUrl) || null,
+      thumbnailUrl: nullableValue(item.thumbnail_url || item.thumbnailUrl || item.url_evidence_image_url || item.urlEvidenceImageUrl),
+      imageAssetUrl: nullableValue(item.image_asset_url || item.imageAssetUrl),
+      imageAssetCacheKey: nullableValue(item.image_asset_cache_key || item.imageAssetCacheKey),
+      imageAssetMimeType: nullableValue(item.image_asset_mime_type || item.imageAssetMimeType),
+      linkedAt: nullableTimestamp(item.linked_at || item.linkedAt)
+    }))
+    .filter((item) => item.id);
 }
 
 export function linkedCollectionFromRemote(row: Record<string, any>): LinkedCollection {
@@ -439,7 +461,8 @@ export function cachedCollectionPageFromRaw(raw: string | null | undefined) {
             ...collection,
             description: String(collection.description || ""),
             status: collection.status === "archived" ? "archived" : "active",
-            captureCount: Number(collection.captureCount || 0)
+            captureCount: Number(collection.captureCount || 0),
+            previewCaptures: collectionPreviewCapturesFromRemote(collection.previewCaptures)
           }))
       : [];
     return {

@@ -454,37 +454,51 @@ export function BottomAppBar({
     <View pointerEvents="box-none" style={styles.bottomNavLayer}>
       <View style={styles.bottomNavDock}>
         <View style={styles.bottomNavBar}>
-          {navItems.map(({ key, label, Icon, selected, onPress, testID }) => (
-            <Pressable
-              accessibilityLabel={label}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              key={key}
-              onPress={onPress}
-              style={({ pressed }) => [
-                styles.bottomNavItem,
-                pressed && styles.bottomNavItemPressed
-              ]}
-              testID={testID}
-            >
-              <View style={[styles.bottomNavIconWrap, selected && styles.bottomNavIconWrapSelected]}>
-                <Icon
-                  color={selected ? colors.accent : colors.muted}
-                  selected={selected}
-                  size={22}
-                />
-              </View>
-            </Pressable>
-          ))}
+          {navItems.map(({ key, label, Icon, selected, onPress, testID }) => {
+            const selectedColor = key === "collections" ? colors.collectionAccent : colors.accent;
+            return (
+              <Pressable
+                accessibilityLabel={label}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                key={key}
+                onPress={onPress}
+                style={({ pressed }) => [
+                  styles.bottomNavItem,
+                  pressed && styles.bottomNavItemPressed
+                ]}
+                testID={testID}
+              >
+                <View
+                  style={[
+                    styles.bottomNavIconWrap,
+                    selected && styles.bottomNavIconWrapSelected,
+                    selected && key === "collections" && styles.bottomNavIconWrapSelectedCollection
+                  ]}
+                >
+                  <Icon
+                    color={selected ? selectedColor : colors.muted}
+                    selected={selected}
+                    size={22}
+                  />
+                </View>
+              </Pressable>
+            );
+          })}
         </View>
         <Pressable
           accessibilityLabel={collectionAction ? "New collection" : "New capture"}
           accessibilityRole="button"
           onPress={onFabPress}
-          style={({ pressed }) => [styles.bottomNavFab, pressed && styles.bottomNavFabPressed]}
+          style={({ pressed }) => [
+            styles.bottomNavFab,
+            collectionAction && styles.bottomNavFabCollection,
+            pressed && styles.bottomNavFabPressed,
+            pressed && collectionAction && styles.bottomNavFabCollectionPressed
+          ]}
           testID={collectionAction ? "pc.nav.collection-create" : "pc.nav.capture"}
         >
-          <Plus color={colors.onAccent} size={22} weight="bold" />
+          <Plus color={collectionAction ? colors.collectionOnAccent : colors.onAccent} size={22} weight="bold" />
         </Pressable>
       </View>
     </View>

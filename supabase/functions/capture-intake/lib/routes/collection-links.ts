@@ -1,7 +1,10 @@
 import { adminClient } from "../supabase.ts";
 import { json } from "../http.ts";
 import { analysisRequiresReview, normalizedReviewAnalysis, resolveReviewTargets } from "../analysis/review-normalization.ts";
-import { linkCaptureToCollection } from "../collections/links.ts";
+import {
+  linkCaptureToCollection,
+  refreshCollectionPreviewAfterCaptureRemoval,
+} from "../collections/links.ts";
 import { captureResponse } from "../collections/responses.ts";
 import { markCollectionDecisionAccepted } from "../collections/review-decisions.ts";
 import { scheduleCaptureEmbeddingRefresh } from "../collections/embeddings.ts";
@@ -86,6 +89,16 @@ export async function setCaptureCollections(
       .in("collection_id", removeIds)
       .is("unlinked_at", null);
     if (unlink.error) throw unlink.error;
+    await Promise.all(
+      removeIds.map((collectionId) =>
+        refreshCollectionPreviewAfterCaptureRemoval(
+          supabase,
+          userId,
+          collectionId,
+          [captureId],
+        )
+      ),
+    );
   }
 
   for (const collectionId of addIds) {
@@ -201,6 +214,12 @@ export async function handleCollectionLinksResource(
       .eq("capture_id", captureId)
       .is("unlinked_at", null);
     if (error) throw error;
+    await refreshCollectionPreviewAfterCaptureRemoval(
+      supabase,
+      userId,
+      collectionId,
+      [captureId],
+    );
     scheduleCaptureEmbeddingRefresh(supabase, userId, captureId);
     return json({ ok: true });
   }

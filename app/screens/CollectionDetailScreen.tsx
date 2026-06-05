@@ -1,6 +1,5 @@
 import type { ReactElement, ReactNode, RefObject } from "react";
 import {
-  FlatList,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -10,7 +9,8 @@ import {
   TextInput,
   View
 } from "react-native";
-import type { FlatListProps, ListRenderItemInfo } from "react-native";
+import { FlashList } from "@shopify/flash-list";
+import type { FlashListProps, FlashListRef, ListRenderItemInfo } from "@shopify/flash-list";
 import { ArrowLeft } from "phosphor-react-native";
 
 import type { Capture, Collection, CollectionCapturesLoadPhase } from "../types";
@@ -27,9 +27,9 @@ type CollectionDetailScreenProps = {
     collectionCapturesForId: string | null;
     collectionCapturesLoadPhase: CollectionCapturesLoadPhase;
     collectionCapturesLoading: boolean;
-    collectionDetailListRef: RefObject<FlatList<Capture> | null>;
+    collectionDetailListRef: RefObject<FlashListRef<Capture> | null>;
     keyboardHeight: number;
-    listPerfProps: Partial<FlatListProps<Capture>>;
+    listPerfProps: Partial<FlashListProps<Capture>>;
     selectedCollection: Collection;
     toast: ReactNode;
   };
@@ -111,7 +111,7 @@ export function CollectionDetailScreen({ actions, data, state }: CollectionDetai
         keyboardVerticalOffset={Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0}
         style={styles.keyboardScreen}
       >
-        <FlatList
+        <FlashList
           {...listPerfProps}
           data={visibleCollectionCaptures}
           keyExtractor={(item) => item.id}

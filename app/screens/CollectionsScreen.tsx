@@ -1,6 +1,7 @@
 import type { ReactElement, ReactNode } from "react";
-import { FlatList, Pressable, SafeAreaView, StatusBar, Text, View } from "react-native";
-import type { FlatListProps, ListRenderItemInfo } from "react-native";
+import { Pressable, SafeAreaView, StatusBar, Text, View } from "react-native";
+import { FlashList } from "@shopify/flash-list";
+import type { FlashListProps, ListRenderItemInfo } from "@shopify/flash-list";
 import { Folder, Plus } from "phosphor-react-native";
 
 import type { Collection, LoadPhase } from "../types";
@@ -15,7 +16,7 @@ type CollectionsScreenProps = {
     collections: Collection[];
     collectionsColdSkeletonVisible: boolean;
     collectionsError: string;
-    collectionsListPerfProps: Partial<FlatListProps<Collection>>;
+    collectionsListPerfProps: Partial<FlashListProps<Collection>>;
     toast: ReactNode;
   };
   state: {
@@ -65,17 +66,14 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
       <View style={styles.collectionsScreen}>
         <View style={styles.collectionsTitleBlock}>
           <Text style={styles.title}>Collections</Text>
-          <Text style={styles.sourceText}>
-            Keep projects, trips, recipes, and purchase decisions tidy without making them the main way to browse.
-          </Text>
         </View>
         {collectionsError ? <Text style={styles.errorText}>{collectionsError}</Text> : null}
-        <FlatList
+        <FlashList
           {...collectionsListPerfProps}
           data={visibleManagedCollections}
           keyExtractor={(item) => item.id}
           renderItem={renderCollection}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          numColumns={2}
           ListEmptyComponent={
             collectionsBlockingLoading && collectionsColdSkeletonVisible ? (
               renderCollectionSkeletonRows(collections.length ? Math.min(collections.length, 7) : 7, false, collections)

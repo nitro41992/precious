@@ -18,6 +18,10 @@ function loadEnvFile(path) {
 [
   ".env",
   ".env.local",
+  "../.env",
+  "../.env.local",
+  "../precious-captures/.env",
+  "../precious-captures/.env.local",
   "../apps/mobile/.env",
   "../apps/mobile/.env.local",
   "../apps/web/.env",

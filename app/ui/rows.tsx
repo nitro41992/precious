@@ -1,7 +1,9 @@
-import type { ReactElement } from "react";
+import { useMemo, useState, type ReactElement } from "react";
 import { Animated, Pressable, Text, View } from "react-native";
-import { BookOpen, CalendarBlank, Folder } from "phosphor-react-native";
+import { Image } from "expo-image";
+import { BookOpen, CalendarBlank, Folder, ImageSquare } from "phosphor-react-native";
 
+import { collectionCollageSlots, hostFromUrl } from "../captureLogic";
 import type { Capture, CaptureImageLoadState, Collection } from "../types";
 import {
   captureDisplayTitle,
@@ -291,6 +293,183 @@ export function CollectionRow({
         <Text numberOfLines={2} style={styles.summaryPreview}>
           {item.description}
         </Text>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+function collectionPreviewImageUrl(item: Collection["previewCaptures"][number]) {
+  return String(item.imageAssetUrl || item.thumbnailUrl || "").trim();
+}
+
+function CollectionCollageTile({
+  item,
+  onImageError,
+  style
+}: {
+  item: Collection["previewCaptures"][number] | null;
+  onImageError?: (imageUri: string) => void;
+  style?: any;
+}) {
+  const imageUri = item ? collectionPreviewImageUrl(item) : "";
+  const cacheKey = item?.imageAssetCacheKey || imageUri;
+  const host = hostFromUrl(item?.sourceUrl || "");
+  if (imageUri) {
+    return (
+      <View style={[styles.collectionCollageTile, style]}>
+        <Image
+          accessibilityLabel={item?.title ? `Preview: ${item.title}` : "Collection preview"}
+          cachePolicy="memory-disk"
+          contentFit="cover"
+          onError={() => onImageError?.(imageUri)}
+          source={cacheKey ? { uri: imageUri, cacheKey } : { uri: imageUri }}
+          style={styles.collectionCollageImage}
+          transition={140}
+        />
+      </View>
+    );
+  }
+  return (
+    <View style={[styles.collectionCollageTile, styles.collectionCollageFallbackTile, style]}>
+      {item ? (
+        <>
+          <ImageSquare color={colors.muted} size={24} weight="regular" />
+          {host ? (
+            <Text numberOfLines={1} style={styles.collectionCollageFallbackHost}>
+              {host}
+            </Text>
+          ) : null}
+        </>
+      ) : null}
+    </View>
+  );
+}
+
+export function CollectionCollage({ collection }: { collection: Collection }) {
+  const [failedImageUris, setFailedImageUris] = useState<Set<string>>(() => new Set());
+  const allSlots = collectionCollageSlots(collection.previewCaptures || [], 4);
+  const slots = useMemo(
+    () => allSlots.filter((slot) => !failedImageUris.has(collectionPreviewImageUrl(slot))),
+    [allSlots, failedImageUris]
+  );
+  const handleImageError = (imageUri: string) => {
+    const trimmedUri = imageUri.trim();
+    if (!trimmedUri) return;
+    setFailedImageUris((current) => {
+      if (current.has(trimmedUri)) return current;
+      const next = new Set(current);
+      next.add(trimmedUri);
+      return next;
+    });
+  };
+  if (!slots.length) {
+    return (
+      <View
+        accessibilityLabel={collection.captureCount > 0 ? "No collection thumbnails" : "Empty collection"}
+        accessible
+        style={[styles.collectionCollageFrame, styles.collectionCollageEmpty]}
+      />
+    );
+  }
+  if (slots.length === 1) {
+    return (
+      <View style={styles.collectionCollageFrame}>
+        <CollectionCollageTile
+          item={slots[0]}
+          onImageError={handleImageError}
+          style={styles.collectionCollageFillTile}
+        />
+      </View>
+    );
+  }
+  if (slots.length === 2) {
+    return (
+      <View style={styles.collectionCollageFrame}>
+        <View style={styles.collectionCollageRow}>
+          <CollectionCollageTile
+            item={slots[0]}
+            onImageError={handleImageError}
+            style={styles.collectionCollageHalfTile}
+          />
+          <CollectionCollageTile
+            item={slots[1]}
+            onImageError={handleImageError}
+            style={styles.collectionCollageHalfTile}
+          />
+        </View>
+      </View>
+    );
+  }
+  if (slots.length === 3) {
+    return (
+      <View style={styles.collectionCollageFrame}>
+        <View style={styles.collectionCollageRow}>
+          <CollectionCollageTile
+            item={slots[0]}
+            onImageError={handleImageError}
+            style={styles.collectionCollageLargeTile}
+          />
+          <View style={styles.collectionCollageStack}>
+            <CollectionCollageTile
+              item={slots[1]}
+              onImageError={handleImageError}
+              style={styles.collectionCollageStackTile}
+            />
+            <CollectionCollageTile
+              item={slots[2]}
+              onImageError={handleImageError}
+              style={styles.collectionCollageStackTile}
+            />
+          </View>
+        </View>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.collectionCollageFrame}>
+      <View style={styles.collectionCollageGrid}>
+        {slots.map((slot) => (
+          <CollectionCollageTile
+            key={slot.id}
+            item={slot}
+            onImageError={handleImageError}
+            style={styles.collectionCollageGridTile}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+export function CollectionCard({
+  collectionListFade,
+  item,
+  onPress
+}: {
+  collectionListFade: Animated.Value;
+  item: Collection;
+  onPress: () => void;
+}) {
+  const collageKey = `${item.id}:${(item.previewCaptures || [])
+    .map((capture) => capture.imageAssetCacheKey || capture.imageAssetUrl || capture.thumbnailUrl || capture.id)
+    .join("|")}`;
+  return (
+    <Animated.View style={[styles.collectionCardWrap, { opacity: collectionListFade }]}>
+      <Pressable
+        android_ripple={{ color: "rgba(31, 122, 91, 0.08)" }}
+        onPress={onPress}
+        style={({ pressed }) => [styles.collectionCard, pressed && styles.collectionCardPressed]}
+        testID={`pc.collection.card.${item.id}`}
+      >
+        <CollectionCollage key={collageKey} collection={item} />
+        <View style={styles.collectionCardCopy}>
+          <Text numberOfLines={2} style={styles.collectionCardTitle}>
+            {item.title}
+          </Text>
+          <Text numberOfLines={1} style={styles.collectionCardMeta}>
+            {item.captureCount} {item.captureCount === 1 ? "capture" : "captures"}
+          </Text>
+        </View>
       </Pressable>
     </Animated.View>
   );

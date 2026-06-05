@@ -99,6 +99,19 @@ export function collectionSelectionActionState(
   selectedCollectionIds?: string[],
   currentCollectionIds?: string[]
 ): CollectionSelectionActionState;
+export function collectionCollageSlots<T extends {
+  id?: string;
+  remoteId?: string;
+  imageAssetUrl?: string;
+  image_asset_url?: string;
+  thumbnailUrl?: string;
+  thumbnail_url?: string;
+  urlEvidenceImageUrl?: string;
+  url_evidence_image_url?: string;
+}>(
+  previewCaptures?: T[] | null,
+  limit?: number
+): T[];
 export function confidenceRequiresReview(value?: string): boolean;
 export function displayStatus(capture: StatusCapture): CaptureStatus;
 export function extractHttpUrl(value?: string | null): string;
