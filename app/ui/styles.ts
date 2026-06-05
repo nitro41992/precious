@@ -2679,9 +2679,6 @@ export const styles = StyleSheet.create({
     backgroundColor: "#9be6c2",
     transform: [{ scale: 0.99 }]
   },
-  reviewConfirmButton: {
-    minHeight: 56
-  },
   disabledButton: {
     opacity: 0.45
   },

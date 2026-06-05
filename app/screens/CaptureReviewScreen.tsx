@@ -430,14 +430,13 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       draftIntentDirty ||
       Object.keys(reminderDrafts).length
   );
-  const reviewConfirmOnly = selectedNeedsReview && !reviewHasPendingChanges && !collectionActionPending;
   const reviewChecklistLabel = reviewChecklistCta(selectedReviewTasks);
   const reviewSupportText = draftIntentDirty
     ? aiIntentValue
       ? `Changed from ${activeIntentLabel(aiIntentValue)}`
       : "Added intent"
     : "";
-  const showReviewFooter = reviewHasPendingChanges || collectionActionPending || reviewConfirmOnly;
+  const showReviewFooter = reviewHasPendingChanges || collectionActionPending;
   const noteSheetKeyboardVisible = noteSheetOpen && keyboardHeight > 0;
   const noteWindowAlreadyKeyboardSized =
     noteSheetKeyboardVisible && Math.abs(windowHeight + keyboardHeight - Dimensions.get("screen").height) < 96;
@@ -896,20 +895,16 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
             <View style={styles.reviewFooter}>
               <Pressable
                 disabled={collectionActionPending}
-                onPress={() => {
-                  if (reviewConfirmOnly) openReviewInsight(selectedReviewInsight);
-                  else saveReviewDecisions();
-                }}
+                onPress={saveReviewDecisions}
                 style={({ pressed }) => [
                   styles.primaryButton,
-                  reviewConfirmOnly && styles.reviewConfirmButton,
                   pressed && !collectionActionPending && styles.primaryButtonPressed,
                   collectionActionPending && styles.disabledButton
                 ]}
-                testID={reviewConfirmOnly ? "pc.review.checklist.open" : "pc.review.save"}
+                testID="pc.review.save"
               >
                 <Text style={styles.primaryButtonText}>
-                  {collectionActionPending ? "Updating collection..." : reviewConfirmOnly ? reviewChecklistLabel : "Save review"}
+                  {collectionActionPending ? "Updating collection..." : "Save review"}
                 </Text>
               </Pressable>
             </View>

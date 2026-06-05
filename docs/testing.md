@@ -182,6 +182,11 @@ npm run android:dev
 npm run android:dev:launch
 ```
 
+The debug build loads Supabase public config from `.env`, `.env.local`, and the
+legacy `../apps/mobile` / `../apps/web` env locations before embedding Android
+`BuildConfig` values. Re-run `npm run android:dev:install` if those values
+change.
+
 Keep `npm run android:dev` running while you edit. Run `npm run android:dev:launch` in another terminal when you need to relaunch the app. Re-run `npm run android:dev:install` only after native Android, manifest, Gradle, native dependency, or BuildConfig environment changes.
 
 Debug builds depend on Metro. For handoff or standalone phone testing, use the hosted release flow below instead.
