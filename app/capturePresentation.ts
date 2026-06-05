@@ -797,7 +797,7 @@ export function captureStatusLabel(capture: Capture) {
   const status = displayStatus(capture);
   if (status === "processing") return "Analyzing";
   if (status === "failed") return "Could not analyze";
-  if (status === "needs_review") return "Needs a quick look";
+  if (status === "needs_review") return "Needs review";
   return statusLabel(status);
 }
 
@@ -862,8 +862,8 @@ export function captureSupportLine(capture: Capture, visibleSummary: string) {
 
 export function reviewStatusCue(capture: Capture, hasReviewReasons: boolean) {
   if (displayStatus(capture) === "processing") return "Checking source";
-  if (displayStatus(capture) === "failed") return "Needs a quick look";
-  if (hasReviewReasons) return "Needs a quick look";
+  if (displayStatus(capture) === "failed") return "Could not analyze";
+  if (hasReviewReasons) return "Needs review";
   return "Ready";
 }
 
@@ -926,7 +926,6 @@ export function captureSearchParts(capture: Capture) {
     capture.visitTarget?.confidence,
     ...(capture.visitTarget?.evidence || []),
     capture.confidenceLabel,
-    captureStatusLabel(capture),
     formatDateTime(capture.createdAt),
     isoDateText(capture.createdAt),
     isoDateText(capture.updatedAt),

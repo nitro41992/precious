@@ -15,7 +15,6 @@ import type { FlatListProps, ListRenderItemInfo } from "react-native";
 import {
   Check,
   ImageSquare as ImageIcon,
-  Info,
   Link as Link2,
   MagnifyingGlass as Search,
   Note as StickyNote,
@@ -23,7 +22,6 @@ import {
   X
 } from "phosphor-react-native";
 
-import { displayStatus } from "../captureLogic";
 import type { CaptureComposerMode, HomeListRow } from "../types";
 import { colors } from "../ui/theme";
 import { styles } from "../ui/styles";
@@ -52,7 +50,6 @@ type HomeScreenProps = {
     homeInitialLoading: boolean;
     keyboardHeight: number;
     pickingCaptureImage: boolean;
-    quickLookCount: number;
     savingCapture: boolean;
     sessionActive: boolean;
     showCaptureComposer: boolean;
@@ -63,7 +60,6 @@ type HomeScreenProps = {
     closeCaptureComposer: () => void;
     loadCaptures: () => void;
     loadMoreActiveCaptures: () => void;
-    openCapture: (captureId: string) => void;
     openCaptureComposer: () => void;
     openSearch: () => void;
     renderCaptureSkeletonRows: (count?: number, withRemoveAction?: boolean) => ReactElement | null;
@@ -97,7 +93,6 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
     homeInitialLoading,
     keyboardHeight,
     pickingCaptureImage,
-    quickLookCount,
     savingCapture,
     sessionActive,
     showCaptureComposer,
@@ -108,7 +103,6 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
     closeCaptureComposer,
     loadCaptures,
     loadMoreActiveCaptures,
-    openCapture,
     openCaptureComposer,
     openSearch,
     renderCaptureSkeletonRows,
@@ -122,8 +116,8 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
   const homeKnownEmpty = activeCapturesLoadedOnce && !capturesLoading && !capturesError && !homeCaptureRows.length;
   const homeAwaitingCaptures = !capturesError && !homeCaptureRows.length && !homeKnownEmpty;
   const homeCountLabel = homeAwaitingCaptures
-    ? "Loading captures"
-    : `${homeCaptureRows.length} recent ${homeCaptureRows.length === 1 ? "capture" : "captures"}`;
+    ? ""
+    : `${homeCaptureRows.length} ${homeCaptureRows.length === 1 ? "capture" : "captures"}`;
   const composerKeyboardVisible = showCaptureComposer && keyboardHeight > 0;
   const screenHeight = Dimensions.get("screen").height;
   const windowAlreadyKeyboardSized =
@@ -147,31 +141,19 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
         <View style={styles.header} testID="pc.home.captures">
           <View style={styles.headerRow}>
             <View style={styles.headerCopy}>
-              <Text style={styles.kicker}>{homeCountLabel}</Text>
-              <Text style={styles.title}>Recent Captures</Text>
+              <View style={styles.headerTitleLine}>
+                <Text style={styles.title}>Recents</Text>
+                {homeCountLabel ? (
+                  <Text numberOfLines={1} style={styles.titleCount}>
+                    {homeCountLabel}
+                  </Text>
+                ) : null}
+              </View>
             </View>
             {sessionActive ? (
               <IconButton Icon={Search} label="Search saved things" onPress={openSearch} testID="pc.home.search" />
             ) : null}
           </View>
-          {quickLookCount ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => {
-                const first = homeCaptureRows.find(
-                  (capture) => displayStatus(capture) === "needs_review" || displayStatus(capture) === "failed"
-                );
-                if (first) openCapture(first.id);
-              }}
-              style={({ pressed }) => [styles.quickLookSummary, pressed && styles.subtlePressed]}
-              testID="pc.home.quick-look"
-            >
-              <Info color={colors.review} size={15} weight="fill" />
-              <Text style={styles.quickLookSummaryText}>
-                {quickLookCount === 1 ? "1 needs a quick look" : `${quickLookCount} need a quick look`}
-              </Text>
-            </Pressable>
-          ) : null}
         </View>
         <FlatList
           {...listPerfProps}

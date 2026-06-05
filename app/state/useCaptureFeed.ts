@@ -97,10 +97,6 @@ export function useCaptureFeed({
     () => homeCaptures,
     [homeCaptures]
   );
-  const quickLookCount = useMemo(
-    () => homeCaptures.filter((capture) => displayStatus(capture) === "needs_review" || displayStatus(capture) === "failed").length,
-    [homeCaptures]
-  );
 
   useEffect(() => {
     if (capturesLoading && !activeCapturesLoadedOnce && !homeRows.length) {
@@ -155,7 +151,6 @@ export function useCaptureFeed({
     homeFeedRevealPending,
     homeInitialLoading,
     homeRows,
-    quickLookCount,
     visibleHomeCapturesForReveal,
     visibleHomeRows
   };

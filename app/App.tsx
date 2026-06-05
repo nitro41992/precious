@@ -1153,7 +1153,6 @@ export default function App() {
     homeFeedRevealPending,
     homeInitialLoading,
     homeRows,
-    quickLookCount,
     visibleHomeCapturesForReveal,
     visibleHomeRows
   } = useCaptureFeed({
@@ -2522,7 +2521,6 @@ export default function App() {
           closeCaptureComposer,
           loadCaptures: () => void loadCaptures(),
           loadMoreActiveCaptures: () => loadMoreCaptures("active"),
-          openCapture: openRecentCapture,
           openCaptureComposer,
           openSearch,
           renderCaptureSkeletonRows,
@@ -2553,7 +2551,6 @@ export default function App() {
           homeInitialLoading,
           keyboardHeight,
           pickingCaptureImage,
-          quickLookCount,
           savingCapture,
           sessionActive: Boolean(session),
           showCaptureComposer,

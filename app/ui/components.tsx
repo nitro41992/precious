@@ -177,7 +177,7 @@ export function SourceMark({
   const Icon = sourceIconForCapture(capture);
   const itemStatus = displayStatus(capture);
   const markStyle = size === "inline" ? styles.sourceMarkInline : size === "detail" ? styles.sourceMarkDetail : styles.sourceMark;
-  const iconSize = size === "inline" ? 24 : size === "detail" ? 16 : 20;
+  const iconSize = size === "inline" ? 24 : size === "detail" ? 16 : 42;
   if (imageUri) {
     return (
       <View
@@ -207,7 +207,6 @@ export function SourceMark({
       style={[
         markStyle,
         size !== "inline" && itemStatus === "processing" && styles.sourceMarkProcessing,
-        size !== "inline" && itemStatus === "needs_review" && styles.sourceMarkReview,
         size !== "inline" && itemStatus === "failed" && styles.sourceMarkFailed
       ]}
     >
@@ -228,25 +227,20 @@ export function SourceMark({
 
 export function sourceIconColor(status: CaptureStatus) {
   if (status === "processing") return colors.processing;
-  if (status === "needs_review") return colors.review;
   if (status === "failed") return colors.danger;
   return colors.accent;
 }
 
 export function StatusGlyph({ capture }: { capture: Capture }) {
   const status = displayStatus(capture);
-  if (status === "ready") return null;
+  if (status === "ready" || status === "needs_review") return null;
   const Icon = status === "processing"
       ? ClockClockwise
-      : status === "failed"
-        ? Warning
-        : Info;
+      : Warning;
   const label = captureStatusLabel(capture);
   const iconColor = status === "processing"
       ? colors.processing
-      : status === "failed"
-        ? colors.danger
-        : colors.review;
+      : colors.danger;
   return (
     <View
       accessibilityLabel={label}
@@ -254,7 +248,6 @@ export function StatusGlyph({ capture }: { capture: Capture }) {
       style={[
         styles.statusGlyph,
         status === "processing" && styles.statusGlyphProcessing,
-        status === "needs_review" && styles.statusGlyphReview,
         status === "failed" && styles.statusGlyphFailed
       ]}
     >
@@ -478,7 +471,7 @@ export function BottomAppBar({
                 <Icon
                   color={selected ? colors.accent : colors.muted}
                   selected={selected}
-                  size={24}
+                  size={22}
                 />
               </View>
             </Pressable>
@@ -491,7 +484,7 @@ export function BottomAppBar({
           style={({ pressed }) => [styles.bottomNavFab, pressed && styles.bottomNavFabPressed]}
           testID={collectionAction ? "pc.nav.collection-create" : "pc.nav.capture"}
         >
-          <Plus color={colors.onAccent} size={24} weight="bold" />
+          <Plus color={colors.onAccent} size={22} weight="bold" />
         </Pressable>
       </View>
     </View>

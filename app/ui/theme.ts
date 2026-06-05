@@ -1,3 +1,5 @@
+import { Platform } from "react-native";
+
 export const colors = {
   paper: "#101411",
   surface: "#171c18",
@@ -21,4 +23,15 @@ export const colors = {
   danger: "#ffb4a8",
   dangerSoft: "#3a1f1c",
   scrim: "rgba(3, 7, 5, 0.62)"
+};
+
+function androidFont(family: string) {
+  return Platform.OS === "android" ? { fontFamily: family } : {};
+}
+
+export const typefaces = {
+  regular: androidFont("Satoshi-Regular"),
+  medium: androidFont("Satoshi-Medium"),
+  bold: androidFont("Satoshi-Bold"),
+  black: androidFont("Satoshi-Black")
 };

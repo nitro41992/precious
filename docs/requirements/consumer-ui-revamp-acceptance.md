@@ -4,14 +4,14 @@
 
 This artifact records the agreed scope for the current Precious consumer UI revamp. Use it with `docs/precious-style-guide.md`, `docs/requirements/CONTEXT.md`, and `docs/requirements/PRODUCT.md` before implementing or reviewing UI work.
 
-Related ADRs: `docs/adr/0001-recent-captures-and-full-screen-search.md`, `docs/adr/0005-bottom-app-bar-and-top-level-collections.md`, `docs/adr/0006-existing-only-multi-collection-assignment.md`, `docs/adr/0008-starter-collections-for-empty-accounts.md`, and `docs/adr/0009-action-oriented-save-intents.md`.
+Related ADRs: `docs/adr/0001-recent-captures-and-full-screen-search.md`, `docs/adr/0005-bottom-app-bar-and-top-level-collections.md`, `docs/adr/0006-existing-only-multi-collection-assignment.md`, `docs/adr/0008-starter-collections-for-empty-accounts.md`, `docs/adr/0009-action-oriented-save-intents.md`, and `docs/adr/0016-use-satoshi-for-consumer-typography.md`.
 
 ## Product Shape
 
 - The app should feel like a polished consumer memory surface, not a dogfooding, audit, or extraction-review tool.
 - The consumer shell uses a calm dark Material 3 Expressive-inspired surface hierarchy by default, not the earlier warm paper shell.
 - Material 3 Expressive emphasis should clarify review decisions through purposeful size, shape, tonal containment, motion, and semantic color while preserving familiar native controls and Precious' calm dark tone.
-- The default screen is `Recent Captures`: active Captures only, ordered by most recently captured.
+- The default Retrieval Lens is `Recent Captures`, titled `Recents` in the app: active Captures only, ordered by most recently captured.
 - Search is a primary product function and opens as its own full-screen Retrieval Lens.
 - The top-level app shell uses a bottom app bar with `Recent`, `Collections`, and `Settings`, plus a separate contextual floating `+` action.
 - Search opens from a compact top action on `Recent Captures`, replacing the prior top-right Settings affordance.
@@ -38,8 +38,10 @@ Authentication must:
 Home must:
 
 - Show a compact, prominent top action that opens full-screen Search.
+- Show the active Capture count as quiet inline metadata beside the `Recents` title, not as a separate top line.
 - Show active Captures grouped by recency, such as `Today`, `Yesterday`, `This week`, and `Earlier`.
-- Show each row as rich consumer content: optional existing thumbnail or shared image preview, title, source plus date/time, summary when available, `Saved as [intent]` when available, meaningful status when needed, and optional note preview.
+- Show each row as rich consumer content: optional existing thumbnail or shared image preview, title, source plus date/time, icon-led Save Intent when available, compact linked Collection when available, compact Reminder when available, and operational status only for analyzing or failed Captures.
+- Hide analyzer rationale, summary prose, and note previews from the Recents row surface while keeping them available in Capture Review and Search.
 - Indicate when a Capture belongs to more than one Collection without making the row noisy, for example by showing the first Collection with a compact additional-count marker.
 - Hide audit-like extraction details from rows, including model/provider names, analysis mode, confidence percentages, generic `Analyzed` labels, and debug state.
 - Keep extraction details persisted and searchable.
@@ -48,6 +50,7 @@ Home must:
 
 Home must not:
 
+- Show a home review banner.
 - Show a permanent paste box as the main module.
 - Use `Upcoming` as the default home.
 - Surface Collections, Map, Agenda, or reminder modules as primary home sections.
@@ -59,6 +62,7 @@ Search must:
 - Open as a full-screen, focused surface with a minimal search input.
 - Use rich result rows consistent with Home.
 - Show existing capture thumbnails or source imagery in result rows when available, with the same fallback rhythm as Home.
+- Avoid review glyphs, review-colored source marks, and visible review status labels in result rows.
 - Search across title, summary, note, source, source URL, Save Intent, entities, collections, reminder suggestions, timestamps, and other persisted extraction details.
 - Use empty and loading states that feel intentionally designed.
 - Avoid chatbot framing unless a future product decision explicitly introduces it.
@@ -89,9 +93,9 @@ Capture Review must:
 - Use a consumer label such as `Later` for the main Reminder control; reserve `Reminder idea` for sheet rationale or detail surfaces when the AI suggested the timing. When Capture Analysis found no Reminder idea, tapping `Add reminder` opens the same manual reminder editor.
 - Show an `Open in Maps` action when Capture Analysis has a maps-searchable Visit Target and a native map provider passes an open check. This action opens the available Google Maps or Apple Maps search from the persisted Visit Target, preferring the target name when present and falling back to the saved query; Android must not show Apple Maps through a browser fallback, and the action must not imply a verified address, coordinates, place ID, or a first-class Map destination.
 - Include an `Add reminder` flow only when the selected reminder can at least persist as a capture-local or otherwise durable value. The editor must collect a start and end date, optional start and end time, and show the computed duration so date ranges, time ranges, and same-day time ranges are all editable. Do not imply notification delivery until it exists.
-- Purpose, Collection, and Later field uncertainty must not create inline review work, `Looks good`, clear-suggestion actions, or `Needs a quick look`. The user corrects AI selections through ordinary field editing.
+- Purpose, Collection, and Later field uncertainty must not create inline review work, `Looks good`, clear-suggestion actions, or home review banners. The user corrects AI selections through ordinary field editing.
 - Do not show a separate Review Insight bottom sheet or checklist for Purpose, Collection, or Later. AI rationale appears only inside the relevant field editor sheet while the field still matches the AI-selected value.
-- Choosing `No intent`, `No collection`, or no Reminder must stay available through the Purpose, Collection, or Later bottom sheets. `Needs a quick look` remains only for analysis-level missing context or failure cases the user can help resolve.
+- Choosing `No intent`, `No collection`, or no Reminder must stay available through the Purpose, Collection, or Later bottom sheets. Analysis-level missing context or failure cases may use neutral `Needs review` or `Could not analyze` status copy.
 - Keep raw source, destructive delete actions, and detailed rationale visually secondary.
 - Use modality-specific evidence in review copy. Image and note captures without a source URL must not show Link evidence fallback copy or a `Link evidence` module; they should show `Needs review` / `Couldn't tell` language when saved content needs more context.
 

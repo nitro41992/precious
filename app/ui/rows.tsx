@@ -1,8 +1,7 @@
 import type { ReactElement } from "react";
 import { Animated, Pressable, Text, View } from "react-native";
-import { BookOpen, Folder, Note as StickyNote } from "phosphor-react-native";
+import { BookOpen, CalendarBlank, Folder } from "phosphor-react-native";
 
-import { displayStatus } from "../captureLogic";
 import type { Capture, CaptureImageLoadState, Collection } from "../types";
 import {
   captureDisplayTitle,
@@ -10,9 +9,8 @@ import {
   captureIntentLabel,
   captureRowRevealKey,
   captureSourceLabel,
-  captureSupportLine,
-  consumerSummary,
   formatDateTime,
+  reminderLabel,
   shouldGhostSourceMark
 } from "../capturePresentation";
 import { colors } from "./theme";
@@ -66,10 +64,16 @@ export function CaptureRow({
         !rowRevealed &&
         (imageLoadKey ? !imageLoadState : true))
   );
-  const itemSummary = displayStatus(item) === "needs_review" ? "" : consumerSummary(item);
-  const supportLine = captureSupportLine(item, itemSummary);
   const intentLabel = captureIntentLabel(item);
   const collectionTokens = showCollectionToken ? item.linkedCollections || [] : [];
+  const reminderText = reminderLabel(
+    (item.suggestedReminders || []).find((reminder) => reminder.status !== "removed")
+  );
+  const hasMeaningTokens = Boolean(
+    intentLabel ||
+      reminderText ||
+      collectionTokens.some((collection) => collection.title.trim())
+  );
   const ghostSourceMark = deferFallbackIcon || shouldGhostSourceMark(item);
   const sourceMark = (
     <SourceMark
@@ -108,24 +112,17 @@ export function CaptureRow({
             {matchReason}
           </Text>
         ) : null}
-        {itemSummary ? (
-          <Text numberOfLines={2} style={styles.summaryPreview}>
-            {itemSummary}
-          </Text>
-        ) : supportLine ? (
-          <Text numberOfLines={2} style={styles.supportPreview}>
-            {supportLine}
-          </Text>
+        {hasMeaningTokens ? (
+          <View style={styles.rowMeaningLine}>
+            {intentLabel ? (
+              <MeaningToken Icon={BookOpen} text={intentLabel} />
+            ) : null}
+            <CollectionMeaningToken collections={collectionTokens} />
+            {reminderText ? (
+              <MeaningToken Icon={CalendarBlank} text={reminderText} />
+            ) : null}
+          </View>
         ) : null}
-        <View style={styles.rowMeaningLine}>
-          {intentLabel ? (
-            <MeaningToken Icon={BookOpen} text={intentLabel} />
-          ) : null}
-          <CollectionMeaningToken collections={collectionTokens} />
-          {item.note ? (
-            <MeaningToken Icon={StickyNote} text={item.note} />
-          ) : null}
-        </View>
       </View>
     </Pressable>
   );

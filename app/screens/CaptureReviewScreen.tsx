@@ -385,7 +385,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const selectedCapturedMeta = `Captured ${formatDateTime(selected.createdAt)}`;
   const selectedNeedsReview = displayStatus(selected) === "needs_review";
   const selectedReviewState = selectedNeedsReview
-    ? "Needs a quick look"
+    ? "Needs review"
     : reviewStatusCue(selected, selectedReviewReasons.length > 0);
   const showReviewStateText = selectedReviewState !== "Ready" && selectedReviewState !== captureStatusLabel(selected);
   const noteStatusLabel =

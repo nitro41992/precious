@@ -1,6 +1,6 @@
 import { Platform, StatusBar, StyleSheet } from "react-native";
 
-import { colors } from "./theme";
+import { colors, typefaces } from "./theme";
 
 export const styles = StyleSheet.create({
   safe: {
@@ -24,7 +24,7 @@ export const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 22,
-    paddingTop: 16
+    paddingTop: 14
   },
   keyboardScreen: {
     flex: 1
@@ -41,20 +41,37 @@ export const styles = StyleSheet.create({
   },
   headerCopy: {
     flex: 1,
-    gap: 4
+    minWidth: 0
+  },
+  headerTitleLine: {
+    alignItems: "baseline",
+    flexDirection: "row",
+    gap: 10,
+    minWidth: 0
   },
   kicker: {
     color: colors.muted,
+    ...typefaces.bold,
     fontSize: 12,
     fontWeight: "700",
     letterSpacing: 0
   },
   title: {
     color: colors.ink,
-    fontSize: 26,
+    ...typefaces.black,
+    fontSize: 30,
+    fontWeight: "900",
+    letterSpacing: 0,
+    lineHeight: 35
+  },
+  titleCount: {
+    color: colors.muted,
+    ...typefaces.bold,
+    flexShrink: 1,
+    fontSize: 12,
     fontWeight: "700",
     letterSpacing: 0,
-    lineHeight: 31
+    lineHeight: 16
   },
   iconButton: {
     alignItems: "center",
@@ -70,22 +87,6 @@ export const styles = StyleSheet.create({
   iconButtonDisabled: {
     opacity: 0.42
   },
-  quickLookSummary: {
-    alignItems: "center",
-    alignSelf: "flex-start",
-    backgroundColor: colors.reviewSoft,
-    borderRadius: 8,
-    flexDirection: "row",
-    gap: 6,
-    marginTop: 10,
-    minHeight: 36,
-    paddingHorizontal: 10
-  },
-  quickLookSummaryText: {
-    color: colors.review,
-    fontSize: 13,
-    fontWeight: "700"
-  },
   search: {
     backgroundColor: colors.soft,
     borderRadius: 8,
@@ -98,8 +99,8 @@ export const styles = StyleSheet.create({
   bottomNavLayer: {
     bottom: 0,
     left: 0,
-    paddingBottom: Platform.OS === "android" ? 34 : 28,
-    paddingHorizontal: 40,
+    paddingBottom: Platform.OS === "android" ? 28 : 24,
+    paddingHorizontal: 48,
     position: "absolute",
     right: 0,
     zIndex: 24
@@ -114,21 +115,21 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.surfaceContainer,
     borderColor: colors.line,
-    borderRadius: 30,
+    borderRadius: 26,
     borderWidth: StyleSheet.hairlineWidth,
     flex: 1,
     flexDirection: "row",
     gap: 6,
     justifyContent: "space-between",
-    minHeight: 60,
-    paddingHorizontal: 8,
-    paddingVertical: 6
+    minHeight: 54,
+    paddingHorizontal: 7,
+    paddingVertical: 5
   },
   bottomNavItem: {
     alignItems: "center",
     flex: 1,
     justifyContent: "center",
-    minHeight: 48,
+    minHeight: 44,
     minWidth: 0,
     paddingHorizontal: 2
   },
@@ -137,20 +138,20 @@ export const styles = StyleSheet.create({
   },
   bottomNavIconWrap: {
     alignItems: "center",
-    borderRadius: 22,
-    height: 42,
+    borderRadius: 18,
+    height: 36,
     justifyContent: "center",
-    minWidth: 54,
-    paddingHorizontal: 12
+    minWidth: 46,
+    paddingHorizontal: 10
   },
   bottomNavIconWrapSelected: {},
   bottomNavFab: {
     alignItems: "center",
     backgroundColor: colors.accent,
-    borderRadius: 30,
+    borderRadius: 26,
     justifyContent: "center",
-    height: 60,
-    width: 60
+    height: 52,
+    width: 52
   },
   bottomNavFabPressed: {
     backgroundColor: "#96e5bf",
@@ -181,6 +182,7 @@ export const styles = StyleSheet.create({
   },
   searchInputNative: {
     color: colors.ink,
+    ...typefaces.medium,
     flex: 1,
     fontSize: 17,
     fontWeight: "600",
@@ -214,6 +216,7 @@ export const styles = StyleSheet.create({
   },
   searchProgressText: {
     color: colors.processing,
+    ...typefaces.bold,
     fontSize: 12,
     fontWeight: "700",
     lineHeight: 16
@@ -262,6 +265,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.soft,
     borderRadius: 8,
     color: colors.ink,
+    ...typefaces.regular,
     fontSize: 16,
     lineHeight: 22,
     maxHeight: 124,
@@ -309,6 +313,7 @@ export const styles = StyleSheet.create({
   },
   captureModeText: {
     color: colors.ink,
+    ...typefaces.bold,
     flexShrink: 1,
     fontSize: 14,
     fontWeight: "800"
@@ -337,6 +342,7 @@ export const styles = StyleSheet.create({
   },
   captureImageButtonText: {
     color: colors.ink,
+    ...typefaces.bold,
     fontSize: 15,
     fontWeight: "800"
   },
@@ -392,12 +398,14 @@ export const styles = StyleSheet.create({
   },
   fieldRationaleTitle: {
     color: colors.secondary,
+    ...typefaces.bold,
     fontSize: 12,
     fontWeight: "800",
     lineHeight: 16
   },
   fieldRationaleText: {
     color: colors.ink,
+    ...typefaces.medium,
     fontSize: 14,
     fontWeight: "600",
     lineHeight: 19
@@ -425,6 +433,7 @@ export const styles = StyleSheet.create({
   },
   purposeOptionText: {
     color: colors.ink,
+    ...typefaces.bold,
     fontSize: 14,
     fontWeight: "800",
     lineHeight: 18,
@@ -565,10 +574,10 @@ export const styles = StyleSheet.create({
   captureRow: {
     alignItems: "flex-start",
     flexDirection: "row",
-    gap: 10,
-    minHeight: 76,
+    gap: 12,
+    minHeight: 104,
     paddingHorizontal: 0,
-    paddingVertical: 14
+    paddingVertical: 16
   },
   captureRowPressed: {
     backgroundColor: colors.surfaceContainer,
@@ -587,13 +596,12 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.accentSoft,
     borderColor: colors.accentLine,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    height: 52,
+    height: 74,
     justifyContent: "center",
-    marginTop: 2,
     overflow: "hidden",
-    width: 52
+    width: 74
   },
   sourceMarkDetail: {
     alignItems: "center",
@@ -617,17 +625,13 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.processingSoft,
     borderColor: "#2b526b"
   },
-  sourceMarkReview: {
-    backgroundColor: colors.reviewSoft,
-    borderColor: "#6c5324"
-  },
   sourceMarkFailed: {
     backgroundColor: colors.dangerSoft,
     borderColor: "#704038"
   },
   sourceFavicon: {
-    height: 22,
-    width: 22
+    height: 42,
+    width: 42
   },
   sourceFaviconDetail: {
     height: 16,
@@ -640,21 +644,20 @@ export const styles = StyleSheet.create({
   captureThumbnailFrame: {
     backgroundColor: colors.surfaceContainer,
     borderColor: colors.line,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    height: 58,
-    marginTop: 1,
+    height: 74,
     overflow: "hidden",
-    width: 58
+    width: 74
   },
   captureThumbnailImage: {
     height: "100%",
     width: "100%"
   },
   thumbnailRevealSlot: {
-    height: 60,
+    height: 74,
     position: "relative",
-    width: 58
+    width: 74
   },
   thumbnailGhostOverlay: {
     bottom: 0,
@@ -685,15 +688,12 @@ export const styles = StyleSheet.create({
     fontWeight: "800",
     lineHeight: 16
   },
-  statusGlyphReview: {
-    backgroundColor: colors.reviewSoft
-  },
   statusGlyphFailed: {
     backgroundColor: colors.dangerSoft
   },
   rowContent: {
     flex: 1,
-    gap: 4,
+    gap: 5,
     minWidth: 0
   },
   rowTop: {
@@ -709,10 +709,11 @@ export const styles = StyleSheet.create({
   },
   captureTitle: {
     color: colors.ink,
+    ...typefaces.bold,
     flex: 1,
-    fontSize: 17,
-    fontWeight: "600",
-    lineHeight: 22
+    fontSize: 18,
+    fontWeight: "700",
+    lineHeight: 23
   },
   status: {
     color: colors.ink,
@@ -730,6 +731,7 @@ export const styles = StyleSheet.create({
   },
   meta: {
     color: colors.muted,
+    ...typefaces.medium,
     flexShrink: 1,
     fontSize: 13,
     lineHeight: 18
@@ -754,37 +756,31 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
-    paddingTop: 1
+    columnGap: 10,
+    rowGap: 5,
+    paddingTop: 3
   },
   meaningToken: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 4,
+    gap: 5,
     maxWidth: "100%",
+    minHeight: 22,
     minWidth: 0
   },
   meaningTokenText: {
     color: colors.muted,
+    ...typefaces.bold,
     flexShrink: 1,
     fontSize: 12,
     fontWeight: "700",
     lineHeight: 17
   },
   collectionMeaningToken: {
-    backgroundColor: colors.surfaceContainer,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    minHeight: 26,
-    paddingLeft: 7,
-    paddingRight: 8,
-    paddingVertical: 4
+    paddingRight: 2
   },
   collectionMeaningTokenMulti: {
-    backgroundColor: colors.accentSoft,
-    borderColor: colors.accentLine,
-    paddingRight: 4
+    paddingRight: 0
   },
   collectionMeaningTokenText: {
     color: colors.secondary
@@ -982,12 +978,14 @@ export const styles = StyleSheet.create({
   },
   emptyTitle: {
     color: colors.ink,
+    ...typefaces.bold,
     fontSize: 22,
     fontWeight: "700",
     marginBottom: 8
   },
   emptyText: {
     color: colors.muted,
+    ...typefaces.regular,
     fontSize: 15,
     lineHeight: 22,
     maxWidth: 280
@@ -1011,6 +1009,7 @@ export const styles = StyleSheet.create({
   },
   promptChipText: {
     color: colors.ink,
+    ...typefaces.bold,
     fontSize: 13,
     fontWeight: "700"
   },
@@ -1041,6 +1040,7 @@ export const styles = StyleSheet.create({
   },
   homeEmptyPrimaryText: {
     color: colors.onAccent,
+    ...typefaces.bold,
     fontSize: 16,
     fontWeight: "800"
   },
@@ -1089,7 +1089,7 @@ export const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 12,
-    minHeight: 132,
+    minHeight: 136,
     paddingVertical: 16
   },
   collectionCaptureSkeletonRow: {
@@ -1117,9 +1117,9 @@ export const styles = StyleSheet.create({
   captureRowSkeletonInline: {
     alignItems: "flex-start",
     flexDirection: "row",
-    gap: 10,
-    minHeight: 76,
-    paddingVertical: 14
+    gap: 12,
+    minHeight: 104,
+    paddingVertical: 16
   },
   collectionCaptureSkeletonInline: {
     alignItems: "flex-start",
@@ -1179,19 +1179,17 @@ export const styles = StyleSheet.create({
   },
   loadingSourceMark: {
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    height: 52,
-    marginTop: 2,
-    width: 52
+    height: 74,
+    width: 74
   },
   loadingThumbnailMark: {
     borderColor: colors.line,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    height: 58,
-    marginTop: 1,
-    width: 58
+    height: 74,
+    width: 74
   },
   collectionLoadingTitle: {
     borderRadius: 6,
@@ -1519,11 +1517,13 @@ export const styles = StyleSheet.create({
   },
   authGoogleMarkText: {
     color: colors.ink,
+    ...typefaces.black,
     fontSize: 18,
     fontWeight: "900"
   },
   authGoogleButtonText: {
     color: colors.paper,
+    ...typefaces.bold,
     fontSize: 16,
     fontWeight: "800"
   },
@@ -1540,6 +1540,7 @@ export const styles = StyleSheet.create({
   },
   authDividerText: {
     color: colors.muted,
+    ...typefaces.bold,
     fontSize: 13,
     fontWeight: "700"
   },
@@ -1549,6 +1550,7 @@ export const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     color: colors.ink,
+    ...typefaces.regular,
     fontSize: 16,
     minHeight: 54,
     paddingHorizontal: 14,
@@ -1596,11 +1598,13 @@ export const styles = StyleSheet.create({
   },
   textButtonText: {
     color: colors.ink,
+    ...typefaces.medium,
     fontSize: 16,
     fontWeight: "600"
   },
   titleInput: {
     color: colors.ink,
+    ...typefaces.bold,
     fontSize: 28,
     fontWeight: "700",
     lineHeight: 34,
@@ -1643,6 +1647,7 @@ export const styles = StyleSheet.create({
   },
   reviewMediaSourceText: {
     color: colors.ink,
+    ...typefaces.bold,
     fontSize: 13,
     fontWeight: "800"
   },
@@ -1694,6 +1699,7 @@ export const styles = StyleSheet.create({
     backgroundColor: "rgba(16, 20, 17, 0.72)",
     borderRadius: 8,
     color: colors.ink,
+    ...typefaces.bold,
     fontSize: 13,
     fontWeight: "800",
     lineHeight: 18,
@@ -1713,11 +1719,13 @@ export const styles = StyleSheet.create({
   },
   reviewMediaFallbackTitle: {
     color: colors.ink,
+    ...typefaces.bold,
     fontSize: 17,
     fontWeight: "800"
   },
   reviewMediaFallbackText: {
     color: colors.muted,
+    ...typefaces.regular,
     fontSize: 14,
     lineHeight: 20
   },
@@ -1735,18 +1743,21 @@ export const styles = StyleSheet.create({
   },
   inlineMeaningLine: {
     color: colors.secondary,
+    ...typefaces.black,
     fontSize: 26,
     fontWeight: "900",
     lineHeight: 35
   },
   inlineMeaningText: {
     color: colors.secondary,
+    ...typefaces.black,
     fontSize: 26,
     fontWeight: "900",
     lineHeight: 35
   },
   inlineMeaningChipText: {
     color: colors.accent,
+    ...typefaces.black,
     fontSize: 26,
     fontWeight: "900",
     lineHeight: 35

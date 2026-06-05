@@ -10,7 +10,7 @@ Use this guide when designing or reviewing capture intake, capture lists, Captur
 
 The current consumer UI target is search-first memory retrieval:
 
-- The default home screen is `Recent Captures`, a beautiful active-capture list ordered by most recently captured.
+- The default home Retrieval Lens is `Recent Captures`, shown in the UI with the compact title `Recents`, a beautiful active-capture list ordered by most recently captured.
 - Search is a full-screen Retrieval Lens opened from a compact, prominent Recent Captures action, not a small embedded filter field.
 - Capture rows should feel rich and consumer-facing, while audit-like extraction details remain hidden from the row and available to Search.
 - The top-level app shell uses a Material 3-inspired bottom app bar for Recent, Collections, and Settings, with a separate contextual floating `+` action.
@@ -32,7 +32,7 @@ Mobbin access was limited during research: the supplied pages exposed title shel
 
 ### Gentler Streak
 
-- Borrow the adaptive, non-judgmental tone. Failed or incomplete analysis should read as "needs a quick look", not as a user failure.
+- Borrow the adaptive, non-judgmental tone. Failed or incomplete analysis should read as `Needs review` or `Could not analyze`, not as a user failure.
 - Make one primary status surface obvious. A capture should clearly move through saved, analyzing, needs review, ready, and failed states. Deleted captures leave active surfaces immediately.
 - Put contextual coaching near the relevant object: "Review the extracted title" or "Saved. Checking the source now."
 - Use compact recaps for perspective, not pressure: review backlog, captures saved this week, collections updated, or sources used.
@@ -101,8 +101,8 @@ Rules:
 
 ### Typography
 
-- Use native system fonts.
-- Page title: 26-28px, 700 weight, tight but readable line height.
+- Use bundled Satoshi for the Android product UI, with native system fallback when the bundled family is unavailable. Avoid Inter as the primary product typeface.
+- Page title: 28-30px, 800-900 weight, tight but readable line height.
 - Section title: 17-19px, 700 weight.
 - Row title: 17-18px, 600-700 weight, usually one line.
 - Body: 15-16px, 21-23px line height.
@@ -142,20 +142,18 @@ Rules:
 
 Capture rows should follow this order:
 
-1. Title on the left and status on the trailing edge.
+1. Title on the left, with operational status on the trailing edge only for analyzing or failed Captures.
 2. Source and date/time metadata.
-3. Optional one- or two-line summary.
-4. Optional `Saved as [intent]` meaning line.
-5. Optional review reason.
-6. Optional note preview.
+3. Optional icon-led meaning line for Save Intent, linked Collection, and Reminder when each value exists.
 
 Rules:
 
 - Rows should feel tappable without heavy card styling.
 - Use separators or grouped surfaces, not thick borders.
 - Keep row tap targets at least 44px high.
-- Use stable row structure for `processing`, `ready`, `needs_review`, and `failed`; deleted rows disappear immediately with toast undo.
+- Use stable row structure for `processing`, `ready`, `needs_review`, and `failed`; deleted rows disappear immediately with toast undo. Do not show a row glyph or review-colored source treatment for `needs_review`.
 - Do not show model/provider details, analysis mode, confidence percentages, or generic `Analyzed` metadata in Recent Captures rows.
+- Do not show analyzer rationale, summary prose, or note previews in Recents rows. Keep those details available in Capture Review and Search.
 - When a Capture belongs to multiple Collections, rows should make that visible compactly, such as first Collection plus a quiet `+N` count, rather than rendering only one Collection or listing every Collection name.
 - Group Recent Captures by recency with headers such as `Today`, `Yesterday`, `This week`, and `Earlier`.
 
@@ -177,7 +175,6 @@ Rules:
 
 Cards are allowed only for bounded summaries or decisions:
 
-- Needs-review module
 - Capture receipt
 - Weekly recap
 - Existing collection assignment
@@ -228,6 +225,7 @@ Rules:
 - Home shows active Captures only, ordered by most recently captured.
 - Deleted Captures are hidden from Recent Captures and Search immediately.
 - Place a compact Search action in the top bar.
+- Show the active capture count as quiet inline metadata beside `Recents`, not as a top kicker line or home review banner.
 - Tapping Search opens full-screen Search.
 - Rows should include source and date/time metadata, not only time.
 - Extraction details should remain persisted and searchable without being rendered as audit metadata.
@@ -262,9 +260,9 @@ Use:
 
 Do not show model names, provider details, analysis reports, or debug status in the primary UI.
 
-### Needs Review
+### Review Decisions
 
-Needs-review states should explain the exact decision needed.
+Review decisions should explain the exact user action needed without adding review prompts to Recents or Search rows.
 
 Use:
 
@@ -391,7 +389,6 @@ Use:
 
 - `Saved`
 - `Analyzing`
-- `Needs review`
 - `Looks right`
 - `Maybe`
 - `Not sure`
@@ -428,6 +425,7 @@ Before shipping a Precious UI change, verify:
 - The UI respects safe areas and bottom insets.
 - No nested cards, decorative gradients, or dashboard-style density were introduced.
 - Recent Captures rows include date/time metadata and hide audit-like extraction details.
+- Recents and Search do not show review glyphs or home review banners; only analyzing and failed states get visible row status treatment.
 - Search opens as a full-screen lens and can match persisted extraction details.
 - Collections, Map, Agenda, and Upcoming are not primary navigation destinations for this pass.
 - Collection removal offers immediate toast undo where feasible.
