@@ -41,7 +41,7 @@ export async function runPreflight(
   const model = preflightModel();
   const requestBody: Record<string, unknown> = {
     model,
-    reasoning: { effort: "minimal" },
+    reasoning: { effort: "low" },
     max_output_tokens: 900,
     input: [
       {

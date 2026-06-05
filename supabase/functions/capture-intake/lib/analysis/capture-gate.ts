@@ -21,39 +21,7 @@ export function captureGateModel() {
 export async function runCaptureGate(capture: CaptureRow) {
   const started = Date.now();
   const model = captureGateModel();
-  const userContent: Array<Record<string, unknown>> = [
-    {
-      type: "input_text",
-      text: captureGatePrompt(capture),
-    },
-  ];
-  if (
-    capture.asset_url &&
-    String(capture.asset_mime_type || "").startsWith("image/")
-  ) {
-    userContent.push({ type: "input_image", image_url: capture.asset_url });
-  }
-  const requestBody: Record<string, unknown> = {
-    model,
-    reasoning: { effort: "minimal" },
-    max_output_tokens: 700,
-    input: [
-      {
-        role: "system",
-        content:
-          "You are Sharebook's modality-specific capture gate. Classify whether saved note or image evidence is useful enough for Capture Analysis.",
-      },
-      { role: "user", content: userContent },
-    ],
-    text: {
-      format: {
-        type: "json_schema",
-        name: "capture_gate",
-        strict: true,
-        schema: captureGateSchema,
-      },
-    },
-  };
+  const requestBody = buildCaptureGateRequestBody(capture, model);
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -80,6 +48,42 @@ export async function runCaptureGate(capture: CaptureRow) {
     requestBody,
     latencyMs: Date.now() - started,
     usage: raw.usage ?? {},
+  };
+}
+
+export function buildCaptureGateRequestBody(capture: CaptureRow, model: string) {
+  const userContent: Array<Record<string, unknown>> = [
+    {
+      type: "input_text",
+      text: captureGatePrompt(capture),
+    },
+  ];
+  if (
+    capture.asset_url &&
+    String(capture.asset_mime_type || "").startsWith("image/")
+  ) {
+    userContent.push({ type: "input_image", image_url: capture.asset_url });
+  }
+  return {
+    model,
+    reasoning: { effort: "low" },
+    max_output_tokens: 700,
+    input: [
+      {
+        role: "system",
+        content:
+          "You are Sharebook's modality-specific capture gate. Classify whether saved note or image evidence is useful enough for Capture Analysis.",
+      },
+      { role: "user", content: userContent },
+    ],
+    text: {
+      format: {
+        type: "json_schema",
+        name: "capture_gate",
+        strict: true,
+        schema: captureGateSchema,
+      },
+    },
   };
 }
 

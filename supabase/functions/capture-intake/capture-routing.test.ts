@@ -215,6 +215,23 @@ Deno.test("capture gate review analysis does not invent URL evidence", () => {
   );
 });
 
+Deno.test("capture payload asset expectation uses explicit structured fields", () => {
+  assert(
+    urlEvidence.capturePayloadExpectsAsset({ assetExpected: true }),
+    "boolean assetExpected should mark media as required",
+  );
+  assert(
+    urlEvidence.capturePayloadExpectsAsset({ expectedAsset: "true" }),
+    "multipart expectedAsset should mark media as required",
+  );
+  assert(
+    !urlEvidence.capturePayloadExpectsAsset({
+      sourceText: "Shared image: Screenshot_20260605-032059.png",
+    }),
+    "filename-like text alone should not imply an expected asset",
+  );
+});
+
 Deno.test("legacy broad intents normalize to blank intent without field review", () => {
   const normalized = urlEvidence.normalizedReviewAnalysis({
     display_title: "Saved note",
@@ -951,6 +968,32 @@ Deno.test("capture gate prompt treats capture text and image text as untrusted",
   assert(
     prompt.includes("Selected image: ..."),
     "gate prompt should call out filename-only image markers",
+  );
+});
+
+Deno.test("capture gate request uses supported low reasoning effort", () => {
+  const request = urlEvidence.buildCaptureGateRequestBody(
+    captureFixture({
+      capture_type: "image",
+      asset_url: "https://example.com/signed-screenshot.jpg",
+      asset_mime_type: "image/jpeg",
+      source_text: "Screenshot (Jun 5, 2026 3:20:59 AM)",
+    }),
+    "gpt-5.4-mini",
+  ) as Record<string, any>;
+  const userContent = request.input?.[1]?.content || [];
+
+  assertEqual(
+    request.reasoning?.effort,
+    "low",
+    "capture gate should not send unsupported minimal reasoning effort",
+  );
+  assert(
+    userContent.some((entry: Record<string, unknown>) =>
+      entry.type === "input_image" &&
+      entry.image_url === "https://example.com/signed-screenshot.jpg"
+    ),
+    "capture gate should still attach shared image evidence",
   );
 });
 

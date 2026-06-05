@@ -2,8 +2,8 @@ import { adminClient } from "../supabase.ts";
 import { activeSaveIntentKeySet, CAPTURE_DETAIL_SELECT, CAPTURE_LIST_SELECT } from "../config.ts";
 import { boundedLimit, isUuid, runInBackground } from "../common.ts";
 import { json } from "../http.ts";
-import { archivedFilter, mergeAnalysisPatch, readCapturePayload, withCaptureState, withCaptureStates, withSignedCaptureAssetRows } from "../capture-records.ts";
-import { createOrGetCaptureFromFields, createOrGetCaptureWithAsset, processCapture } from "../captures.ts";
+import { archivedFilter, capturePayloadExpectsAsset, mergeAnalysisPatch, readCapturePayload, withCaptureState, withCaptureStates, withSignedCaptureAssetRows } from "../capture-records.ts";
+import { createOrGetCaptureFromFields, createOrGetCaptureWithAsset, failCaptureMissingAsset, processCapture } from "../captures.ts";
 import { analysisRequiresReview, analysisWithCurrentIntent, normalizedReviewAnalysis, normalizedReviewTargets, resolveReviewTargets, reviewTargetsForAnalysis } from "../analysis/review-normalization.ts";
 import {
   acceptPendingCollectionDecisions,
@@ -749,7 +749,7 @@ export async function handleCapturesResource(
   if (request.method !== "POST") return json({ error: "Not found" }, 404);
 
   const payload = await readCapturePayload(request);
-  const capture = payload.asset
+  let capture = payload.asset
     ? await createOrGetCaptureWithAsset(
       supabase,
       userId,
@@ -757,7 +757,9 @@ export async function handleCapturesResource(
       payload.asset,
     )
     : await createOrGetCaptureFromFields(supabase, userId, payload.fields);
-  if (
+  if (!payload.asset && capturePayloadExpectsAsset(payload.fields)) {
+    capture = await failCaptureMissingAsset(supabase, userId, capture);
+  } else if (
     capture.analysis_state === "queued" ||
     capture.analysis_state === "failed"
   ) {

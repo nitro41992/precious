@@ -1566,7 +1566,7 @@ export default function App() {
   async function saveContextNote(capture: Capture, noteValue: string) {
     const captureKey = captureDraftKey(capture);
     setNoteSaveState("saving");
-    if (config?.apiUrl && session?.accessToken) {
+    if (config?.apiUrl && session?.accessToken && capture.remoteId) {
       try {
         const json = await withFreshAccessToken((accessToken) =>
           requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
@@ -2157,7 +2157,7 @@ export default function App() {
 
   async function undoDeleteCapture(capture: Capture, returnCollectionId: string | null = null) {
     const captureRef = capture.remoteId || capture.id;
-    if (config?.apiUrl && session?.accessToken) {
+    if (config?.apiUrl && session?.accessToken && capture.remoteId) {
       try {
         const json = await withFreshAccessToken((accessToken) =>
           requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
@@ -2203,6 +2203,18 @@ export default function App() {
     if (!selected) return;
     const capture = selected;
     const returnCollectionId = captureReturnCollectionId;
+    const clearLocalCapture = async () => {
+      if (!nativeStore) return false;
+      try {
+        const raw = nativeStore.deleteCapture
+          ? await nativeStore.deleteCapture(capture.id)
+          : await nativeStore.archiveCapture(capture.id);
+        replaceLocalCaptureLists(JSON.parse(raw || "[]") as Capture[]);
+        return true;
+      } catch {
+        return false;
+      }
+    };
     removeCaptureFromVisibleLists(capture);
     selectCapture(null);
     if (returnCollectionId) selectCollection(returnCollectionId);
@@ -2214,7 +2226,7 @@ export default function App() {
       actionLabel: "Undo",
       action: () => void undoDeleteCapture(capture, returnCollectionId)
     });
-    if (config?.apiUrl && session?.accessToken) {
+    if (config?.apiUrl && session?.accessToken && capture.remoteId) {
       try {
         await withFreshAccessToken((accessToken) =>
           requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
@@ -2230,6 +2242,7 @@ export default function App() {
             }
           })
         );
+        await clearLocalCapture();
         collectionCapturesCacheRef.current = {};
         collectionCapturesCursorCacheRef.current = {};
         await loadCaptures();
@@ -2240,15 +2253,10 @@ export default function App() {
       }
       return;
     }
-    if (!nativeStore) return;
-    try {
-      const raw = nativeStore.deleteCapture
-        ? await nativeStore.deleteCapture(capture.id)
-        : await nativeStore.archiveCapture(capture.id);
-      replaceLocalCaptureLists(JSON.parse(raw || "[]") as Capture[]);
-    } catch (error) {
+    const deletedLocal = await clearLocalCapture();
+    if (!deletedLocal) {
       upsertActiveCapture(capture);
-      showErrorToast(error, "Could not delete.");
+      showErrorToast(new Error("Local capture store unavailable."), "Could not delete.");
     }
   }
 

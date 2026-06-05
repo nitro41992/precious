@@ -48,6 +48,10 @@ class ShareIntakeActivity : Activity() {
       Toast.makeText(this, "Could not read the shared image.", Toast.LENGTH_LONG).show()
       return
     }
+    if (intent.type?.startsWith("image/", ignoreCase = true) == true) {
+      Toast.makeText(this, "Could not read the shared image.", Toast.LENGTH_LONG).show()
+      return
+    }
     val sourceText = intent.getStringExtra(Intent.EXTRA_TEXT)
       ?: intent.getStringExtra(Intent.EXTRA_SUBJECT)
       ?: return
@@ -72,7 +76,8 @@ class ShareIntakeActivity : Activity() {
       networkType,
       asset?.file?.absolutePath,
       asset?.mimeType,
-      asset?.fileName
+      asset?.fileName,
+      assetExpected = asset != null
     )
   }
 

@@ -20,14 +20,17 @@ export type CaptureRow = {
 };
 
 export type CaptureAssetRow = {
+  id?: string;
   storage_path: string;
   mime_type: string | null;
+  asset_role?: "capture_media" | "source_preview" | null;
+  source_url?: string | null;
 };
 
 export type CaptureImageVariant = "thumb" | "detail" | "viewer";
 
 export const CAPTURE_ASSET_SELECT =
-  "id,user_id,capture_id,storage_path,public_url,mime_type,byte_size,created_at";
+  "id,user_id,capture_id,storage_path,public_url,mime_type,byte_size,asset_role,source_url,created_at";
 export const CAPTURE_LIST_SELECT =
   "id,user_id,client_capture_key,source_url,source_text,source_app,display_title,title,context_note,analysis_state,analysis_error,analysis,analysis_provider,analysis_mode,default_intent,current_save_intent,intent_rationale,thumbnail_url,capture_type,created_at,updated_at,processed_at,archived_at,deleted_at,delete_purge_after,rejected_at," +
   `capture_assets(${CAPTURE_ASSET_SELECT})`;

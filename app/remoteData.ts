@@ -30,11 +30,15 @@ export function captureFromRemote(row: Record<string, any>): Capture {
   const analysis = row.analysis ?? {};
   const defaultIntent = analysis.default_intent ?? {};
   const imageAsset = remoteImageAsset(row);
+  const sourcePreviewAsset = remoteImageAsset(row, "source_preview");
   const assetUrl = imageAsset
     ? nullableValue(imageAsset.signed_url || imageAsset.signedUrl || imageAsset.public_url || imageAsset.publicUrl)
     : undefined;
   const assetFullUrl = imageAsset
     ? nullableValue(imageAsset.signed_full_url || imageAsset.signedFullUrl || imageAsset.public_url || imageAsset.publicUrl)
+    : undefined;
+  const sourcePreviewAssetUrl = sourcePreviewAsset
+    ? nullableValue(sourcePreviewAsset.signed_url || sourcePreviewAsset.signedUrl || sourcePreviewAsset.public_url || sourcePreviewAsset.publicUrl)
     : undefined;
   const archivedAtValue = row.archived_at || analysis.archived_at || null;
   const deletedAtValue =
@@ -64,7 +68,6 @@ export function captureFromRemote(row: Record<string, any>): Capture {
   const visibleNeedsReview = reviewTargets.includes("analysis");
   const remoteHasExtractedData = Boolean(
     row.default_intent ||
-      row.analysis_provider ||
       analysis.summary ||
       defaultIntent.category
   );
@@ -92,6 +95,13 @@ export function captureFromRemote(row: Record<string, any>): Capture {
       ? nullableValue(imageAsset.signed_full_url_cache_key || imageAsset.signedFullUrlCacheKey)
       : undefined,
     imageAssetMimeType: imageAsset ? nullableValue(imageAsset.mime_type || imageAsset.mimeType) : undefined,
+    sourcePreviewAssetUrl,
+    sourcePreviewAssetCacheKey: sourcePreviewAsset
+      ? nullableValue(sourcePreviewAsset.signed_url_cache_key || sourcePreviewAsset.signedUrlCacheKey)
+      : undefined,
+    sourcePreviewAssetMimeType: sourcePreviewAsset
+      ? nullableValue(sourcePreviewAsset.mime_type || sourcePreviewAsset.mimeType)
+      : undefined,
     urlEvidence: analysis.url_evidence || row.urlEvidence || null,
     analysisMode,
     analysisProvider: nullableValue(row.analysis_provider),
@@ -166,13 +176,13 @@ export function captureFromRemote(row: Record<string, any>): Capture {
     status:
       row.analysis_state === "ready"
         ? "ready"
+        : row.analysis_state === "failed"
+          ? "failed"
         : row.analysis_state === "needs_review" && visibleNeedsReview
           ? "needs_review"
-          : row.analysis_state === "failed" && !remoteHasExtractedData
-            ? "failed"
-            : remoteHasExtractedData
-              ? "ready"
-              : "processing",
+          : remoteHasExtractedData
+            ? "ready"
+            : "processing",
     createdAt: row.created_at ? Date.parse(row.created_at) : Date.now(),
     updatedAt: row.updated_at ? Date.parse(row.updated_at) : Date.now(),
     processedAt: row.processed_at ? Date.parse(row.processed_at) : null

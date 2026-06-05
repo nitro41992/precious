@@ -62,7 +62,8 @@ class PreciousCaptureStoreModule(
             networkType,
             asset.file.absolutePath,
             asset.mimeType,
-            asset.fileName
+            asset.fileName,
+            assetExpected = true
           )
           promise.resolve(capture.toString())
         } catch (error: Exception) {

@@ -10,6 +10,92 @@ import {
   urlEvidence,
 } from "./url-evidence.test-support.ts";
 
+async function assertRejects(
+  fn: () => Promise<unknown>,
+  message: string,
+) {
+  try {
+    await fn();
+  } catch {
+    return;
+  }
+  throw new Error(message);
+}
+
+function fakePreviewSupabase(existingAsset: Record<string, unknown> | null = null) {
+  const state = {
+    assets: existingAsset ? [{ ...existingAsset }] : [] as Array<Record<string, unknown>>,
+    uploads: [] as Array<Record<string, unknown>>,
+    removes: [] as string[],
+  };
+  const captureAssetTable = {
+    select() {
+      return {
+        filters: {} as Record<string, unknown>,
+        eq(key: string, value: unknown) {
+          this.filters[key] = value;
+          return this;
+        },
+        maybeSingle() {
+          const row = state.assets.find((asset) =>
+            Object.entries(this.filters).every(([key, value]) =>
+              asset[key] === value
+            )
+          );
+          return Promise.resolve({ data: row || null, error: null });
+        },
+      };
+    },
+    insert(row: Record<string, unknown>) {
+      state.assets.push({ id: `asset-${state.assets.length + 1}`, ...row });
+      return Promise.resolve({ error: null });
+    },
+    update(row: Record<string, unknown>) {
+      return {
+        filters: {} as Record<string, unknown>,
+        eq(key: string, value: unknown) {
+          this.filters[key] = value;
+          return this;
+        },
+        then(resolve: (value: { error: null }) => void) {
+          const existing = state.assets.find((asset) =>
+            Object.entries(this.filters).every(([key, value]) =>
+              asset[key] === value
+            )
+          );
+          if (existing) Object.assign(existing, row);
+          resolve({ error: null });
+        },
+      };
+    },
+  };
+  return {
+    state,
+    from(table: string) {
+      if (table !== "capture_assets") throw new Error(`Unexpected table ${table}`);
+      return captureAssetTable;
+    },
+    storage: {
+      getBucket() {
+        return Promise.resolve({ error: null });
+      },
+      from(bucket: string) {
+        if (bucket !== "captures") throw new Error(`Unexpected bucket ${bucket}`);
+        return {
+          upload(path: string, bytes: ArrayBuffer, options: Record<string, unknown>) {
+            state.uploads.push({ path, byteLength: bytes.byteLength, options });
+            return Promise.resolve({ error: null });
+          },
+          remove(paths: string[]) {
+            state.removes.push(...paths);
+            return Promise.resolve({ error: null });
+          },
+        };
+      },
+    },
+  };
+}
+
 Deno.test("URL evidence corpus normalizes into product evidence", () => {
   for (const entry of corpus) {
     const evidence = evidenceFor(entry);
@@ -201,6 +287,185 @@ Deno.test("Exa per-URL failure records failed evidence without throwing", () => 
     Boolean(evidence.error?.includes("SOURCE_NOT_AVAILABLE")),
     "Exa failure should include status tag",
   );
+});
+
+Deno.test("source preview fetch accepts bounded public images", async () => {
+  const originalFetch = globalThis.fetch;
+  const pngBytes = new Uint8Array([137, 80, 78, 71]);
+  globalThis.fetch = (() =>
+    Promise.resolve(
+      new Response(pngBytes, {
+        status: 200,
+        headers: {
+          "content-type": "image/png",
+          "content-length": String(pngBytes.byteLength),
+        },
+      }),
+    )) as typeof fetch;
+  try {
+    const image = await urlEvidence.fetchSourcePreviewImage(
+      "https://cdn.example.com/preview.png",
+    );
+    assertEqual(image.contentType, "image/png", "preview content type");
+    assertEqual(image.extension, "png", "preview extension");
+    assertEqual(image.bytes.byteLength, 4, "preview byte length");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("source preview fetch rejects unsafe or unsupported images", async () => {
+  const originalFetch = globalThis.fetch;
+  await assertRejects(
+    () => urlEvidence.fetchSourcePreviewImage("http://cdn.example.com/a.png"),
+    "non-HTTPS preview should fail",
+  );
+
+  globalThis.fetch = (() =>
+    Promise.resolve(
+      new Response("<svg></svg>", {
+        status: 200,
+        headers: { "content-type": "image/svg+xml" },
+      }),
+    )) as typeof fetch;
+  try {
+    await assertRejects(
+      () => urlEvidence.fetchSourcePreviewImage("https://cdn.example.com/a.svg"),
+      "SVG preview should fail",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  globalThis.fetch = (() =>
+    Promise.resolve(
+      new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: {
+          "content-type": "image/jpeg",
+          "content-length": "3",
+        },
+      }),
+    )) as typeof fetch;
+  try {
+    await assertRejects(
+      () =>
+        urlEvidence.fetchSourcePreviewImage(
+          "https://cdn.example.com/large.jpg",
+          { maxBytes: 2 },
+        ),
+      "oversized preview should fail",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  globalThis.fetch = (() =>
+    Promise.resolve(
+      new Response(
+        new Uint8Array([
+          0x47,
+          0x49,
+          0x46,
+          0x38,
+          0x39,
+          0x61,
+          0x21,
+          0xf9,
+          0x04,
+          0x00,
+          0x21,
+          0xf9,
+          0x04,
+          0x00,
+        ]),
+        {
+          status: 200,
+          headers: { "content-type": "image/gif" },
+        },
+      ),
+    )) as typeof fetch;
+  try {
+    await assertRejects(
+      () => urlEvidence.fetchSourcePreviewImage("https://cdn.example.com/a.gif"),
+      "animated GIF preview should fail",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("source preview mirror stores one source_preview asset", async () => {
+  const originalFetch = globalThis.fetch;
+  const pngBytes = new Uint8Array([137, 80, 78, 71]);
+  globalThis.fetch = (() =>
+    Promise.resolve(
+      new Response(pngBytes, {
+        status: 200,
+        headers: { "content-type": "image/png" },
+      }),
+    )) as typeof fetch;
+  const supabase = fakePreviewSupabase();
+  try {
+    const evidence = urlEvidence.oembedMetadata(
+      {
+        title: "Preview post",
+        thumbnail_url: "https://cdn.example.com/preview.png",
+      },
+      "https://example.com/post/1",
+    );
+    const result = await urlEvidence.mirrorSourcePreviewAsset(
+      supabase as any,
+      "user-1",
+      { id: "capture-1", source_url: "https://example.com/post/1" },
+      evidence,
+    );
+    assertEqual(result.status, "mirrored", "mirror status");
+    assertEqual(supabase.state.assets.length, 1, "asset count");
+    assertEqual(
+      supabase.state.assets[0].asset_role,
+      "source_preview",
+      "asset role",
+    );
+    assertEqual(
+      supabase.state.assets[0].mime_type,
+      "image/png",
+      "asset mime type",
+    );
+    assert(
+      !("capture_type" in supabase.state.assets[0]),
+      "mirror must not update capture fields",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("source preview mirror skips duplicate existing asset", async () => {
+  const supabase = fakePreviewSupabase({
+    id: "asset-1",
+    user_id: "user-1",
+    capture_id: "capture-1",
+    storage_path: "user-1/capture-1/source-preview-existing.png",
+    source_url: "https://cdn.example.com/preview.png",
+    asset_role: "source_preview",
+  });
+  const evidence = urlEvidence.oembedMetadata(
+    {
+      title: "Preview post",
+      thumbnail_url: "https://cdn.example.com/preview.png",
+    },
+    "https://example.com/post/1",
+  );
+  const result = await urlEvidence.mirrorSourcePreviewAsset(
+    supabase as any,
+    "user-1",
+    { id: "capture-1", source_url: "https://example.com/post/1" },
+    evidence,
+  );
+  assertEqual(result.status, "existing", "existing status");
+  assertEqual(supabase.state.uploads.length, 0, "no duplicate upload");
+  assertEqual(supabase.state.assets.length, 1, "no duplicate asset row");
 });
 
 Deno.test("Places resolver accepts a strong single text-search result", async () => {

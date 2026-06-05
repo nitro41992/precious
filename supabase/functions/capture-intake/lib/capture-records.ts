@@ -231,6 +231,16 @@ export async function readCapturePayload(
   return { fields, asset };
 }
 
+export function capturePayloadExpectsAsset(fields: Record<string, unknown>) {
+  return booleanField(fields.assetExpected) || booleanField(fields.expectedAsset);
+}
+
+function booleanField(value: unknown) {
+  if (value === true) return true;
+  if (typeof value !== "string") return false;
+  return /^(true|1|yes)$/i.test(value.trim());
+}
+
 export async function ensureCaptureBucket(
   supabase: ReturnType<typeof adminClient>,
 ) {

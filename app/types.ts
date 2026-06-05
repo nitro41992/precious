@@ -84,6 +84,9 @@ export type Capture = {
   imageAssetFullUrl?: string;
   imageAssetFullCacheKey?: string;
   imageAssetMimeType?: string;
+  sourcePreviewAssetUrl?: string;
+  sourcePreviewAssetCacheKey?: string;
+  sourcePreviewAssetMimeType?: string;
   urlEvidence?: UrlEvidence | null;
   analysisMode?: string;
   analysisProvider?: string;

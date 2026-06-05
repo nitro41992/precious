@@ -203,7 +203,6 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
         {renderCaptureRow({
           item: item.capture,
           deferFallbackIcon: input.capturesLoading && !input.activeCapturesLoadedOnce,
-          deferMediaUntilLoaded: true,
           forceSkeleton: input.homeFeedRevealPending,
           onPress: () => input.onOpenRecentCapture(item.capture.id),
           testID: `pc.capture.row.${item.capture.id}`

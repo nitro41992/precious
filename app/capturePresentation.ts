@@ -696,19 +696,23 @@ export function sourceFaviconUrl(host: string) {
   return `https://${cleaned}/favicon.ico`;
 }
 
-export function remoteImageAsset(row: Record<string, any>) {
+export function remoteImageAsset(row: Record<string, any>, role = "capture_media") {
   const assets = Array.isArray(row.capture_assets) ? row.capture_assets : [];
   return assets.find((asset) => {
     const mimeType = String(asset?.mime_type || asset?.mimeType || "");
     const url = asset?.signed_url || asset?.signedUrl || asset?.public_url || asset?.publicUrl;
     const storagePath = asset?.storage_path || asset?.storagePath;
-    return mimeType.startsWith("image/") && Boolean((typeof url === "string" && url.trim()) || storagePath);
+    const assetRole = String(asset?.asset_role || asset?.assetRole || "capture_media");
+    return assetRole === role &&
+      mimeType.startsWith("image/") &&
+      Boolean((typeof url === "string" && url.trim()) || storagePath);
   });
 }
 
 export function captureImageUrl(capture: Capture) {
   return (
     capture.imageAssetUrl ||
+    capture.sourcePreviewAssetUrl ||
     capture.thumbnailUrl ||
     capture.urlEvidence?.image_url ||
     ""
@@ -716,17 +720,41 @@ export function captureImageUrl(capture: Capture) {
 }
 
 export function captureFullImageUrl(capture: Capture) {
-  return capture.imageAssetFullUrl || capture.imageAssetUrl || capture.thumbnailUrl || capture.urlEvidence?.image_url || "";
+  return capture.imageAssetFullUrl ||
+    capture.imageAssetUrl ||
+    capture.sourcePreviewAssetUrl ||
+    capture.thumbnailUrl ||
+    capture.urlEvidence?.image_url ||
+    "";
 }
 
 export function captureImageLoadKey(capture: Capture) {
   const imageUri = captureImageUrl(capture);
-  return imageUri ? capture.imageAssetCacheKey || imageUri : "";
+  if (!imageUri) return "";
+  if (capture.imageAssetUrl && imageUri === capture.imageAssetUrl) {
+    return capture.imageAssetCacheKey || imageUri;
+  }
+  if (capture.sourcePreviewAssetUrl && imageUri === capture.sourcePreviewAssetUrl) {
+    return capture.sourcePreviewAssetCacheKey || imageUri;
+  }
+  return imageUri;
 }
 
 export function captureFullImageLoadKey(capture: Capture) {
   const imageUri = captureFullImageUrl(capture);
-  return imageUri ? capture.imageAssetFullCacheKey || capture.imageAssetCacheKey || imageUri : "";
+  if (!imageUri) return "";
+  if (
+    capture.imageAssetFullUrl && imageUri === capture.imageAssetFullUrl
+  ) {
+    return capture.imageAssetFullCacheKey || capture.imageAssetCacheKey || imageUri;
+  }
+  if (capture.imageAssetUrl && imageUri === capture.imageAssetUrl) {
+    return capture.imageAssetCacheKey || imageUri;
+  }
+  if (capture.sourcePreviewAssetUrl && imageUri === capture.sourcePreviewAssetUrl) {
+    return capture.sourcePreviewAssetCacheKey || imageUri;
+  }
+  return imageUri;
 }
 
 export function captureRowRevealKey(capture: Capture) {

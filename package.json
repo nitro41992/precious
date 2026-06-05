@@ -32,6 +32,7 @@
     "hosted:create-user": "node scripts/create-password-user.mjs",
     "hosted:verify": "node scripts/verify-hosted-capture.mjs",
     "hosted:verify:review": "node scripts/verify-review-regression.mjs",
+    "hosted:backfill-source-previews": "node scripts/backfill-source-previews.mjs",
     "eval:exa:generate": "node scripts/generate-exa-corpus.mjs",
     "eval:private:export": "node scripts/export-private-capture-eval.mjs",
     "eval:label:preflight": "node scripts/label-silver-gemini.mjs --preflight --limit 1",

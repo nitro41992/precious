@@ -9,6 +9,7 @@ import {
   COLLECTION_AUTO_LINK_LIMIT,
   STARTER_COLLECTIONS,
 } from "./config.ts";
+import { capturePayloadExpectsAsset } from "./capture-records.ts";
 import {
   bestEvidence,
   compactUrlEvidence,
@@ -35,6 +36,7 @@ import {
 } from "./url-evidence.ts";
 import {
   buildOpenAiUserContent,
+  buildCaptureGateRequestBody,
   buildPrompt,
   captureGateMetadata,
   captureGateNeedsReviewAnalysis,
@@ -69,6 +71,13 @@ import {
   confirmedReminderFromInput,
   saveConfirmedReminderSuggestion,
 } from "./collections/review-decisions.ts";
+import {
+  fetchSourcePreviewImage,
+  gifLooksAnimated,
+  mirrorSourcePreviewAsset,
+  sourcePreviewContentType,
+  sourcePreviewExtension,
+} from "./source-previews.ts";
 
 export const __urlEvidenceTest = {
   activeSaveIntentKeys,
@@ -76,6 +85,7 @@ export const __urlEvidenceTest = {
   applySecondaryCollectionRecovery,
   bestEvidence,
   buildOpenAiUserContent,
+  buildCaptureGateRequestBody,
   buildPrompt,
   captureGateMetadata,
   captureGateNeedsReviewAnalysis,
@@ -83,6 +93,7 @@ export const __urlEvidenceTest = {
   confirmedReminderFromInput,
   contentEvidenceProfile,
   captureGatePrompt,
+  capturePayloadExpectsAsset,
   captureRoleInstruction,
   captureRoleTraceFromCollections,
   compactUrlEvidence,
@@ -96,9 +107,12 @@ export const __urlEvidenceTest = {
   exaTargetUrlsForEnrichment,
   fetchExtractusOembedEvidence,
   fetchExaContentsEvidence,
+  fetchSourcePreviewImage,
+  gifLooksAnimated,
   isExaContentsConfigured,
   isVisualDownloadFailure,
   metaOembedEndpoint,
+  mirrorSourcePreviewAsset,
   normalizeExaContentsEvidence,
   normalizedLocationContext,
   normalizeVisitTargetFields,
@@ -124,6 +138,8 @@ export const __urlEvidenceTest = {
   shouldAnalyzeAfterCaptureGate,
   shouldUseLinkOnlyUrlEvidenceFallback,
   shouldSeedStarterCollections,
+  sourcePreviewContentType,
+  sourcePreviewExtension,
   saveConfirmedReminderSuggestion,
   starterCollectionRows,
   starterCollections: STARTER_COLLECTIONS,

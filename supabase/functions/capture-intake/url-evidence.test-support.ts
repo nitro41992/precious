@@ -88,6 +88,7 @@ export function imageAssetFixture(
   return {
     storage_path: "user-1/capture-1/image.jpg",
     mime_type: "image/jpeg",
+    asset_role: "capture_media",
     ...overrides,
   };
 }

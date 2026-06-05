@@ -6,7 +6,12 @@ import {
   PROMPT_VERSION,
   SCHEMA_VERSION,
 } from "./config.ts";
-import { cleanedString, errorMessage, normalizeUrl } from "./common.ts";
+import {
+  cleanedString,
+  errorMessage,
+  normalizeUrl,
+  runInBackground,
+} from "./common.ts";
 import {
   ensureCaptureBucket,
   extractUrl,
@@ -53,12 +58,16 @@ import {
   retrieveCollectionsForCapture,
 } from "./collections.ts";
 import { resolvePlacePatchForAnalysis } from "./places.ts";
+import { mirrorSourcePreviewAssetQuietly } from "./source-previews.ts";
 import type {
   AnalysisOutput,
   CapturePayload,
   CaptureRow,
   UrlEvidence,
 } from "./types.ts";
+
+export const MISSING_CAPTURE_ASSET_MESSAGE =
+  "Could not upload the shared image. Share it again or choose it from Precious Captures.";
 
 export async function persistDeterministicAnalysis(
   supabase: ReturnType<typeof adminClient>,
@@ -286,6 +295,74 @@ export async function rejectContextlessLinkCapture(
   if (updateError) throw updateError;
 }
 
+export async function failCaptureMissingAsset(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  capture: CaptureRow,
+) {
+  const now = new Date().toISOString();
+  const analysis = normalizedReviewAnalysis({
+    display_title: titleFallback(capture.source_text, capture.source_url),
+    summary: MISSING_CAPTURE_ASSET_MESSAGE,
+    default_intent: {
+      category: null,
+      confidence: 0,
+      rationale: "The capture expected uploaded media, but no asset was received.",
+    },
+    entities: [],
+    visit_target_name: null,
+    visit_target_query: null,
+    visit_target_confidence: "none",
+    visit_target_evidence: [],
+    verified_place: false,
+    suggested_reminders: [],
+    collection_decisions: [],
+    search_phrases: [],
+    confidence_label: "Couldn't tell",
+    review_targets: ["analysis"],
+    needs_review: true,
+  });
+  const { error: runError } = await supabase.from("analysis_runs").insert({
+    user_id: userId,
+    capture_id: capture.id,
+    provider: "system",
+    model: "asset-intake",
+    status: "failed",
+    prompt_version: "capture_asset_missing",
+    schema_version: SCHEMA_VERSION,
+    latency_ms: 0,
+    usage: {},
+    raw_output: analysis,
+    raw_model_output: JSON.stringify({ reason: "expected_asset_missing" }),
+    error_message: MISSING_CAPTURE_ASSET_MESSAGE,
+  });
+  if (runError) throw runError;
+
+  const { data, error } = await supabase
+    .from("captures")
+    .update({
+      analysis_state: "failed",
+      analysis_error: MISSING_CAPTURE_ASSET_MESSAGE,
+      analysis,
+      analysis_provider: "system",
+      analysis_model: "asset-intake",
+      analysis_mode: "capture_asset_missing",
+      display_title: analysis.display_title,
+      title: capture.title || analysis.display_title,
+      default_intent: null,
+      default_intent_confidence: 0,
+      current_save_intent: null,
+      intent_rationale: analysis.default_intent.rationale,
+      processed_at: now,
+    })
+    .eq("id", capture.id)
+    .eq("user_id", userId)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 export async function processCapture(captureId: string, userId: string) {
   const supabase = adminClient();
   const { data: capture, error: captureError } = await supabase
@@ -330,6 +407,9 @@ export async function processCapture(captureId: string, userId: string) {
             : null,
       })
       : null;
+    runInBackground(
+      mirrorSourcePreviewAssetQuietly(supabase, userId, capture, urlEvidence),
+    );
     const urlEvidenceStatus = productEvidenceStatus(urlEvidence);
     let captureGateResult: Awaited<ReturnType<typeof runCaptureGate>> | null =
       null;
@@ -717,6 +797,7 @@ export async function createOrGetCaptureWithAsset(
     .select("id")
     .eq("user_id", userId)
     .eq("capture_id", capture.id)
+    .eq("asset_role", "capture_media")
     .maybeSingle();
   if (existing.error && existing.error.code !== "PGRST116") {
     throw existing.error;
@@ -745,6 +826,7 @@ export async function createOrGetCaptureWithAsset(
     public_url: null,
     mime_type: asset.contentType || "application/octet-stream",
     byte_size: asset.size,
+    asset_role: "capture_media",
   });
   if (assetError) throw assetError;
 

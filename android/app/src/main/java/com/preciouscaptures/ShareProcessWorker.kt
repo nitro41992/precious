@@ -30,7 +30,8 @@ class ShareProcessWorker(
         pendingCapture?.optString("clientResolutionSource")?.ifBlank { null },
         assetPath,
         inputData.getString("assetMimeType"),
-        inputData.getString("assetFileName")
+        inputData.getString("assetFileName"),
+        inputData.getBoolean("assetExpected", false)
       ) { phase ->
         when (phase) {
           CaptureProcessingPhase.UPLOADING -> CaptureNotifications.showUploading(applicationContext, captureId)
@@ -86,7 +87,7 @@ class ShareProcessWorker(
       .put("analysisModel", "")
       .put(
         "analysisError",
-        "LLM extraction did not run. Sign in and configure the hosted Sharebook API."
+        "Hosted analysis is not available. Open Precious Captures and sign in before saving."
       )
       .put("defaultIntent", "")
       .put("intentRationale", "")

@@ -29,9 +29,10 @@ export function shouldRunPreflight(
 }
 
 export function firstCaptureAsset(capture: CaptureRow): CaptureAssetRow | null {
-  return Array.isArray(capture.capture_assets)
-    ? capture.capture_assets[0] || null
-    : null;
+  if (!Array.isArray(capture.capture_assets)) return null;
+  return capture.capture_assets.find((asset) =>
+    (asset.asset_role || "capture_media") === "capture_media"
+  ) || null;
 }
 
 export function isImageAsset(asset: CaptureAssetRow | null | undefined) {

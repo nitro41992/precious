@@ -55,6 +55,7 @@ object CaptureAnalysisClient {
     assetPath: String? = null,
     assetMimeType: String? = null,
     assetFileName: String? = null,
+    assetExpected: Boolean = false,
     onPhase: (CaptureProcessingPhase) -> Unit = {}
   ): JSONObject? {
     var apiUrl = ""
@@ -72,6 +73,16 @@ object CaptureAnalysisClient {
       accessToken = token
 
       onPhase(CaptureProcessingPhase.UPLOADING)
+      if (assetExpected || !assetPath.isNullOrBlank()) {
+        val asset = assetPath?.ifBlank { null }?.let { File(it) }
+        if (asset == null || !asset.exists() || asset.length() <= 0) {
+          Log.w(
+            ANALYSIS_CLIENT_TAG,
+            "Shared capture expected an asset but the cached file was unavailable: ${assetPath ?: "(missing path)"}"
+          )
+          return captureAssetUnavailableEnrichment(sourceText, sourceUrl)
+        }
+      }
       val created = postCapture(
         apiUrl,
         token,
@@ -83,11 +94,12 @@ object CaptureAnalysisClient {
         assetFileName,
         clientResolvedUrl,
         clientResolutionSource,
-        clientResolutionAttemptCount.takeIf { it > 0 }
+        clientResolutionAttemptCount.takeIf { it > 0 },
+        assetExpected
       )
       if (created == null) {
         Log.w(ANALYSIS_CLIENT_TAG, "Hosted capture enqueue failed")
-        return null
+        return hostedEnqueueFailedEnrichment(sourceText, sourceUrl)
       }
       remoteCaptureId = created.optString("id", captureId)
       rememberRemoteCapture(context, captureId, remoteCaptureId ?: captureId)
@@ -160,7 +172,8 @@ object CaptureAnalysisClient {
     assetFileName: String? = null,
     clientResolvedUrl: String? = null,
     clientResolutionSource: String? = null,
-    clientResolutionAttemptCount: Int? = null
+    clientResolutionAttemptCount: Int? = null,
+    assetExpected: Boolean = false
   ): JSONObject? {
     val edge = isEdgeFunction(apiUrl)
     val url = if (edge) apiUrl else "$apiUrl/api/captures"
@@ -179,6 +192,7 @@ object CaptureAnalysisClient {
         .put("client_resolution_source", clientResolutionSource ?: JSONObject.NULL)
         .put("client_resolution_timestamp", if (clientResolvedUrl.isNullOrBlank()) JSONObject.NULL else isoNow())
         .put("client_resolution_attempt_count", clientResolutionAttemptCount ?: JSONObject.NULL)
+        .put("assetExpected", assetExpected)
         .put("sourceApp", "Android Share")
         .put("autoAnalyze", edge)
       connection.outputStream.use { output -> output.write(body.toString().toByteArray()) }
@@ -225,6 +239,7 @@ object CaptureAnalysisClient {
         field("sourceUrl", sourceUrl)
         field("original_url", sourceUrl)
         field("sourceApp", "Android Share")
+        field("assetExpected", "true")
         field("autoAnalyze", if (autoAnalyze) "true" else "false")
         output.write("--$boundary\r\n".toByteArray())
         output.write(
@@ -474,6 +489,30 @@ object CaptureAnalysisClient {
       .put("intentRationale", "")
       .put("confidenceLabel", "")
       .put("needsReview", false)
+  }
+
+  private fun captureAssetUnavailableEnrichment(sourceText: String, sourceUrl: String?): JSONObject {
+    return CaptureEnricher.enrich(sourceText, sourceUrl)
+      .put("analysisMode", "capture_asset_missing")
+      .put("analysisProvider", "system")
+      .put("analysisModel", "android-share-intake")
+      .put("analysisError", "Could not upload the shared image. Share it again or choose it from Precious Captures.")
+      .put("defaultIntent", "")
+      .put("intentRationale", "")
+      .put("confidenceLabel", "Couldn't tell")
+      .put("needsReview", true)
+  }
+
+  private fun hostedEnqueueFailedEnrichment(sourceText: String, sourceUrl: String?): JSONObject {
+    return CaptureEnricher.enrich(sourceText, sourceUrl)
+      .put("analysisMode", "capture_enqueue_failed")
+      .put("analysisProvider", "system")
+      .put("analysisModel", "android-share-intake")
+      .put("analysisError", "Could not send this capture for analysis. Open Precious Captures and try again.")
+      .put("defaultIntent", "")
+      .put("intentRationale", "")
+      .put("confidenceLabel", "Couldn't tell")
+      .put("needsReview", true)
   }
 
   private fun waitingForNetworkEnrichment(sourceText: String, sourceUrl: String?): JSONObject {

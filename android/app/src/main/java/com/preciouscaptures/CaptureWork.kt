@@ -19,13 +19,15 @@ fun enqueueCaptureWork(
   networkType: NetworkType,
   assetPath: String? = null,
   assetMimeType: String? = null,
-  assetFileName: String? = null
+  assetFileName: String? = null,
+  assetExpected: Boolean = false
 ) {
   val input = Data.Builder()
     .putString("captureId", captureId)
     .putString("assetPath", assetPath)
     .putString("assetMimeType", assetMimeType)
     .putString("assetFileName", assetFileName)
+    .putBoolean("assetExpected", assetExpected)
     .build()
   val request = OneTimeWorkRequestBuilder<ShareProcessWorker>()
     .setInputData(input)
