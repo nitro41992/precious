@@ -1009,17 +1009,36 @@ export default function App() {
       captureComposerClosingRef.current = false;
       return;
     }
-    Animated.timing(captureComposerMotion, {
-      duration: 135,
-      easing: Easing.in(Easing.cubic),
-      toValue: 0,
-      useNativeDriver: false
-    }).start(() => {
+    const closeDuration = 125;
+    const keyboardWasVisible = keyboardHeight > 0;
+    const keyboardSettleDuration = Platform.OS === "android" ? 190 : 160;
+    Keyboard.dismiss();
+    const closeAnimation = keyboardWasVisible
+      ? Animated.sequence([
+          Animated.timing(captureKeyboardInset, {
+            duration: keyboardSettleDuration,
+            easing: Easing.out(Easing.cubic),
+            toValue: 0,
+            useNativeDriver: false
+          }),
+          Animated.timing(captureComposerMotion, {
+            duration: closeDuration,
+            easing: Easing.in(Easing.cubic),
+            toValue: 0,
+            useNativeDriver: false
+          })
+        ])
+      : Animated.timing(captureComposerMotion, {
+          duration: closeDuration,
+          easing: Easing.in(Easing.cubic),
+          toValue: 0,
+          useNativeDriver: false
+        });
+    closeAnimation.start(() => {
       onClosed();
       setKeyboardHeight(0);
       captureKeyboardInset.setValue(0);
       captureComposerMotion.setValue(0);
-      if (!options.keyboardHidden) Keyboard.dismiss();
       requestAnimationFrame(() => {
         setCaptureComposerClosing(false);
         captureComposerClosingRef.current = false;
@@ -2486,7 +2505,6 @@ export default function App() {
           removeReminder: (reminderIndex) => void dismissReminder(reminderIndex),
           saveReminder: (draft, reminderIndex) => void saveReminder(draft, reminderIndex),
           savePurposeIntent: (intent) => void savePurposeIntent(intent),
-          saveReviewDecisions: () => void saveReviewDecisions(),
           selectCapture,
           selectCollection,
           setDraftIntent,

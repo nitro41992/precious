@@ -9,7 +9,7 @@ export const styles = StyleSheet.create({
     paddingTop: Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0
   },
   reviewSafe: {
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: colors.surfaceContainer,
     flex: 1
   },
   screenStack: {
@@ -1832,15 +1832,6 @@ export const styles = StyleSheet.create({
   reviewDetailContentNoFooter: {
     paddingBottom: 44
   },
-  reviewFooter: {
-    backgroundColor: colors.surfaceContainer,
-    borderTopColor: colors.line,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingBottom: Platform.OS === "android" ? 16 : 22,
-    paddingHorizontal: 22,
-    paddingTop: 10,
-    zIndex: 2
-  },
   detailHeader: {
     alignItems: "center",
     flexDirection: "row",
@@ -2043,16 +2034,16 @@ export const styles = StyleSheet.create({
   },
   inlineMeaningLine: {
     color: colors.secondary,
-    ...typefaces.black,
+    ...typefaces.medium,
     fontSize: 24,
-    fontWeight: "900",
+    fontWeight: "600",
     lineHeight: 32
   },
   inlineMeaningText: {
     color: colors.secondary,
-    ...typefaces.black,
+    ...typefaces.medium,
     fontSize: 24,
-    fontWeight: "900",
+    fontWeight: "600",
     lineHeight: 32
   },
   inlineMeaningChipText: {

@@ -106,7 +106,6 @@ type CaptureReviewScreenProps = {
     removeReminder: (reminderIndex: number) => void;
     saveReminder: (draft: ReminderScheduleDraft, reminderIndex: number | null) => void;
     savePurposeIntent: (intent: string | null) => void;
-    saveReviewDecisions: () => void;
     selectCapture: (captureId: string | null) => void;
     selectCollection: (collectionId: string | null) => void;
     setDraftIntent: (value: string) => void;
@@ -340,7 +339,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     removeReminder,
     saveReminder,
     savePurposeIntent,
-    saveReviewDecisions,
     selectCapture,
     selectCollection,
     setDraftIntent,
@@ -380,7 +378,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const laterField = meaningFields.find((field) => field.kind === "later");
   const purposeRationale = captureFieldRationale(selected, "purpose");
   const reminderRationale = captureFieldRationale(selected, "later");
-  const collectionActionPending = collectionChoiceSaving === "set-collections";
   const urlEvidenceNotice = urlEvidenceMessage(selected.urlEvidence);
   const selectedVisitTarget = selected.visitTarget;
   const selectedVisitTargetMapCandidates = selectedVisitTarget ? visitTargetMapCandidates : [];
@@ -410,12 +407,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
             ? "Autosaves"
             : "";
   const noteHasText = Boolean(draftNote.trim());
-  const reviewHasPendingChanges = Boolean(
-    state.draftTitleDirty ||
-      draftNoteDirty ||
-      Object.keys(reminderDrafts).length
-  );
-  const showReviewFooter = reviewHasPendingChanges || collectionActionPending;
   const noteSheetKeyboardVisible = noteSheetOpen && keyboardHeight > 0;
   const noteWindowAlreadyKeyboardSized =
     noteSheetKeyboardVisible && Math.abs(windowHeight + keyboardHeight - Dimensions.get("screen").height) < 96;
@@ -423,10 +414,15 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const noteVisibleHeight = noteSheetKeyboardVisible && !noteWindowAlreadyKeyboardSized
     ? windowHeight - keyboardHeight
     : windowHeight;
+  const noteKeyboardGap = noteSheetKeyboardVisible ? 16 : 0;
   const noteSheetMaxHeight = noteSheetKeyboardVisible
-    ? Math.min(440, Math.max(320, noteVisibleHeight - 24))
+    ? Math.min(440, Math.max(320, noteVisibleHeight - 24 - noteKeyboardGap))
     : Math.min(500, Math.max(340, windowHeight * 0.64));
-  const noteSheetBottomInset = noteWindowAlreadyKeyboardSized ? 0 : captureKeyboardInset;
+  const noteSheetBottomInset = noteWindowAlreadyKeyboardSized
+    ? noteKeyboardGap
+    : noteSheetKeyboardVisible
+      ? Animated.add(captureKeyboardInset, noteKeyboardGap)
+      : captureKeyboardInset;
   const showStatus = displayStatus(selected) !== "ready";
   const reviewScrollY = useRef(new Animated.Value(0)).current;
   const reviewWindowWidth = Dimensions.get("window").width;
@@ -487,16 +483,13 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
           }
         ]}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.reviewShell}
-        >
+        <View style={styles.reviewShell}>
           <View style={styles.reviewScrollLayout}>
             <Animated.ScrollView
               style={styles.reviewDetailScroller}
               contentContainerStyle={[
                 styles.reviewDetailContent,
-                !showReviewFooter && styles.reviewDetailContentNoFooter
+                styles.reviewDetailContentNoFooter
               ]}
               keyboardShouldPersistTaps="handled"
               onScroll={Animated.event(
@@ -801,26 +794,8 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                   </View>
                 </View>
               </Animated.ScrollView>
-              {showReviewFooter ? (
-                <View style={styles.reviewFooter}>
-                  <Pressable
-                    disabled={collectionActionPending}
-                    onPress={saveReviewDecisions}
-                    style={({ pressed }) => [
-                      styles.primaryButton,
-                      pressed && !collectionActionPending && styles.primaryButtonPressed,
-                      collectionActionPending && styles.disabledButton
-                    ]}
-                    testID="pc.review.save"
-                  >
-                    <Text style={styles.primaryButtonText}>
-                      {collectionActionPending ? "Updating collection..." : "Save review"}
-                    </Text>
-                  </Pressable>
-                </View>
-              ) : null}
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </Animated.View>
       {noteSheetOpen ? (
         <View style={styles.sheetLayer} pointerEvents="box-none">
