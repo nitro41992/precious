@@ -1903,12 +1903,6 @@ export const styles = StyleSheet.create({
     padding: 0,
     paddingVertical: 2
   },
-  reviewCapturedMeta: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: "600",
-    lineHeight: 18
-  },
   reviewMetaRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -1928,6 +1922,20 @@ export const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     lineHeight: 19
+  },
+  reviewSourceTime: {
+    color: colors.muted,
+    fontWeight: "600"
+  },
+  reviewSourceImageIconPill: {
+    alignItems: "center",
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accentLine,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 24,
+    justifyContent: "center",
+    width: 28
   },
   reviewSourceCopyButton: {
     alignItems: "center",

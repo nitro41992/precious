@@ -18,6 +18,7 @@ import {
 import { Image } from "expo-image";
 import {
   ArrowLeft,
+  Camera,
   Check,
   Copy,
   Note as StickyNote,
@@ -355,6 +356,8 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   } = actions;
 
   const sourceValue = selected.sourceUrl || selected.sourceText;
+  const selectedSourceLabel = captureReviewSourceLabel(selected);
+  const selectedSourceIsSharedImage = selectedSourceLabel === "Shared Image";
   const selectedOpenUrl = captureOpenUrl(selected);
   const selectedImageUrl = captureImageUrl(selected);
   const selectedImageLoadKey = captureImageLoadKey(selected);
@@ -391,7 +394,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     selectedVisitTarget &&
       locationInlineValue
   );
-  const selectedCapturedMeta = `Captured ${formatDateTime(selected.createdAt)}`;
+  const selectedCapturedTime = formatDateTime(selected.createdAt);
   const selectedNeedsReview = displayStatus(selected) === "needs_review";
   const selectedReviewState = selectedNeedsReview
     ? "Needs review"
@@ -526,13 +529,22 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
               />
               <View style={styles.reviewMetaRow}>
                 <View style={styles.reviewSourceCluster}>
-                  <SourceMark
-                    capture={selected}
-                    failedFavicons={faviconFailures}
-                    onFaviconFailure={markFaviconFailed}
-                    size="inline"
-                  />
-                  <Text numberOfLines={1} style={styles.reviewSourceName}>{captureReviewSourceLabel(selected)}</Text>
+                  {selectedSourceIsSharedImage ? (
+                    <View style={styles.reviewSourceImageIconPill}>
+                      <Camera color={colors.accent} size={17} weight="regular" />
+                    </View>
+                  ) : (
+                    <SourceMark
+                      capture={selected}
+                      failedFavicons={faviconFailures}
+                      onFaviconFailure={markFaviconFailed}
+                      size="inline"
+                    />
+                  )}
+                  <Text numberOfLines={1} style={styles.reviewSourceName}>
+                    {selectedSourceLabel}
+                    <Text style={styles.reviewSourceTime}> · {selectedCapturedTime}</Text>
+                  </Text>
                   {sourceValue ? (
                     <Pressable
                       accessibilityLabel="Copy source"
@@ -541,12 +553,11 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                       onPress={() => void copySource()}
                       style={({ pressed }) => [styles.reviewSourceCopyButton, pressed && styles.subtlePressed]}
                     >
-                      <Copy color={colors.secondary} size={17} weight="regular" />
+                      <Copy color={colors.secondary} size={18} weight="regular" />
                     </Pressable>
                   ) : null}
                 </View>
               </View>
-              <Text numberOfLines={1} style={styles.reviewCapturedMeta}>{selectedCapturedMeta}</Text>
               {showReviewStateText ? (
                 <Text style={styles.reviewSentenceSubtext}>{selectedReviewState}</Text>
               ) : null}

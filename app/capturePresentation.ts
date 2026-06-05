@@ -1,7 +1,6 @@
 import {
   BookOpen,
   Calendar,
-  Camera,
   ImageSquare as ImageIcon,
   Link,
   MapPin,
@@ -797,7 +796,7 @@ export function isScreenshotCapture(capture: Capture) {
   return (
     captureType === "screenshot" ||
     /^(selected|shared)\s+screenshot:/i.test(sourceText) ||
-    /^(selected|shared)\s+image:\s*.*\bscreenshot\b/i.test(sourceText)
+    /^(selected|shared)\s+image:\s*.*(?:^|[^a-z])screenshot(?:[^a-z]|$)/i.test(sourceText)
   );
 }
 
@@ -830,9 +829,6 @@ export function isMapSource(capture: Capture) {
 export function sourceIconForCapture(capture: Capture): AppIconComponent {
   const host = captureSourceHost(capture).toLowerCase();
   const intent = capture.defaultIntent || "";
-  if (isScreenshotCapture(capture)) {
-    return Camera;
-  }
   if (isMapSource(capture)) {
     return MapPin;
   }
