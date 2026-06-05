@@ -127,7 +127,7 @@ export const styles = StyleSheet.create({
     opacity: 0.42
   },
   search: {
-    backgroundColor: colors.soft,
+    backgroundColor: colors.reviewCardWell,
     borderRadius: 8,
     color: colors.ink,
     fontSize: 16,
@@ -304,7 +304,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 7
   },
   scopeChipSelected: {
-    backgroundColor: colors.soft
+    backgroundColor: colors.reviewCardWell
   },
   scopeChipText: {
     color: colors.muted,
@@ -315,7 +315,7 @@ export const styles = StyleSheet.create({
     color: colors.ink
   },
   captureInput: {
-    backgroundColor: colors.soft,
+    backgroundColor: colors.reviewCardWell,
     borderRadius: 8,
     color: colors.ink,
     ...typefaces.regular,
@@ -680,7 +680,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 16
   },
   captureRowPressed: {
-    backgroundColor: colors.rowPressed
+    backgroundColor: colors.surface
   },
   subtlePressed: {
     backgroundColor: colors.surfaceContainerHigh,
@@ -781,7 +781,7 @@ export const styles = StyleSheet.create({
   },
   statusGlyph: {
     alignItems: "center",
-    backgroundColor: colors.soft,
+    backgroundColor: colors.reviewCardWell,
     borderRadius: 8,
     flexShrink: 0,
     height: 28,
@@ -1139,7 +1139,7 @@ export const styles = StyleSheet.create({
   },
   promptChip: {
     alignItems: "center",
-    backgroundColor: colors.soft,
+    backgroundColor: colors.reviewCardWell,
     borderRadius: 8,
     flexDirection: "row",
     gap: 6,
@@ -1417,16 +1417,17 @@ export const styles = StyleSheet.create({
     minWidth: 0
   },
   collectionCardWrap: {
-    flex: 1,
-    padding: 5
+    flex: 1
   },
   collectionCard: {
+    flex: 1,
     gap: 9,
-    minHeight: 0
+    minHeight: 0,
+    padding: 5,
+    width: "100%"
   },
   collectionCardPressed: {
-    opacity: 0.88,
-    transform: [{ scale: 0.985 }]
+    backgroundColor: colors.surface
   },
   collectionCollageFrame: {
     aspectRatio: 1,
@@ -2351,7 +2352,7 @@ export const styles = StyleSheet.create({
   },
   rationaleBlock: {
     alignItems: "center",
-    backgroundColor: colors.soft,
+    backgroundColor: colors.reviewCardWell,
     borderRadius: 8,
     flexDirection: "row",
     gap: 10,
@@ -2708,7 +2709,7 @@ export const styles = StyleSheet.create({
     color: colors.onAccent
   },
   noteInput: {
-    backgroundColor: colors.soft,
+    backgroundColor: colors.reviewCardWell,
     borderRadius: 8,
     color: colors.ink,
     fontSize: 15,
@@ -2717,7 +2718,7 @@ export const styles = StyleSheet.create({
     textAlignVertical: "top"
   },
   detailInput: {
-    backgroundColor: colors.soft,
+    backgroundColor: colors.reviewCardWell,
     borderRadius: 8,
     color: colors.ink,
     fontSize: 16,

@@ -481,7 +481,6 @@ export function CollectionCard({
   return (
     <Animated.View style={[styles.collectionCardWrap, { opacity: collectionListFade }]}>
       <Pressable
-        android_ripple={{ color: colors.rowRipple }}
         onPress={onPress}
         style={({ pressed }) => [styles.collectionCard, pressed && styles.collectionCardPressed]}
         testID={`pc.collection.card.${item.id}`}

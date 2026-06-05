@@ -145,7 +145,7 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
                     ) : null}
                   </View>
                   <View style={[styles.collectionSelectionControl, selectedRow && styles.collectionSelectionControlSelected]}>
-                    {selectedRow ? <Check color={colors.onSelectedControl} size={15} weight="bold" /> : null}
+                    {selectedRow ? <Check color={colors.onAccent} size={15} weight="bold" /> : null}
                   </View>
                 </Pressable>
               </Animated.View>
@@ -188,7 +188,7 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
                   collectionSelectionIds.length === 0 && styles.collectionSelectionControlSelected
                 ]}
               >
-                {collectionSelectionIds.length === 0 ? <Check color={colors.onSelectedControl} size={15} weight="bold" /> : null}
+                {collectionSelectionIds.length === 0 ? <Check color={colors.onAccent} size={15} weight="bold" /> : null}
               </View>
             </Pressable>
           }

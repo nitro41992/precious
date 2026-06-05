@@ -409,7 +409,7 @@ export function CollectionMeaningToken({ collections }: { collections: LinkedCol
       ]}
     >
       <Folder
-        color={colors.tertiary}
+        color={colors.collectionAccent}
         size={13}
         weight={overflowCount > 0 ? "fill" : "regular"}
       />
@@ -542,12 +542,12 @@ export function HeaderContentGradient({ density = "standard" }: { density?: "sta
       <Svg height="100%" preserveAspectRatio="none" width="100%">
         <Defs>
           <LinearGradient id="header-content-fade" x1="0" x2="0" y1="0" y2="1">
-            <Stop offset="0" stopColor={colors.appBarScrim} stopOpacity="1" />
-            <Stop offset="0.34" stopColor={colors.appBarScrim} stopOpacity="0.96" />
-            <Stop offset={stops.middleOffset} stopColor={colors.appBarScrim} stopOpacity={stops.middleOpacity} />
-            <Stop offset={stops.dropOffset} stopColor={colors.appBarScrim} stopOpacity={stops.dropOpacity} />
-            <Stop offset={stops.clearOffset} stopColor={colors.appBarScrim} stopOpacity="0" />
-            <Stop offset="1" stopColor={colors.appBarScrim} stopOpacity="0" />
+            <Stop offset="0" stopColor={colors.surface} stopOpacity="1" />
+            <Stop offset="0.34" stopColor={colors.surface} stopOpacity="0.96" />
+            <Stop offset={stops.middleOffset} stopColor={colors.surface} stopOpacity={stops.middleOpacity} />
+            <Stop offset={stops.dropOffset} stopColor={colors.surface} stopOpacity={stops.dropOpacity} />
+            <Stop offset={stops.clearOffset} stopColor={colors.surface} stopOpacity="0" />
+            <Stop offset="1" stopColor={colors.surface} stopOpacity="0" />
           </LinearGradient>
         </Defs>
         <Rect fill="url(#header-content-fade)" height="100%" width="100%" x="0" y="0" />
@@ -610,9 +610,9 @@ export function BottomAppBar({
         <Svg height="100%" preserveAspectRatio="none" width="100%">
           <Defs>
             <LinearGradient id="bottom-nav-fade" x1="0" x2="0" y1="0" y2="1">
-              <Stop offset="0" stopColor={colors.bottomNavFade} stopOpacity="0" />
-              <Stop offset="0.28" stopColor={colors.bottomNavFade} stopOpacity="0.18" />
-              <Stop offset="1" stopColor={colors.bottomNavFade} stopOpacity="1" />
+              <Stop offset="0" stopColor={colors.paper} stopOpacity="0" />
+              <Stop offset="0.28" stopColor={colors.paper} stopOpacity="0.18" />
+              <Stop offset="1" stopColor={colors.paper} stopOpacity="1" />
             </LinearGradient>
           </Defs>
           <Rect fill="url(#bottom-nav-fade)" height="100%" width="100%" x="0" y="0" />
@@ -663,7 +663,7 @@ export function BottomAppBar({
           ]}
           testID={collectionAction ? "pc.nav.collection-create" : "pc.nav.capture"}
         >
-          <Plus color={collectionAction ? colors.collectionOnAccent : colors.onAccent} size={20} weight="bold" />
+          <Plus color={colors.onAccent} size={20} weight="bold" />
         </Pressable>
       </View>
     </View>
