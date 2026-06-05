@@ -14,9 +14,8 @@ import {
   View,
   useWindowDimensions
 } from "react-native";
-import type { TextInput } from "react-native";
+import type { FlatList, TextInput } from "react-native";
 import { Image } from "expo-image";
-import type { FlashListRef } from "@shopify/flash-list";
 
 import { AppSheets } from "./sheets/AppSheets";
 import { CollectionComposerSheet } from "./sheets/CollectionComposerSheet";
@@ -129,10 +128,13 @@ const COLLECTION_LIST_PERF_PROPS = {
   windowSize: 7
 };
 const COLLECTION_CAPTURE_LIST_PERF_PROPS = {
-  drawDistance: 1400,
-  removeClippedSubviews: Platform.OS === "android",
+  initialNumToRender: COLLECTION_CAPTURE_PAGE_SIZE,
+  maxToRenderPerBatch: COLLECTION_CAPTURE_PAGE_SIZE,
+  removeClippedSubviews: false,
   showsHorizontalScrollIndicator: false,
-  showsVerticalScrollIndicator: false
+  showsVerticalScrollIndicator: false,
+  updateCellsBatchingPeriod: 0,
+  windowSize: 9
 };
 const COLLECTION_CAPTURE_PREFETCH_LIMIT = 8;
 
@@ -291,7 +293,7 @@ export default function App() {
   const sourceInputRef = useRef<TextInput>(null);
   const noteInputRef = useRef<TextInput>(null);
   const collectionTitleInputRef = useRef<TextInput>(null);
-  const collectionDetailListRef = useRef<FlashListRef<Capture>>(null);
+  const collectionDetailListRef = useRef<FlatList<Capture>>(null);
   const lastKeyboardHeightRef = useRef(0);
   const captureComposerClosingRef = useRef(false);
   const captureImagePickerActiveRef = useRef(false);
