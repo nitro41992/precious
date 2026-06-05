@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import { Animated, Dimensions, Easing, Pressable, View } from "react-native";
 import { Image } from "expo-image";
-import { Check, ClockClockwise, ClockCounterClockwise, Folder, Folders, GearSix, Info, Plus, Sparkle, Warning } from "phosphor-react-native";
+import { Check, ClockClockwise, Folder, Folders, Gear, HouseSimple, Info, Plus, Sparkle, Warning } from "phosphor-react-native";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 import type {
   AppIconComponent,
@@ -107,7 +108,7 @@ export function AnimatedBottomSheet({
 }
 
 export function RecentNavIcon({ color, selected = false, size = 24 }: NavIconProps) {
-  return <ClockCounterClockwise color={color} size={size} weight={selected ? "fill" : "regular"} />;
+  return <HouseSimple color={color} size={size} weight={selected ? "fill" : "regular"} />;
 }
 
 export function CollectionsNavIcon({ color, selected = false, size = 24 }: NavIconProps) {
@@ -115,7 +116,7 @@ export function CollectionsNavIcon({ color, selected = false, size = 24 }: NavIc
 }
 
 export function SettingsNavIcon({ color, selected = false, size = 24 }: NavIconProps) {
-  return <GearSix color={color} size={size} weight={selected ? "fill" : "regular"} />;
+  return <Gear color={color} size={size} weight={selected ? "fill" : "regular"} />;
 }
 
 export function IconButton({
@@ -569,6 +570,18 @@ export function BottomAppBar({
 
   return (
     <View pointerEvents="box-none" style={styles.bottomNavLayer}>
+      <View pointerEvents="none" style={styles.bottomNavGradient}>
+        <Svg height="100%" preserveAspectRatio="none" width="100%">
+          <Defs>
+            <LinearGradient id="bottom-nav-fade" x1="0" x2="0" y1="0" y2="1">
+              <Stop offset="0" stopColor="#000000" stopOpacity="0" />
+              <Stop offset="0.58" stopColor="#000000" stopOpacity="0" />
+              <Stop offset="1" stopColor="#000000" stopOpacity="0.42" />
+            </LinearGradient>
+          </Defs>
+          <Rect fill="url(#bottom-nav-fade)" height="100%" width="100%" x="0" y="0" />
+        </Svg>
+      </View>
       <View style={styles.bottomNavDock}>
         <View style={styles.bottomNavBar}>
           {navItems.map(({ key, label, Icon, selected, onPress, testID }) => {
@@ -589,8 +602,7 @@ export function BottomAppBar({
                 <View
                   style={[
                     styles.bottomNavIconWrap,
-                    selected && styles.bottomNavIconWrapSelected,
-                    selected && key === "collections" && styles.bottomNavIconWrapSelectedCollection
+                    selected && styles.bottomNavIconWrapSelected
                   ]}
                 >
                   <Icon
@@ -615,7 +627,7 @@ export function BottomAppBar({
           ]}
           testID={collectionAction ? "pc.nav.collection-create" : "pc.nav.capture"}
         >
-          <Plus color={collectionAction ? colors.collectionOnAccent : colors.onAccent} size={22} weight="bold" />
+          <Plus color={collectionAction ? colors.collectionOnAccent : colors.onAccent} size={20} weight="bold" />
         </Pressable>
       </View>
     </View>

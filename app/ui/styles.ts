@@ -108,29 +108,39 @@ export const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     paddingBottom: Platform.OS === "android" ? 28 : 24,
-    paddingHorizontal: 48,
+    paddingHorizontal: 0,
     position: "absolute",
     right: 0,
     zIndex: 24
   },
+  bottomNavGradient: {
+    bottom: 0,
+    height: Platform.OS === "android" ? 96 : 104,
+    left: 0,
+    position: "absolute",
+    right: 0
+  },
   bottomNavDock: {
     alignItems: "center",
+    alignSelf: "center",
     flexDirection: "row",
-    gap: 12,
-    justifyContent: "space-between"
+    gap: 16,
+    justifyContent: "center",
+    maxWidth: "78%",
+    width: 264
   },
   bottomNavBar: {
     alignItems: "center",
     backgroundColor: colors.surfaceContainer,
-    borderColor: colors.line,
-    borderRadius: 26,
+    borderColor: "rgba(238, 245, 239, 0.12)",
+    borderRadius: 27,
     borderWidth: StyleSheet.hairlineWidth,
     flex: 1,
     flexDirection: "row",
     gap: 6,
     justifyContent: "space-between",
-    minHeight: 54,
-    paddingHorizontal: 7,
+    minHeight: 50,
+    paddingHorizontal: 5,
     paddingVertical: 5
   },
   bottomNavItem: {
@@ -147,22 +157,19 @@ export const styles = StyleSheet.create({
   bottomNavIconWrap: {
     alignItems: "center",
     borderRadius: 18,
-    height: 36,
+    height: 32,
     justifyContent: "center",
-    minWidth: 46,
-    paddingHorizontal: 10
+    minWidth: 39,
+    paddingHorizontal: 8
   },
   bottomNavIconWrapSelected: {},
-  bottomNavIconWrapSelectedCollection: {
-    backgroundColor: colors.collectionAccentSoft
-  },
   bottomNavFab: {
     alignItems: "center",
     backgroundColor: colors.accent,
-    borderRadius: 26,
+    borderRadius: 25,
     justifyContent: "center",
-    height: 52,
-    width: 52
+    height: 50,
+    width: 50
   },
   bottomNavFabPressed: {
     backgroundColor: "#96e5bf",
