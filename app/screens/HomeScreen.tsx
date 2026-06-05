@@ -148,7 +148,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
       <StatusBar backgroundColor="transparent" barStyle={appTheme.statusBarStyle} translucent />
       <View style={styles.topAppBarScreen}>
         <View style={[styles.header, styles.topAppBarOverlay]} testID="pc.home.captures">
-          <HeaderContentGradient />
+          <HeaderContentGradient density="compact" />
           <View style={styles.headerRow}>
             <View style={styles.headerCopy}>
               <View style={styles.headerTitleLine}>
