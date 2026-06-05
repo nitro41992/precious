@@ -94,3 +94,33 @@ test("captureDisplayTitle uses non-source summary before generic fallback", () =
     "Modly turns local photos into 3D models"
   );
 });
+
+test("captureRowSourceLabel hides shared image filenames from row metadata", () => {
+  const { captureRowSourceLabel } = loadCapturePresentation();
+
+  assert.equal(
+    captureRowSourceLabel(
+      capture({
+        captureType: "image",
+        sourceText: "Shared image: Screenshot_20260605-032059.png",
+        imageAssetUrl: "https://storage.example/captures/screenshot.png"
+      })
+    ),
+    "Shared image"
+  );
+});
+
+test("captureRowSourceLabel keeps real source hosts for link rows", () => {
+  const { captureRowSourceLabel } = loadCapturePresentation();
+
+  assert.equal(
+    captureRowSourceLabel(
+      capture({
+        sourceUrl: "https://www.instagram.com/reel/abc123/",
+        siteName: "instagram.com",
+        sourceText: "Shared text: https://www.instagram.com/reel/abc123/"
+      })
+    ),
+    "instagram.com"
+  );
+});

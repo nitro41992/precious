@@ -10,7 +10,7 @@ import {
   captureImageLoadKey,
   captureIntentLabel,
   captureRowRevealKey,
-  captureSourceLabel,
+  captureRowSourceLabel,
   formatDateTime,
   reminderLabel,
   shouldGhostSourceMark
@@ -107,7 +107,7 @@ export function CaptureRow({
           <StatusGlyph capture={item} />
         </View>
         <Text numberOfLines={1} style={styles.meta}>
-          {captureSourceLabel(item)} · {formatDateTime(item.createdAt)}
+          {captureRowSourceLabel(item)} · {formatDateTime(item.createdAt)}
         </Text>
         {matchReason ? (
           <Text numberOfLines={1} style={styles.searchMatchText}>

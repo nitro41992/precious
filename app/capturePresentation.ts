@@ -687,6 +687,15 @@ export function captureSourceLabel(capture: Capture) {
   return capture.siteName || hostFromUrl(capture.sourceUrl) || conciseText(capture.sourceText, 56) || "Shared text";
 }
 
+export function captureRowSourceLabel(capture: Capture) {
+  if (capture.siteName || hostFromUrl(capture.sourceUrl)) return captureSourceLabel(capture);
+  const sourceText = String(capture.sourceText || "").trim();
+  if (/^(shared|selected)\s+(image|screenshot):/i.test(sourceText) || isImageCapture(capture)) {
+    return "Shared image";
+  }
+  return captureSourceLabel(capture);
+}
+
 export function captureReviewSourceLabel(capture: Capture) {
   const sourceText = String(capture.sourceText || "").trim();
   const imageShareMatch = /^(shared|selected)\s+(image|screenshot):/i.exec(sourceText);
