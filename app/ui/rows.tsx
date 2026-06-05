@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactElement } from "react";
 import { Animated, Pressable, Text, View } from "react-native";
 import { Image } from "expo-image";
-import { BookOpen, CalendarBlank, Folder, ImageSquare } from "phosphor-react-native";
+import { CalendarBlank, Folder, ImageSquare, Lightbulb } from "phosphor-react-native";
 
 import { collectionCollageSlots, hostFromUrl } from "../captureLogic";
 import type { Capture, CaptureImageLoadState, Collection } from "../types";
@@ -117,7 +117,7 @@ export function CaptureRow({
         {hasMeaningTokens ? (
           <View style={styles.rowMeaningLine}>
             {intentLabel ? (
-              <MeaningToken Icon={BookOpen} text={intentLabel} />
+              <MeaningToken Icon={Lightbulb} text={intentLabel} />
             ) : null}
             <CollectionMeaningToken collections={collectionTokens} />
             {reminderText ? (

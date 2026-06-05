@@ -686,6 +686,19 @@ export function captureSourceLabel(capture: Capture) {
   return capture.siteName || hostFromUrl(capture.sourceUrl) || conciseText(capture.sourceText, 56) || "Shared text";
 }
 
+export function captureReviewSourceLabel(capture: Capture) {
+  const sourceText = String(capture.sourceText || "").trim();
+  const imageShareMatch = /^(shared|selected)\s+(image|screenshot):/i.exec(sourceText);
+  if (imageShareMatch) {
+    const verb = imageShareMatch[1].toLowerCase() === "selected" ? "Selected" : "Shared";
+    return `${verb} image`;
+  }
+  if (!capture.sourceUrl && isImageCapture(capture)) {
+    return "Shared image";
+  }
+  return captureSourceLabel(capture);
+}
+
 export function captureSourceHost(capture: Capture) {
   return hostFromUrl(capture.sourceUrl) || capture.siteName || "";
 }

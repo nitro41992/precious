@@ -47,6 +47,7 @@ import {
   captureImageUrl,
   captureIntentLabel,
   captureOpenUrl,
+  captureReviewSourceLabel,
   captureSourceLabel,
   captureStatusLabel,
   formatDateTime,
@@ -531,7 +532,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                     onFaviconFailure={markFaviconFailed}
                     size="inline"
                   />
-                  <Text numberOfLines={1} style={styles.reviewSourceName}>{captureSourceLabel(selected)}</Text>
+                  <Text numberOfLines={1} style={styles.reviewSourceName}>{captureReviewSourceLabel(selected)}</Text>
                   {sourceValue ? (
                     <Pressable
                       accessibilityLabel="Copy source"
