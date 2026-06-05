@@ -88,7 +88,7 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
             [collection.title, collection.description].join(" ").toLowerCase().includes(selectionTerm)
         );
   const selectionCountText = collectionSelectionIds.length ? `${collectionSelectionIds.length} selected` : "No collection";
-  const rationale = captureFieldRationale(selected, "collection");
+  const rationale = captureFieldRationale(selected, "collection", { collectionSelectionIds });
 
   return (
     <View style={styles.modalLayer} pointerEvents="box-none">

@@ -106,6 +106,95 @@ test("captureFromRemote still maps successful OpenAI rows to ready", () => {
   assert.equal(capture.analysisProvider, "openai");
 });
 
+test("captureFromRemote maps structured field rationales", () => {
+  const { captureFromRemote } = loadRemoteData();
+  const capture = captureFromRemote({
+    id: "structured-rationale-capture",
+    client_capture_key: "structured-rationale-client",
+    created_at: "2026-06-05T07:22:09.169Z",
+    updated_at: "2026-06-05T07:22:10.914Z",
+    display_title: "Saved guide",
+    source_text: "A useful saved guide",
+    analysis_state: "ready",
+    analysis_provider: "openai",
+    current_save_intent: "learn",
+    linked_collections: [
+      {
+        id: "collection-a",
+        title: "Articles & Guides",
+        created_by: "analysis",
+        rationale: "I picked Articles & Guides because it explains the workflow."
+      }
+    ],
+    analysis: {
+      default_intent: {
+        category: "learn",
+        confidence: 0.82,
+        rationale: "I chose Learn because it explains the workflow."
+      },
+      field_rationales: {
+        purpose: {
+          selection_key: "learn",
+          selection_label: "Learn",
+          text: "I chose Learn because it explains the workflow."
+        },
+        collections: [
+          {
+            collection_id: "collection-a",
+            selection_label: "Articles & Guides",
+            text: "I picked Articles & Guides because it explains the workflow."
+          }
+        ],
+        reminder: {
+          trigger_value: "June 12",
+          start_date: "2026-06-12",
+          end_date: "2026-06-12",
+          start_time: null,
+          end_time: null,
+          text: "I suggested June 12 because the event starts then."
+        }
+      },
+      suggested_reminders: [
+        {
+          trigger_type: "time",
+          trigger_value: "June 12",
+          start_date: "2026-06-12",
+          end_date: "2026-06-12",
+          rationale: "I suggested June 12 because the event starts then.",
+          confidence: 0.82,
+          source: "analysis"
+        }
+      ],
+      entities: [],
+      collection_decisions: [],
+      search_phrases: []
+    }
+  });
+
+  assert.deepEqual(capture.fieldRationales, {
+    purpose: {
+      selectionKey: "learn",
+      selectionLabel: "Learn",
+      text: "I chose Learn because it explains the workflow."
+    },
+    collections: [
+      {
+        collectionId: "collection-a",
+        selectionLabel: "Articles & Guides",
+        text: "I picked Articles & Guides because it explains the workflow."
+      }
+    ],
+    reminder: {
+      triggerValue: "June 12",
+      startDate: "2026-06-12",
+      endDate: "2026-06-12",
+      startTime: null,
+      endTime: null,
+      text: "I suggested June 12 because the event starts then."
+    }
+  });
+});
+
 test("captureFromRemote separates user media from source preview media", () => {
   const { captureFromRemote } = loadRemoteData();
   const capture = captureFromRemote({

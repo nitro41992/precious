@@ -56,6 +56,43 @@ export type CaptureFieldState = {
   canEdit: boolean;
 };
 
+export type CaptureFieldRationaleVisibilityInput = ReviewableCapture & {
+  aiDefaultIntent?: string;
+  intentRationale?: string;
+  fieldRationales?: {
+    purpose?: {
+      selectionKey?: string | null;
+      text?: string | null;
+    };
+    collections?: Array<{
+      collectionId?: string | null;
+      text?: string | null;
+    }>;
+    reminder?: {
+      triggerValue?: string | null;
+      startDate?: string | null;
+      endDate?: string | null;
+      startTime?: string | null;
+      endTime?: string | null;
+      text?: string | null;
+    };
+  };
+  linkedCollections?: Array<{
+    id: string;
+    createdBy?: string;
+    rationale?: string | null;
+  }>;
+  suggestedReminders?: Array<{
+    trigger_value?: string | null;
+    start_date?: string | null;
+    end_date?: string | null;
+    start_time?: string | null;
+    end_time?: string | null;
+    rationale?: string | null;
+    source?: string | null;
+  }>;
+};
+
 type StatusCapture = ReviewableCapture & {
   defaultIntent?: string;
   summary?: string;
@@ -118,6 +155,11 @@ export function extractHttpUrl(value?: string | null): string;
 export function hasExtractedData(capture: StatusCapture): boolean;
 export function hostFromUrl(value?: string | null): string;
 export function captureFieldState(input?: CaptureFieldStateInput): CaptureFieldState;
+export function captureFieldRationaleVisible(
+  capture: CaptureFieldRationaleVisibilityInput,
+  field: "purpose" | "collection" | "later" | string,
+  options?: { allowedIntents?: string[]; collectionSelectionIds?: string[] }
+): boolean;
 export function isArchived(capture: { archivedAt?: number | null }): boolean;
 export function isDeleted(capture: { archivedAt?: number | null; deletedAt?: number | null }): boolean;
 export function isRejected(capture: { rejectedAt?: number | null; analysisMode?: string }): boolean;

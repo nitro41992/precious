@@ -4,6 +4,7 @@ const test = require("node:test");
 const {
   LOCAL_PROCESSING_GRACE_MS,
   captureIdentityAliases,
+  captureFieldRationaleVisible,
   captureIntentPatchBody,
   collectionCollageSlots,
   capturesForListMode,
@@ -232,6 +233,151 @@ test("collection selection action ignores field review targets", () => {
       shouldSave: false,
       label: "Done"
     }
+  );
+});
+
+test("field rationale visibility follows current AI-selected field values", () => {
+  assert.equal(
+    captureFieldRationaleVisible(
+      capture({
+        defaultIntent: "learn",
+        aiDefaultIntent: "learn",
+        intentRationale: "I chose Learn because the capture explains a method.",
+        fieldRationales: {
+          purpose: {
+            selectionKey: "learn",
+            text: "I chose Learn because the capture explains a method."
+          }
+        }
+      }),
+      "purpose",
+      { allowedIntents: ["learn", "read"] }
+    ),
+    true
+  );
+  assert.equal(
+    captureFieldRationaleVisible(
+      capture({
+        defaultIntent: "read",
+        aiDefaultIntent: "learn",
+        intentRationale: "I chose Learn because the capture explains a method.",
+        fieldRationales: {
+          purpose: {
+            selectionKey: "learn",
+            text: "I chose Learn because the capture explains a method."
+          }
+        }
+      }),
+      "purpose",
+      { allowedIntents: ["learn", "read"] }
+    ),
+    false
+  );
+
+  const collectionCapture = capture({
+    linkedCollections: [
+      {
+        id: "collection-a",
+        createdBy: "analysis",
+        rationale: "I picked Recipes because the capture gives cooking steps."
+      }
+    ],
+    fieldRationales: {
+      collections: [
+        {
+          collectionId: "collection-a",
+          text: "I picked Recipes because the capture gives cooking steps."
+        }
+      ]
+    }
+  });
+  assert.equal(
+    captureFieldRationaleVisible(collectionCapture, "collection", {
+      collectionSelectionIds: ["collection-a"]
+    }),
+    true
+  );
+  assert.equal(
+    captureFieldRationaleVisible(collectionCapture, "collection", {
+      collectionSelectionIds: ["collection-b"]
+    }),
+    false
+  );
+
+  assert.equal(
+    captureFieldRationaleVisible(
+      capture({
+        suggestedReminders: [
+          {
+            trigger_value: "June 5",
+            start_date: "2026-06-05",
+            end_date: "2026-06-05",
+            rationale: "I suggested June 5 because the event starts then.",
+            source: "analysis"
+          }
+        ],
+        fieldRationales: {
+          reminder: {
+            triggerValue: "June 5",
+            startDate: "2026-06-05",
+            endDate: "2026-06-05",
+            text: "I suggested June 5 because the event starts then."
+          }
+        }
+      }),
+      "later"
+    ),
+    true
+  );
+  assert.equal(
+    captureFieldRationaleVisible(
+      capture({
+        suggestedReminders: [
+          {
+            trigger_value: "June 6",
+            start_date: "2026-06-06",
+            end_date: "2026-06-06",
+            rationale: "I suggested June 5 because the event starts then.",
+            source: "ai_prefill"
+          }
+        ],
+        fieldRationales: {
+          reminder: {
+            triggerValue: "June 5",
+            startDate: "2026-06-05",
+            endDate: "2026-06-05",
+            text: "I suggested June 5 because the event starts then."
+          }
+        }
+      }),
+      "later"
+    ),
+    false
+  );
+  assert.equal(
+    captureFieldRationaleVisible(
+      capture({
+        suggestedReminders: [
+          {
+            trigger_value: "June 5",
+            start_date: "2026-06-05",
+            end_date: "2026-06-05",
+            rationale: "I suggested June 5 because the event starts then.",
+            source: "manual"
+          }
+        ],
+        fieldRationales: {
+          reminder: {
+            triggerValue: "June 5",
+            startDate: "2026-06-05",
+            endDate: "2026-06-05",
+            text: "I suggested June 5 because the event starts then."
+          }
+        }
+      }),
+      "later"
+    ),
+    false
   );
 });
 

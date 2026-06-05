@@ -701,8 +701,24 @@ Deno.test("analysis prompt requires evidence-rich review rationale", () => {
   assert(
     prompt.includes("default_intent.rationale") &&
       prompt.includes("collection_decisions[].rationale") &&
-      prompt.includes("suggested_reminders[].rationale"),
+      prompt.includes("suggested_reminders[].rationale") &&
+      prompt.includes("field_rationales"),
     "prompt should keep rationale attached to selected fields",
+  );
+  assert(
+    prompt.includes("Each field rationale text must be at most 12 words"),
+    "prompt should constrain field rationale length",
+  );
+  assert(
+    prompt.includes("Each header value must be at most 36 characters") &&
+      prompt.includes("shorten only these header values when needed"),
+    "prompt should constrain structured field rationale headers",
+  );
+  assert(
+    prompt.includes("I chose [Intent label] because") &&
+      prompt.includes("I picked [Collection label] because") &&
+      prompt.includes("I suggested [Later label] because"),
+    "prompt should require fixed structured field rationale phrases",
   );
   assert(
     prompt.includes(
@@ -713,6 +729,65 @@ Deno.test("analysis prompt requires evidence-rich review rationale", () => {
   assert(
     prompt.includes("Do not set needs_review because Purpose, Collection, Reminder, or confidence_label is uncertain"),
     "prompt should keep field uncertainty out of review state",
+  );
+});
+
+Deno.test("analysis schema exposes structured field rationales", () => {
+  const schema = urlEvidence.analysisSchemaForCollections([
+    {
+      id: "collection-1",
+      title: "Recipes",
+      description: "Cooking ideas.",
+    },
+  ]);
+  assertIncludes(
+    schema.required,
+    "field_rationales",
+    "analysis schema should require structured field rationales",
+  );
+  const fieldRationales = schema.properties.field_rationales;
+  assertEqual(
+    fieldRationales.required.join("|"),
+    "purpose|collections|reminder",
+    "field rationale schema should include all editor fields",
+  );
+  assert(
+    fieldRationales.properties.purpose.properties.text.description.includes(
+      "I chose [Intent label] because",
+    ),
+    "purpose rationale schema should describe fixed phrase",
+  );
+  assert(
+    fieldRationales.properties.purpose.properties.selection_label.description
+      .includes("at most 36 characters"),
+    "purpose header should be length-limited by schema description",
+  );
+  assert(
+    fieldRationales.properties.collections.items.properties.text.description
+      .includes("I picked [Collection title] because"),
+    "collection rationale schema should describe fixed phrase",
+  );
+  assert(
+    fieldRationales.properties.collections.items.properties.selection_label
+      .description.includes("at most 36 characters"),
+    "collection header should be length-limited by schema description",
+  );
+  assert(
+    fieldRationales.properties.reminder.properties.text.description.includes(
+      "I suggested [Later value] because",
+    ),
+    "reminder rationale schema should describe fixed phrase",
+  );
+  assert(
+    fieldRationales.properties.reminder.properties.trigger_value.description
+      .includes("at most 36 characters"),
+    "reminder header should be length-limited by schema description",
+  );
+  assertEqual(
+    fieldRationales.properties.collections.items.properties.collection_id.enum
+      .join("|"),
+    "collection-1|",
+    "collection rationale ids should share retrieved collection enum",
   );
 });
 

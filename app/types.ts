@@ -69,6 +69,27 @@ export type CaptureFieldRationale = {
   visible: boolean;
 };
 
+export type CaptureFieldRationales = {
+  purpose?: {
+    selectionKey?: string | null;
+    selectionLabel?: string | null;
+    text?: string | null;
+  };
+  collections?: Array<{
+    collectionId?: string | null;
+    selectionLabel?: string | null;
+    text?: string | null;
+  }>;
+  reminder?: {
+    triggerValue?: string | null;
+    startDate?: string | null;
+    endDate?: string | null;
+    startTime?: string | null;
+    endTime?: string | null;
+    text?: string | null;
+  };
+};
+
 export type Capture = {
   id: string;
   remoteId?: string;
@@ -95,6 +116,7 @@ export type Capture = {
   aiDefaultIntent?: string;
   defaultIntent?: string;
   intentRationale?: string;
+  fieldRationales?: CaptureFieldRationales;
   reviewRationale?: ReviewRationale;
   reviewRationaleStatus?: ReviewRationaleStatus;
   reviewRationaleInvalidReason?: string;

@@ -89,6 +89,28 @@ function addMinutes(timeText: string, minutes: number) {
   }`;
 }
 
+function collectionFieldRationale(
+  analysis: Record<string, unknown>,
+  collectionId: string,
+) {
+  const fieldRationales = analysis.field_rationales &&
+      typeof analysis.field_rationales === "object" &&
+      !Array.isArray(analysis.field_rationales)
+    ? analysis.field_rationales as Record<string, unknown>
+    : {};
+  const records = Array.isArray(fieldRationales.collections)
+    ? fieldRationales.collections
+    : [];
+  for (const item of records) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const record = item as Record<string, unknown>;
+    if (stringValue(record.collection_id) !== collectionId) continue;
+    const rationale = rationaleForAnalysis(analysis, record.text);
+    if (rationale) return rationale;
+  }
+  return "";
+}
+
 function intervalDuration(
   startDate: string,
   endDate: string,
@@ -337,8 +359,10 @@ export async function autoLinkCollectionDecisions(
   const linked: Array<Record<string, unknown>> = [];
   for (const { decision } of decisionsToLink) {
     const collection = retrievedById.get(decision.collection_id!)!;
-    const rationale = rationaleForAnalysis(analysis, decision.rationale) ||
-      `Matched ${collection.title} because the saved content fits this Collection.`;
+    const rationale = collectionFieldRationale(
+      analysis,
+      decision.collection_id!,
+    ) || rationaleForAnalysis(analysis, decision.rationale);
     await linkCaptureToCollection(
       supabase,
       userId,

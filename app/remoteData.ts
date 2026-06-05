@@ -1,5 +1,6 @@
 import type {
   Capture,
+  CaptureFieldRationales,
   Collection,
   CollectionChoiceOverride,
   CollectionDecision,
@@ -110,6 +111,7 @@ export function captureFromRemote(row: Record<string, any>): Capture {
     aiDefaultIntent: defaultIntent.category || undefined,
     defaultIntent: row.current_save_intent || row.default_intent || defaultIntent.category || undefined,
     intentRationale: row.intent_rationale || defaultIntent.rationale || undefined,
+    fieldRationales: fieldRationalesFromRemote(analysis.field_rationales),
     reviewRationale: reviewRationaleFromRemote(analysis.review_rationale),
     reviewRationaleStatus:
       analysis.review_rationale_status === "accepted" || analysis.review_rationale_status === "neutral_fallback"
@@ -239,6 +241,49 @@ export function reminderSuggestionsFromRemote(value: unknown): ReminderSuggestio
       rationale: String(item.rationale || ""),
       confidence: Number.isFinite(Number(item.confidence)) ? Number(item.confidence) : 0
     }));
+}
+
+export function fieldRationalesFromRemote(value: unknown): CaptureFieldRationales | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const row = value as Record<string, any>;
+  const purpose = row.purpose && typeof row.purpose === "object" && !Array.isArray(row.purpose)
+    ? row.purpose as Record<string, any>
+    : null;
+  const reminder = row.reminder && typeof row.reminder === "object" && !Array.isArray(row.reminder)
+    ? row.reminder as Record<string, any>
+    : null;
+  const collections = Array.isArray(row.collections)
+    ? row.collections
+        .filter((item): item is Record<string, any> =>
+          Boolean(item && typeof item === "object" && !Array.isArray(item))
+        )
+        .map((item) => ({
+          collectionId: nullableValue(item.collection_id || item.collectionId) || null,
+          selectionLabel: nullableValue(item.selection_label || item.selectionLabel) || null,
+          text: nullableValue(item.text) || null
+        }))
+        .filter((item) => Boolean(item.collectionId || item.selectionLabel || item.text))
+    : [];
+  const next: CaptureFieldRationales = {};
+  if (purpose) {
+    next.purpose = {
+      selectionKey: nullableValue(purpose.selection_key || purpose.selectionKey) || null,
+      selectionLabel: nullableValue(purpose.selection_label || purpose.selectionLabel) || null,
+      text: nullableValue(purpose.text) || null
+    };
+  }
+  if (collections.length) next.collections = collections;
+  if (reminder) {
+    next.reminder = {
+      triggerValue: nullableValue(reminder.trigger_value || reminder.triggerValue) || null,
+      startDate: nullableValue(reminder.start_date || reminder.startDate) || null,
+      endDate: nullableValue(reminder.end_date || reminder.endDate) || null,
+      startTime: nullableValue(reminder.start_time || reminder.startTime) || null,
+      endTime: nullableValue(reminder.end_time || reminder.endTime) || null,
+      text: nullableValue(reminder.text) || null
+    };
+  }
+  return Object.keys(next).length ? next : undefined;
 }
 
 export function visitTargetFromRemote(analysis: Record<string, any>): VisitTarget | null {

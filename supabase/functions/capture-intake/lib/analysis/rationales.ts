@@ -92,10 +92,34 @@ export function sanitizeRationaleRecords(
   });
 }
 
-export function sanitizeAnalysisRationales(analysis: Record<string, unknown>) {
-  if (sourceFallbackAllowedFromAnalysis(analysis)) return analysis;
+export function sanitizeAnalysisRationales(
+  analysis: Record<string, unknown>,
+): Record<string, unknown> {
   const defaultIntent = jsonObject(analysis.default_intent);
   const reviewRationale = jsonObject(analysis.review_rationale);
+  const fieldRationales = jsonObject(analysis.field_rationales);
+  const fieldPurpose = jsonObject(fieldRationales.purpose);
+  const fieldReminder = jsonObject(fieldRationales.reminder);
+  const fieldCollections = Array.isArray(fieldRationales.collections)
+    ? fieldRationales.collections.map((item) => {
+      const record = jsonObject(item);
+      return {
+        ...record,
+        text: rationaleForAnalysis(analysis, record.text),
+      };
+    })
+    : fieldRationales.collections;
+  if (sourceFallbackAllowedFromAnalysis(analysis)) {
+    return {
+      ...analysis,
+      field_rationales: {
+        ...fieldRationales,
+        purpose: fieldPurpose,
+        collections: fieldCollections,
+        reminder: fieldReminder,
+      },
+    };
+  }
   const sanitizedReviewRationale = Object.fromEntries(
     Object.entries(reviewRationale).map(([key, value]) => [
       key,
@@ -107,6 +131,18 @@ export function sanitizeAnalysisRationales(analysis: Record<string, unknown>) {
     default_intent: {
       ...defaultIntent,
       rationale: rationaleForAnalysis(analysis, defaultIntent.rationale),
+    },
+    field_rationales: {
+      ...fieldRationales,
+      purpose: {
+        ...fieldPurpose,
+        text: rationaleForAnalysis(analysis, fieldPurpose.text),
+      },
+      collections: fieldCollections,
+      reminder: {
+        ...fieldReminder,
+        text: rationaleForAnalysis(analysis, fieldReminder.text),
+      },
     },
     review_rationale: sanitizedReviewRationale,
     collection_decisions: sanitizeRationaleRecords(

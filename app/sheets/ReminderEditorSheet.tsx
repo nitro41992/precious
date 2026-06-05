@@ -203,7 +203,7 @@ export function ReminderEditorSheet({
           showsVerticalScrollIndicator={false}
           style={styles.reminderSheetScroll}
         >
-          {rationale?.visible ? (
+          {rationale?.visible && !draftChanged ? (
             <View style={styles.fieldRationaleBox}>
               <Text style={styles.fieldRationaleTitle}>{rationale.title}</Text>
               <Text style={styles.fieldRationaleText}>{rationale.text}</Text>

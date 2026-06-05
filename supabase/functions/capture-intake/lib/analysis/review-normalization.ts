@@ -165,6 +165,40 @@ function normalizedReminderTimePrecision(
   return "unknown";
 }
 
+function normalizedFieldRationales(analysis: Record<string, unknown>) {
+  const fieldRationales = jsonObject(analysis.field_rationales);
+  const defaultIntent = normalizedDefaultIntent(analysis);
+  const purpose = jsonObject(fieldRationales.purpose);
+  const reminder = jsonObject(fieldRationales.reminder);
+  const collections = Array.isArray(fieldRationales.collections)
+    ? fieldRationales.collections.map((item) => {
+      const record = jsonObject(item);
+      return {
+        collection_id: stringValue(record.collection_id) || null,
+        selection_label: stringValue(record.selection_label) || null,
+        text: stringValue(record.text) || null,
+      };
+    }).filter((item) => item.collection_id && item.selection_label)
+    : [];
+  return {
+    purpose: {
+      selection_key: activeIntentCategory(purpose.selection_key) ||
+        defaultIntent.category,
+      selection_label: stringValue(purpose.selection_label) || null,
+      text: stringValue(purpose.text) || null,
+    },
+    collections,
+    reminder: {
+      trigger_value: stringValue(reminder.trigger_value) || null,
+      start_date: stringValue(reminder.start_date) || null,
+      end_date: stringValue(reminder.end_date) || null,
+      start_time: stringValue(reminder.start_time) || null,
+      end_time: stringValue(reminder.end_time) || null,
+      text: stringValue(reminder.text) || null,
+    },
+  };
+}
+
 export function normalizedTimeReminderSuggestion(value: unknown) {
   const record = jsonObject(value);
   if (!Object.keys(record).length || record.trigger_type !== "time") {
@@ -277,6 +311,7 @@ export function normalizedReviewAnalysis(
   const normalizedAnalysis = {
     ...sanitized,
     default_intent: normalizedDefaultIntent(sanitized),
+    field_rationales: normalizedFieldRationales(sanitized),
     location_context: normalizedLocationContext(sanitized.location_context),
     suggested_reminders: normalizedTimeReminderSuggestions(
       sanitized.suggested_reminders,

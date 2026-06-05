@@ -30,6 +30,7 @@ import type {
 } from "./types";
 import {
   captureFieldState,
+  captureFieldRationaleVisible,
   displayStatus,
   extractHttpUrl,
   hostFromUrl,
@@ -1147,7 +1148,13 @@ export function captureFieldStates(capture: Capture): CaptureFieldState[] {
   ];
 }
 
-export function captureFieldRationale(capture: Capture, field: CaptureFieldRationale["field"]): CaptureFieldRationale {
+export function captureFieldRationale(
+  capture: Capture,
+  field: CaptureFieldRationale["field"],
+  options: {
+    collectionSelectionIds?: string[];
+  } = {}
+): CaptureFieldRationale {
   const base = {
     field,
     title: "Why AI picked this",
@@ -1156,30 +1163,67 @@ export function captureFieldRationale(capture: Capture, field: CaptureFieldRatio
   };
   if (field === "purpose") {
     const currentIntent = normalizeIntent(capture.defaultIntent);
-    const aiIntent = normalizeIntent(capture.aiDefaultIntent || capture.defaultIntent);
-    const text = rationaleLine(capture.intentRationale);
+    const aiIntent = normalizeIntent(
+      capture.fieldRationales?.purpose?.selectionKey ||
+        capture.aiDefaultIntent ||
+        capture.defaultIntent
+    );
+    const structuredText = rationaleLine(capture.fieldRationales?.purpose?.text);
+    const fallbackText = rationaleLine(capture.intentRationale);
+    const text = structuredText || fallbackText;
     return {
       ...base,
       text,
-      visible: Boolean(text && currentIntent && aiIntent && currentIntent === aiIntent)
+      visible: Boolean(
+        text &&
+          currentIntent &&
+          aiIntent &&
+          currentIntent === aiIntent &&
+          captureFieldRationaleVisible(capture, field, { allowedIntents: INTENT_OPTIONS })
+      )
     };
   }
   if (field === "collection") {
-    const rationaleText = (capture.linkedCollections || [])
+    const aiCollectionIds = (capture.fieldRationales?.collections || [])
+      .map((collection) => collection.collectionId || "")
+      .filter(Boolean);
+    const fallbackAiCollections = (capture.linkedCollections || [])
+      .filter((collection) => collection.createdBy === "analysis");
+    const fallbackAiCollectionIds = fallbackAiCollections.map((collection) => collection.id);
+    const currentIds = options.collectionSelectionIds ||
+      (capture.linkedCollections || []).map((collection) => collection.id);
+    const expectedIds = aiCollectionIds.length ? aiCollectionIds : fallbackAiCollectionIds;
+    const structuredText = (capture.fieldRationales?.collections || [])
+      .map((collection) => rationaleLine(collection.text))
+      .find(Boolean) || "";
+    const fallbackText = fallbackAiCollections
       .map((collection) => rationaleLine(collection.rationale))
       .find(Boolean) || "";
+    const rationaleText = structuredText || fallbackText;
     return {
       ...base,
       text: rationaleText,
-      visible: Boolean(rationaleText)
+      visible: Boolean(
+        rationaleText &&
+          expectedIds.length &&
+          captureFieldRationaleVisible(capture, field, {
+            allowedIntents: INTENT_OPTIONS,
+            collectionSelectionIds: currentIds
+          })
+      )
     };
   }
   const reminder = (capture.suggestedReminders || [])[0];
-  const reminderRationale = rationaleLine(reminder?.rationale);
+  const structuredText = rationaleLine(capture.fieldRationales?.reminder?.text);
+  const fallbackText = rationaleLine(reminder?.rationale);
+  const reminderRationale = structuredText || fallbackText;
   return {
     ...base,
     text: reminderRationale,
-    visible: Boolean(reminderRationale && reminder?.source !== "manual")
+    visible: Boolean(
+      reminderRationale &&
+        captureFieldRationaleVisible(capture, field, { allowedIntents: INTENT_OPTIONS })
+    )
   };
 }
 

@@ -290,6 +290,72 @@ function captureFieldState(input = {}) {
   };
 }
 
+function sameStringSet(left = [], right = []) {
+  const leftSet = new Set(left.filter(Boolean));
+  const rightSet = new Set(right.filter(Boolean));
+  if (leftSet.size !== rightSet.size) return false;
+  for (const value of leftSet) {
+    if (!rightSet.has(value)) return false;
+  }
+  return true;
+}
+
+function reminderFieldSelectionMatches(reminder, fieldReminder) {
+  if (!reminder || !fieldReminder) return false;
+  const checks = [
+    [reminder.trigger_value, fieldReminder.triggerValue],
+    [reminder.start_date, fieldReminder.startDate],
+    [reminder.end_date, fieldReminder.endDate],
+    [reminder.start_time, fieldReminder.startTime],
+    [reminder.end_time, fieldReminder.endTime]
+  ];
+  return checks.every(([current, aiValue]) => !aiValue || String(current || "") === String(aiValue || ""));
+}
+
+function captureFieldRationaleVisible(capture, field, options = {}) {
+  if (!capture) return false;
+  if (field === "purpose") {
+    const allowedIntents = options.allowedIntents || [];
+    const rawCurrentIntent = capture.defaultIntent;
+    const rawAiIntent = capture.fieldRationales?.purpose?.selectionKey ||
+        capture.aiDefaultIntent ||
+        capture.defaultIntent;
+    const currentIntent = allowedIntents.length
+      ? normalizeIntent(rawCurrentIntent, allowedIntents)
+      : String(rawCurrentIntent || "");
+    const aiIntent = allowedIntents.length
+      ? normalizeIntent(rawAiIntent, allowedIntents)
+      : String(rawAiIntent || "");
+    const hasText = Boolean(capture.fieldRationales?.purpose?.text || capture.intentRationale);
+    return Boolean(hasText && currentIntent && aiIntent && currentIntent === aiIntent);
+  }
+  if (field === "collection") {
+    const aiCollectionIds = (capture.fieldRationales?.collections || [])
+      .map((collection) => collection.collectionId || "")
+      .filter(Boolean);
+    const fallbackAiCollectionIds = (capture.linkedCollections || [])
+      .filter((collection) => collection.createdBy === "analysis")
+      .map((collection) => collection.id);
+    const expectedIds = aiCollectionIds.length ? aiCollectionIds : fallbackAiCollectionIds;
+    const currentIds = options.collectionSelectionIds ||
+      (capture.linkedCollections || []).map((collection) => collection.id);
+    const hasText = Boolean(
+      (capture.fieldRationales?.collections || []).some((collection) => collection.text) ||
+        (capture.linkedCollections || []).some((collection) => collection.createdBy === "analysis" && collection.rationale)
+    );
+    return Boolean(hasText && expectedIds.length && sameStringSet(currentIds, expectedIds));
+  }
+  if (field === "later") {
+    const reminder = (capture.suggestedReminders || [])[0];
+    const structuredText = capture.fieldRationales?.reminder?.text;
+    const hasText = Boolean(structuredText || reminder?.rationale);
+    if (!hasText || reminder?.source === "manual") return false;
+    if (structuredText) return reminderFieldSelectionMatches(reminder, capture.fieldRationales?.reminder);
+    return true;
+  }
+  return false;
+}
+
 function reviewReasons(capture) {
   return reviewTargetsForCapture(capture);
 }
@@ -388,6 +454,7 @@ module.exports = {
   LOCAL_PROCESSING_GRACE_MS,
   REVIEW_TARGETS,
   captureIdentityAliases,
+  captureFieldRationaleVisible,
   captureIntentPatchBody,
   capturesForListMode,
   capturesForSearchScope,

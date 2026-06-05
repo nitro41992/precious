@@ -27,6 +27,19 @@ and appears inside the relevant bottom sheet while the current field still
 matches the AI-selected value. The separate Review Insight checklist sheet is
 removed from Capture Review.
 
+Field rationale is structured analyzer output, not client-side copy
+composition. Capture Analysis returns a `field_rationales` object for Purpose,
+Collections, and Later. Each user-facing rationale is capped at 12 words, each
+structured field header is capped at 36 characters, and the copy uses
+field-specific wording: `I chose [Purpose] because ...`, `I picked [Collection]
+because ...`, or `I suggested [Later] because ...`.
+
+The UI may decide whether a rationale is still fresh by comparing structured
+field values, such as intent key, Collection ids, and Reminder interval fields,
+but it must not parse, classify, or rewrite rationale prose to make that
+decision. Editing a field hides stale rationale as soon as the draft no longer
+matches the structured AI selection.
+
 ## Consequences
 
 - The main Capture Review page stays minimal and correction-oriented.
@@ -35,3 +48,5 @@ removed from Capture Review.
   context while the user adjusts field values.
 - Confidence labels and field rationales remain available for internal quality
   work but do not route field-level review.
+- Analyzer-owned field rationale copy keeps user-facing explanation bounded
+  without adding regex or substring interpretation to the app.

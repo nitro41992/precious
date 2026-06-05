@@ -38,8 +38,8 @@ export const STARTER_COLLECTIONS = [
   },
 ] as const;
 
-export const PROMPT_VERSION = "precious-capture-analysis-v13";
-export const SCHEMA_VERSION = "precious-capture-analysis-v11";
+export const PROMPT_VERSION = "precious-capture-analysis-v15";
+export const SCHEMA_VERSION = "precious-capture-analysis-v13";
 export const PREFLIGHT_PROMPT_VERSION = "precious-capture-preflight-v1";
 export const CAPTURE_GATE_PROMPT_VERSION = "precious-capture-gate-v1";
 export const CLIENT_EVENT_RETENTION_DAYS = 90;
@@ -145,6 +145,7 @@ export const analysisSchema = {
     "verified_place",
     "suggested_reminders",
     "collection_decisions",
+    "field_rationales",
     "search_phrases",
     "confidence_label",
     "needs_review",
@@ -311,6 +312,83 @@ export const analysisSchema = {
         },
       },
     },
+    field_rationales: {
+      type: "object",
+      additionalProperties: false,
+      required: ["purpose", "collections", "reminder"],
+      properties: {
+        purpose: {
+          type: "object",
+          additionalProperties: false,
+          required: ["selection_key", "selection_label", "text"],
+          properties: {
+            selection_key: {
+              type: ["string", "null"],
+              enum: [...activeSaveIntentKeys, null],
+            },
+            selection_label: {
+              type: ["string", "null"],
+              description:
+                "Short header text for the selected Purpose, at most 36 characters.",
+            },
+            text: {
+              type: ["string", "null"],
+              description:
+                "At most 12 words, phrased like: I chose [Intent label] because [specific evidence].",
+            },
+          },
+        },
+        collections: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["collection_id", "selection_label", "text"],
+            properties: {
+              collection_id: { type: ["string", "null"] },
+              selection_label: {
+                type: ["string", "null"],
+                description:
+                  "Short header text for this Collection selection, at most 36 characters.",
+              },
+              text: {
+                type: ["string", "null"],
+                description:
+                  "At most 12 words, phrased like: I picked [Collection title] because [specific evidence].",
+              },
+            },
+          },
+        },
+        reminder: {
+          type: "object",
+          additionalProperties: false,
+          required: [
+            "trigger_value",
+            "start_date",
+            "end_date",
+            "start_time",
+            "end_time",
+            "text",
+          ],
+          properties: {
+            trigger_value: {
+              type: ["string", "null"],
+              description:
+                "Short header text for the Later selection, at most 36 characters.",
+            },
+            start_date: { type: ["string", "null"] },
+            end_date: { type: ["string", "null"] },
+            start_time: { type: ["string", "null"] },
+            end_time: { type: ["string", "null"] },
+            text: {
+              type: ["string", "null"],
+              description:
+                "At most 12 words, phrased like: I suggested [Later value] because [specific evidence].",
+            },
+          },
+        },
+      },
+    },
     search_phrases: { type: "array", items: { type: "string" } },
     confidence_label: {
       type: "string",
@@ -335,6 +413,8 @@ export function analysisSchemaForCollections(
     ? { type: ["string", "null"], enum: [...collectionIds, null] }
     : { type: "null", enum: [null] };
   schema.properties.collection_decisions.items.properties.collection_id =
+    collectionIdSchema;
+  schema.properties.field_rationales.properties.collections.items.properties.collection_id =
     collectionIdSchema;
   return schema;
 }
