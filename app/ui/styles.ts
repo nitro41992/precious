@@ -12,6 +12,10 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.paper,
     flex: 1
   },
+  bootBlank: {
+    backgroundColor: "#000000",
+    flex: 1
+  },
   screenOverlay: {
     backgroundColor: colors.paper,
     bottom: 0,
@@ -665,6 +669,22 @@ export const styles = StyleSheet.create({
     overflow: "hidden",
     width: 28
   },
+  sourceMarkMeta: {
+    alignItems: "center",
+    flexShrink: 0,
+    height: 16,
+    justifyContent: "center",
+    overflow: "hidden",
+    width: 16
+  },
+  sourceMarkMetaPill: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accentLine,
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 20,
+    width: 20
+  },
   sourceMarkProcessing: {
     backgroundColor: colors.processingSoft,
     borderColor: "#2b526b"
@@ -684,6 +704,11 @@ export const styles = StyleSheet.create({
   sourceFaviconInline: {
     height: 24,
     width: 24
+  },
+  sourceFaviconMeta: {
+    borderRadius: 2,
+    height: 14,
+    width: 14
   },
   captureThumbnailFrame: {
     backgroundColor: colors.surfaceContainer,
@@ -777,6 +802,33 @@ export const styles = StyleSheet.create({
     color: colors.muted,
     ...typefaces.medium,
     flexShrink: 1,
+    fontSize: 13,
+    lineHeight: 18
+  },
+  rowMetaLine: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 5,
+    minWidth: 0
+  },
+  rowSourceMetaText: {
+    color: colors.muted,
+    ...typefaces.medium,
+    flexShrink: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    minWidth: 0
+  },
+  rowMetaSeparator: {
+    color: colors.muted,
+    flexShrink: 0,
+    fontSize: 13,
+    lineHeight: 18
+  },
+  rowDateMetaText: {
+    color: colors.muted,
+    ...typefaces.medium,
+    flexShrink: 0,
     fontSize: 13,
     lineHeight: 18
   },

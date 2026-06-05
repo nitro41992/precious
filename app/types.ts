@@ -389,6 +389,7 @@ export type AuthCallbackPayload =
 export type RemoteCapturePage = {
   captures?: Array<Record<string, any>>;
   next_cursor?: string | null;
+  total_count?: number | null;
 };
 
 export type RemoteCollectionPage = {

@@ -35,6 +35,7 @@ type CaptureRowProps = {
   onPress: () => void;
   renderInlineSkeleton: () => ReactElement | null;
   showCollectionToken?: boolean;
+  showInlineSourceIcon?: boolean;
   SkeletonBlock: SkeletonBlockRenderer;
   testID?: string;
 };
@@ -53,6 +54,7 @@ export function CaptureRow({
   onPress,
   renderInlineSkeleton,
   showCollectionToken = true,
+  showInlineSourceIcon = false,
   SkeletonBlock,
   testID
 }: CaptureRowProps) {
@@ -106,9 +108,29 @@ export function CaptureRow({
           </Text>
           <StatusGlyph capture={item} />
         </View>
-        <Text numberOfLines={1} style={styles.meta}>
-          {captureRowSourceLabel(item)} · {formatDateTime(item.createdAt)}
-        </Text>
+        {showInlineSourceIcon ? (
+          <View style={styles.rowMetaLine}>
+            <SourceMark
+              capture={item}
+              failedFavicons={failedFavicons}
+              onFaviconFailure={onFaviconFailure}
+              size="meta"
+            />
+            <Text numberOfLines={1} style={styles.rowSourceMetaText}>
+              {captureRowSourceLabel(item)}
+            </Text>
+            <Text accessibilityElementsHidden importantForAccessibility="no" style={styles.rowMetaSeparator}>
+              ·
+            </Text>
+            <Text numberOfLines={1} style={styles.rowDateMetaText}>
+              {formatDateTime(item.createdAt)}
+            </Text>
+          </View>
+        ) : (
+          <Text numberOfLines={1} style={styles.meta}>
+            {captureRowSourceLabel(item)} · {formatDateTime(item.createdAt)}
+          </Text>
+        )}
         {matchReason ? (
           <Text numberOfLines={1} style={styles.searchMatchText}>
             {matchReason}
@@ -117,11 +139,11 @@ export function CaptureRow({
         {hasMeaningTokens ? (
           <View style={styles.rowMeaningLine}>
             {intentLabel ? (
-              <MeaningToken Icon={Lightbulb} text={intentLabel} />
+              <MeaningToken Icon={Lightbulb} iconColor={colors.accent} text={intentLabel} />
             ) : null}
             <CollectionMeaningToken collections={collectionTokens} />
             {reminderText ? (
-              <MeaningToken Icon={CalendarBlank} text={reminderText} />
+              <MeaningToken Icon={CalendarBlank} iconColor={colors.review} text={reminderText} />
             ) : null}
           </View>
         ) : null}

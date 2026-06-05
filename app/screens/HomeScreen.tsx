@@ -5,7 +5,6 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Pressable,
-  SafeAreaView,
   StatusBar,
   Text,
   TextInput,
@@ -33,6 +32,7 @@ type HomeScreenProps = {
     bottomAppBar: ReactNode;
     captureComposerMotion: Animated.Value;
     captureKeyboardInset: Animated.Value;
+    homeCaptureTotalCount: number | null;
     homeCaptures: HomeListRow[];
     listPerfProps: Partial<FlatListProps<HomeListRow>>;
     toast: ReactNode;
@@ -76,6 +76,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
     bottomAppBar,
     captureComposerMotion,
     captureKeyboardInset,
+    homeCaptureTotalCount,
     homeCaptures,
     listPerfProps,
     toast,
@@ -115,9 +116,12 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
   const homeCaptureRows = homeCaptures.flatMap((row) => row.type === "capture" ? [row.capture] : []);
   const homeKnownEmpty = activeCapturesLoadedOnce && !capturesLoading && !capturesError && !homeCaptureRows.length;
   const homeAwaitingCaptures = !capturesError && !homeCaptureRows.length && !homeKnownEmpty;
+  const homeCaptureCount = homeCaptureTotalCount ?? (capturesNextCursor ? null : homeCaptureRows.length);
   const homeCountLabel = homeAwaitingCaptures
     ? ""
-    : `${homeCaptureRows.length} ${homeCaptureRows.length === 1 ? "capture" : "captures"}`;
+    : typeof homeCaptureCount === "number"
+      ? `${homeCaptureCount} ${homeCaptureCount === 1 ? "capture" : "captures"}`
+      : "";
   const composerKeyboardVisible = showCaptureComposer && keyboardHeight > 0;
   const screenHeight = Dimensions.get("screen").height;
   const windowAlreadyKeyboardSized =
@@ -135,7 +139,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
   const captureSheetBottomInset = windowAlreadyKeyboardSized ? 0 : captureKeyboardInset;
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.safe}>
       <StatusBar barStyle="light-content" />
       <View style={styles.container}>
         <View style={styles.header} testID="pc.home.captures">
@@ -358,6 +362,6 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
       {appSheets}
       {bottomAppBar}
       {toast}
-    </SafeAreaView>
+    </View>
   );
 }

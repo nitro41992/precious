@@ -7,10 +7,10 @@ import {
   AppState,
   Dimensions,
   Easing,
-  InteractionManager,
   Keyboard,
   Linking,
   Platform,
+  StatusBar,
   TextInput,
   View,
   useWindowDimensions
@@ -128,6 +128,22 @@ const COLLECTION_LIST_PERF_PROPS = {
   windowSize: 7
 };
 
+function scheduleIdleTask(task: () => void) {
+  const idleScheduler = (globalThis as typeof globalThis & {
+    requestIdleCallback?: (callback: () => void) => number;
+    cancelIdleCallback?: (handle: number) => void;
+  }).requestIdleCallback;
+  const idleCanceler = (globalThis as typeof globalThis & {
+    cancelIdleCallback?: (handle: number) => void;
+  }).cancelIdleCallback;
+  if (idleScheduler) {
+    const handle = idleScheduler(task);
+    return () => idleCanceler?.(handle);
+  }
+  const handle = setTimeout(task, 80);
+  return () => clearTimeout(handle);
+}
+
 function prefetchImageUrls(urls: string[]) {
   const unique = Array.from(new Set(urls.map((url) => String(url || "").trim()).filter(Boolean)));
   if (!unique.length) return;
@@ -181,6 +197,7 @@ export default function App() {
   const [capturesLoadPhase, setCapturesLoadPhase] = useState<LoadPhase>("idle");
   const [capturesError, setCapturesError] = useState("");
   const [activeCapturesLoadedOnce, setActiveCapturesLoadedOnce] = useState(false);
+  const [activeCaptureTotalCount, setActiveCaptureTotalCount] = useState<number | null>(null);
   const [archivedCapturesLoading, setArchivedCapturesLoading] = useState(false);
   const [, setArchivedCapturesLoadPhase] = useState<LoadPhase>("idle");
   const [archivedCapturesError, setArchivedCapturesError] = useState("");
@@ -416,6 +433,7 @@ export default function App() {
     setArchivedCaptures([]);
     setCapturesLoadPhase("idle");
     setArchivedCapturesLoadPhase("idle");
+    setActiveCaptureTotalCount(null);
     setActiveCapturesLoadedOnce(false);
     setArchivedCapturesLoaded(false);
     setCapturesNextCursor(null);
@@ -550,6 +568,9 @@ export default function App() {
               ? sortCaptures(uniqueCaptures([...current, ...next]))
               : mergeRemoteCaptures(next, current, "active")
           );
+          if (typeof json.total_count === "number" && Number.isFinite(json.total_count)) {
+            setActiveCaptureTotalCount(json.total_count);
+          }
           setCapturesNextCursor(json.next_cursor || null);
           if (!options.append) writeCachedCapturePage("active", rows, json.next_cursor || null);
         }
@@ -581,6 +602,7 @@ export default function App() {
       } else {
         commitCaptureRows("active", () => sortCaptures(active));
         commitCaptureRows("archived", () => sortCaptures(archived));
+        setActiveCaptureTotalCount(active.length);
         setArchivedCapturesLoaded(true);
         setCapturesNextCursor(null);
         setArchivedCapturesNextCursor(null);
@@ -1138,6 +1160,7 @@ export default function App() {
 
   useEffect(() => {
     setActiveCapturesLoadedOnce(false);
+    setActiveCaptureTotalCount(null);
     setCapturesLoadPhase("idle");
     setArchivedCapturesLoadPhase("idle");
     setCollectionsLoadedOnce({ active: false, archived: false });
@@ -1178,12 +1201,11 @@ export default function App() {
   useEffect(() => {
     if (!config?.apiUrl || !session?.accessToken || collectionsPrefetchStartedRef.current) return;
     collectionsPrefetchStartedRef.current = true;
-    const task = InteractionManager.runAfterInteractions(() => {
+    return scheduleIdleTask(() => {
       void loadCollections("active").catch(() => {
         collectionsPrefetchStartedRef.current = false;
       });
     });
-    return () => task.cancel();
   }, [config?.apiUrl, loadCollections, session?.accessToken]);
 
   const selected = selectedId
@@ -2504,6 +2526,7 @@ export default function App() {
           bottomAppBar: includeChrome && !showCaptureComposer ? renderBottomAppBar("recent") : null,
           captureComposerMotion,
           captureKeyboardInset,
+          homeCaptureTotalCount: activeCaptureTotalCount,
           homeCaptures: homeRows,
           listPerfProps: CAPTURE_LIST_PERF_PROPS,
           toast: includeChrome ? renderToast(showCaptureComposer ? "footer" : "bottomNav") : null,
@@ -2541,6 +2564,18 @@ export default function App() {
         ) : null}
       </View>
     );
+  }
+
+  function renderBootScreen() {
+    return (
+      <View style={styles.bootBlank}>
+        <StatusBar barStyle="light-content" />
+      </View>
+    );
+  }
+
+  if (!authReady) {
+    return renderBootScreen();
   }
 
 

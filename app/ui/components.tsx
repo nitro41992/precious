@@ -22,6 +22,7 @@ import {
   captureImageUrl,
   captureSourceHost,
   captureStatusLabel,
+  isScreenshotCapture,
   sourceFaviconUrl,
   sourceIconForCapture,
   uniqueStrings
@@ -191,6 +192,7 @@ export function SourceMark({
   const imageUri = size === "row" && !imageUnavailable ? captureImageUrl(capture) : "";
   const Icon = sourceIconForCapture(capture);
   const itemStatus = displayStatus(capture);
+  const metaScreenshotPill = size === "meta" && isScreenshotCapture(capture);
   const markStyle =
     size === "meta"
       ? styles.sourceMarkMeta
@@ -199,7 +201,7 @@ export function SourceMark({
         : size === "detail"
           ? styles.sourceMarkDetail
           : styles.sourceMark;
-  const iconSize = size === "meta" ? 14 : size === "inline" ? 24 : size === "detail" ? 16 : 42;
+  const iconSize = metaScreenshotPill ? 12 : size === "meta" ? 14 : size === "inline" ? 24 : size === "detail" ? 16 : 42;
   if (imageUri) {
     return (
       <View
@@ -228,8 +230,9 @@ export function SourceMark({
       accessible
       style={[
         markStyle,
-        size !== "inline" && size !== "meta" && itemStatus === "processing" && styles.sourceMarkProcessing,
-        size !== "inline" && size !== "meta" && itemStatus === "failed" && styles.sourceMarkFailed
+        metaScreenshotPill && styles.sourceMarkMetaPill,
+        size !== "inline" && (size !== "meta" || metaScreenshotPill) && itemStatus === "processing" && styles.sourceMarkProcessing,
+        size !== "inline" && (size !== "meta" || metaScreenshotPill) && itemStatus === "failed" && styles.sourceMarkFailed
       ]}
     >
       {faviconUri ? (

@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import {
   Pressable,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   Text,
@@ -39,7 +38,7 @@ export function AuthScreen({ actions, data, state }: AuthScreenProps) {
   const { backToSignIn, sendEmailAuthLink, setAuthEmail, startGoogleSignIn } = actions;
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.safe}>
       <StatusBar barStyle="light-content" />
       <ScrollView
         contentContainerStyle={[styles.detail, styles.authDetail]}
@@ -144,6 +143,6 @@ export function AuthScreen({ actions, data, state }: AuthScreenProps) {
         )}
       </ScrollView>
       {appSheets}
-    </SafeAreaView>
+    </View>
   );
 }

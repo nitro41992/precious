@@ -33,6 +33,19 @@ export async function handleCapturesResource(
       url.searchParams.get("includeRejectedTombstones") === "true";
     const limit = boundedLimit(url.searchParams.get("limit"), 30, 100);
     const before = url.searchParams.get("before");
+    let totalCountQuery = clientCaptureKey
+      ? null
+      : supabase
+        .from("captures")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .is("rejected_at", null);
+    if (totalCountQuery) {
+      totalCountQuery = archived
+        ? totalCountQuery.not("archived_at", "is", null)
+        : totalCountQuery.is("archived_at", null);
+    }
     let query = supabase
       .from("captures")
       .select(clientCaptureKey ? CAPTURE_DETAIL_SELECT : CAPTURE_LIST_SELECT)
@@ -53,8 +66,13 @@ export async function handleCapturesResource(
       if (before) query = query.lt("created_at", before);
       query = query.limit(limit + 1);
     }
-    const { data, error } = await query;
+    const [pageResult, totalCountResult] = await Promise.all([
+      query,
+      totalCountQuery ?? Promise.resolve(null),
+    ]);
+    const { data, error } = pageResult;
     if (error) throw error;
+    if (totalCountResult?.error) throw totalCountResult.error;
     const fetchedRows = (data ?? []) as unknown as Array<
       Record<string, unknown>
     >;
@@ -86,6 +104,7 @@ export async function handleCapturesResource(
       next_cursor: fetchedRows.length > limit
         ? pageRows[pageRows.length - 1]?.created_at || null
         : null,
+      total_count: totalCountResult?.count ?? null,
     });
   }
 

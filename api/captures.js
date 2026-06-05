@@ -420,14 +420,23 @@ module.exports = async function captures(req, res) {
         return send(res, 200, { capture: withCaptureState(capture) });
       }
 
-      const { data, error } = await supabase
+      let listQuery = supabase
         .from("captures")
-        .select("*, analysis_runs(*), capture_assets(*)")
+        .select("*, analysis_runs(*), capture_assets(*)", { count: "exact" })
         .eq("user_id", user.id)
+        .is("deleted_at", null)
+        .is("rejected_at", null)
         .order("created_at", { ascending: false })
         .limit(Number.isFinite(limit) ? limit : 50);
+      listQuery = archived
+        ? listQuery.not("archived_at", "is", null)
+        : listQuery.is("archived_at", null);
+      const { data, error, count } = await listQuery;
       if (error) throw error;
-      return send(res, 200, { captures: withCaptureStates(data).filter((row) => archivedFilter(row, archived)) });
+      return send(res, 200, {
+        captures: withCaptureStates(data).filter((row) => archivedFilter(row, archived)),
+        total_count: count ?? null
+      });
     }
 
     if (req.method === "POST") {

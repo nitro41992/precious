@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
-import { Animated, FlatList, Platform, Pressable, SafeAreaView, StatusBar, Text, TextInput, View } from "react-native";
+import { Animated, FlatList, Platform, Pressable, StatusBar, Text, TextInput, View } from "react-native";
 import type { FlatListProps } from "react-native";
 import { ArrowLeft, Check, Folder, MagnifyingGlass as Search, X } from "phosphor-react-native";
 
@@ -86,7 +86,7 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
   const selectionCountText = collectionSelectionIds.length ? `${collectionSelectionIds.length} selected` : "No collection";
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.safe}>
       <StatusBar barStyle="light-content" />
       <View style={styles.collectionSelectorScreen}>
         <View style={styles.collectionSelectorHeader}>
@@ -234,6 +234,6 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
         </Pressable>
       </View>
       {toast}
-    </SafeAreaView>
+    </View>
   );
 }

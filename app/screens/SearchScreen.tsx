@@ -5,7 +5,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
   StatusBar,
   Text,
   TextInput,
@@ -68,7 +67,7 @@ export function SearchScreen({ actions, data, state }: SearchScreenProps) {
   } = actions;
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.safe}>
       <StatusBar barStyle="light-content" />
       <Animated.View
         style={[
@@ -162,6 +161,6 @@ export function SearchScreen({ actions, data, state }: SearchScreenProps) {
       </Animated.View>
       {appSheets}
       {toast}
-    </SafeAreaView>
+    </View>
   );
 }

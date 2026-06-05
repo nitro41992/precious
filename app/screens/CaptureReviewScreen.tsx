@@ -8,7 +8,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   Text,
@@ -454,7 +453,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.safe}>
       <StatusBar barStyle="light-content" />
       <Animated.View
         style={[
@@ -936,6 +935,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       />
       {appSheets}
       {toast}
-    </SafeAreaView>
+    </View>
   );
 }

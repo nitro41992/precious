@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
-import { Pressable, SafeAreaView, StatusBar, Text, View } from "react-native";
+import { Pressable, StatusBar, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import type { FlashListProps, ListRenderItemInfo } from "@shopify/flash-list";
 import { Folder, Plus } from "phosphor-react-native";
@@ -61,7 +61,7 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
   const visibleManagedCollections = collectionsBlockingLoading ? [] : collections;
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.safe}>
       <StatusBar barStyle="light-content" />
       <View style={styles.collectionsScreen}>
         <View style={styles.collectionsTitleBlock}>
@@ -135,6 +135,6 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
       {bottomAppBar}
       {collectionComposerSheet}
       {toast}
-    </SafeAreaView>
+    </View>
   );
 }

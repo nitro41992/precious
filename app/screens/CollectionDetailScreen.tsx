@@ -3,7 +3,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
   StatusBar,
   Text,
   TextInput,
@@ -104,7 +103,7 @@ export function CollectionDetailScreen({ actions, data, state }: CollectionDetai
     keyboardHeight > 0 ? Math.min(Math.max(keyboardHeight + 72, 180), 380) : 40;
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.safe}>
       <StatusBar barStyle="light-content" />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -211,6 +210,6 @@ export function CollectionDetailScreen({ actions, data, state }: CollectionDetai
       </KeyboardAvoidingView>
       {appSheets}
       {toast}
-    </SafeAreaView>
+    </View>
   );
 }

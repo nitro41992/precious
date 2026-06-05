@@ -1,6 +1,7 @@
 import {
   BookOpen,
   Calendar,
+  Camera,
   ImageSquare as ImageIcon,
   Link,
   MapPin,
@@ -840,6 +841,12 @@ export function sourceIconForCapture(capture: Capture): AppIconComponent {
   const intent = capture.defaultIntent || "";
   if (isMapSource(capture)) {
     return MapPin;
+  }
+  if (isScreenshotCapture(capture)) {
+    return Camera;
+  }
+  if (isImageCapture(capture)) {
+    return ImageIcon;
   }
   if (intent.includes("buy") || intent.includes("product") || host.includes("amazon") || host.includes("etsy")) {
     return ShoppingBag;

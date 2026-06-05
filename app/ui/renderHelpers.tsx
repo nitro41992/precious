@@ -134,6 +134,7 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     testID?: string;
     matchReason?: string;
     showCollectionToken?: boolean;
+    showInlineSourceIcon?: boolean;
     deferFallbackIcon?: boolean;
     deferMediaUntilLoaded?: boolean;
     forceSkeleton?: boolean;
@@ -205,6 +206,7 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
           deferFallbackIcon: input.capturesLoading && !input.activeCapturesLoadedOnce,
           forceSkeleton: input.homeFeedRevealPending,
           onPress: () => input.onOpenRecentCapture(item.capture.id),
+          showInlineSourceIcon: true,
           testID: `pc.capture.row.${item.capture.id}`
         })}
       </Animated.View>
