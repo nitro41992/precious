@@ -14,7 +14,7 @@ import { ArrowLeft, MagnifyingGlass as Search, X } from "phosphor-react-native";
 import type { Capture } from "../types";
 import { SEARCH_PROMPTS } from "../capturePresentation";
 import { IconButton } from "../ui/components";
-import { colors } from "../ui/theme";
+import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
 import { Text, TextInput } from "../ui/typography";
 
@@ -67,7 +67,7 @@ export function SearchScreen({ actions, data, state }: SearchScreenProps) {
 
   return (
     <View style={styles.safe}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={appTheme.statusBarStyle} />
       <Animated.View
         style={[
           styles.searchScreen,
@@ -97,7 +97,7 @@ export function SearchScreen({ actions, data, state }: SearchScreenProps) {
                   autoFocus
                   onChangeText={setSearchQuery}
                   placeholder="Search saved things"
-                  placeholderTextColor={colors.muted}
+                  placeholderTextColor={colors.placeholder}
                   returnKeyType="search"
                   style={styles.searchInputNative}
                   testID="pc.search.input"

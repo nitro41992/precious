@@ -4,7 +4,7 @@ Date: 2026-05-29
 
 ## Status
 
-Accepted
+Superseded by `docs/adr/0018-light-consumer-app-shell.md`
 
 ## Context
 

@@ -94,7 +94,6 @@ export function CaptureRow({
   );
   const row = (
     <Pressable
-      android_ripple={{ color: "rgba(31, 122, 91, 0.08)" }}
       onPress={onPress}
       style={({ pressed }) => [styles.captureRow, pressed && styles.captureRowPressed]}
       testID={testID}
@@ -482,7 +481,7 @@ export function CollectionCard({
   return (
     <Animated.View style={[styles.collectionCardWrap, { opacity: collectionListFade }]}>
       <Pressable
-        android_ripple={{ color: "rgba(31, 122, 91, 0.08)" }}
+        android_ripple={{ color: colors.rowRipple }}
         onPress={onPress}
         style={({ pressed }) => [styles.collectionCard, pressed && styles.collectionCardPressed]}
         testID={`pc.collection.card.${item.id}`}

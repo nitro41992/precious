@@ -21,9 +21,9 @@ import {
 } from "phosphor-react-native";
 
 import type { CaptureComposerMode, HomeListRow } from "../types";
-import { colors } from "../ui/theme";
+import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
-import { IconButton } from "../ui/components";
+import { HeaderContentGradient, IconButton } from "../ui/components";
 import { Text, TextInput } from "../ui/typography";
 
 type HomeScreenProps = {
@@ -144,10 +144,11 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
       : captureKeyboardInset;
 
   return (
-    <View style={styles.safe}>
-      <StatusBar barStyle="light-content" />
-      <View style={styles.container}>
-        <View style={styles.header} testID="pc.home.captures">
+    <View style={styles.edgeToEdgeSafe}>
+      <StatusBar backgroundColor="transparent" barStyle={appTheme.statusBarStyle} translucent />
+      <View style={styles.topAppBarScreen}>
+        <View style={[styles.header, styles.topAppBarOverlay]} testID="pc.home.captures">
+          <HeaderContentGradient />
           <View style={styles.headerRow}>
             <View style={styles.headerCopy}>
               <View style={styles.headerTitleLine}>
@@ -169,11 +170,9 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
           data={visibleHomeRows}
           keyExtractor={(item) => item.id}
           renderItem={renderHomeRow}
+          style={styles.homeList}
           onEndReached={loadMoreActiveCaptures}
           onEndReachedThreshold={0.35}
-          ItemSeparatorComponent={({ leadingItem }) =>
-            leadingItem?.type === "section" ? null : <View style={styles.separator} />
-          }
           ListEmptyComponent={
             homeAwaitingCaptures && (homeInitialLoading || capturesLoading) && homeColdSkeletonVisible ? (
               renderCaptureSkeletonRows(5)
@@ -256,7 +255,10 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
               ? renderListLoadingFooter()
               : null
           }
-          contentContainerStyle={visibleHomeRows.length ? styles.listContent : styles.emptyContent}
+          contentContainerStyle={[
+            visibleHomeRows.length ? styles.listContent : styles.emptyContent,
+            styles.topAppBarListInset
+          ]}
           keyboardShouldPersistTaps="handled"
         />
       </View>
@@ -353,7 +355,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                   ref={sourceInputRef}
                   onChangeText={setSourceDraft}
                   placeholder={captureSourcePlaceholder}
-                  placeholderTextColor={colors.muted}
+                  placeholderTextColor={colors.placeholder}
                   style={[styles.captureInput, composerKeyboardVisible && styles.captureInputCompact]}
                   testID="pc.capture.source"
                   value={sourceDraft}

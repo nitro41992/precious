@@ -11,7 +11,7 @@ import type { FlashListProps, FlashListRef, ListRenderItemInfo } from "@shopify/
 import { ArrowLeft } from "phosphor-react-native";
 
 import type { Capture, Collection, CollectionCapturesLoadPhase } from "../types";
-import { colors } from "../ui/theme";
+import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
 import { IconButton } from "../ui/components";
 import { Text, TextInput } from "../ui/typography";
@@ -103,7 +103,7 @@ export function CollectionDetailScreen({ actions, data, state }: CollectionDetai
 
   return (
     <View style={styles.safe}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={appTheme.statusBarStyle} />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0}
@@ -168,7 +168,7 @@ export function CollectionDetailScreen({ actions, data, state }: CollectionDetai
                   }}
                   onFocus={scrollCollectionSettingsIntoView}
                   placeholder="Title"
-                  placeholderTextColor={colors.muted}
+                  placeholderTextColor={colors.placeholder}
                   style={styles.search}
                   testID="pc.collection.detail.title"
                   value={collectionTitle}
@@ -181,7 +181,7 @@ export function CollectionDetailScreen({ actions, data, state }: CollectionDetai
                   }}
                   onFocus={scrollCollectionSettingsIntoView}
                   placeholder="What belongs in this collection"
-                  placeholderTextColor={colors.muted}
+                  placeholderTextColor={colors.placeholder}
                   style={styles.noteInput}
                   testID="pc.collection.detail.description"
                   value={collectionDescription}

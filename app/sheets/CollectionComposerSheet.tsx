@@ -112,7 +112,7 @@ export function CollectionComposerSheet({
             <TextInput
               onChangeText={onCollectionTitleChange}
               placeholder="Title"
-              placeholderTextColor={colors.muted}
+              placeholderTextColor={colors.placeholder}
               ref={collectionTitleInputRef}
               returnKeyType="next"
               style={[styles.captureInput, styles.collectionSheetTitleInput]}
@@ -123,7 +123,7 @@ export function CollectionComposerSheet({
               multiline
               onChangeText={onCollectionDescriptionChange}
               placeholder="What belongs here"
-              placeholderTextColor={colors.muted}
+              placeholderTextColor={colors.placeholder}
               style={[styles.captureInput, styles.collectionSheetDescriptionInput]}
               testID="pc.collections.create.description"
               value={collectionDescription}

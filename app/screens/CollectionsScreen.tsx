@@ -5,8 +5,9 @@ import type { FlashListProps, ListRenderItemInfo } from "@shopify/flash-list";
 import { Folder, Plus } from "phosphor-react-native";
 
 import type { Collection, LoadPhase } from "../types";
-import { colors } from "../ui/theme";
+import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
+import { HeaderContentGradient } from "../ui/components";
 import { Text } from "../ui/typography";
 
 type CollectionsScreenProps = {
@@ -62,11 +63,18 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
   const visibleManagedCollections = collectionsBlockingLoading ? [] : collections;
 
   return (
-    <View style={styles.safe}>
-      <StatusBar barStyle="light-content" />
-      <View style={styles.collectionsScreen}>
-        <View style={styles.collectionsTitleBlock}>
-          <Text style={styles.title}>Collections</Text>
+    <View style={styles.edgeToEdgeSafe}>
+      <StatusBar backgroundColor="transparent" barStyle={appTheme.statusBarStyle} translucent />
+      <View style={styles.topAppBarScreen}>
+        <View style={[styles.header, styles.topAppBarOverlay]}>
+          <HeaderContentGradient density="compact" />
+          <View style={styles.headerRow}>
+            <View style={styles.headerCopy}>
+              <View style={styles.headerTitleLine}>
+                <Text style={styles.title}>Collections</Text>
+              </View>
+            </View>
+          </View>
         </View>
         {collectionsError ? <Text style={styles.errorText}>{collectionsError}</Text> : null}
         <FlashList
@@ -119,9 +127,12 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
             )
           }
           contentContainerStyle={
-            visibleManagedCollections.length || (collectionsBlockingLoading && collectionsColdSkeletonVisible)
-              ? styles.collectionsListContent
-              : styles.collectionsEmptyContent
+            [
+              visibleManagedCollections.length || (collectionsBlockingLoading && collectionsColdSkeletonVisible)
+                ? styles.collectionsListContent
+                : styles.collectionsEmptyContent,
+              styles.topAppBarListInset
+            ]
           }
           onEndReached={loadMoreCollections}
           onEndReachedThreshold={0.35}

@@ -6,7 +6,7 @@ import { ArrowLeft, Check, Folder, MagnifyingGlass as Search, X } from "phosphor
 import type { Capture, Collection, LoadPhase } from "../types";
 import { collectionSelectionActionState } from "../captureLogic";
 import { collectionCountLabel } from "../capturePresentation";
-import { colors } from "../ui/theme";
+import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
 import { IconButton } from "../ui/components";
 import { Text, TextInput } from "../ui/typography";
@@ -88,7 +88,7 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
 
   return (
     <View style={styles.safe}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={appTheme.statusBarStyle} />
       <View style={styles.collectionSelectorScreen}>
         <View style={styles.collectionSelectorHeader}>
           <View style={styles.detailHeader}>
@@ -102,7 +102,7 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
             <TextInput
               onChangeText={setCollectionPickerQuery}
               placeholder="Search collections"
-              placeholderTextColor={colors.muted}
+              placeholderTextColor={colors.placeholder}
               style={styles.searchInputNative}
               testID="pc.collection.select.search"
               value={collectionPickerQuery}
@@ -145,7 +145,7 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
                     ) : null}
                   </View>
                   <View style={[styles.collectionSelectionControl, selectedRow && styles.collectionSelectionControlSelected]}>
-                    {selectedRow ? <Check color={colors.paper} size={15} weight="bold" /> : null}
+                    {selectedRow ? <Check color={colors.onSelectedControl} size={15} weight="bold" /> : null}
                   </View>
                 </Pressable>
               </Animated.View>
@@ -188,7 +188,7 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
                   collectionSelectionIds.length === 0 && styles.collectionSelectionControlSelected
                 ]}
               >
-                {collectionSelectionIds.length === 0 ? <Check color={colors.paper} size={15} weight="bold" /> : null}
+                {collectionSelectionIds.length === 0 ? <Check color={colors.onSelectedControl} size={15} weight="bold" /> : null}
               </View>
             </Pressable>
           }

@@ -29,6 +29,7 @@ import { useCaptureSearch } from "./state/useCaptureSearch";
 import { useCollectionsState } from "./state/useCollections";
 import { createAppRenderHelpers } from "./ui/renderHelpers";
 import { styles } from "./ui/styles";
+import { appTheme } from "./ui/theme";
 
 import type {
   Capture,
@@ -127,6 +128,13 @@ const COLLECTION_LIST_PERF_PROPS = {
   updateCellsBatchingPeriod: 40,
   windowSize: 7
 };
+const COLLECTION_CAPTURE_LIST_PERF_PROPS = {
+  drawDistance: 1400,
+  removeClippedSubviews: Platform.OS === "android",
+  showsHorizontalScrollIndicator: false,
+  showsVerticalScrollIndicator: false
+};
+const COLLECTION_CAPTURE_PREFETCH_LIMIT = 8;
 
 function scheduleIdleTask(task: () => void) {
   const idleScheduler = (globalThis as typeof globalThis & {
@@ -265,6 +273,7 @@ export default function App() {
   const archivedCapturesRef = useRef<Capture[]>([]);
   const activeCapturesLoadedOnceRef = useRef(false);
   const archivedCapturesLoadedRef = useRef(false);
+  const selectedCollectionIdRef = useRef<string | null>(null);
   const capturePageCacheHydratedRef = useRef<Record<CaptureListMode, string | null>>({ active: null, archived: null });
   const collectionPageCacheHydratedRef = useRef<Record<CollectionListMode, string | null>>({ active: null, archived: null });
   const collectionsCacheRef = useRef<Record<CollectionListMode, Collection[]>>({ active: [], archived: [] });
@@ -273,6 +282,7 @@ export default function App() {
   const collectionsModeRef = useRef<CollectionListMode>("active");
   const collectionCapturesCacheRef = useRef<Record<string, Capture[]>>({});
   const collectionCapturesCursorCacheRef = useRef<Record<string, string | null>>({});
+  const collectionCapturePrefetchStartedRef = useRef<Set<string>>(new Set());
   const captureDetailHydrationRef = useRef<Set<string>>(new Set());
   const placeResolutionRef = useRef<Set<string>>(new Set());
   const captureImageLoadStatesRef = useRef<Record<string, CaptureImageLoadState>>({});
@@ -705,6 +715,7 @@ export default function App() {
       collectionsCursorCacheRef.current[mode] = json.next_cursor || null;
       setCollectionsNextCursor((current) => ({ ...current, [mode]: json.next_cursor || null }));
       setCollectionsLoadedOnce((current) => ({ ...current, [mode]: true }));
+      collectionCapturePrefetchStartedRef.current = new Set();
       if (collectionsModeRef.current === mode) setCollections(rows);
       if (!options.append) writeCachedCollectionPage(mode, rows, json.next_cursor || null);
       succeeded = true;
@@ -727,10 +738,12 @@ export default function App() {
 
   const loadCollectionCaptures = useCallback(async (
     collectionId: string,
-    options: { append?: boolean; before?: string | null; phase?: CollectionCapturesLoadPhase } = {}
+    options: { append?: boolean; before?: string | null; phase?: CollectionCapturesLoadPhase; prefetch?: boolean } = {}
   ) => {
+    const prefetch = Boolean(options.prefetch);
     const phase = options.phase || (options.append ? "append" : "initial");
     if (!config?.apiUrl || !session?.accessToken) {
+      if (prefetch) return;
       setCollectionCaptures([]);
       setCollectionCapturesForId(collectionId);
       setCollectionCapturesNextCursor(null);
@@ -738,9 +751,11 @@ export default function App() {
       setCollectionCapturesError("");
       return;
     }
-    setCollectionCapturesLoading(true);
-    setCollectionCapturesLoadPhase(phase);
-    setCollectionCapturesError("");
+    if (!prefetch) {
+      setCollectionCapturesLoading(true);
+      setCollectionCapturesLoadPhase(phase);
+      setCollectionCapturesError("");
+    }
     try {
       const json = await withFreshAccessToken(async (accessToken) => {
         return await requestJson(
@@ -767,13 +782,17 @@ export default function App() {
         : next;
       collectionCapturesCacheRef.current[collectionId] = merged;
       collectionCapturesCursorCacheRef.current[collectionId] = json.next_cursor || null;
-      setCollectionCaptures(merged);
-      setCollectionCapturesNextCursor(json.next_cursor || null);
-      setCollectionCapturesForId(collectionId);
-      setCollectionCapturesError("");
+      if (!prefetch || selectedCollectionIdRef.current === collectionId) {
+        setCollectionCaptures(merged);
+        setCollectionCapturesNextCursor(json.next_cursor || null);
+        setCollectionCapturesForId(collectionId);
+        setCollectionCapturesError("");
+      }
     } finally {
-      setCollectionCapturesLoading(false);
-      setCollectionCapturesLoadPhase("idle");
+      if (!prefetch || selectedCollectionIdRef.current === collectionId) {
+        setCollectionCapturesLoading(false);
+        setCollectionCapturesLoadPhase("idle");
+      }
     }
   }, [config, session, withFreshAccessToken]);
 
@@ -1199,6 +1218,54 @@ export default function App() {
   useEffect(() => {
     collectionsModeRef.current = collectionsMode;
   }, [collectionsMode]);
+
+  useEffect(() => {
+    selectedCollectionIdRef.current = selectedCollectionId;
+  }, [selectedCollectionId]);
+
+  useEffect(() => {
+    if (
+      !collectionsOpen ||
+      selectedCollectionId ||
+      collectionsMode !== "active" ||
+      collectionsLoading ||
+      !config?.apiUrl ||
+      !session?.accessToken
+    ) {
+      return;
+    }
+    const candidates = collections
+      .filter((collection) => collection.status === "active" && collection.captureCount > 0)
+      .slice(0, COLLECTION_CAPTURE_PREFETCH_LIMIT);
+    if (!candidates.length) return;
+    let cancelled = false;
+    const cancelIdleTask = scheduleIdleTask(() => {
+      void candidates.reduce<Promise<void>>(async (previous, collection) => {
+        await previous;
+        if (cancelled) return;
+        const expectedRows = Math.min(collection.captureCount, COLLECTION_CAPTURE_PAGE_SIZE);
+        const cachedRows = capturesForListMode(collectionCapturesCacheRef.current[collection.id] || [], "active");
+        if (cachedRows.length >= expectedRows || collectionCapturePrefetchStartedRef.current.has(collection.id)) return;
+        collectionCapturePrefetchStartedRef.current.add(collection.id);
+        await loadCollectionCaptures(collection.id, { prefetch: true }).catch(() => {
+          collectionCapturePrefetchStartedRef.current.delete(collection.id);
+        });
+      }, Promise.resolve());
+    });
+    return () => {
+      cancelled = true;
+      cancelIdleTask();
+    };
+  }, [
+    collections,
+    collectionsLoading,
+    collectionsMode,
+    collectionsOpen,
+    config?.apiUrl,
+    loadCollectionCaptures,
+    selectedCollectionId,
+    session?.accessToken
+  ]);
 
   useEffect(() => {
     setActiveCapturesLoadedOnce(false);
@@ -2250,6 +2317,7 @@ export default function App() {
         showToast("Capture restored.", "success");
         collectionCapturesCacheRef.current = {};
         collectionCapturesCursorCacheRef.current = {};
+        collectionCapturePrefetchStartedRef.current = new Set();
         await loadCaptures();
         if (collectionsOpen || selectedCollectionId || returnCollectionId) await loadCollections("active");
       } catch (error) {
@@ -2613,7 +2681,7 @@ export default function App() {
   function renderBootScreen() {
     return (
       <View style={styles.bootBlank}>
-        <StatusBar barStyle="light-content" />
+        <StatusBar barStyle={appTheme.statusBarStyle} />
       </View>
     );
   }
@@ -2650,7 +2718,7 @@ export default function App() {
           collectionCapturesLoading,
           collectionDetailListRef,
           keyboardHeight,
-          listPerfProps: CAPTURE_LIST_PERF_PROPS,
+          listPerfProps: COLLECTION_CAPTURE_LIST_PERF_PROPS,
           selectedCollection,
           toast: renderToast("footer")
         }}

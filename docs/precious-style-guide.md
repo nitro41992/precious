@@ -24,7 +24,7 @@ Mobbin access was limited during research: the supplied pages exposed title shel
 
 ### Apple Health
 
-- Borrow the quiet grouped-list system: low-glare dark grouped background, tonal surfaces, high-contrast text, muted metadata, thin dividers, and compact rows.
+- Borrow the quiet grouped-list system: warm off-white grouped background, tonal surfaces, high-contrast text, muted metadata, soft spacing, and compact rows.
 - Lead with a curated retrieval surface, not an exhaustive database. In Precious, recent active Captures and full-screen Search should appear before inactive-item cleanup.
 - Use color only for meaning. Status, confidence, reminders, and collection suggestions may carry color; decoration should not.
 - Keep detail screens drill-in oriented: title and state first, source and summary next, review decisions in the middle, raw source and destructive actions last.
@@ -56,7 +56,7 @@ Mobbin access was limited during research: the supplied pages exposed title shel
 
 ## Design Principles
 
-- **Native Calm:** Use restrained native mobile patterns, compact hierarchy, dark neutral tonal surfaces, and clear state labels.
+- **Native Calm:** Use restrained native mobile patterns, compact hierarchy, warm light tonal surfaces, and clear state labels.
 - **Capture First:** Saving must feel durable and immediate. Analysis and review happen after capture, not before it.
 - **Quiet Confidence:** Persist low-risk, reversible AI decisions quietly; ask before creating reminders, obligations, or new organizational structures.
 - **Guided Review:** Correction should feel like editing meaning with chips and short rationale, not filling out an analysis report.
@@ -72,24 +72,26 @@ Mobbin access was limited during research: the supplied pages exposed title shel
 
 ### Color Roles
 
-Use the dark neutral palette as the default app base and add state colors sparingly. The prior warm-paper palette is no longer the primary consumer shell direction.
+Use the warm light palette as the default app base and add state colors sparingly. The shell should feel off-white and native, not stark white, dark, or decorative.
 
 | Role | Token | Use |
 | --- | --- | --- |
-| Paper | `#101411` | App background and sticky footers |
-| Surface | `#171c18` | Bounded review blocks or grouped surfaces only |
-| Surface Container | `#1d241f` | Search bars, sheets, rows with emphasis |
-| Surface Container High | `#252d27` | Pressed states, dense inputs, secondary panels |
-| Ink | `#eef5ef` | Primary text and high-emphasis actions |
-| Muted | `#a6b3aa` | Metadata, helper text, secondary labels |
-| Line | `#37413a` | Hairline dividers and subtle borders |
-| Accent | `#7bd7ad` | Primary action, ready, selected positive state |
-| Accent Soft | `#17382b` | Selected chip or successful quiet state |
-| Processing | `#9fc6e3` | Analyzing, syncing, queued |
-| Review | `#e2bd76` | Needs review, maybe, action needed |
-| Review Soft | `#342713` | Review callouts and changed suggestions |
-| Danger | `#ffb4a8` | Failed, destructive, could not save |
-| Deleted | `#ffb4a8` | Destructive delete actions and pending-delete undo |
+| Paper | `#f6f1e8` | App background and sticky footers |
+| Surface | `#fffefa` | Bounded review blocks or grouped surfaces only |
+| Surface Container | `#fff9f0` | Search bars, sheets, rows with emphasis |
+| Surface Container High | `#fbf0e0` | Pressed states, dense inputs, secondary panels |
+| Review Card | `#fffdf8` | Capture Review source and action cards |
+| Review Card Well | `#fff7ec` | Icon wells inside Capture Review action cards |
+| Ink | `#25221c` | Primary text and high-emphasis actions |
+| Muted | `#675f54` | Metadata, helper text, secondary labels |
+| Line | `#cdbca5` | Rare subtle borders when tonal separation is not enough |
+| Accent | `#236f4d` | Primary action, ready, selected positive state |
+| Accent Soft | `#dcefe5` | Selected chip or successful quiet state |
+| Processing | `#2f6f98` | Analyzing, syncing, queued |
+| Review | `#946a1d` | Needs review, maybe, action needed |
+| Review Soft | `#f4e7ca` | Review callouts and changed suggestions |
+| Danger | `#b64234` | Failed, destructive, could not save |
+| Deleted | `#b64234` | Destructive delete actions and pending-delete undo |
 
 Rules:
 
@@ -123,7 +125,7 @@ Rules:
 - Use a compact spacing scale: 4, 8, 12, 16, 22 or 24, 32.
 - Default horizontal screen padding: 22px unless a native component requires otherwise.
 - Default radius: 8px. Segments may use 6px. Avoid large pill-heavy UI unless the element is truly a chip.
-- Use hairline dividers for list separation.
+- Prefer spacing and tonal separation for lists. Avoid visible hairline dividers; use header gradients or tonal grouping when a boundary needs soft separation.
 - Do not put cards inside cards.
 - Prefer grouping and spacing before adding borders.
 
@@ -189,7 +191,7 @@ Each card should have one purpose, one short headline, one evidence line, and on
 - Use press feedback on rows, buttons, and chips.
 - Use inline loading placeholders or skeleton rows for captures and search results; avoid full-screen spinners except during app boot.
 - Use toast undo for reversible destructive or removal actions such as delete and collection removal.
-- Use the shared tonal toast host for transient action feedback such as saved, copied, removed, undo, unavailable, and could-not-complete states. Toasts should be bottom-docked, dark tonal, borderless, icon-led, and should show tone through the icon/action accent rather than a colored card edge. Keep page-level load errors, authentication form errors, and field-level autosave state inline where they orient the current task.
+- Use the shared tonal toast host for transient action feedback such as saved, copied, removed, undo, unavailable, and could-not-complete states. Toasts should be bottom-docked, tonal, borderless, icon-led, and should show tone through the icon/action accent rather than a colored card edge. Keep page-level load errors, authentication form errors, and field-level autosave state inline where they orient the current task.
 - Do not use decorative motion, delayed search animations, or heavy gesture systems until core retrieval is fast.
 
 ## Workflow Patterns
@@ -275,7 +277,7 @@ Capture Review should read like a polished saved-memory edit surface, not a form
 
 `Purpose: Visit | Collection: NYC restaurants | Later: next Saturday afternoon`
 
-The rail should feel embedded in the memory surface: use spacing, hairline separation, hierarchy, and pressed states rather than equal-weight stat cards, chunky pills, prose sentences, or boxed form rows.
+The rail should feel embedded in the memory surface: use spacing, tonal separation, hierarchy, and pressed states rather than equal-weight stat cards, chunky pills, prose sentences, or boxed form rows.
 
 Each control can expand into a focused picker or editor. Keep concise rationale visible only when it builds trust:
 

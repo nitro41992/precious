@@ -8,6 +8,10 @@ export const styles = StyleSheet.create({
     flex: 1,
     paddingTop: Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0
   },
+  edgeToEdgeSafe: {
+    backgroundColor: colors.paper,
+    flex: 1
+  },
   reviewSafe: {
     backgroundColor: colors.surfaceContainer,
     flex: 1
@@ -17,7 +21,7 @@ export const styles = StyleSheet.create({
     flex: 1
   },
   bootBlank: {
-    backgroundColor: "#000000",
+    backgroundColor: colors.paper,
     flex: 1
   },
   screenOverlay: {
@@ -34,18 +38,34 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingTop: 14
   },
+  topAppBarScreen: {
+    flex: 1,
+    paddingHorizontal: 22
+  },
   keyboardScreen: {
     flex: 1
   },
   header: {
     gap: 4,
-    paddingBottom: 14
+    paddingBottom: 14,
+    position: "relative",
+    zIndex: 2
+  },
+  headerContentGradient: {
+    height: Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) + 118 : 118,
+    left: -22,
+    position: "absolute",
+    right: -22,
+    top: 0,
+    zIndex: 0
   },
   headerRow: {
     alignItems: "flex-start",
     flexDirection: "row",
     gap: 12,
-    justifyContent: "space-between"
+    justifyContent: "space-between",
+    position: "relative",
+    zIndex: 2
   },
   headerCopy: {
     flex: 1,
@@ -56,6 +76,17 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     minWidth: 0
+  },
+  topAppBarOverlay: {
+    left: 22,
+    paddingTop: (Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0) + 14,
+    position: "absolute",
+    right: 22,
+    top: 0,
+    zIndex: 4
+  },
+  topAppBarListInset: {
+    paddingTop: (Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0) + 102
   },
   kicker: {
     color: colors.muted,
@@ -115,7 +146,7 @@ export const styles = StyleSheet.create({
   },
   bottomNavGradient: {
     bottom: 0,
-    height: Platform.OS === "android" ? 96 : 104,
+    height: Platform.OS === "android" ? 152 : 162,
     left: 0,
     position: "absolute",
     right: 0
@@ -132,9 +163,7 @@ export const styles = StyleSheet.create({
   bottomNavBar: {
     alignItems: "center",
     backgroundColor: colors.surfaceContainer,
-    borderColor: "rgba(238, 245, 239, 0.12)",
     borderRadius: 27,
-    borderWidth: StyleSheet.hairlineWidth,
     flex: 1,
     flexDirection: "row",
     gap: 6,
@@ -172,14 +201,14 @@ export const styles = StyleSheet.create({
     width: 50
   },
   bottomNavFabPressed: {
-    backgroundColor: "#96e5bf",
+    backgroundColor: colors.accentPressed,
     transform: [{ scale: 0.965 }]
   },
   bottomNavFabCollection: {
     backgroundColor: colors.collectionAccent
   },
   bottomNavFabCollectionPressed: {
-    backgroundColor: "#e4cf92"
+    backgroundColor: colors.collectionAccentPressed
   },
   searchScreen: {
     flex: 1
@@ -322,7 +351,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.paper,
     borderColor: colors.line,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     flex: 1,
     flexDirection: "row",
     gap: 7,
@@ -354,7 +383,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainerHighest,
     borderColor: colors.line,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     flexDirection: "row",
     gap: 8,
     justifyContent: "center",
@@ -401,7 +430,7 @@ export const styles = StyleSheet.create({
     borderTopColor: colors.line,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: 0,
     gap: 12,
     paddingBottom: Platform.OS === "android" ? 20 : 28,
     paddingHorizontal: 22,
@@ -415,7 +444,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 10
@@ -479,7 +508,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
     borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     flexGrow: 1,
     justifyContent: "center",
     minHeight: 48,
@@ -539,7 +568,7 @@ export const styles = StyleSheet.create({
     borderTopColor: colors.line,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: 0,
     gap: 14,
     paddingBottom: Platform.OS === "android" ? 18 : 26,
     paddingHorizontal: 22,
@@ -582,7 +611,7 @@ export const styles = StyleSheet.create({
   sheetActionRow: {
     alignItems: "center",
     borderTopColor: colors.line,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: 0,
     flexDirection: "row",
     gap: 12,
     minHeight: 62,
@@ -609,9 +638,9 @@ export const styles = StyleSheet.create({
   destructiveSheetIcon: {
     alignItems: "center",
     backgroundColor: colors.dangerSoft,
-    borderColor: "#704038",
+    borderColor: colors.dangerLine,
     borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     height: 46,
     justifyContent: "center",
     width: 46
@@ -619,6 +648,9 @@ export const styles = StyleSheet.create({
   listContent: {
     paddingBottom: 132,
     paddingTop: 0
+  },
+  homeList: {
+    marginHorizontal: -22
   },
   searchResultsContent: {
     paddingBottom: 180,
@@ -635,6 +667,7 @@ export const styles = StyleSheet.create({
     ...typefaces.bold,
     fontSize: 12,
     fontWeight: "800",
+    paddingHorizontal: 22,
     paddingBottom: 2,
     paddingTop: 16
   },
@@ -642,14 +675,12 @@ export const styles = StyleSheet.create({
     alignItems: "flex-start",
     flexDirection: "row",
     gap: 12,
-    minHeight: 104,
-    paddingHorizontal: 0,
+    minHeight: 128,
+    paddingHorizontal: 22,
     paddingVertical: 16
   },
   captureRowPressed: {
-    backgroundColor: colors.surfaceContainer,
-    borderRadius: 8,
-    transform: [{ scale: 0.995 }]
+    backgroundColor: colors.rowPressed
   },
   subtlePressed: {
     backgroundColor: colors.surfaceContainerHigh,
@@ -662,10 +693,8 @@ export const styles = StyleSheet.create({
   sourceMark: {
     alignItems: "center",
     backgroundColor: colors.surfaceContainer,
-    borderColor: colors.accentLine,
     borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 74,
+    height: 96,
     justifyContent: "center",
     overflow: "hidden",
     width: 74
@@ -673,9 +702,7 @@ export const styles = StyleSheet.create({
   sourceMarkDetail: {
     alignItems: "center",
     backgroundColor: colors.accentSoft,
-    borderColor: colors.accentLine,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
     height: 28,
     justifyContent: "center",
     overflow: "hidden",
@@ -700,17 +727,17 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.accentSoft,
     borderColor: colors.accentLine,
     borderRadius: 6,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     height: 20,
     width: 20
   },
   sourceMarkProcessing: {
     backgroundColor: colors.processingSoft,
-    borderColor: "#2b526b"
+    borderColor: colors.processingLine
   },
   sourceMarkFailed: {
     backgroundColor: colors.dangerSoft,
-    borderColor: "#704038"
+    borderColor: colors.dangerLine
   },
   sourceFavicon: {
     height: 42,
@@ -731,10 +758,8 @@ export const styles = StyleSheet.create({
   },
   captureThumbnailFrame: {
     backgroundColor: colors.surfaceContainer,
-    borderColor: colors.line,
     borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 74,
+    height: 96,
     overflow: "hidden",
     width: 74
   },
@@ -743,7 +768,7 @@ export const styles = StyleSheet.create({
     width: "100%"
   },
   thumbnailRevealSlot: {
-    height: 74,
+    height: 96,
     position: "relative",
     width: 74
   },
@@ -924,7 +949,7 @@ export const styles = StyleSheet.create({
   },
   separator: {
     backgroundColor: colors.line,
-    height: StyleSheet.hairlineWidth
+    height: 0
   },
   emptyContent: {
     flexGrow: 1,
@@ -962,7 +987,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     borderColor: colors.accentLine,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     height: 16,
     width: 16
   },
@@ -970,13 +995,13 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.line,
     flex: 1,
     marginVertical: 8,
-    width: StyleSheet.hairlineWidth
+    width: 0
   },
   homeEmptyRailDot: {
     backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
     borderRadius: 7,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     height: 14,
     width: 14
   },
@@ -990,7 +1015,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainer,
     borderColor: colors.line,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     overflow: "hidden"
   },
   homeEmptyTilePrimary: {
@@ -1056,10 +1081,10 @@ export const styles = StyleSheet.create({
   },
   homeEmptyImageFrame: {
     alignSelf: "stretch",
-    backgroundColor: "rgba(159, 198, 227, 0.18)",
-    borderColor: "rgba(159, 198, 227, 0.32)",
+    backgroundColor: colors.processingSoft,
+    borderColor: colors.processingLine,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     flex: 1,
     minHeight: 34
   },
@@ -1068,7 +1093,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     bottom: 0,
     height: 42,
     justifyContent: "center",
@@ -1150,7 +1175,7 @@ export const styles = StyleSheet.create({
     width: "100%"
   },
   homeEmptyPrimaryPressed: {
-    backgroundColor: "#9be6c2",
+    backgroundColor: colors.accentPressed,
     transform: [{ scale: 0.99 }]
   },
   homeEmptyPrimaryText: {
@@ -1192,7 +1217,7 @@ export const styles = StyleSheet.create({
     overflow: "hidden"
   },
   skeletonSheen: {
-    backgroundColor: "rgba(245, 251, 247, 0.10)",
+    backgroundColor: colors.skeletonSheen,
     bottom: -14,
     position: "absolute",
     top: -14,
@@ -1201,7 +1226,7 @@ export const styles = StyleSheet.create({
   captureSkeletonRow: {
     alignItems: "flex-start",
     borderBottomColor: colors.line,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 0,
     flexDirection: "row",
     gap: 12,
     minHeight: 136,
@@ -1210,7 +1235,7 @@ export const styles = StyleSheet.create({
   collectionCaptureSkeletonRow: {
     alignItems: "flex-start",
     borderBottomColor: colors.line,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 0,
     flexDirection: "row",
     gap: 12,
     minHeight: 156,
@@ -1234,14 +1259,14 @@ export const styles = StyleSheet.create({
     alignItems: "flex-start",
     flexDirection: "row",
     gap: 12,
-    minHeight: 104,
+    minHeight: 128,
     paddingVertical: 16
   },
   collectionCaptureSkeletonInline: {
     alignItems: "flex-start",
     flexDirection: "row",
     gap: 12,
-    minHeight: 108,
+    minHeight: 128,
     paddingVertical: 16
   },
   captureRowSkeletonCopy: {
@@ -1294,17 +1319,13 @@ export const styles = StyleSheet.create({
     width: 34
   },
   loadingSourceMark: {
-    borderColor: colors.line,
     borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 74,
+    height: 96,
     width: 74
   },
   loadingThumbnailMark: {
-    borderColor: colors.line,
     borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 74,
+    height: 96,
     width: 74
   },
   collectionLoadingTitle: {
@@ -1410,15 +1431,12 @@ export const styles = StyleSheet.create({
   collectionCollageFrame: {
     aspectRatio: 1,
     backgroundColor: colors.surfaceContainer,
-    borderColor: colors.line,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",
     width: "100%"
   },
   collectionCollageEmpty: {
-    backgroundColor: colors.surfaceContainer,
-    borderColor: colors.surfaceContainerHigh
+    backgroundColor: colors.surfaceContainer
   },
   collectionCollagePending: {
     alignItems: "center",
@@ -1547,7 +1565,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainer,
     borderColor: colors.line,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     bottom: 20,
     left: 18,
     opacity: 0.78,
@@ -1561,7 +1579,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     bottom: 10,
     gap: 16,
     justifyContent: "center",
@@ -1576,7 +1594,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.accentSoft,
     borderColor: colors.accentLine,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     height: 28,
     left: 22,
     position: "absolute",
@@ -1619,7 +1637,7 @@ export const styles = StyleSheet.create({
   },
   collectionSettings: {
     borderTopColor: colors.line,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: 0,
     gap: 10,
     marginTop: 8,
     paddingHorizontal: 22,
@@ -1632,7 +1650,9 @@ export const styles = StyleSheet.create({
     paddingTop: 16
   },
   collectionsTitleBlock: {
-    gap: 6
+    gap: 6,
+    position: "relative",
+    zIndex: 2
   },
   collectionModeRow: {
     alignItems: "center",
@@ -1709,7 +1729,7 @@ export const styles = StyleSheet.create({
   collectionSelectionFooter: {
     backgroundColor: colors.paper,
     borderTopColor: colors.line,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: 0,
     paddingBottom: Platform.OS === "android" ? 16 : 22,
     paddingHorizontal: 22,
     paddingTop: 10
@@ -1790,7 +1810,7 @@ export const styles = StyleSheet.create({
   authDividerLine: {
     backgroundColor: colors.line,
     flex: 1,
-    height: StyleSheet.hairlineWidth
+    height: 0
   },
   authDividerText: {
     color: colors.muted,
@@ -1802,7 +1822,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainer,
     borderColor: colors.line,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     color: colors.ink,
     ...typefaces.regular,
     fontSize: 16,
@@ -1927,20 +1947,20 @@ export const styles = StyleSheet.create({
   },
   reviewMediaIconButton: {
     alignItems: "center",
-    backgroundColor: "rgba(16, 20, 17, 0.72)",
-    borderColor: "rgba(238, 245, 239, 0.18)",
+    backgroundColor: colors.mediaControl,
+    borderColor: colors.mediaControlLine,
     borderRadius: 24,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     height: 48,
     justifyContent: "center",
     width: 48
   },
   reviewMediaStatusPill: {
-    backgroundColor: "rgba(16, 20, 17, 0.72)",
-    borderColor: "rgba(238, 245, 239, 0.18)",
+    backgroundColor: colors.mediaControl,
+    borderColor: colors.mediaControlLine,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    color: colors.ink,
+    borderWidth: 0,
+    color: colors.onMediaControl,
     ...typefaces.bold,
     fontSize: 12,
     fontWeight: "800",
@@ -1952,23 +1972,23 @@ export const styles = StyleSheet.create({
   },
   reviewMediaSourcePill: {
     alignSelf: "flex-start",
-    backgroundColor: "rgba(3, 7, 5, 0.68)",
-    borderColor: "rgba(238, 245, 239, 0.18)",
+    backgroundColor: colors.mediaControlStrong,
+    borderColor: colors.mediaControlLine,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     maxWidth: "100%",
     minHeight: 34,
     paddingHorizontal: 10,
     paddingVertical: 7
   },
   reviewMediaSourceText: {
-    color: colors.ink,
+    color: colors.onMediaControl,
     ...typefaces.bold,
     fontSize: 13,
     fontWeight: "800"
   },
   imageViewerLayer: {
-    backgroundColor: "#000000",
+    backgroundColor: colors.imageViewerBackground,
     flex: 1
   },
   imageViewerSurface: {
@@ -1993,10 +2013,10 @@ export const styles = StyleSheet.create({
   },
   imageViewerClose: {
     alignItems: "center",
-    backgroundColor: "rgba(16, 20, 17, 0.72)",
-    borderColor: "rgba(238, 245, 239, 0.18)",
+    backgroundColor: colors.mediaControl,
+    borderColor: colors.mediaControlLine,
     borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     height: 44,
     justifyContent: "center",
     position: "absolute",
@@ -2012,9 +2032,9 @@ export const styles = StyleSheet.create({
     right: 20
   },
   imageViewerCaptionText: {
-    backgroundColor: "rgba(16, 20, 17, 0.72)",
+    backgroundColor: colors.mediaControl,
     borderRadius: 8,
-    color: colors.ink,
+    color: colors.onMediaControl,
     ...typefaces.bold,
     fontSize: 13,
     fontWeight: "800",
@@ -2106,10 +2126,10 @@ export const styles = StyleSheet.create({
   reviewSourceCluster: {
     alignItems: "center",
     alignSelf: "flex-start",
-    backgroundColor: colors.surfaceContainerHigh,
-    borderColor: colors.line,
+    backgroundColor: colors.reviewCard,
+    borderColor: colors.lineStrong,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     flexDirection: "row",
     flexShrink: 1,
     gap: 8,
@@ -2137,7 +2157,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.accentSoft,
     borderColor: colors.accentLine,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     height: 24,
     justifyContent: "center",
     width: 28
@@ -2153,9 +2173,9 @@ export const styles = StyleSheet.create({
   reviewEditRail: {
     alignItems: "stretch",
     borderBottomColor: colors.line,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 0,
     borderTopColor: colors.line,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: 0,
     flexDirection: "row",
     minHeight: 88,
     overflow: "hidden",
@@ -2192,7 +2212,7 @@ export const styles = StyleSheet.create({
   reviewEditRailDivider: {
     backgroundColor: colors.line,
     marginVertical: 8,
-    width: StyleSheet.hairlineWidth
+    width: 0
   },
   reviewEditRailDetails: {
     flex: 1,
@@ -2229,7 +2249,7 @@ export const styles = StyleSheet.create({
   },
   reviewEditRailDetailDivider: {
     backgroundColor: colors.line,
-    height: StyleSheet.hairlineWidth,
+    height: 0,
     marginLeft: 8,
     marginRight: 8,
     opacity: 0.72
@@ -2283,7 +2303,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     justifyContent: "center",
     minHeight: 44,
     paddingHorizontal: 12
@@ -2354,7 +2374,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     gap: 12,
     padding: 12
   },
@@ -2384,7 +2404,7 @@ export const styles = StyleSheet.create({
   },
   sheetSection: {
     borderTopColor: colors.line,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: 0,
     gap: 8,
     paddingTop: 12
   },
@@ -2406,7 +2426,7 @@ export const styles = StyleSheet.create({
   },
   reminderFieldGroup: {
     borderTopColor: colors.line,
-    borderTopWidth: StyleSheet.hairlineWidth
+    borderTopWidth: 0
   },
   reminderFieldSectionHeader: {
     alignItems: "center",
@@ -2419,7 +2439,7 @@ export const styles = StyleSheet.create({
   reminderFieldRow: {
     alignItems: "center",
     borderBottomColor: colors.line,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 0,
     flexDirection: "row",
     gap: 12,
     minHeight: 64,
@@ -2452,7 +2472,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     gap: 10,
     overflow: "hidden",
     padding: 10
@@ -2461,7 +2481,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     gap: 4,
     padding: 12
   },
@@ -2475,7 +2495,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     gap: 12,
     padding: 12
   },
@@ -2493,7 +2513,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.paper,
     borderColor: colors.line,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     color: colors.ink,
     fontSize: 18,
     fontWeight: "800",
@@ -2514,7 +2534,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainer,
     borderColor: colors.line,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     flexGrow: 1,
     justifyContent: "center",
     minHeight: 48,
@@ -2571,7 +2591,7 @@ export const styles = StyleSheet.create({
   collectionPickerRow: {
     alignItems: "center",
     borderTopColor: colors.line,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: 0,
     flexDirection: "row",
     gap: 10,
     minHeight: 50,
@@ -2579,7 +2599,7 @@ export const styles = StyleSheet.create({
   },
   collectionCreateBox: {
     borderTopColor: colors.line,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: 0,
     gap: 8,
     paddingTop: 10
   },
@@ -2689,7 +2709,7 @@ export const styles = StyleSheet.create({
   },
   sourceBlock: {
     borderTopColor: colors.line,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: 0,
     gap: 8,
     paddingTop: 16
   },
@@ -2706,10 +2726,10 @@ export const styles = StyleSheet.create({
     paddingLeft: 1
   },
   reviewActionGroup: {
-    backgroundColor: colors.surfaceContainerHigh,
-    borderColor: colors.line,
+    backgroundColor: colors.reviewCard,
+    borderColor: colors.lineStrong,
     borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     overflow: "hidden"
   },
   reviewActionRow: {
@@ -2722,11 +2742,13 @@ export const styles = StyleSheet.create({
   },
   reviewActionRowDivided: {
     borderTopColor: colors.line,
-    borderTopWidth: StyleSheet.hairlineWidth
+    borderTopWidth: 0
   },
   reviewActionIconWell: {
     alignItems: "center",
-    backgroundColor: colors.soft,
+    backgroundColor: colors.reviewCardWell,
+    borderColor: colors.line,
+    borderWidth: 0,
     borderRadius: 8,
     height: 34,
     justifyContent: "center",
@@ -2856,7 +2878,7 @@ export const styles = StyleSheet.create({
     justifyContent: "center"
   },
   primaryButtonPressed: {
-    backgroundColor: "#9be6c2",
+    backgroundColor: colors.accentPressed,
     transform: [{ scale: 0.99 }]
   },
   disabledButton: {
@@ -2871,7 +2893,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.danger
   },
   destructiveButtonText: {
-    color: "#2d0b08",
+    color: colors.onDanger,
     fontSize: 16,
     fontWeight: "800"
   },
@@ -2910,7 +2932,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 11,
     position: "absolute",
     right: 22,
-    shadowColor: "#000000",
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.28,
     shadowRadius: 18,

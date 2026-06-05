@@ -58,7 +58,7 @@ import {
   urlEvidenceMessage
 } from "../capturePresentation";
 import { ReminderEditorSheet } from "../sheets/ReminderEditorSheet";
-import { colors } from "../ui/theme";
+import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
 import { AiFieldInsight, AnimatedBottomSheet, IconButton, SourceMark } from "../ui/components";
 import { Text, TextInput } from "../ui/typography";
@@ -289,7 +289,7 @@ function CaptureImageViewer({
           onPress={onClose}
           style={({ pressed }) => [styles.imageViewerClose, pressed && styles.subtlePressed]}
         >
-          <X color={colors.ink} size={22} weight="bold" />
+          <X color={colors.onMediaControl} size={22} weight="bold" />
         </Pressable>
         <View pointerEvents="none" style={styles.imageViewerCaption}>
           <Text numberOfLines={1} style={styles.imageViewerCaptionText}>{title}</Text>
@@ -468,7 +468,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
 
   return (
     <View style={styles.reviewSafe}>
-      <StatusBar backgroundColor="transparent" barStyle="light-content" translucent />
+      <StatusBar backgroundColor="transparent" barStyle={appTheme.mediaStatusBarStyle} translucent />
       <Animated.View
         style={[
           styles.reviewShell,
@@ -596,7 +596,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                     }}
                     style={({ pressed }) => [styles.reviewMediaIconButton, pressed && styles.subtlePressed]}
                   >
-                    <ArrowLeft color={colors.ink} size={22} weight="regular" />
+                    <ArrowLeft color={colors.onMediaControl} size={22} weight="regular" />
                   </Pressable>
                   {showStatus ? (
                     <Text
@@ -622,7 +622,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                         updateSelectedReviewDraft({ title: value, titleDirty: true });
                       }}
                       placeholder="Title"
-                      placeholderTextColor={colors.muted}
+                      placeholderTextColor={colors.placeholder}
                       style={styles.reviewTitleInput}
                       testID="pc.review.title"
                       value={draftTitle}
@@ -850,7 +850,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                     updateSelectedReviewDraft({ note: value, noteDirty: true });
                   }}
                   placeholder="Why did you save this?"
-                  placeholderTextColor={colors.muted}
+                  placeholderTextColor={colors.placeholder}
                   ref={noteInputRef}
                   style={[styles.captureInput, styles.noteSheetInput]}
                   testID="pc.review.note"

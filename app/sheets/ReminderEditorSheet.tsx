@@ -19,7 +19,7 @@ import {
 import { AiFieldInsight, AnimatedBottomSheet, IconButton } from "../ui/components";
 import { styles } from "../ui/styles";
 import { Text } from "../ui/typography";
-import { colors } from "../ui/theme";
+import { appTheme, colors } from "../ui/theme";
 
 type PickerMode = "date" | "time" | null;
 type PickerTarget = "startDate" | "endDate" | "startTime" | "endTime" | null;
@@ -285,7 +285,7 @@ export function ReminderEditorSheet({
                 positiveButton={{ label: "Use" }}
                 presentation="dialog"
                 testID={`pc.reminder.${pickerTarget}.picker`}
-                themeVariant="dark"
+                themeVariant={appTheme.dateTimePickerThemeVariant}
                 timeZoneName={draft.timezone || deviceTimeZone()}
                 value={pickerValue}
               />

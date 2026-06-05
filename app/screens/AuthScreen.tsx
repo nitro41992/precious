@@ -8,7 +8,7 @@ import {
 import { ArrowLeft, Check, EnvelopeSimple as Mail } from "phosphor-react-native";
 
 import type { AuthLoadingState, AuthScreenMode } from "../types";
-import { colors } from "../ui/theme";
+import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
 import { Text, TextInput } from "../ui/typography";
 
@@ -38,7 +38,7 @@ export function AuthScreen({ actions, data, state }: AuthScreenProps) {
 
   return (
     <View style={styles.safe}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={appTheme.statusBarStyle} />
       <ScrollView
         contentContainerStyle={[styles.detail, styles.authDetail]}
         keyboardShouldPersistTaps="handled"
@@ -75,7 +75,7 @@ export function AuthScreen({ actions, data, state }: AuthScreenProps) {
               keyboardType="email-address"
               onChangeText={setAuthEmail}
               placeholder="Email"
-              placeholderTextColor={colors.muted}
+              placeholderTextColor={colors.placeholder}
               style={styles.authEmailInput}
               testID="pc.auth.email"
               value={authEmail}

@@ -4,13 +4,13 @@
 
 This artifact records the agreed scope for the current Precious consumer UI revamp. Use it with `docs/precious-style-guide.md`, `docs/requirements/CONTEXT.md`, and `docs/requirements/PRODUCT.md` before implementing or reviewing UI work.
 
-Related ADRs: `docs/adr/0001-recent-captures-and-full-screen-search.md`, `docs/adr/0005-bottom-app-bar-and-top-level-collections.md`, `docs/adr/0006-existing-only-multi-collection-assignment.md`, `docs/adr/0008-starter-collections-for-empty-accounts.md`, `docs/adr/0009-action-oriented-save-intents.md`, and `docs/adr/0016-use-satoshi-for-consumer-typography.md`.
+Related ADRs: `docs/adr/0001-recent-captures-and-full-screen-search.md`, `docs/adr/0005-bottom-app-bar-and-top-level-collections.md`, `docs/adr/0006-existing-only-multi-collection-assignment.md`, `docs/adr/0008-starter-collections-for-empty-accounts.md`, `docs/adr/0009-action-oriented-save-intents.md`, `docs/adr/0016-use-satoshi-for-consumer-typography.md`, and `docs/adr/0018-light-consumer-app-shell.md`.
 
 ## Product Shape
 
 - The app should feel like a polished consumer memory surface, not a dogfooding, audit, or extraction-review tool.
-- The consumer shell uses a calm dark Material 3 Expressive-inspired surface hierarchy by default, not the earlier warm paper shell.
-- Material 3 Expressive emphasis should clarify review decisions through purposeful size, shape, tonal containment, motion, and semantic color while preserving familiar native controls and Precious' calm dark tone.
+- The consumer shell uses a calm warm light Material 3 Expressive-inspired surface hierarchy by default, with an off-white paper background and tonal grouped surfaces.
+- Material 3 Expressive emphasis should clarify review decisions through purposeful size, shape, tonal containment, motion, and semantic color while preserving familiar native controls and Precious' calm memory-surface tone.
 - The default Retrieval Lens is `Recent Captures`, titled `Recents` in the app: active Captures only, ordered by most recently captured.
 - Search is a primary product function and opens as its own full-screen Retrieval Lens.
 - The top-level app shell uses a bottom app bar with `Recent`, `Collections`, and `Settings`, plus a separate contextual floating `+` action.
