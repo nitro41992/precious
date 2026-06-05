@@ -804,6 +804,136 @@ Deno.test("URL preview visual evidence only accepts HTTPS images", () => {
   assertEqual(content.length, 1, "HTTP preview images should not be attached");
 });
 
+Deno.test("collection context prepass is enabled for uploaded and URL preview images", () => {
+  assert(
+    urlEvidence.shouldRunCollectionContextPrepass(
+      captureFixture({
+        source_text: "Shared image: Screenshot_20260605-032059.png",
+        asset_url: "https://storage.example.com/screenshot.png",
+        asset_mime_type: "image/png",
+      }),
+      null,
+    ),
+    "uploaded screenshots should run collection context prepass",
+  );
+
+  const evidence = urlEvidence.oembedMetadata(
+    {
+      title: "Market chart",
+      thumbnail_url: "https://cdn.example.com/market-preview.jpg",
+    },
+    "https://example.com/market/abc123",
+  );
+  assert(
+    urlEvidence.shouldRunCollectionContextPrepass(
+      captureFixture({
+        source_url: "https://example.com/market/abc123",
+        source_text: "https://example.com/market/abc123",
+      }),
+      evidence,
+    ),
+    "HTTPS URL preview images should run collection context prepass",
+  );
+  assert(
+    !urlEvidence.shouldRunCollectionContextPrepass(
+      captureFixture({
+        source_text: "Dermatologist recommends budget retinoids for acne care.",
+      }),
+      null,
+    ),
+    "text-only captures without visual evidence should skip the prepass",
+  );
+});
+
+Deno.test("collection retrieval query uses visual context and suppresses filename markers", () => {
+  const query = urlEvidence.retrievalQueryForCapture(
+    captureFixture({
+      capture_type: "screenshot",
+      source_text: "Shared image: Screenshot_20260605-032059.png",
+      asset_url: "https://storage.example.com/screenshot.png",
+      asset_mime_type: "image/png",
+    }),
+    null,
+    {
+      inferred_title: "Los Angeles mayor winner market screenshot",
+      short_summary:
+        "A prediction market chart for the Los Angeles mayor winner race.",
+      visible_text: [
+        "Los Angeles Mayor winner",
+        "Karen Bass 63c",
+        "Nithya Raman 29c",
+        "Select a contract",
+      ],
+      entities: [
+        {
+          type: "platform",
+          name: "Polymarket",
+          evidence: "User context identifies this as a Polymarket market.",
+        },
+        {
+          type: "topic",
+          name: "prediction market",
+          evidence: "Cent-denominated contract prices are visible.",
+        },
+      ],
+      source_hints: ["finance", "prediction market chart"],
+      search_phrases: [
+        "Polymarket Los Angeles mayor market",
+        "Stocks & Crypto prediction market",
+      ],
+    },
+  );
+
+  assert(
+    query.includes("Polymarket") &&
+      query.includes("prediction market") &&
+      query.includes("Los Angeles mayor") &&
+      query.includes("finance"),
+    "visual collection context should feed retrieval",
+  );
+  assert(
+    !query.includes("Screenshot_20260605-032059.png"),
+    "filename marker should not dominate retrieval when visual context exists",
+  );
+});
+
+Deno.test("collection retrieval query preserves plain text behavior without visual context", () => {
+  const query = urlEvidence.retrievalQueryForCapture(
+    captureFixture({
+      source_text: "Dermatologist recommends budget retinoids for acne care.",
+    }),
+    null,
+  );
+  assertEqual(
+    query,
+    "Dermatologist recommends budget retinoids for acne care.",
+    "plain text captures should keep existing retrieval query shape",
+  );
+});
+
+Deno.test("visual context can make Stocks & Crypto eligible but not bypass linking threshold", () => {
+  const schema = urlEvidence.analysisSchemaForCollections([
+    {
+      id: "stocks-id",
+      title: "Stocks & Crypto",
+      description: "US finance and crypto including polymarkets",
+    },
+  ] as any);
+  assertEqual(
+    JSON.stringify(
+      schema.properties.collection_decisions.items.properties.collection_id
+        .enum,
+    ),
+    JSON.stringify(["stocks-id", null]),
+    "retrieved finance Collection should become an eligible decision id",
+  );
+  assertEqual(
+    urlEvidence.COLLECTION_AUTO_LINK_CONFIDENCE,
+    0.82,
+    "eligible Collection decisions still need the production auto-link threshold",
+  );
+});
+
 Deno.test("visual retry catches invalid image data errors", () => {
   assert(
     urlEvidence.isVisualDownloadFailure({

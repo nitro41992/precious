@@ -2,6 +2,7 @@ import { adminClient } from "../supabase.ts";
 import { compactText } from "../common.ts";
 import {
   contentEvidenceProfile,
+  looksLikeFileOrGeneratedMarker,
   textWithoutUrls,
 } from "../analysis/content-evidence.ts";
 import {
@@ -9,7 +10,12 @@ import {
   substantiveDescription,
   substantiveText,
 } from "../url-evidence/platforms.ts";
-import type { CaptureRow, RetrievedCollection, UrlEvidence } from "../types.ts";
+import type {
+  CaptureRow,
+  CollectionContext,
+  RetrievedCollection,
+  UrlEvidence,
+} from "../types.ts";
 import { createEmbedding, embeddingLiteral } from "./embeddings.ts";
 
 export const COLLECTION_RETRIEVAL_MATCH_COUNT = 20;
@@ -18,8 +24,18 @@ export const COLLECTION_PROMPT_CANDIDATE_COUNT = 10;
 export function retrievalQueryForCapture(
   capture: CaptureRow,
   urlEvidence: UrlEvidence | null,
+  collectionContext: CollectionContext | null = null,
 ) {
   const profile = contentEvidenceProfile(capture, urlEvidence);
+  const contextText = collectionContextText(collectionContext);
+  const sourceText = profile.source_fallback_allowed
+    ? capture.source_text
+    : textWithoutUrls(capture.source_text);
+  const safeSourceText = contextText && looksLikeFileOrGeneratedMarker(
+      textWithoutUrls(sourceText),
+    )
+    ? null
+    : sourceText;
   const urlTitle = urlEvidence?.title &&
       (profile.source_fallback_allowed || !evidenceTitleIsGeneric(urlEvidence))
     ? urlEvidence.title
@@ -33,17 +49,30 @@ export function retrievalQueryForCapture(
     ? urlEvidence.text?.slice(0, 1400)
     : null;
   return compactText([
-    profile.source_fallback_allowed
-      ? capture.source_text
-      : textWithoutUrls(capture.source_text),
+    safeSourceText,
     profile.source_fallback_allowed ? capture.source_url : null,
     urlTitle,
     urlDescription,
     urlText,
+    contextText,
     typeof (capture as Record<string, unknown>).context_note === "string"
       ? String((capture as Record<string, unknown>).context_note)
       : null,
   ]);
+}
+
+function collectionContextText(collectionContext: CollectionContext | null) {
+  if (!collectionContext) return "";
+  return compactText([
+    collectionContext.inferred_title,
+    collectionContext.short_summary,
+    collectionContext.visible_text.join(" "),
+    collectionContext.entities.map((entity) =>
+      compactText([entity.type, entity.name, entity.evidence], 180)
+    ).join(" "),
+    collectionContext.source_hints.join(" "),
+    collectionContext.search_phrases.join(" "),
+  ], 2400);
 }
 
 export async function retrieveCollectionsForCapture(
@@ -51,8 +80,13 @@ export async function retrieveCollectionsForCapture(
   userId: string,
   capture: CaptureRow,
   urlEvidence: UrlEvidence | null,
+  collectionContext: CollectionContext | null = null,
 ): Promise<RetrievedCollection[]> {
-  const queryText = retrievalQueryForCapture(capture, urlEvidence);
+  const queryText = retrievalQueryForCapture(
+    capture,
+    urlEvidence,
+    collectionContext,
+  );
   if (!queryText) return [];
   const embedding = await createEmbedding(queryText);
   const { data, error } = await supabase.rpc("match_collections_for_capture", {

@@ -6,6 +6,7 @@ import {
 import {
   activeSaveIntentKeys,
   analysisSchemaForCollections,
+  COLLECTION_AUTO_LINK_CONFIDENCE,
   COLLECTION_AUTO_LINK_LIMIT,
   STARTER_COLLECTIONS,
 } from "./config.ts";
@@ -48,6 +49,7 @@ import {
   normalizedLocationContext,
   normalizedReviewAnalysis,
   normalizeVisitTargetFields,
+  shouldRunCollectionContextPrepass,
   resolveReviewTargets,
   reviewTargetsForAnalysis,
   shouldAnalyzeAfterCaptureGate,
@@ -64,6 +66,7 @@ import {
   COLLECTION_RETRIEVAL_MATCH_COUNT,
   collectionFacets,
   promptCollectionsForAnalysis,
+  retrievalQueryForCapture,
   shouldSeedStarterCollections,
   starterCollectionRows,
 } from "./collections.ts";
@@ -98,6 +101,7 @@ export const __urlEvidenceTest = {
   captureRoleTraceFromCollections,
   compactUrlEvidence,
   collectionFacets,
+  COLLECTION_AUTO_LINK_CONFIDENCE,
   COLLECTION_AUTO_LINK_LIMIT,
   COLLECTION_PROMPT_CANDIDATE_COUNT,
   emptyUrlEvidence,
@@ -124,6 +128,7 @@ export const __urlEvidenceTest = {
   platformForUrl,
   placeCandidatesForAnalysis,
   promptCollectionsForAnalysis,
+  retrievalQueryForCapture,
   productEvidenceStatus,
   resolvePlaceForAnalysis,
   resolvePlacePatchForAnalysis,
@@ -132,6 +137,7 @@ export const __urlEvidenceTest = {
   shouldAttemptExaEnrichment,
   shouldAttachUrlEvidence,
   shouldUseCachedEvidence,
+  shouldRunCollectionContextPrepass,
   shouldRunCaptureGate,
   shouldRunPreflight,
   shouldRejectContextlessLinkCapture,

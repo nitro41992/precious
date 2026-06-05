@@ -190,6 +190,21 @@ export type ContentEvidenceProfile = {
   limited_reasons: string[];
 };
 
+export type CollectionContextEntity = {
+  type: string;
+  name: string;
+  evidence: string;
+};
+
+export type CollectionContext = {
+  inferred_title: string | null;
+  short_summary: string | null;
+  visible_text: string[];
+  entities: CollectionContextEntity[];
+  source_hints: string[];
+  search_phrases: string[];
+};
+
 export type AnalysisOutput = Record<string, any>;
 export type PreflightDecision = {
   decision: "valid" | "invalid";

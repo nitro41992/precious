@@ -38,6 +38,7 @@ import {
   normalizedReviewAnalysis,
   normalizedUrlEvidenceForCapture,
   rejectedAnalysis,
+  runCollectionContextPrepass,
   runCaptureGate,
   runOpenAi,
   runPreflight,
@@ -45,6 +46,7 @@ import {
   shouldAnalyzeAfterCaptureGate,
   shouldAttachUrlEvidence,
   shouldRejectContextlessLinkCapture,
+  shouldRunCollectionContextPrepass,
   shouldRunCaptureGate,
   shouldRunPreflight,
   validateReminderIdeas,
@@ -476,11 +478,32 @@ export async function processCapture(captureId: string, userId: string) {
         return;
       }
     }
+    const collectionContextResult = shouldRunCollectionContextPrepass(
+        captureForAnalysis,
+        urlEvidence,
+      )
+      ? await runCollectionContextPrepass(captureForAnalysis, urlEvidence)
+        .then((result) => ({
+          ok: true as const,
+          context: result.context,
+          model: result.model,
+          requestBody: result.requestBody,
+          raw: result.raw,
+          latencyMs: result.latencyMs,
+          usage: result.usage,
+        }))
+        .catch((error) => ({
+          ok: false as const,
+          context: null,
+          error: errorMessage(error),
+        }))
+      : null;
     const retrievedCollections = await retrieveCollectionsForCapture(
       supabase,
       userId,
       captureForAnalysis,
       urlEvidence,
+      collectionContextResult?.context ?? null,
     )
       .catch(() => []);
     const rerankedCollections = await rerankCollectionsForCapture(
@@ -582,6 +605,7 @@ export async function processCapture(captureId: string, userId: string) {
           extraction_request: result.requestBody,
           response: result.raw,
           visual_retry: result.visualRetry || null,
+          collection_context: collectionContextResult,
           url_evidence: result.urlEvidence,
           retrieved_collections: retrievedCollections,
           reranked_collections: rerankedCollections,
