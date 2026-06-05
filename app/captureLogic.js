@@ -43,6 +43,54 @@ function mapsSearchUrls(query) {
   };
 }
 
+function coordinateQuery(location) {
+  const latitude = Number(location?.latitude);
+  const longitude = Number(location?.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return "";
+  return `${latitude},${longitude}`;
+}
+
+function resolvedPlaceSearchText(place, fallback = "") {
+  return String(place?.displayName || place?.formattedAddress || place?.resolvedQuery || fallback || "").trim();
+}
+
+function mapSearchCandidatesForResolvedPlace(place, fallbackQuery = "", platform = "") {
+  if (!place || place.status !== "resolved") return [];
+  const searchText = resolvedPlaceSearchText(place, fallbackQuery);
+  const placeId = String(place.placeId || "").trim();
+  const coordinates = coordinateQuery(place.location);
+  const encodedSearch = encodeURIComponent(searchText || coordinates);
+  const encodedPlaceId = encodeURIComponent(placeId);
+  const candidates = [];
+  if (placeId && encodedSearch) {
+    candidates.push({
+      provider: "google",
+      label: "Google Maps",
+      url: `https://www.google.com/maps/search/?api=1&query=${encodedSearch}&query_place_id=${encodedPlaceId}`
+    });
+  } else if (place.googleMapsUri) {
+    candidates.push({
+      provider: "google",
+      label: "Google Maps",
+      url: String(place.googleMapsUri)
+    });
+  }
+  if ((platform === "ios" || platform === "") && (coordinates || searchText)) {
+    const appleUrl = coordinates
+      ? `maps://?ll=${encodeURIComponent(coordinates)}&q=${encodeURIComponent(searchText || coordinates)}`
+      : `maps://?q=${encodeURIComponent(searchText)}`;
+    candidates.push({
+      provider: "apple",
+      label: "Apple Maps",
+      url: platform === "" && coordinates
+        ? `https://maps.apple.com/?ll=${encodeURIComponent(coordinates)}&q=${encodeURIComponent(searchText || coordinates)}`
+        : appleUrl
+    });
+  }
+  if (!candidates.length && searchText) return mapSearchCandidates(searchText, platform);
+  return candidates;
+}
+
 function mapSearchCandidates(query, platform = "") {
   const cleaned = String(query || "").trim();
   if (!cleaned) return [];
@@ -80,6 +128,12 @@ function mapSearchCandidates(query, platform = "") {
 function mapSearchCandidatesForVisitTarget(target, platform = "") {
   const name = String(target?.name || "").trim();
   const query = String(target?.query || "").trim();
+  const resolvedCandidates = mapSearchCandidatesForResolvedPlace(
+    target?.resolvedPlace,
+    name || query,
+    platform
+  );
+  if (resolvedCandidates.length) return resolvedCandidates;
   return mapSearchCandidates(name || query, platform);
 }
 
@@ -315,6 +369,7 @@ module.exports = {
   isDeleted,
   isRejected,
   mapSearchCandidates,
+  mapSearchCandidatesForResolvedPlace,
   mapSearchCandidatesForVisitTarget,
   mapsSearchUrls,
   mergeRemoteCaptures,

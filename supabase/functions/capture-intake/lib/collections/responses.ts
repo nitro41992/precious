@@ -4,6 +4,7 @@ import {
   withCaptureState,
   withSignedCaptureAssets,
 } from "../capture-records.ts";
+import { hydrateResolvedPlaceThumbnail } from "../places.ts";
 import {
   analysisRequiresReview,
   normalizedReviewAnalysis,
@@ -40,10 +41,13 @@ export async function captureResponse(
   const rows = await attachLinkedCollections(supabase, userId, [
     data as Record<string, unknown>,
   ]);
+  const hydrated = await hydrateResolvedPlaceThumbnail(
+    (rows[0] ?? data) as Record<string, unknown>,
+  );
   const signed = await withSignedCaptureAssets(
     supabase,
     userId,
-    (rows[0] ?? data) as Record<string, unknown>,
+    hydrated,
   );
   scheduleCaptureEmbeddingRefresh(
     supabase,

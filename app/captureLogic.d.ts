@@ -9,6 +9,16 @@ export type MapSearchCandidate = {
 export type MapSearchVisitTarget = {
   name?: string | null;
   query?: string | null;
+  resolvedPlace?: MapResolvedPlace | null;
+};
+export type MapResolvedPlace = {
+  status?: string | null;
+  placeId?: string | null;
+  displayName?: string | null;
+  formattedAddress?: string | null;
+  resolvedQuery?: string | null;
+  googleMapsUri?: string | null;
+  location?: { latitude?: number | null; longitude?: number | null } | null;
 };
 
 type ReviewableCapture = {
@@ -92,6 +102,7 @@ export function isArchived(capture: { archivedAt?: number | null }): boolean;
 export function isDeleted(capture: { archivedAt?: number | null; deletedAt?: number | null }): boolean;
 export function isRejected(capture: { rejectedAt?: number | null; analysisMode?: string }): boolean;
 export function mapSearchCandidates(query?: string | null, platform?: string): MapSearchCandidate[];
+export function mapSearchCandidatesForResolvedPlace(place?: MapResolvedPlace | null, fallbackQuery?: string | null, platform?: string): MapSearchCandidate[];
 export function mapSearchCandidatesForVisitTarget(target?: MapSearchVisitTarget | null, platform?: string): MapSearchCandidate[];
 export function mapsSearchUrls(query?: string | null): { google: string; apple: string };
 export function mergeRemoteCaptures<T extends SortableCapture>(

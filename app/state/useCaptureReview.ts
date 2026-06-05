@@ -11,12 +11,25 @@ export function useCaptureReview({ selected }: { selected: Capture | null }) {
   const [visitTargetMapCandidates, setVisitTargetMapCandidates] = useState<MapSearchCandidate[]>([]);
   const selectedVisitTargetName = selected?.visitTarget?.name || "";
   const selectedVisitTargetQuery = selected?.visitTarget?.query || "";
+  const selectedResolvedPlace = selected?.visitTarget?.resolvedPlace || null;
+  const selectedResolvedPlaceKey = selectedResolvedPlace
+    ? [
+      selectedResolvedPlace.status,
+      selectedResolvedPlace.placeId,
+      selectedResolvedPlace.displayName,
+      selectedResolvedPlace.formattedAddress,
+      selectedResolvedPlace.location?.latitude,
+      selectedResolvedPlace.location?.longitude,
+      selectedResolvedPlace.googleMapsUri
+    ].join(":")
+    : "";
 
   useEffect(() => {
     const candidates = mapSearchCandidatesForVisitTarget(
       {
         name: selectedVisitTargetName,
-        query: selectedVisitTargetQuery
+        query: selectedVisitTargetQuery,
+        resolvedPlace: selectedResolvedPlace
       },
       Platform.OS
     );
@@ -43,7 +56,7 @@ export function useCaptureReview({ selected }: { selected: Capture | null }) {
     return () => {
       cancelled = true;
     };
-  }, [selectedVisitTargetName, selectedVisitTargetQuery]);
+  }, [selectedResolvedPlace, selectedResolvedPlaceKey, selectedVisitTargetName, selectedVisitTargetQuery]);
 
   return {
     visitTargetMapCandidates

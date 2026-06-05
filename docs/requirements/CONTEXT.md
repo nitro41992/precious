@@ -31,8 +31,12 @@ A person, place, product, event, media object, concept, or other meaningful thin
 _Avoid_: Keyword, tag
 
 **Visit Target**:
-A maps-searchable candidate extracted from Capture evidence when the Capture appears to reference a real-world venue, business, restaurant, shop, park, hotel, event venue, or other place the user may want to visit. A Visit Target stores a name, search query, confidence state, evidence, and `verified_place: false` until a future resolver verifies it. It may power Google Maps or Apple Maps search links without becoming a canonical place record.
+A maps-searchable candidate extracted from Capture evidence when the Capture appears to reference a real-world venue, business, restaurant, shop, park, hotel, event venue, or other place the user may want to visit. A Visit Target stores a name, search query, confidence state, evidence, and `verified_place: false` unless the server-side Places resolver attaches a Resolved Place. It may power Google Maps or Apple Maps search links without becoming a canonical place record.
 _Avoid_: Verified location, place ID, address, map pin
+
+**Resolved Place**:
+A server-verified Google Places result attached to a Visit Target when the Places lookup finds a confident exact match. A Resolved Place may store a durable Google place ID plus refreshable display snapshots such as name, address, coordinates, Maps URI, and photo attribution. Google photo bytes are not stored as app media; Capture responses may include a short-lived thumbnail URL.
+_Avoid_: AI-invented address, permanent copied Places photo, top-level Map destination
 
 **Structured Location Context**:
 Internal extraction detail for explicit place and destination evidence, such as a place name, address, city, region, country, coordinates when provided, source destination framing, and coarse local-vs-travel reasoning when user context explicitly supports it. It helps eval and future travel/local Collection reasoning without becoming a verified place record, Map pin, location history, or continuous precise tracking feature.

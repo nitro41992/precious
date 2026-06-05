@@ -16,19 +16,25 @@ export function normalizeVisitTargetFields(analysis: Record<string, unknown>) {
       .filter(Boolean)
       .slice(0, 6)
     : [];
+  const resolvedPlace = analysis.resolved_place &&
+      typeof analysis.resolved_place === "object" &&
+      !Array.isArray(analysis.resolved_place)
+    ? analysis.resolved_place as Record<string, unknown>
+    : {};
+  const verifiedPlace = resolvedPlace.status === "resolved";
   return confidence === "none"
     ? {
       visit_target_name: null,
       visit_target_query: null,
       visit_target_confidence: "none",
       visit_target_evidence: [],
-      verified_place: false,
+      verified_place: verifiedPlace,
     }
     : {
       visit_target_name: name,
       visit_target_query: query,
       visit_target_confidence: confidence,
       visit_target_evidence: evidence,
-      verified_place: false,
+      verified_place: verifiedPlace,
     };
 }

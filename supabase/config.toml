@@ -1,2 +1,5 @@
 [functions.capture-intake]
 verify_jwt = true
+
+[functions.place-photo]
+verify_jwt = false

@@ -19,6 +19,29 @@ export type UrlEvidence = {
   favicon?: string | null;
 };
 
+export type ResolvedPlace = {
+  status: "resolved" | "not_found" | "ambiguous" | "failed" | "skipped_no_key" | "skipped_no_target";
+  provider: "google_places";
+  placeId?: string | null;
+  resourceName?: string | null;
+  resolvedQuery?: string | null;
+  resolvedAt?: string | null;
+  dataExpiresAt?: string | null;
+  displayName?: string | null;
+  formattedAddress?: string | null;
+  location?: { latitude: number; longitude: number } | null;
+  googleMapsUri?: string | null;
+  thumbnailStatus?: "available" | "unavailable";
+  thumbnailUrl?: string | null;
+  thumbnailAttribution?: Array<{
+    displayName?: string | null;
+    uri?: string | null;
+    photoUri?: string | null;
+  }>;
+  matchReason?: string | null;
+  error?: string | null;
+};
+
 export type ReviewRationale = {
   focus?: string;
   summary?: string;
@@ -148,6 +171,7 @@ export type VisitTarget = {
   confidence: "high" | "medium" | "low";
   evidence: string[];
   verifiedPlace: boolean;
+  resolvedPlace?: ResolvedPlace | null;
 };
 
 export type Collection = {

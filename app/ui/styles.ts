@@ -1765,6 +1765,9 @@ export const styles = StyleSheet.create({
   inlineMeaningChipTextEmpty: {
     color: colors.accent
   },
+  inlineMeaningChipTextPending: {
+    color: colors.review
+  },
   reviewPrimaryBlock: {
     gap: 10,
     paddingHorizontal: 2
@@ -2375,34 +2378,6 @@ export const styles = StyleSheet.create({
   reviewActionRowDivided: {
     borderTopColor: colors.line,
     borderTopWidth: StyleSheet.hairlineWidth
-  },
-  mapTargetRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 14,
-    minHeight: 58,
-    paddingVertical: 12
-  },
-  mapTargetCopy: {
-    flex: 1,
-    gap: 2,
-    minWidth: 0
-  },
-  mapActionRow: {
-    borderTopColor: colors.line,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    paddingVertical: 10
-  },
-  mapActionButton: {
-    alignSelf: "flex-start",
-    backgroundColor: "transparent",
-    borderRadius: 8,
-    justifyContent: "center",
-    minHeight: 44,
-    paddingHorizontal: 0
   },
   compactActionRow: {
     alignItems: "center",

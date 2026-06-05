@@ -33,7 +33,7 @@ if (!match) {
 }
 
 const projectRef = match[1];
-const result = spawnSync(
+const captureIntakeResult = spawnSync(
   "npx",
   ["supabase", "functions", "deploy", "capture-intake", "--project-ref", projectRef],
   {
@@ -43,5 +43,26 @@ const result = spawnSync(
   }
 );
 
-if (result.status !== 0) process.exit(result.status ?? 1);
+if (captureIntakeResult.status !== 0) process.exit(captureIntakeResult.status ?? 1);
 console.log(`Deployed capture-intake to project ${projectRef}.`);
+
+const placePhotoResult = spawnSync(
+  "npx",
+  [
+    "supabase",
+    "functions",
+    "deploy",
+    "place-photo",
+    "--project-ref",
+    projectRef,
+    "--no-verify-jwt"
+  ],
+  {
+    cwd: process.cwd(),
+    env: process.env,
+    stdio: "inherit"
+  }
+);
+
+if (placePhotoResult.status !== 0) process.exit(placePhotoResult.status ?? 1);
+console.log(`Deployed place-photo to project ${projectRef}.`);

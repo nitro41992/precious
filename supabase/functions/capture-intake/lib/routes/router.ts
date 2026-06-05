@@ -9,16 +9,20 @@ import { handleCollectionLinksResource } from "./collection-links.ts";
 import { handleCollectionsResource } from "./collections.ts";
 import { handlePurgeDeletedResource } from "./purge-deleted.ts";
 import { handleSearchResource } from "./search.ts";
+import { handlePlacePhotoRequest } from "../places.ts";
 
 export async function handleCaptureIntakeRequest(request: Request) {
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+  const url = new URL(request.url);
+  if (url.searchParams.get("resource") === "place-photo") {
+    return await handlePlacePhotoRequest(url);
+  }
   const user = await currentUser(request);
   if (!user) return json({ error: "Unauthorized" }, 401);
 
   try {
-    const url = new URL(request.url);
     const supabase = adminClient();
     const resource = url.searchParams.get("resource") || "";
 

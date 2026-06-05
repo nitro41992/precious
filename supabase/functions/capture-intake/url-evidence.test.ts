@@ -203,6 +203,103 @@ Deno.test("Exa per-URL failure records failed evidence without throwing", () => 
   );
 });
 
+Deno.test("Places resolver accepts a strong single text-search result", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = Deno.env.get("GOOGLE_PLACES_API_KEY");
+  Deno.env.set("GOOGLE_PLACES_API_KEY", "test-key");
+  globalThis.fetch = ((url: string | URL | Request, init?: RequestInit) => {
+    const requestUrl = String(url);
+    assert(
+      requestUrl.includes("places:searchText"),
+      "resolver should call Text Search",
+    );
+    assertEqual(
+      (init?.headers as Record<string, string>)["X-Goog-FieldMask"],
+      "places.id,places.name,places.displayName,places.formattedAddress,places.location,places.googleMapsUri,places.photos,places.types,places.businessStatus",
+      "field mask",
+    );
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          places: [{
+            id: "place-love-club",
+            name: "places/place-love-club",
+            displayName: { text: "Love's Club" },
+            formattedAddress: "106 Melrose St, Brooklyn, NY 11206",
+            location: { latitude: 40.703, longitude: -73.93 },
+            googleMapsUri: "https://maps.google.com/?cid=123",
+            photos: [{
+              name: "places/place-love-club/photos/photo-1",
+              authorAttributions: [{
+                displayName: "Google contributor",
+                uri: "https://maps.google.com",
+              }],
+            }],
+          }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+  }) as typeof fetch;
+  try {
+    const resolved = await urlEvidence.resolvePlaceForAnalysis({
+      visit_target_name: "Love's Club",
+      visit_target_query: "Love's Club 106 Melrose St Brooklyn NY",
+      visit_target_confidence: "high",
+      visit_target_evidence: ["Maps link names the venue."],
+    });
+    assertEqual(resolved.status, "resolved", "place status");
+    assertEqual(resolved.place_id, "place-love-club", "place id");
+    assertEqual(resolved.thumbnail_status, "available", "photo status");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey) Deno.env.set("GOOGLE_PLACES_API_KEY", originalKey);
+    else Deno.env.delete("GOOGLE_PLACES_API_KEY");
+  }
+});
+
+Deno.test("Places resolver leaves weak multi-result searches unverified", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = Deno.env.get("GOOGLE_PLACES_API_KEY");
+  Deno.env.set("GOOGLE_PLACES_API_KEY", "test-key");
+  globalThis.fetch = (() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          places: [
+            {
+              id: "place-a",
+              name: "places/place-a",
+              displayName: { text: "Central Cafe" },
+              formattedAddress: "1 Main St",
+            },
+            {
+              id: "place-b",
+              name: "places/place-b",
+              displayName: { text: "Downtown Cafe" },
+              formattedAddress: "2 Main St",
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    )) as typeof fetch;
+  try {
+    const resolved = await urlEvidence.resolvePlaceForAnalysis({
+      visit_target_name: "Cafe",
+      visit_target_query: "Cafe",
+      visit_target_confidence: "medium",
+      visit_target_evidence: ["Only a generic cafe name is available."],
+    });
+    assertEqual(resolved.status, "ambiguous", "weak results should not verify");
+    assertEqual(resolved.place_id, null, "ambiguous place id");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey) Deno.env.set("GOOGLE_PLACES_API_KEY", originalKey);
+    else Deno.env.delete("GOOGLE_PLACES_API_KEY");
+  }
+});
+
 Deno.test("Exa enrichment gate skips strong evidence and targets weak evidence", () => {
   const rich = urlEvidence.oembedMetadata(
     {

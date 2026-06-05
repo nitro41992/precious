@@ -5,6 +5,7 @@ import type {
   CollectionDecision,
   ReminderSuggestion,
   LinkedCollection,
+  ResolvedPlace,
   VisitTarget
 } from "./types";
 import {
@@ -75,7 +76,12 @@ export function captureFromRemote(row: Record<string, any>): Capture {
     siteName: hostFromUrl(typeof row.source_url === "string" ? row.source_url : null),
     summary: analysis.summary || undefined,
     captureType: nullableValue(row.capture_type || row.captureType || analysis.capture_type),
-    thumbnailUrl: nullableValue(row.thumbnail_url || row.thumbnailUrl || analysis.thumbnail_url),
+    thumbnailUrl: nullableValue(
+      row.thumbnail_url ||
+        row.thumbnailUrl ||
+        analysis.thumbnail_url ||
+        analysis.resolved_place?.thumbnail_url
+    ),
     imageAssetUrl: assetUrl,
     imageAssetCacheKey: imageAsset
       ? nullableValue(imageAsset.signed_url_cache_key || imageAsset.signedUrlCacheKey)
@@ -228,7 +234,22 @@ export function visitTargetFromRemote(analysis: Record<string, any>): VisitTarge
   const name = nullableValue(analysis.visit_target_name);
   const query = nullableValue(analysis.visit_target_query);
   const confidence = analysis.visit_target_confidence;
-  if (!name || !query || !["high", "medium", "low"].includes(confidence)) return null;
+  const resolvedPlace = resolvedPlaceFromRemote(analysis.resolved_place);
+  if (!name || !query || !["high", "medium", "low"].includes(confidence)) {
+    if (resolvedPlace?.status === "resolved") {
+      const resolvedName = resolvedPlace.displayName || resolvedPlace.resolvedQuery || "Saved place";
+      const resolvedQuery = resolvedPlace.formattedAddress || resolvedPlace.resolvedQuery || resolvedName;
+      return {
+        name: resolvedName,
+        query: resolvedQuery,
+        confidence: "high",
+        evidence: [],
+        verifiedPlace: true,
+        resolvedPlace
+      };
+    }
+    return null;
+  }
   return {
     name,
     query,
@@ -236,7 +257,55 @@ export function visitTargetFromRemote(analysis: Record<string, any>): VisitTarge
     evidence: Array.isArray(analysis.visit_target_evidence)
       ? analysis.visit_target_evidence.map(String).filter(Boolean)
       : [],
-    verifiedPlace: analysis.verified_place === true
+    verifiedPlace: analysis.verified_place === true || resolvedPlace?.status === "resolved",
+    resolvedPlace
+  };
+}
+
+export function resolvedPlaceFromRemote(value: unknown): ResolvedPlace | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, any>;
+  const status = nullableValue(row.status);
+  if (
+    status !== "resolved" &&
+    status !== "not_found" &&
+    status !== "ambiguous" &&
+    status !== "failed" &&
+    status !== "skipped_no_key" &&
+    status !== "skipped_no_target"
+  ) {
+    return null;
+  }
+  const location = row.location_snapshot && typeof row.location_snapshot === "object"
+    ? row.location_snapshot as Record<string, any>
+    : null;
+  const latitude = Number(location?.latitude);
+  const longitude = Number(location?.longitude);
+  return {
+    status,
+    provider: "google_places",
+    placeId: nullableValue(row.place_id || row.placeId) || null,
+    resourceName: nullableValue(row.resource_name || row.resourceName) || null,
+    resolvedQuery: nullableValue(row.resolved_query || row.resolvedQuery) || null,
+    resolvedAt: nullableValue(row.resolved_at || row.resolvedAt) || null,
+    dataExpiresAt: nullableValue(row.data_expires_at || row.dataExpiresAt) || null,
+    displayName: nullableValue(row.display_name_snapshot || row.displayName) || null,
+    formattedAddress: nullableValue(row.formatted_address_snapshot || row.formattedAddress) || null,
+    location: Number.isFinite(latitude) && Number.isFinite(longitude)
+      ? { latitude, longitude }
+      : null,
+    googleMapsUri: nullableValue(row.google_maps_uri || row.googleMapsUri) || null,
+    thumbnailStatus: row.thumbnail_status === "available" ? "available" : "unavailable",
+    thumbnailUrl: nullableValue(row.thumbnail_url || row.thumbnailUrl) || null,
+    thumbnailAttribution: Array.isArray(row.thumbnail_attribution || row.thumbnailAttribution)
+      ? (row.thumbnail_attribution || row.thumbnailAttribution).map((item: Record<string, any>) => ({
+        displayName: nullableValue(item.display_name || item.displayName) || null,
+        uri: nullableValue(item.uri) || null,
+        photoUri: nullableValue(item.photo_uri || item.photoUri) || null
+      }))
+      : [],
+    matchReason: nullableValue(row.match_reason || row.matchReason) || null,
+    error: nullableValue(row.error) || null
   };
 }
 

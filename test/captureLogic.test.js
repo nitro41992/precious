@@ -119,6 +119,32 @@ test("mapSearchCandidatesForVisitTarget prefers the visit target name over the l
   );
 });
 
+test("mapSearchCandidatesForVisitTarget uses Google place id when resolved", () => {
+  assert.deepEqual(
+    mapSearchCandidatesForVisitTarget(
+      {
+        name: "Love's Club",
+        query: "Love's Club 106 Melrose St Brooklyn NY",
+        resolvedPlace: {
+          status: "resolved",
+          placeId: "places-love-club",
+          displayName: "Love's Club",
+          formattedAddress: "106 Melrose St, Brooklyn, NY",
+          location: { latitude: 40.703, longitude: -73.93 }
+        }
+      },
+      "android"
+    ),
+    [
+      {
+        provider: "google",
+        label: "Google Maps",
+        url: "https://www.google.com/maps/search/?api=1&query=Love's%20Club&query_place_id=places-love-club"
+      }
+    ]
+  );
+});
+
 test("reviewReasons ignores field uncertainty and keeps confirmed reviews ready", () => {
   assert.deepEqual(
     reviewReasons(capture({ confidenceLabel: "Maybe", collectionDecisions: [{ title: "Ideas" }] })),

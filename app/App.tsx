@@ -211,6 +211,7 @@ export default function App() {
   const [collectionPickerQuery, setCollectionPickerQuery] = useState("");
   const [collectionSelectionIds, setCollectionSelectionIds] = useState<string[]>([]);
   const [collectionChoiceSaving, setCollectionChoiceSaving] = useState<string | null>(null);
+  const [placeResolvingByCapture, setPlaceResolvingByCapture] = useState<Record<string, boolean>>({});
   const [reviewDraftsByCapture, setReviewDraftsByCapture] = useState<Record<string, CaptureReviewDraft>>({});
   const [reviewDraftsLoaded, setReviewDraftsLoaded] = useState(false);
   const [noteSaveState, setNoteSaveState] = useState<NoteSaveState>("idle");
@@ -252,6 +253,7 @@ export default function App() {
   const collectionCapturesCacheRef = useRef<Record<string, Capture[]>>({});
   const collectionCapturesCursorCacheRef = useRef<Record<string, string | null>>({});
   const captureDetailHydrationRef = useRef<Set<string>>(new Set());
+  const placeResolutionRef = useRef<Set<string>>(new Set());
   const captureImageLoadStatesRef = useRef<Record<string, CaptureImageLoadState>>({});
   const captureRowRevealStatesRef = useRef<Record<string, boolean>>({});
   const collectionsPrefetchStartedRef = useRef(false);
@@ -441,6 +443,8 @@ export default function App() {
     setCollectionCapturesLoadPhase("idle");
     setCollectionCapturesError("");
     captureDetailHydrationRef.current.clear();
+    placeResolutionRef.current.clear();
+    setPlaceResolvingByCapture({});
     collectionsPrefetchStartedRef.current = false;
     setCaptureReturnCollectionId(null);
     setCaptureReviewOrigin(null);
@@ -796,6 +800,58 @@ export default function App() {
       applyUpdatedCapture(captureFromRemote(json.capture), capture.id);
     } catch (error) {
       captureDetailHydrationRef.current.delete(captureRef);
+    }
+  }, [config, session, withFreshAccessToken]);
+
+  const resolveCapturePlace = useCallback(async (capture: Capture) => {
+    const captureRef = capture.remoteId || capture.id;
+    const resolvedPlaceStatus = capture.visitTarget?.resolvedPlace?.status || "missing";
+    const shouldAttemptResolution = [
+      "missing",
+      "failed",
+      "skipped_no_key",
+      "skipped_no_target"
+    ].includes(resolvedPlaceStatus);
+    const placeResolutionKey = `${captureRef}:${resolvedPlaceStatus}`;
+    if (
+      !captureRef ||
+      !capture.visitTarget ||
+      !shouldAttemptResolution ||
+      !config?.apiUrl ||
+      !session?.accessToken ||
+      placeResolutionRef.current.has(placeResolutionKey)
+    ) {
+      return;
+    }
+    placeResolutionRef.current.add(placeResolutionKey);
+    setPlaceResolvingByCapture((current) => ({ ...current, [captureRef]: true }));
+    try {
+      const json = await withFreshAccessToken((accessToken) =>
+        requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
+          method: "PATCH",
+          headers: {
+            apikey: config.supabaseAnonKey,
+            authorization: `Bearer ${accessToken}`,
+            "content-type": "application/json"
+          },
+          body: {
+            captureId: captureRef,
+            action: "resolve_place"
+          }
+        })
+      );
+      if (json.capture) {
+        applyUpdatedCapture(captureFromRemote(json.capture), capture.id);
+      }
+    } catch (error) {
+      placeResolutionRef.current.delete(placeResolutionKey);
+    } finally {
+      setPlaceResolvingByCapture((current) => {
+        if (!current[captureRef]) return current;
+        const next = { ...current };
+        delete next[captureRef];
+        return next;
+      });
     }
   }, [config, session, withFreshAccessToken]);
 
@@ -1247,6 +1303,18 @@ export default function App() {
     if (!selected) return;
     void loadCaptureDetail(selected);
   }, [loadCaptureDetail, selected?.id, selected?.remoteId]);
+
+  useEffect(() => {
+    if (!selected) return;
+    void resolveCapturePlace(selected);
+  }, [
+    resolveCapturePlace,
+    selected?.id,
+    selected?.remoteId,
+    selected?.visitTarget?.name,
+    selected?.visitTarget?.query,
+    selected?.visitTarget?.resolvedPlace?.status
+  ]);
 
   useEffect(() => {
     latestNoteRef.current = draftNote;
@@ -2489,6 +2557,7 @@ export default function App() {
           faviconFailures,
           keyboardHeight,
           noteInputRef,
+          placeResolving: Boolean(placeResolvingByCapture[capture.remoteId || capture.id]),
           reviewMotion,
           selected: capture,
           toast: renderToast("footer"),

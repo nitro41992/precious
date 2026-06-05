@@ -52,6 +52,7 @@ import {
   rerankCollectionsForCapture,
   retrieveCollectionsForCapture,
 } from "./collections.ts";
+import { resolvePlacePatchForAnalysis } from "./places.ts";
 import type {
   AnalysisOutput,
   CapturePayload,
@@ -441,7 +442,7 @@ export async function processCapture(captureId: string, userId: string) {
       rerankedCollections,
       promptCollections,
     );
-    const analysis = normalizedReviewAnalysis(
+    const analysisBeforePlaceResolution = normalizedReviewAnalysis(
       await autoLinkCollectionDecisions(
         supabase,
         userId,
@@ -450,6 +451,34 @@ export async function processCapture(captureId: string, userId: string) {
         rerankedCollections,
       ),
     );
+    const placePatch = await resolvePlacePatchForAnalysis(
+      analysisBeforePlaceResolution,
+    ).catch((error) => ({
+      resolved_place: {
+        status: "failed",
+        provider: "google_places",
+        place_id: null,
+        resource_name: null,
+        resolved_query: analysisBeforePlaceResolution.visit_target_query ||
+          analysisBeforePlaceResolution.visit_target_name ||
+          null,
+        resolved_at: new Date().toISOString(),
+        data_expires_at: null,
+        display_name_snapshot: null,
+        formatted_address_snapshot: null,
+        location_snapshot: null,
+        google_maps_uri: null,
+        thumbnail_status: "unavailable",
+        thumbnail_attribution: [],
+        match_reason: "capture_processing",
+        error: errorMessage(error),
+      },
+      verified_place: false,
+    }));
+    const analysis = normalizedReviewAnalysis({
+      ...analysisBeforePlaceResolution,
+      ...placePatch,
+    });
     const { data: run, error: runError } = await supabase
       .from("analysis_runs")
       .insert({

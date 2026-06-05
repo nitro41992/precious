@@ -15,6 +15,10 @@ import {
 } from "../collections/review-decisions.ts";
 import { applyCollectionChoice, captureResponse, clearCollectionSuggestion, undoCollectionChoice } from "../collections/responses.ts";
 import { attachLinkedCollections } from "../collections/links.ts";
+import {
+  hydrateResolvedPlaceThumbnails,
+  resolvePlacePatchForAnalysis,
+} from "../places.ts";
 
 export async function handleCapturesResource(
   request: Request,
@@ -62,10 +66,13 @@ export async function handleCapturesResource(
       userId,
       pageRows,
     );
+    const placeHydratedRows = await hydrateResolvedPlaceThumbnails(
+      rows as Array<Record<string, unknown>>,
+    );
     const signedRows = await withSignedCaptureAssetRows(
       supabase,
       userId,
-      rows as Array<Record<string, unknown>>,
+      placeHydratedRows,
       clientCaptureKey ? "detail" : "thumb",
     );
     if (clientCaptureKey) {
@@ -124,6 +131,34 @@ export async function handleCapturesResource(
         userId,
         existingResult.data as Record<string, unknown>,
         body,
+      );
+    }
+
+    if (body.action === "resolve_place") {
+      const currentAnalysis = existingResult.data.analysis &&
+          typeof existingResult.data.analysis === "object"
+        ? existingResult.data.analysis as Record<string, unknown>
+        : {};
+      const placePatch = await resolvePlacePatchForAnalysis(
+        currentAnalysis,
+        { force: body.force === true },
+      );
+      const nextAnalysis = normalizedReviewAnalysis({
+        ...currentAnalysis,
+        ...placePatch,
+      }, existingResult.data.review_confirmed_at);
+      const result = await supabase
+        .from("captures")
+        .update({ analysis: nextAnalysis })
+        .eq("user_id", userId)
+        .eq("id", String(existingResult.data.id))
+        .select("*")
+        .single();
+      if (result.error) throw result.error;
+      return await captureResponse(
+        supabase,
+        userId,
+        String(existingResult.data.id),
       );
     }
 

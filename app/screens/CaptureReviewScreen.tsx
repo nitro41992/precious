@@ -20,7 +20,6 @@ import {
   ArrowLeft,
   Check,
   Copy,
-  MapPin,
   Note as StickyNote,
   Trash as Trash2,
   X
@@ -72,6 +71,7 @@ type CaptureReviewScreenProps = {
     faviconFailures: Record<string, boolean>;
     keyboardHeight: number;
     noteInputRef: RefObject<TextInput | null>;
+    placeResolving: boolean;
     reviewMotion: Animated.Value;
     selected: Capture;
     toast: ReactNode;
@@ -307,6 +307,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     faviconFailures,
     keyboardHeight,
     noteInputRef,
+    placeResolving,
     reviewMotion,
     selected,
     toast,
@@ -382,6 +383,18 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const urlEvidenceNotice = urlEvidenceMessage(selected.urlEvidence);
   const selectedVisitTarget = selected.visitTarget;
   const selectedVisitTargetMapCandidates = selectedVisitTarget ? visitTargetMapCandidates : [];
+  const resolvedPlace = selectedVisitTarget?.resolvedPlace?.status === "resolved"
+    ? selectedVisitTarget.resolvedPlace
+    : null;
+  const primaryMapCandidate = selectedVisitTargetMapCandidates[0] || null;
+  const locationInlineValue = placeResolving && !resolvedPlace
+    ? "Finding this place"
+    : resolvedPlace?.displayName || selectedVisitTarget?.name || "";
+  const showLocationInline = Boolean(
+    selectedVisitTarget &&
+      locationInlineValue &&
+      (placeResolving || primaryMapCandidate || resolvedPlace)
+  );
   const selectedCapturedMeta = `Captured ${formatDateTime(selected.createdAt)}`;
   const selectedNeedsReview = displayStatus(selected) === "needs_review";
   const selectedReviewState = selectedNeedsReview
@@ -636,7 +649,10 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                         accessibilityLabel={`Collection: ${collectionField.displayValue}`}
                         accessibilityRole="button"
                         onPress={() => openInlineField("collection")}
-                        style={[styles.inlineMeaningChipText, !collectionField.hasValue && styles.inlineMeaningChipTextEmpty]}
+                        style={[
+                          styles.inlineMeaningChipText,
+                          !collectionField.hasValue && styles.inlineMeaningChipTextPending
+                        ]}
                         testID="pc.review.collections.open"
                       >
                         {collectionField.displayValue}
@@ -650,44 +666,32 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                         accessibilityLabel={`Later: ${laterField.displayValue}`}
                         accessibilityRole="button"
                         onPress={() => openInlineField("later")}
-                        style={[styles.inlineMeaningChipText, !laterField.hasValue && styles.inlineMeaningChipTextEmpty]}
+                        style={[
+                          styles.inlineMeaningChipText,
+                          !laterField.hasValue && styles.inlineMeaningChipTextPending
+                        ]}
                         testID="pc.review.reminder.open"
                       >
                         {laterField.displayValue}
                       </Text>
                     </Text>
                   ) : null}
+                  {showLocationInline ? (
+                    <Text style={styles.inlineMeaningLine}>
+                      <Text style={styles.inlineMeaningText}>at </Text>
+                      <Text
+                        accessibilityLabel={resolvedPlace ? `Open ${locationInlineValue} in Maps` : `Search Maps for ${locationInlineValue}`}
+                        accessibilityRole={primaryMapCandidate ? "button" : undefined}
+                        onPress={primaryMapCandidate ? () => void openVisitTargetMaps(primaryMapCandidate) : undefined}
+                        style={styles.inlineMeaningChipText}
+                      >
+                        {locationInlineValue}
+                      </Text>
+                    </Text>
+                  ) : null}
                 </View>
               </View>
             </View>
-            {selectedVisitTarget && selectedVisitTargetMapCandidates.length ? (
-              <View style={styles.reviewActionBlock}>
-                <Text style={styles.meta}>Open in Maps</Text>
-                <View style={styles.reviewActionGroup}>
-                  <View style={styles.mapTargetRow}>
-                    <MapPin color={colors.accent} size={19} weight="regular" />
-                    <View style={styles.mapTargetCopy}>
-                      <Text numberOfLines={1} style={styles.compactActionText}>{selectedVisitTarget.name}</Text>
-                      <Text numberOfLines={2} style={styles.supportingText}>
-                        {selectedVisitTarget.query}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.mapActionRow}>
-                    {selectedVisitTargetMapCandidates.map((candidate) => (
-                      <Pressable
-                        accessibilityRole="button"
-                        key={`${candidate.provider}:${candidate.url}`}
-                        onPress={() => void openVisitTargetMaps(candidate)}
-                        style={({ pressed }) => [styles.mapActionButton, pressed && styles.subtlePressed]}
-                      >
-                        <Text style={styles.inlineAction}>{candidate.label}</Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </View>
-              </View>
-            ) : null}
             {urlEvidenceNotice ? (
               <View style={styles.sourceBlock}>
                 <Text style={styles.meta}>Link evidence</Text>

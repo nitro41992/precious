@@ -1,4 +1,9 @@
 import {
+  placeCandidatesForAnalysis,
+  resolvePlaceForAnalysis,
+  resolvePlacePatchForAnalysis,
+} from "./places.ts";
+import {
   activeSaveIntentKeys,
   analysisSchemaForCollections,
   COLLECTION_AUTO_LINK_LIMIT,
@@ -103,8 +108,11 @@ export const __urlEvidenceTest = {
   oembedMetadata,
   parseHtmlEvidence,
   platformForUrl,
+  placeCandidatesForAnalysis,
   promptCollectionsForAnalysis,
   productEvidenceStatus,
+  resolvePlaceForAnalysis,
+  resolvePlacePatchForAnalysis,
   resolveReviewTargets,
   reviewTargetsForAnalysis,
   shouldAttemptExaEnrichment,
