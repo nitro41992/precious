@@ -86,7 +86,7 @@ export const styles = StyleSheet.create({
     zIndex: 4
   },
   topAppBarListInset: {
-    paddingTop: (Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0) + 102
+    paddingTop: (Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0) + 60
   },
   kicker: {
     color: colors.muted,
