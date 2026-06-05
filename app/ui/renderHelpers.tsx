@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { Animated, Pressable, View } from "react-native";
+import { FolderMinus } from "phosphor-react-native";
 
 import { matchReasonForCapture } from "../capturePresentation";
 import type {
@@ -23,6 +24,7 @@ import {
   CollectionSkeletonRows
 } from "./rows";
 import { styles } from "./styles";
+import { colors } from "./theme";
 import { Text } from "./typography";
 
 export type AppRenderHelpersInput = {
@@ -139,6 +141,7 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     deferFallbackIcon?: boolean;
     deferMediaUntilLoaded?: boolean;
     forceSkeleton?: boolean;
+    trailingAction?: ReactElement | null;
   }) {
     return (
       <CaptureRow
@@ -155,25 +158,30 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
   }
 
   function renderCollectionCapture({ item }: { item: Capture }) {
+    const removeAction = (
+      <Pressable
+        accessibilityLabel="Remove from collection"
+        accessibilityRole="button"
+        hitSlop={8}
+        onPress={() => {
+          if (input.selectedCollection) input.onUnlinkCaptureFromCollection(input.selectedCollection.id, item);
+        }}
+        style={({ pressed }) => [styles.collectionRemoveIconButton, pressed && styles.collectionRemoveIconButtonPressed]}
+      >
+        <FolderMinus color={colors.danger} size={22} weight="regular" />
+      </Pressable>
+    );
+
     return (
       <Animated.View style={[styles.collectionCaptureRow, { opacity: input.collectionRowsFade }]}>
-        <View style={styles.collectionCaptureMain}>
-          {renderCaptureRow({
-            showCollectionToken: false,
-            item,
-            onPress: () => {
-              if (input.selectedCollection) input.onOpenCaptureFromCollection(item, input.selectedCollection.id);
-            }
-          })}
-        </View>
-        <Pressable
-          onPress={() => {
-            if (input.selectedCollection) input.onUnlinkCaptureFromCollection(input.selectedCollection.id, item);
-          }}
-          style={styles.removeButton}
-        >
-          <Text style={styles.inlineAction}>Remove</Text>
-        </Pressable>
+        {renderCaptureRow({
+          showCollectionToken: false,
+          item,
+          onPress: () => {
+            if (input.selectedCollection) input.onOpenCaptureFromCollection(item, input.selectedCollection.id);
+          },
+          trailingAction: removeAction
+        })}
       </Animated.View>
     );
   }

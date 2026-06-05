@@ -119,7 +119,7 @@ export function CollectionDetailScreen({ actions, data, state }: CollectionDetai
           renderItem={renderCollectionCapture}
           onEndReached={loadMoreCollectionCaptures}
           onEndReachedThreshold={0.35}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ItemSeparatorComponent={() => <View style={styles.collectionCaptureSeparator} />}
           ListHeaderComponent={
             <View style={styles.collectionDetailTop}>
               <View style={styles.detailHeader}>

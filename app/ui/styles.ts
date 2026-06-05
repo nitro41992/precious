@@ -661,7 +661,7 @@ export const styles = StyleSheet.create({
   },
   sourceMark: {
     alignItems: "center",
-    backgroundColor: colors.accentSoft,
+    backgroundColor: colors.surfaceContainer,
     borderColor: colors.accentLine,
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
@@ -1214,6 +1214,7 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     minHeight: 156,
+    paddingHorizontal: 22,
     paddingVertical: 16
   },
   collectionCaptureSkeletonMain: {
@@ -1328,10 +1329,9 @@ export const styles = StyleSheet.create({
     width: 72
   },
   collectionLoadingAction: {
-    borderRadius: 6,
-    height: 16,
-    marginTop: 9,
-    width: 58
+    borderRadius: 8,
+    height: 44,
+    width: 44
   },
   listLoadingFooter: {
     alignItems: "center",
@@ -1340,22 +1340,27 @@ export const styles = StyleSheet.create({
   },
   collectionDetailContent: {
     paddingBottom: 40,
-    paddingHorizontal: 22,
+    paddingHorizontal: 0,
     paddingTop: 18
   },
   collectionDetailTop: {
     gap: 12,
+    paddingHorizontal: 22,
     paddingBottom: 8
   },
   collectionCaptureRow: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 12,
-    paddingVertical: 16
+    minWidth: 0
   },
   collectionCaptureMain: {
     flex: 1,
     gap: 7
+  },
+  collectionCaptureSeparator: {
+    backgroundColor: colors.line,
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 108,
+    marginRight: 22,
+    opacity: 0.5
   },
   collectionRow: {
     gap: 7,
@@ -1507,7 +1512,22 @@ export const styles = StyleSheet.create({
   removeButton: {
     paddingVertical: 4
   },
+  collectionRemoveIconButton: {
+    alignItems: "center",
+    borderRadius: 8,
+    flexShrink: 0,
+    height: 44,
+    justifyContent: "center",
+    marginRight: -8,
+    marginTop: -9,
+    width: 44
+  },
+  collectionRemoveIconButtonPressed: {
+    backgroundColor: colors.dangerSoft,
+    transform: [{ scale: 0.985 }]
+  },
   collectionEmpty: {
+    paddingHorizontal: 22,
     paddingBottom: 24,
     paddingTop: 18
   },
@@ -1602,6 +1622,7 @@ export const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 10,
     marginTop: 8,
+    paddingHorizontal: 22,
     paddingTop: 16
   },
   collectionsScreen: {

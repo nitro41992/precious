@@ -39,6 +39,7 @@ type CaptureRowProps = {
   showInlineSourceIcon?: boolean;
   SkeletonBlock: SkeletonBlockRenderer;
   testID?: string;
+  trailingAction?: ReactElement | null;
 };
 
 export function CaptureRow({
@@ -57,7 +58,8 @@ export function CaptureRow({
   showCollectionToken = true,
   showInlineSourceIcon = false,
   SkeletonBlock,
-  testID
+  testID,
+  trailingAction = null
 }: CaptureRowProps) {
   const imageLoadKey = captureImageLoadKey(item);
   const imageLoadState = imageLoadKey ? captureImageLoadStates[imageLoadKey] : undefined;
@@ -108,6 +110,7 @@ export function CaptureRow({
             {captureDisplayTitle(item)}
           </Text>
           <StatusGlyph capture={item} />
+          {trailingAction}
         </View>
         {showInlineSourceIcon ? (
           <View style={styles.rowMetaLine}>
