@@ -27,6 +27,62 @@ import {
 export const CAPTURE_PAGE_SIZE = 18;
 export const COLLECTION_CAPTURE_PAGE_SIZE = 18;
 
+function cleanTitleCandidate(value: unknown) {
+  return String(value || "").trim().replace(/\s+/g, " ");
+}
+
+function sourceOnlyTitleCandidate(
+  value: unknown,
+  sourceUrl: string | null,
+  sourceLabel?: string | null
+) {
+  const title = cleanTitleCandidate(value).toLowerCase();
+  if (!title) return true;
+  if (/^saved\s+from\s+/i.test(title)) return true;
+  if (/^https?:\/\//i.test(title)) return true;
+  if (/^(instagram|tiktok|youtube|reddit|facebook|x|twitter)\s+(reel|short|video|post|link|share)$/i.test(title)) {
+    return true;
+  }
+  if (/^[a-z0-9.-]+\/\S+/i.test(title)) return true;
+  const host = hostFromUrl(sourceUrl).toLowerCase();
+  const source = String(sourceLabel || "").trim().toLowerCase();
+  if (host && title.startsWith(`${host}/`)) return true;
+  if (host && (title === host || title === host.replace(/^www\./, ""))) return true;
+  if (source && title === source) return true;
+  return !title.includes(" ") && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(title);
+}
+
+function genericRemoteTitle(row: Record<string, any>) {
+  const captureType = String(row.capture_type || row.captureType || row.analysis?.capture_type || "").toLowerCase();
+  if (row.source_url || row.sourceUrl) return "Saved link";
+  if (captureType === "image" || captureType === "screenshot" || captureType === "mixed") return "Saved image";
+  if (row.source_text || row.sourceText) return "Saved note";
+  return "Saved capture";
+}
+
+function bestRemoteTitle(row: Record<string, any>, analysis: Record<string, any>) {
+  const sourceUrl = typeof row.source_url === "string"
+    ? row.source_url
+    : typeof row.sourceUrl === "string"
+      ? row.sourceUrl
+      : null;
+  const sourceLabel = analysis?.url_evidence?.source_domain || analysis?.url_evidence?.site_name || hostFromUrl(sourceUrl);
+  const candidates = [
+    row.title,
+    analysis.display_title,
+    row.display_title,
+    row.displayTitle,
+    analysis.summary
+  ];
+  for (const candidate of candidates) {
+    const title = cleanTitleCandidate(candidate);
+    if (title && !sourceOnlyTitleCandidate(title, sourceUrl, sourceLabel)) {
+      return title;
+    }
+  }
+  return genericRemoteTitle(row);
+}
+
 export function captureFromRemote(row: Record<string, any>): Capture {
   const analysis = row.analysis ?? {};
   const defaultIntent = analysis.default_intent ?? {};
@@ -75,7 +131,7 @@ export function captureFromRemote(row: Record<string, any>): Capture {
   return {
     id: String(row.client_capture_key || row.id),
     remoteId: String(row.id || row.client_capture_key || ""),
-    title: String(row.display_title || row.title || analysis.display_title || row.source_url || "Untitled capture"),
+    title: bestRemoteTitle(row, analysis),
     sourceText: String(row.source_text || ""),
     sourceUrl: typeof row.source_url === "string" ? row.source_url : null,
     siteName: hostFromUrl(typeof row.source_url === "string" ? row.source_url : null),
@@ -421,7 +477,7 @@ export function collectionPreviewCapturesFromRemote(value: unknown): CollectionP
     .map((item) => ({
       id: String(item.id || item.client_capture_key || item.remoteId || item.remote_id || ""),
       remoteId: nullableValue(item.remote_id || item.remoteId) || undefined,
-      title: String(item.title || item.display_title || item.source_url || "Untitled capture"),
+      title: bestRemoteTitle(item, item.analysis || {}),
       sourceUrl: nullableValue(item.source_url || item.sourceUrl) || null,
       thumbnailUrl: nullableValue(item.thumbnail_url || item.thumbnailUrl || item.url_evidence_image_url || item.urlEvidenceImageUrl),
       imageAssetUrl: nullableValue(item.image_asset_url || item.imageAssetUrl),

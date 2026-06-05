@@ -11,13 +11,7 @@ export function titleFallback(
   sourceText: string | null,
   sourceUrl: string | null,
 ) {
-  if (sourceUrl) {
-    try {
-      return new URL(sourceUrl).hostname.replace(/^www\./, "");
-    } catch {
-      return sourceUrl;
-    }
-  }
+  if (sourceUrl) return "Saved link";
   return sourceText?.trim().split(/\n/)[0]?.slice(0, 80) || "Untitled capture";
 }
 

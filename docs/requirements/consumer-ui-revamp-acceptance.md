@@ -41,6 +41,7 @@ Home must:
 - Show the active Capture count as quiet inline metadata beside the `Recents` title, not as a separate top line.
 - Show active Captures grouped by recency, such as `Today`, `Yesterday`, `This week`, and `Earlier`.
 - Show each row as rich consumer content: optional existing thumbnail or shared image preview, title, source plus date/time, icon-led Save Intent when available, compact linked Collection when available, compact Reminder when available, and operational status only for analyzing or failed Captures.
+- Treat the Capture title as the saved content's title, not source metadata. Titles must not duplicate the source line or render copy such as `Saved from instagram.com`.
 - Hide analyzer rationale, summary prose, and note previews from the Recents row surface while keeping them available in Capture Review and Search.
 - Indicate when a Capture belongs to more than one Collection without making the row noisy, for example by showing the first Collection with a compact additional-count marker.
 - Hide audit-like extraction details from rows, including model/provider names, analysis mode, confidence percentages, generic `Analyzed` labels, and debug state.
@@ -85,6 +86,7 @@ Capture Review must:
 - Feel like editing a saved memory, not inspecting an analysis report.
 - Lead with the editable title and source context, followed by existing capture imagery or source media when available. Tapping uploaded image or screenshot media opens a full-screen image viewer with pinch zoom; tapping source/link preview media opens the source URL when one is available.
 - Make the editable title the primary text above the media/source preview.
+- Keep source app, host, and URL represented only as source context; the editable title should not default to source-only copy such as `Saved from [domain]`.
 - Show Save Intent, Collections, and Reminder as one compact editable sentence below the title/source area, using language like `Saved as [Purpose] in [Collection] for [Later]`. Use Material 3 Expressive-style emphasis through type, color, underline, and touch target sizing rather than pill cards.
 - Show current AI-selected values as normal editable values. Show `Add intent`, `Add collection`, or `Add reminder` only when the field has no current value. Blank intent remains valid when no concrete action is inferable.
 - Tapping Purpose, Collection, or Later opens a focused bottom sheet editor. Collection selection includes existing active Collections and `No collection` as a valid clearing state.

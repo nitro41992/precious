@@ -381,7 +381,7 @@ object CaptureAnalysisClient {
         "title",
         analysis.optString(
           "display_title",
-          remoteCapture.optString("display_title", remoteCapture.optString("source_url", "Capture saved"))
+          remoteCapture.optString("display_title", "Capture saved")
         )
       )
       .put("summary", analysis.optString("summary"))

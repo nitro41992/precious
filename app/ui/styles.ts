@@ -720,9 +720,9 @@ export const styles = StyleSheet.create({
     color: colors.ink,
     ...typefaces.bold,
     flex: 1,
-    fontSize: 18,
+    fontSize: 17.5,
     fontWeight: "700",
-    lineHeight: 23
+    lineHeight: 22.5
   },
   status: {
     color: colors.ink,

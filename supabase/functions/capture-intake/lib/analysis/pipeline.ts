@@ -8,4 +8,5 @@ export * from "./prompts.ts";
 export * from "./rationales.ts";
 export * from "./reminder-validation.ts";
 export * from "./review-normalization.ts";
+export * from "./titles.ts";
 export * from "./visit-targets.ts";

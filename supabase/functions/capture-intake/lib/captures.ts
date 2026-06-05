@@ -49,6 +49,7 @@ import {
   shouldRunCollectionContextPrepass,
   shouldRunCaptureGate,
   shouldRunPreflight,
+  titleForAnalysisUpdate,
   validateReminderIdeas,
 } from "./analysis.ts";
 import {
@@ -104,7 +105,7 @@ export async function persistDeterministicAnalysis(
       analysis_model: "url-evidence-policy",
       analysis_mode: mode,
       display_title: normalizedAnalysis.display_title,
-      title: capture.title || normalizedAnalysis.display_title,
+      title: titleForAnalysisUpdate(capture, normalizedAnalysis.display_title),
       default_intent: normalizedAnalysis.default_intent.category,
       default_intent_confidence: normalizedAnalysis.default_intent.confidence,
       current_save_intent: normalizedAnalysis.default_intent.category,
@@ -160,7 +161,7 @@ export async function persistCaptureGateNeedsReview(
       analysis_model: result.model,
       analysis_mode: "capture_gate_needs_review",
       display_title: normalizedAnalysis.display_title,
-      title: capture.title || normalizedAnalysis.display_title,
+      title: titleForAnalysisUpdate(capture, normalizedAnalysis.display_title),
       default_intent: normalizedAnalysis.default_intent.category,
       default_intent_confidence: normalizedAnalysis.default_intent.confidence,
       current_save_intent: normalizedAnalysis.default_intent.category,
@@ -213,7 +214,7 @@ export async function rejectCapturePreflight(
       analysis_model: result.model,
       analysis_mode: "preflight_rejected",
       display_title: normalizedAnalysis.display_title,
-      title: capture.title || normalizedAnalysis.display_title,
+      title: titleForAnalysisUpdate(capture, normalizedAnalysis.display_title),
       processed_at: new Date().toISOString(),
     })
     .eq("id", capture.id)
@@ -350,7 +351,7 @@ export async function failCaptureMissingAsset(
       analysis_model: "asset-intake",
       analysis_mode: "capture_asset_missing",
       display_title: analysis.display_title,
-      title: capture.title || analysis.display_title,
+      title: titleForAnalysisUpdate(capture, analysis.display_title),
       default_intent: null,
       default_intent_confidence: 0,
       current_save_intent: null,
@@ -631,7 +632,7 @@ export async function processCapture(captureId: string, userId: string) {
         analysis_model: result.model,
         analysis_mode: "llm",
         display_title: analysis.display_title,
-        title: capture.title || analysis.display_title,
+        title: titleForAnalysisUpdate(capture, analysis.display_title),
         default_intent: analysis.default_intent.category,
         default_intent_confidence: analysis.default_intent.confidence,
         current_save_intent: analysis.default_intent.category,

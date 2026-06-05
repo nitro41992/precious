@@ -1,6 +1,7 @@
 import {
   BookOpen,
   Calendar,
+  Camera,
   ImageSquare as ImageIcon,
   Link,
   MapPin,
@@ -691,11 +692,13 @@ export function captureReviewSourceLabel(capture: Capture) {
   const sourceText = String(capture.sourceText || "").trim();
   const imageShareMatch = /^(shared|selected)\s+(image|screenshot):/i.exec(sourceText);
   if (imageShareMatch) {
-    const verb = imageShareMatch[1].toLowerCase() === "selected" ? "Selected" : "Shared";
-    return `${verb} image`;
+    return "Shared Image";
+  }
+  if (isScreenshotCapture(capture)) {
+    return "Shared Image";
   }
   if (!capture.sourceUrl && isImageCapture(capture)) {
-    return "Shared image";
+    return "Shared Image";
   }
   return captureSourceLabel(capture);
 }
@@ -788,6 +791,16 @@ export function isImageCapture(capture: Capture) {
   );
 }
 
+export function isScreenshotCapture(capture: Capture) {
+  const captureType = String(capture.captureType || "").toLowerCase();
+  const sourceText = String(capture.sourceText || "").trim();
+  return (
+    captureType === "screenshot" ||
+    /^(selected|shared)\s+screenshot:/i.test(sourceText) ||
+    /^(selected|shared)\s+image:\s*.*\bscreenshot\b/i.test(sourceText)
+  );
+}
+
 export function shouldGhostSourceMark(capture: Capture) {
   if (captureImageUrl(capture)) return false;
   if (isImageCapture(capture) && displayStatus(capture) !== "failed") return true;
@@ -817,6 +830,9 @@ export function isMapSource(capture: Capture) {
 export function sourceIconForCapture(capture: Capture): AppIconComponent {
   const host = captureSourceHost(capture).toLowerCase();
   const intent = capture.defaultIntent || "";
+  if (isScreenshotCapture(capture)) {
+    return Camera;
+  }
   if (isMapSource(capture)) {
     return MapPin;
   }
@@ -848,7 +864,7 @@ export function captureIntentLabel(capture: Capture) {
 }
 
 export function auditLikeText(value: string | null | undefined) {
-  return /url returned|saved url failed|saved link:|failed to fetch metadata|could not fetch metadata|metadata fetch|metadata|no readable title|readable title|readable description|path suggests|generic evidence|insufficient url|link saved from android share|android share|untitled capture|extraction|analysis|confidence|model|provider/i.test(
+  return /url returned|saved url failed|saved link:|failed to fetch metadata|could not fetch metadata|metadata fetch|metadata|no readable title|readable title|readable description|path suggests|generic evidence|insufficient url|link saved from android share|android share|untitled capture|extraction|analysis|confidence|analysis model|model provider|provider/i.test(
     String(value || "")
   );
 }
@@ -871,9 +887,11 @@ export function rawTitleLikeSource(capture: Capture) {
   const title = cleanSentence(capture.title).toLowerCase();
   if (!title) return true;
   if (auditLikeText(title)) return true;
+  if (/^saved\s+from\s+/i.test(title)) return true;
   if (/^https?:\/\//i.test(title)) return true;
   const host = captureSourceHost(capture).toLowerCase();
   const source = captureSourceLabel(capture).toLowerCase();
+  if (genericSourceFormatTitle(title)) return true;
   if (/^[a-z0-9.-]+\/\S+/i.test(title)) return true;
   if (host && title.startsWith(`${host}/`)) return true;
   if (host && (title === host || title === host.replace(/^www\./, ""))) return true;
@@ -881,14 +899,25 @@ export function rawTitleLikeSource(capture: Capture) {
   return !title.includes(" ") && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(title);
 }
 
+function genericSourceFormatTitle(value: string) {
+  return /^(instagram|tiktok|youtube|reddit|facebook|x|twitter)\s+(reel|short|video|post|link|share)$/i.test(value);
+}
+
+function genericCaptureTitle(capture: Capture) {
+  const captureType = String(capture.captureType || "").toLowerCase();
+  if (capture.sourceUrl) return "Saved link";
+  if (captureType === "image" || captureType === "screenshot" || capture.imageAssetUrl) return "Saved image";
+  if (captureType === "social_post") return "Saved capture";
+  if (capture.sourceText) return "Saved note";
+  return "Saved capture";
+}
+
 export function captureDisplayTitle(capture: Capture) {
   const title = cleanSentence(capture.title);
   if (title && !rawTitleLikeSource(capture)) return title;
   const summary = consumerSummary(capture);
   if (summary) return conciseText(summary, 72);
-  const source = captureSourceLabel(capture);
-  if (source && source !== "Shared text") return `Saved from ${source}`;
-  return capture.sourceUrl ? "Saved link" : "Saved note";
+  return genericCaptureTitle(capture);
 }
 
 export function captureSupportLine(capture: Capture, visibleSummary: string) {

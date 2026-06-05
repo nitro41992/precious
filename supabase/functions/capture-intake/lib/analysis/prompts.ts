@@ -24,6 +24,7 @@ export function buildPrompt(
   return [
     "Infer why the user saved this item. Focus on intent, medium-term usefulness, reminders, and collection fit.",
     "Return concise structured data for a mobile quick-edit surface.",
+    "display_title must name the saved content itself. Never return only the source app, host/domain, URL, source format, or copy like 'Saved from instagram.com'; source is stored separately as metadata.",
     "Sharebook is source-agnostic and content/context-specific. Classify from the saved content and user context before considering where it came from.",
     "Use source/app/host/format only as fallback classification evidence when content_evidence_profile.source_fallback_allowed is true.",
     "When source_fallback_allowed is false, do not choose Save Intent or Collections from source_app, source_domain, platform, host, URL path, media format, or content_type_guess. Those fields remain source metadata only.",

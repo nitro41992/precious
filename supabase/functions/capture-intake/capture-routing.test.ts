@@ -730,6 +730,11 @@ Deno.test("analysis prompt requires evidence-rich review rationale", () => {
     prompt.includes("Do not set needs_review because Purpose, Collection, Reminder, or confidence_label is uncertain"),
     "prompt should keep field uncertainty out of review state",
   );
+  assert(
+    prompt.includes("display_title must name the saved content itself") &&
+      prompt.includes("Never return only the source app, host/domain, URL"),
+    "prompt should prevent source-only display titles",
+  );
 });
 
 Deno.test("analysis schema exposes structured field rationales", () => {
@@ -744,6 +749,12 @@ Deno.test("analysis schema exposes structured field rationales", () => {
     schema.required,
     "field_rationales",
     "analysis schema should require structured field rationales",
+  );
+  assert(
+    schema.properties.display_title.description.includes(
+      "Must not be a source app, host/domain, URL",
+    ),
+    "display title schema should reject source-only titles",
   );
   const fieldRationales = schema.properties.field_rationales;
   assertEqual(
@@ -788,6 +799,71 @@ Deno.test("analysis schema exposes structured field rationales", () => {
       .join("|"),
     "collection-1|",
     "collection rationale ids should share retrieved collection enum",
+  );
+});
+
+Deno.test("analysis title normalization rejects source-only display titles", () => {
+  const normalized = urlEvidence.normalizedReviewAnalysis({
+    display_title: "Saved from instagram.com",
+    summary: "Modly turns local photos into 3D models.",
+    default_intent: {
+      category: "learn",
+      confidence: 0.8,
+      rationale: "The capture explains a tool.",
+    },
+    confidence_label: "Looks right",
+    needs_review: false,
+    url_evidence: {
+      source_domain: "instagram.com",
+    },
+  });
+
+  assertEqual(
+    normalized.display_title,
+    "Modly turns local photos into 3D models.",
+    "source-only display title should fall back to content summary",
+  );
+
+  const generic = urlEvidence.normalizedReviewAnalysis({
+    display_title: "https://www.instagram.com/reel/abc123/",
+    summary: "instagram.com",
+    default_intent: {
+      category: null,
+      confidence: 0,
+      rationale: "",
+    },
+    confidence_label: "Couldn't tell",
+    needs_review: true,
+  });
+  assertEqual(
+    generic.display_title,
+    "Saved capture",
+    "source-only title and summary should fall back to generic copy",
+  );
+});
+
+Deno.test("analysis persistence title selection replaces placeholders but preserves user titles", () => {
+  assertEqual(
+    urlEvidence.titleForAnalysisUpdate(
+      captureFixture({
+        title: "instagram.com",
+        source_url: "https://www.instagram.com/reel/abc123/",
+      }),
+      "Modly local photo-to-3D model tool",
+    ),
+    "Modly local photo-to-3D model tool",
+    "source-only placeholder title should be replaced",
+  );
+  assertEqual(
+    urlEvidence.titleForAnalysisUpdate(
+      captureFixture({
+        title: "My title for this tool",
+        source_url: "https://www.instagram.com/reel/abc123/",
+      }),
+      "Modly local photo-to-3D model tool",
+    ),
+    "My title for this tool",
+    "non-source user title should be preserved",
   );
 });
 

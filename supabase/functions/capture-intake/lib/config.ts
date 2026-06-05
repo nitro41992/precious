@@ -151,7 +151,11 @@ export const analysisSchema = {
     "needs_review",
   ],
   properties: {
-    display_title: { type: "string" },
+    display_title: {
+      type: "string",
+      description:
+        "Concise title for the saved content. Must not be a source app, host/domain, URL, media format, or 'Saved from [source]' label.",
+    },
     summary: { type: "string" },
     default_intent: {
       type: "object",

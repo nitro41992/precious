@@ -17,8 +17,7 @@ object CaptureEnricher {
   }
 
   private fun sourceTitle(sourceText: String, url: String?): String {
-    val host = hostFromUrl(url)
-    if (host.isNotBlank()) return host
+    if (!url.isNullOrBlank()) return "Saved link"
     return sourceText.trim().lineSequence().firstOrNull()?.take(72)?.ifBlank { null } ?: "Shared capture"
   }
 

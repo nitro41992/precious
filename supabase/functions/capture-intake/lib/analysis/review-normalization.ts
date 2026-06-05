@@ -7,6 +7,7 @@ import type { AnalysisOutput } from "../types.ts";
 import { sanitizeAnalysisRationales } from "./rationales.ts";
 import { normalizeVisitTargetFields } from "./visit-targets.ts";
 import { normalizedLocationContext } from "./capture-roles.ts";
+import { normalizedAnalysisDisplayTitle } from "./titles.ts";
 
 export function confidenceRequiresReview(value: unknown) {
   return value === "Maybe" || value === "Not sure" ||
@@ -310,6 +311,7 @@ export function normalizedReviewAnalysis(
   const sanitized = sanitizeAnalysisRationales(analysis);
   const normalizedAnalysis = {
     ...sanitized,
+    display_title: normalizedAnalysisDisplayTitle(sanitized),
     default_intent: normalizedDefaultIntent(sanitized),
     field_rationales: normalizedFieldRationales(sanitized),
     location_context: normalizedLocationContext(sanitized.location_context),

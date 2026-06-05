@@ -106,6 +106,61 @@ test("captureFromRemote still maps successful OpenAI rows to ready", () => {
   assert.equal(capture.analysisProvider, "openai");
 });
 
+test("captureFromRemote prefers analyzer title over source-only persisted titles", () => {
+  const { captureFromRemote } = loadRemoteData();
+  const capture = captureFromRemote({
+    id: "source-title-capture",
+    client_capture_key: "source-title-client",
+    created_at: "2026-06-05T15:19:09.169Z",
+    updated_at: "2026-06-05T15:19:10.914Z",
+    display_title: "Saved from instagram.com",
+    title: "instagram.com",
+    source_url: "https://www.instagram.com/reel/abc123/",
+    capture_type: "social_post",
+    analysis_state: "ready",
+    analysis: {
+      display_title: "Modly local photo-to-3D model tool",
+      summary: "A local open-source photo-to-3D mesh generation tool.",
+      default_intent: {
+        category: "learn",
+        confidence: 0.82,
+        rationale: "The capture explains a tool."
+      },
+      entities: [],
+      suggested_reminders: [],
+      collection_decisions: [],
+      search_phrases: []
+    }
+  });
+
+  assert.equal(capture.title, "Modly local photo-to-3D model tool");
+});
+
+test("captureFromRemote falls back to generic copy when only source metadata exists", () => {
+  const { captureFromRemote } = loadRemoteData();
+  const capture = captureFromRemote({
+    id: "source-only-capture",
+    client_capture_key: "source-only-client",
+    created_at: "2026-06-05T15:19:09.169Z",
+    updated_at: "2026-06-05T15:19:10.914Z",
+    display_title: "instagram.com",
+    source_url: "https://www.instagram.com/reel/abc123/",
+    capture_type: "social_post",
+    analysis_state: "ready",
+    analysis: {
+      display_title: "Saved from instagram.com",
+      summary: "",
+      default_intent: { category: null, confidence: 0, rationale: "" },
+      entities: [],
+      suggested_reminders: [],
+      collection_decisions: [],
+      search_phrases: []
+    }
+  });
+
+  assert.equal(capture.title, "Saved link");
+});
+
 test("captureFromRemote maps structured field rationales", () => {
   const { captureFromRemote } = loadRemoteData();
   const capture = captureFromRemote({

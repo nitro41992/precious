@@ -58,6 +58,7 @@ import {
   shouldRunCaptureGate,
   shouldRunPreflight,
   shouldUseLinkOnlyUrlEvidenceFallback,
+  titleForAnalysisUpdate,
   validateReminderIdeas,
 } from "./analysis.ts";
 import {
@@ -150,6 +151,7 @@ export const __urlEvidenceTest = {
   starterCollectionRows,
   starterCollections: STARTER_COLLECTIONS,
   tier1CanonicalCandidates,
+  titleForAnalysisUpdate,
   validateReminderIdeas,
   weaknessReasons,
 };
