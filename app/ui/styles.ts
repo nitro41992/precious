@@ -1945,6 +1945,11 @@ export const styles = StyleSheet.create({
     top: Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) + 12 : 18,
     zIndex: 4
   },
+  reviewMediaRightControls: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8
+  },
   reviewMediaIconButton: {
     alignItems: "center",
     backgroundColor: colors.mediaControl,
@@ -1954,6 +1959,9 @@ export const styles = StyleSheet.create({
     height: 48,
     justifyContent: "center",
     width: 48
+  },
+  reviewMediaDangerButton: {
+    backgroundColor: "rgba(92, 24, 19, 0.78)"
   },
   reviewMediaStatusPill: {
     backgroundColor: colors.mediaControl,
@@ -2078,14 +2086,14 @@ export const styles = StyleSheet.create({
     paddingVertical: 4
   },
   inlineMeaningSentence: {
-    gap: 2
+    gap: 8
   },
   inlineMeaningLine: {
-    color: colors.secondary,
-    ...typefaces.medium,
-    fontSize: 24,
-    fontWeight: "600",
-    lineHeight: 32
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    minHeight: 38
   },
   inlineMeaningText: {
     color: colors.secondary,
@@ -2094,11 +2102,22 @@ export const styles = StyleSheet.create({
     fontWeight: "600",
     lineHeight: 32
   },
-  inlineMeaningChipText: {
+  inlineMeaningPill: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 0,
+    maxWidth: "100%",
+    minHeight: 38,
+    paddingHorizontal: 10,
+    paddingVertical: 3
+  },
+  inlineMeaningPillText: {
     color: colors.accent,
-    ...typefaces.black,
+    ...typefaces.medium,
     fontSize: 24,
-    fontWeight: "900",
+    fontWeight: "500",
     lineHeight: 32
   },
   inlineMeaningChipTextPending: {
@@ -2714,7 +2733,7 @@ export const styles = StyleSheet.create({
     paddingTop: 16
   },
   reviewActionBlock: {
-    gap: 9,
+    gap: 10,
     paddingTop: 6
   },
   reviewActionLabel: {
@@ -2757,6 +2776,28 @@ export const styles = StyleSheet.create({
   reviewActionIconWellDanger: {
     backgroundColor: colors.dangerSoft
   },
+  noteActionCard: {
+    alignItems: "center",
+    backgroundColor: colors.reviewCard,
+    borderColor: colors.lineStrong,
+    borderRadius: 8,
+    borderWidth: 0,
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 82,
+    paddingHorizontal: 14,
+    paddingVertical: 14
+  },
+  noteActionCardIcon: {
+    alignItems: "center",
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accentLine,
+    borderRadius: 8,
+    borderWidth: 0,
+    height: 42,
+    justifyContent: "center",
+    width: 42
+  },
   compactActionRow: {
     alignItems: "center",
     borderRadius: 8,
@@ -2784,11 +2825,19 @@ export const styles = StyleSheet.create({
     gap: 10,
     justifyContent: "space-between"
   },
+  noteActionTitle: {
+    color: colors.ink,
+    ...typefaces.bold,
+    flex: 1,
+    fontSize: 17,
+    fontWeight: "700",
+    lineHeight: 22
+  },
   noteActionPreview: {
     color: colors.muted,
     ...typefaces.medium,
-    fontSize: 13,
-    lineHeight: 18
+    fontSize: 14,
+    lineHeight: 20
   },
   noteSheetInput: {
     fontSize: 16,

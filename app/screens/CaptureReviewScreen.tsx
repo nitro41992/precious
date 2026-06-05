@@ -598,18 +598,34 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                   >
                     <ArrowLeft color={colors.onMediaControl} size={22} weight="regular" />
                   </Pressable>
-                  {showStatus ? (
-                    <Text
-                      style={[
-                        styles.reviewMediaStatusPill,
-                        displayStatus(selected) === "processing" && styles.statusProcessing,
-                        displayStatus(selected) === "needs_review" && styles.statusReview,
-                        displayStatus(selected) === "failed" && styles.statusFailed
+                  <View style={styles.reviewMediaRightControls}>
+                    {showStatus ? (
+                      <Text
+                        style={[
+                          styles.reviewMediaStatusPill,
+                          displayStatus(selected) === "processing" && styles.statusProcessing,
+                          displayStatus(selected) === "needs_review" && styles.statusReview,
+                          displayStatus(selected) === "failed" && styles.statusFailed
+                        ]}
+                      >
+                        {captureStatusLabel(selected)}
+                      </Text>
+                    ) : null}
+                    <Pressable
+                      accessibilityLabel="Delete capture"
+                      accessibilityRole="button"
+                      hitSlop={8}
+                      onPress={deleteCapture}
+                      style={({ pressed }) => [
+                        styles.reviewMediaIconButton,
+                        styles.reviewMediaDangerButton,
+                        pressed && styles.subtlePressed
                       ]}
+                      testID="pc.capture.delete"
                     >
-                      {captureStatusLabel(selected)}
-                    </Text>
-                  ) : null}
+                      <Trash2 color={colors.onMediaControl} size={21} weight="regular" />
+                    </Pressable>
+                  </View>
                 </View>
               </Animated.View>
                 <View style={styles.reviewDetailPlane}>
@@ -666,68 +682,82 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                     <View style={styles.inlineMeaningBlock}>
                       <View style={styles.inlineMeaningSentence}>
                         {purposeField ? (
-                          <Text style={styles.inlineMeaningLine}>
+                          <View style={styles.inlineMeaningLine}>
                             <Text style={styles.inlineMeaningText}>Saved as </Text>
-                            <Text
+                            <Pressable
                               accessibilityLabel={`Purpose: ${purposeField.displayValue}`}
                               accessibilityRole="button"
                               onPress={() => openInlineField("purpose")}
-                              style={[
-                                styles.inlineMeaningChipText,
-                                !purposeField.hasValue && styles.inlineMeaningChipTextPending
-                              ]}
+                              style={({ pressed }) => [styles.inlineMeaningPill, pressed && styles.subtlePressed]}
                               testID="pc.review.intent.open"
                             >
-                              {purposeField.displayValue}
-                            </Text>
-                          </Text>
+                              <Text
+                                style={[
+                                  styles.inlineMeaningPillText,
+                                  !purposeField.hasValue && styles.inlineMeaningChipTextPending
+                                ]}
+                              >
+                                {purposeField.displayValue}
+                              </Text>
+                            </Pressable>
+                          </View>
                         ) : null}
                         {collectionField ? (
-                          <Text style={styles.inlineMeaningLine}>
+                          <View style={styles.inlineMeaningLine}>
                             <Text style={styles.inlineMeaningText}>in </Text>
-                            <Text
+                            <Pressable
                               accessibilityLabel={`Collection: ${collectionField.displayValue}`}
                               accessibilityRole="button"
                               onPress={() => openInlineField("collection")}
-                              style={[
-                                styles.inlineMeaningChipText,
-                                !collectionField.hasValue && styles.inlineMeaningChipTextPending
-                              ]}
+                              style={({ pressed }) => [styles.inlineMeaningPill, pressed && styles.subtlePressed]}
                               testID="pc.review.collections.open"
                             >
-                              {collectionField.displayValue}
-                            </Text>
-                          </Text>
+                              <Text
+                                style={[
+                                  styles.inlineMeaningPillText,
+                                  !collectionField.hasValue && styles.inlineMeaningChipTextPending
+                                ]}
+                              >
+                                {collectionField.displayValue}
+                              </Text>
+                            </Pressable>
+                          </View>
                         ) : null}
                         {laterField ? (
-                          <Text style={styles.inlineMeaningLine}>
+                          <View style={styles.inlineMeaningLine}>
                             <Text style={styles.inlineMeaningText}>for </Text>
-                            <Text
+                            <Pressable
                               accessibilityLabel={`Later: ${laterField.displayValue}`}
                               accessibilityRole="button"
                               onPress={() => openInlineField("later")}
-                              style={[
-                                styles.inlineMeaningChipText,
-                                !laterField.hasValue && styles.inlineMeaningChipTextPending
-                              ]}
+                              style={({ pressed }) => [styles.inlineMeaningPill, pressed && styles.subtlePressed]}
                               testID="pc.review.reminder.open"
                             >
-                              {laterField.displayValue}
-                            </Text>
-                          </Text>
+                              <Text
+                                style={[
+                                  styles.inlineMeaningPillText,
+                                  !laterField.hasValue && styles.inlineMeaningChipTextPending
+                                ]}
+                              >
+                                {laterField.displayValue}
+                              </Text>
+                            </Pressable>
+                          </View>
                         ) : null}
                         {showLocationInline ? (
-                          <Text style={styles.inlineMeaningLine}>
+                          <View style={styles.inlineMeaningLine}>
                             <Text style={styles.inlineMeaningText}>at </Text>
-                            <Text
+                            <Pressable
                               accessibilityLabel={resolvedPlace ? `Open ${locationInlineValue} in Maps` : `Search Maps for ${locationInlineValue}`}
                               accessibilityRole={primaryMapCandidate ? "button" : undefined}
                               onPress={primaryMapCandidate ? () => void openVisitTargetMaps(primaryMapCandidate) : undefined}
-                              style={styles.inlineMeaningChipText}
+                              style={({ pressed }) => [styles.inlineMeaningPill, pressed && primaryMapCandidate && styles.subtlePressed]}
                             >
-                              {locationInlineValue}
-                            </Text>
-                          </Text>
+                              <Text style={styles.inlineMeaningPillText}>
+                                {locationInlineValue}
+                              </Text>
+                            </Pressable>
+                          </View>
                         ) : null}
                       </View>
                     </View>
@@ -750,49 +780,32 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                   ) : null}
                   <View style={styles.reviewActionBlock}>
                     <Text style={styles.reviewActionLabel}>Capture actions</Text>
-                    <View style={styles.reviewActionGroup}>
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={openNoteSheet}
-                        style={({ pressed }) => [styles.reviewActionRow, pressed && styles.subtlePressed]}
-                        testID="pc.review.note.open"
-                      >
-                        <View style={styles.reviewActionIconWell}>
-                          <StickyNote color={colors.secondary} size={19} weight="regular" />
-                        </View>
-                        <View style={styles.noteActionCopy}>
-                          <View style={styles.noteActionHeader}>
-                            <Text style={styles.compactActionText}>
-                              {noteHasText ? "Note" : "Add note"}
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={openNoteSheet}
+                      style={({ pressed }) => [styles.noteActionCard, pressed && styles.subtlePressed]}
+                      testID="pc.review.note.open"
+                    >
+                      <View style={styles.noteActionCardIcon}>
+                        <StickyNote color={colors.accent} size={21} weight="regular" />
+                      </View>
+                      <View style={styles.noteActionCopy}>
+                        <View style={styles.noteActionHeader}>
+                          <Text style={styles.noteActionTitle}>
+                            {noteHasText ? "Note" : "Add note"}
+                          </Text>
+                          {noteStatusLabel ? (
+                            <Text style={[styles.noteSaveState, noteSaveState === "error" && styles.noteSaveStateError]}>
+                              {noteStatusLabel}
                             </Text>
-                            {noteStatusLabel ? (
-                              <Text style={[styles.noteSaveState, noteSaveState === "error" && styles.noteSaveStateError]}>
-                                {noteStatusLabel}
-                              </Text>
-                            ) : null}
-                          </View>
-                          {noteHasText ? (
-                            <Text numberOfLines={2} style={styles.noteActionPreview}>{draftNote}</Text>
                           ) : null}
                         </View>
-                        <CaretRight color={colors.muted} size={18} weight="bold" />
-                      </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={deleteCapture}
-                        style={({ pressed }) => [
-                          styles.reviewActionRow,
-                          styles.reviewActionRowDivided,
-                          pressed && styles.subtlePressed
-                        ]}
-                        testID="pc.capture.delete"
-                      >
-                        <View style={[styles.reviewActionIconWell, styles.reviewActionIconWellDanger]}>
-                          <Trash2 color={colors.danger} size={19} weight="regular" />
-                        </View>
-                        <Text style={styles.dangerButtonText}>Delete capture</Text>
-                      </Pressable>
-                    </View>
+                        <Text numberOfLines={noteHasText ? 2 : 1} style={styles.noteActionPreview}>
+                          {noteHasText ? draftNote : "Why did you save this?"}
+                        </Text>
+                      </View>
+                      <CaretRight color={colors.muted} size={18} weight="bold" />
+                    </Pressable>
                   </View>
                 </View>
               </Animated.ScrollView>
