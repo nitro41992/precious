@@ -16,7 +16,7 @@ import {
   reminderTimeLabel,
   timeStringFromDate
 } from "../capturePresentation";
-import { AiFieldInsight, IconButton } from "../ui/components";
+import { AiFieldInsight, AnimatedBottomSheet, IconButton } from "../ui/components";
 import { styles } from "../ui/styles";
 import { colors } from "../ui/theme";
 
@@ -75,8 +75,6 @@ export function ReminderEditorSheet({
     setDraft(nextDraft);
     setPickerTarget(null);
   }, [reminder, visible]);
-
-  if (!visible) return null;
 
   const pickerMode: PickerMode = pickerTarget === "startDate" || pickerTarget === "endDate"
     ? "date"
@@ -181,9 +179,12 @@ export function ReminderEditorSheet({
   }
 
   return (
-    <View style={styles.modalLayer} pointerEvents="box-none">
-      <Pressable accessibilityLabel="Close reminder editor" onPress={onClose} style={styles.modalBackdrop} />
-      <View style={[styles.actionSheet, styles.reminderSheet]}>
+    <AnimatedBottomSheet
+      closeLabel="Close reminder editor"
+      onClose={onClose}
+      sheetStyle={[styles.actionSheet, styles.reminderSheet]}
+      visible={visible}
+    >
         <View style={styles.sheetGrabber} />
         <View style={styles.rationaleSheetHeader}>
           <View style={[styles.rationaleSheetHeaderIcon, styles.reminderSheetHeaderIcon]}>
@@ -328,7 +329,6 @@ export function ReminderEditorSheet({
             <Text style={styles.dangerButtonText}>Remove reminder</Text>
           </Pressable>
         ) : null}
-      </View>
-    </View>
+    </AnimatedBottomSheet>
   );
 }

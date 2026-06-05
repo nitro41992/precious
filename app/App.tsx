@@ -992,6 +992,48 @@ export default function App() {
     captureKeyboardInset.setValue(0);
   }
 
+  function animateCaptureSheetClose(
+    onClosed: () => void,
+    options: { keyboardHidden?: boolean } = {}
+  ) {
+    captureComposerMotion.stopAnimation();
+    captureKeyboardInset.stopAnimation();
+    captureComposerClosingRef.current = true;
+    setCaptureComposerClosing(true);
+    const animation = options.keyboardHidden
+      ? Animated.parallel([
+          Animated.timing(captureComposerMotion, {
+            duration: 135,
+            easing: Easing.in(Easing.cubic),
+            toValue: 0,
+            useNativeDriver: false
+          }),
+          Animated.timing(captureKeyboardInset, {
+            duration: 135,
+            easing: Easing.in(Easing.cubic),
+            toValue: 0,
+            useNativeDriver: false
+          })
+        ])
+      : Animated.timing(captureComposerMotion, {
+          duration: 135,
+          easing: Easing.in(Easing.cubic),
+          toValue: 0,
+          useNativeDriver: false
+        });
+    animation.start(() => {
+      onClosed();
+      setKeyboardHeight(0);
+      captureKeyboardInset.setValue(0);
+      captureComposerMotion.setValue(0);
+      if (!options.keyboardHidden) Keyboard.dismiss();
+      requestAnimationFrame(() => {
+        setCaptureComposerClosing(false);
+        captureComposerClosingRef.current = false;
+      });
+    });
+  }
+
   function openCaptureComposer() {
     setShowCollectionForm(false);
     const screenHeight = Dimensions.get("screen").height;
@@ -1000,6 +1042,7 @@ export default function App() {
     setCaptureMode(DEFAULT_CAPTURE_COMPOSER_MODE);
     captureComposerClosingRef.current = false;
     setCaptureComposerClosing(false);
+    lastKeyboardHeightRef.current = estimatedKeyboardHeight;
     setKeyboardHeight(estimatedKeyboardHeight);
     captureComposerMotion.stopAnimation();
     captureKeyboardInset.stopAnimation();
@@ -1021,6 +1064,7 @@ export default function App() {
     setShowCaptureComposer(false);
     const screenHeight = Dimensions.get("screen").height;
     const estimatedKeyboardHeight = lastKeyboardHeightRef.current || Math.round(screenHeight * (Platform.OS === "ios" ? 0.34 : 0.4));
+    lastKeyboardHeightRef.current = estimatedKeyboardHeight;
     setKeyboardHeight(estimatedKeyboardHeight);
     captureComposerMotion.stopAnimation();
     captureKeyboardInset.stopAnimation();
@@ -1034,6 +1078,7 @@ export default function App() {
     const estimatedKeyboardHeight = lastKeyboardHeightRef.current || Math.round(screenHeight * (Platform.OS === "ios" ? 0.34 : 0.4));
     setQuickIntentOpen(false);
     setMessage("");
+    lastKeyboardHeightRef.current = estimatedKeyboardHeight;
     captureComposerMotion.stopAnimation();
     captureKeyboardInset.stopAnimation();
     captureComposerMotion.setValue(0);
@@ -1042,44 +1087,29 @@ export default function App() {
     setNoteSheetOpen(true);
   }
 
-  function closeNoteSheet() {
-    Keyboard.dismiss();
-    setNoteSheetOpen(false);
-    setKeyboardHeight(0);
-    captureKeyboardInset.setValue(0);
+  function closeNoteSheet(options?: { keyboardHidden?: boolean }) {
+    if (!noteSheetOpen || captureComposerClosing) return;
+    animateCaptureSheetClose(() => {
+      setNoteSheetOpen(false);
+    }, options);
   }
 
-  function closeCaptureComposer() {
+  function closeCaptureComposer(options?: { keyboardHidden?: boolean }) {
     if (!showCaptureComposer || captureComposerClosing) return;
-    captureComposerClosingRef.current = true;
-    setCaptureComposerClosing(true);
-    Keyboard.dismiss();
-    Animated.parallel([
-      Animated.timing(captureComposerMotion, {
-        duration: 170,
-        easing: Easing.in(Easing.cubic),
-        toValue: 0,
-        useNativeDriver: false
-      }),
-      Animated.timing(captureKeyboardInset, {
-        duration: 180,
-        easing: Easing.in(Easing.cubic),
-        toValue: 0,
-        useNativeDriver: false
-      })
-    ]).start(() => {
-      resetCaptureComposerSurface();
-    });
+    animateCaptureSheetClose(() => {
+      setShowCaptureComposer(false);
+      setCaptureMode(DEFAULT_CAPTURE_COMPOSER_MODE);
+    }, options);
   }
 
-  function closeCollectionComposer() {
-    Keyboard.dismiss();
-    setShowCollectionForm(false);
-    setCollectionTitle("");
-    setCollectionDescription("");
-    setCollectionDraftDirty(false);
-    setKeyboardHeight(0);
-    captureKeyboardInset.setValue(0);
+  function closeCollectionComposer(options?: { keyboardHidden?: boolean }) {
+    if (!showCollectionForm || captureComposerClosing) return;
+    animateCaptureSheetClose(() => {
+      setShowCollectionForm(false);
+      setCollectionTitle("");
+      setCollectionDescription("");
+      setCollectionDraftDirty(false);
+    }, options);
   }
 
   function chooseCaptureMode(mode: CaptureComposerMode) {
@@ -1293,7 +1323,9 @@ export default function App() {
     captures,
     closeCaptureComposer,
     closeCollectionComposer,
+    closeCollectionPicker,
     closeNoteSheet,
+    collectionPickerOpen,
     collectionDraftDirty,
     collectionTitleInputRef,
     collections,
@@ -1320,7 +1352,11 @@ export default function App() {
     setDraftNote,
     setDraftTitle,
     setKeyboardHeight,
+    setQuickIntentOpen,
+    setReminderSheetOpen,
     setSearchOpen,
+    quickIntentOpen,
+    reminderSheetOpen,
     showCaptureComposer,
     showCollectionForm,
     skeletonPulse,
@@ -1857,10 +1893,7 @@ export default function App() {
           ...collectionsCacheRef.current.active.filter((item) => item.id !== created.id)
         ];
         if (collectionsMode === "active") setCollections((current) => [created, ...current]);
-        Keyboard.dismiss();
-        setCollectionTitle("");
-        setCollectionDescription("");
-        setShowCollectionForm(false);
+        closeCollectionComposer();
       }
       setCollectionDraftDirty(false);
       showToast("Collection saved.", "success");

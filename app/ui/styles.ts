@@ -515,6 +515,13 @@ export const styles = StyleSheet.create({
     right: 0,
     top: 0
   },
+  sheetBackdropHit: {
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0
+  },
   sheetKeyboard: {
     flex: 1,
     justifyContent: "flex-end",
@@ -1811,10 +1818,10 @@ export const styles = StyleSheet.create({
   },
   reviewDetailPlane: {
     backgroundColor: colors.surfaceContainer,
-    gap: 16,
+    gap: 18,
     minHeight: 520,
     paddingHorizontal: 22,
-    paddingTop: 20
+    paddingTop: 22
   },
   reviewDetailContent: {
     backgroundColor: colors.surfaceContainer,
@@ -2026,70 +2033,82 @@ export const styles = StyleSheet.create({
   },
   inlineMeaningBlock: {
     gap: 10,
-    paddingHorizontal: 2,
-    paddingVertical: 6
+    paddingHorizontal: 0,
+    paddingVertical: 4
   },
   inlineMeaningSentence: {
-    gap: 3
+    gap: 2
   },
   inlineMeaningLine: {
     color: colors.secondary,
     ...typefaces.black,
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: "900",
-    lineHeight: 35
+    lineHeight: 32
   },
   inlineMeaningText: {
     color: colors.secondary,
     ...typefaces.black,
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: "900",
-    lineHeight: 35
+    lineHeight: 32
   },
   inlineMeaningChipText: {
     color: colors.accent,
     ...typefaces.black,
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: "900",
-    lineHeight: 35
+    lineHeight: 32
   },
   inlineMeaningChipTextPending: {
     color: colors.review
   },
   reviewPrimaryBlock: {
-    gap: 10,
-    paddingHorizontal: 2
+    gap: 8,
+    paddingHorizontal: 0
   },
   reviewTitleInput: {
     color: colors.ink,
-    fontSize: 22,
-    fontWeight: "700",
-    lineHeight: 28,
+    ...typefaces.black,
+    fontSize: 25,
+    fontWeight: "900",
+    lineHeight: 31,
     padding: 0,
-    paddingVertical: 2
+    paddingVertical: 0
   },
   reviewMetaRow: {
     alignItems: "center",
     flexDirection: "row",
     gap: 8,
-    minHeight: 36
+    minHeight: 34
   },
   reviewSourceCluster: {
     alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     flexShrink: 1,
     gap: 8,
-    minWidth: 0
+    minHeight: 34,
+    minWidth: 0,
+    paddingLeft: 5,
+    paddingRight: 4,
+    paddingVertical: 4
   },
   reviewSourceName: {
     color: colors.secondary,
+    ...typefaces.bold,
     flexShrink: 1,
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: "700",
-    lineHeight: 19
+    lineHeight: 18
   },
   reviewSourceTime: {
     color: colors.muted,
+    ...typefaces.medium,
     fontWeight: "600"
   },
   reviewSourceImageIconPill: {
@@ -2105,10 +2124,10 @@ export const styles = StyleSheet.create({
   reviewSourceCopyButton: {
     alignItems: "center",
     borderRadius: 8,
-    height: 34,
+    height: 30,
     justifyContent: "center",
     marginLeft: -4,
-    width: 34
+    width: 30
   },
   reviewEditRail: {
     alignItems: "stretch",
@@ -2654,26 +2673,46 @@ export const styles = StyleSheet.create({
     paddingTop: 16
   },
   reviewActionBlock: {
-    gap: 6,
-    paddingTop: 2
+    gap: 9,
+    paddingTop: 6
+  },
+  reviewActionLabel: {
+    color: colors.muted,
+    ...typefaces.bold,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 16,
+    paddingLeft: 1
   },
   reviewActionGroup: {
-    backgroundColor: "transparent",
+    backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
-    borderRadius: 0,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    overflow: "visible"
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden"
   },
   reviewActionRow: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 14,
-    minHeight: 54,
-    paddingVertical: 12
+    gap: 12,
+    minHeight: 60,
+    paddingHorizontal: 12,
+    paddingVertical: 10
   },
   reviewActionRowDivided: {
     borderTopColor: colors.line,
     borderTopWidth: StyleSheet.hairlineWidth
+  },
+  reviewActionIconWell: {
+    alignItems: "center",
+    backgroundColor: colors.soft,
+    borderRadius: 8,
+    height: 34,
+    justifyContent: "center",
+    width: 34
+  },
+  reviewActionIconWellDanger: {
+    backgroundColor: colors.dangerSoft
   },
   compactActionRow: {
     alignItems: "center",
@@ -2686,8 +2725,9 @@ export const styles = StyleSheet.create({
   },
   compactActionText: {
     color: colors.ink,
+    ...typefaces.bold,
     flex: 1,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700"
   },
   noteActionCopy: {
@@ -2703,6 +2743,7 @@ export const styles = StyleSheet.create({
   },
   noteActionPreview: {
     color: colors.muted,
+    ...typefaces.medium,
     fontSize: 13,
     lineHeight: 18
   },
@@ -2829,7 +2870,8 @@ export const styles = StyleSheet.create({
   },
   dangerButtonText: {
     color: colors.danger,
-    fontSize: 16,
+    ...typefaces.bold,
+    fontSize: 15.5,
     fontWeight: "700"
   },
   toast: {

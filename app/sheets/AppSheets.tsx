@@ -4,7 +4,7 @@ import {
   X
 } from "phosphor-react-native";
 
-import { IconButton } from "../ui/components";
+import { AnimatedBottomSheet, IconButton } from "../ui/components";
 import { styles } from "../ui/styles";
 import { colors } from "../ui/theme";
 
@@ -17,15 +17,13 @@ export function AppSheets({
   onSignOut: () => void;
   setAccountSheetOpen: (value: boolean) => void;
 }) {
-  if (accountSheetOpen) {
-    return (
-      <View style={styles.modalLayer} pointerEvents="box-none">
-        <Pressable
-          accessibilityLabel="Close account actions"
-          onPress={() => setAccountSheetOpen(false)}
-          style={styles.modalBackdrop}
-        />
-        <View style={styles.actionSheet}>
+  return (
+    <AnimatedBottomSheet
+      closeLabel="Close account actions"
+      onClose={() => setAccountSheetOpen(false)}
+      sheetStyle={styles.actionSheet}
+      visible={accountSheetOpen}
+    >
           <View style={styles.sheetGrabber} />
           <View style={styles.sheetHeader}>
             <View style={styles.sheetHeaderCopy}>
@@ -47,10 +45,6 @@ export function AppSheets({
               <Text style={styles.sheetActionText}>Remove this session from the phone.</Text>
             </View>
           </Pressable>
-        </View>
-      </View>
-    );
-  }
-
-  return null;
+    </AnimatedBottomSheet>
+  );
 }

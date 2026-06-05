@@ -28,7 +28,9 @@ export function useAppUiEffects({
   captures,
   closeCaptureComposer,
   closeCollectionComposer,
+  closeCollectionPicker,
   closeNoteSheet,
+  collectionPickerOpen,
   collectionDraftDirty,
   collectionTitleInputRef,
   collections,
@@ -40,6 +42,8 @@ export function useAppUiEffects({
   noteInputRef,
   noteSheetOpen,
   pickingCaptureImage,
+  quickIntentOpen,
+  reminderSheetOpen,
   reviewMotion,
   searchMotion,
   searchOpen,
@@ -55,6 +59,8 @@ export function useAppUiEffects({
   setDraftNote,
   setDraftTitle,
   setKeyboardHeight,
+  setQuickIntentOpen,
+  setReminderSheetOpen,
   setSearchOpen,
   showCaptureComposer,
   showCollectionForm,
@@ -70,9 +76,11 @@ export function useAppUiEffects({
   captureMode: CaptureComposerMode;
   captureReturnCollectionId: string | null;
   captures: Capture[];
-  closeCaptureComposer: () => void;
-  closeCollectionComposer: () => void;
-  closeNoteSheet: () => void;
+  closeCaptureComposer: (options?: { keyboardHidden?: boolean }) => void;
+  closeCollectionComposer: (options?: { keyboardHidden?: boolean }) => void;
+  closeCollectionPicker: () => void;
+  closeNoteSheet: (options?: { keyboardHidden?: boolean }) => void;
+  collectionPickerOpen: boolean;
   collectionDraftDirty: boolean;
   collectionTitleInputRef: RefObject<TextInput | null>;
   collections: Collection[];
@@ -84,6 +92,8 @@ export function useAppUiEffects({
   noteInputRef: RefObject<TextInput | null>;
   noteSheetOpen: boolean;
   pickingCaptureImage: boolean;
+  quickIntentOpen: boolean;
+  reminderSheetOpen: boolean;
   reviewMotion: Animated.Value;
   searchMotion: Animated.Value;
   searchOpen: boolean;
@@ -99,6 +109,8 @@ export function useAppUiEffects({
   setDraftNote: (value: string) => void;
   setDraftTitle: (value: string) => void;
   setKeyboardHeight: (value: number) => void;
+  setQuickIntentOpen: (value: boolean) => void;
+  setReminderSheetOpen: (value: boolean) => void;
   setSearchOpen: (value: boolean) => void;
   showCaptureComposer: boolean;
   showCollectionForm: boolean;
@@ -145,10 +157,25 @@ export function useAppUiEffects({
       !showCaptureComposer &&
       !showCollectionForm &&
       !noteSheetOpen &&
+      !collectionPickerOpen &&
+      !quickIntentOpen &&
+      !reminderSheetOpen &&
       !collectionsOpen &&
       !accountSheetOpen
     ) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (collectionPickerOpen) {
+        closeCollectionPicker();
+        return true;
+      }
+      if (quickIntentOpen) {
+        setQuickIntentOpen(false);
+        return true;
+      }
+      if (reminderSheetOpen) {
+        setReminderSheetOpen(false);
+        return true;
+      }
       if (accountSheetOpen) {
         setAccountSheetOpen(false);
         return true;
@@ -192,9 +219,13 @@ export function useAppUiEffects({
     captureReturnCollectionId,
     closeCaptureComposer,
     closeCollectionComposer,
+    closeCollectionPicker,
     closeNoteSheet,
+    collectionPickerOpen,
     collectionsOpen,
     noteSheetOpen,
+    quickIntentOpen,
+    reminderSheetOpen,
     searchOpen,
     selectCapture,
     selectCollection,
@@ -202,6 +233,8 @@ export function useAppUiEffects({
     selectedId,
     setAccountSheetOpen,
     setCollectionsOpen,
+    setQuickIntentOpen,
+    setReminderSheetOpen,
     setSearchOpen,
     showCaptureComposer,
     showCollectionForm
@@ -256,10 +289,9 @@ export function useAppUiEffects({
   useEffect(() => {
     if ((!showCaptureComposer && !showCollectionForm && !noteSheetOpen) || captureComposerClosing) return;
     captureComposerMotion.setValue(0);
-    Animated.spring(captureComposerMotion, {
-      damping: 24,
-      mass: 0.9,
-      stiffness: 300,
+    Animated.timing(captureComposerMotion, {
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
       toValue: 1,
       useNativeDriver: false
     }).start();
@@ -319,6 +351,17 @@ export function useAppUiEffects({
     });
     const hideSubscription = Keyboard.addListener(hideEvent, (event) => {
       if (captureImagePickerActiveRef.current) return;
+      if (captureComposerClosingRef.current) return;
+      if (Platform.OS === "android" && collectionPickerOpen) {
+        closeCollectionPicker();
+        return;
+      }
+      if (Platform.OS === "android" && (showCaptureComposer || showCollectionForm || noteSheetOpen)) {
+        if (showCaptureComposer) closeCaptureComposer({ keyboardHidden: true });
+        else if (showCollectionForm) closeCollectionComposer({ keyboardHidden: true });
+        else closeNoteSheet({ keyboardHidden: true });
+        return;
+      }
       if (!captureComposerClosingRef.current) setKeyboardHeight(0);
       if (Platform.OS === "ios") Keyboard.scheduleLayoutAnimation(event);
       Animated.timing(captureKeyboardInset, {
@@ -336,7 +379,15 @@ export function useAppUiEffects({
     captureComposerClosingRef,
     captureImagePickerActiveRef,
     captureKeyboardInset,
+    closeCaptureComposer,
+    closeCollectionComposer,
+    closeCollectionPicker,
+    closeNoteSheet,
+    collectionPickerOpen,
     lastKeyboardHeightRef,
-    setKeyboardHeight
+    noteSheetOpen,
+    setKeyboardHeight,
+    showCaptureComposer,
+    showCollectionForm
   ]);
 }

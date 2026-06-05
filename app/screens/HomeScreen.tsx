@@ -270,12 +270,11 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                 {
                   marginBottom: captureSheetBottomInset,
                   maxHeight: captureSheetMaxHeight,
-                  opacity: captureComposerMotion,
                   transform: [
                     {
                       translateY: captureComposerMotion.interpolate({
                         inputRange: [0, 1],
-                        outputRange: [28, 0]
+                        outputRange: [screenHeight, 0]
                       })
                     }
                   ]

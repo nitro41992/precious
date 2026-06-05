@@ -17,6 +17,7 @@ import { Image } from "expo-image";
 import {
   ArrowLeft,
   Camera,
+  CaretRight,
   Check,
   Copy,
   Note as StickyNote,
@@ -60,7 +61,7 @@ import {
 import { ReminderEditorSheet } from "../sheets/ReminderEditorSheet";
 import { colors } from "../ui/theme";
 import { styles } from "../ui/styles";
-import { AiFieldInsight, IconButton, SourceMark } from "../ui/components";
+import { AiFieldInsight, AnimatedBottomSheet, IconButton, SourceMark } from "../ui/components";
 
 type CaptureReviewScreenProps = {
   data: {
@@ -418,6 +419,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const noteSheetKeyboardVisible = noteSheetOpen && keyboardHeight > 0;
   const noteWindowAlreadyKeyboardSized =
     noteSheetKeyboardVisible && Math.abs(windowHeight + keyboardHeight - Dimensions.get("screen").height) < 96;
+  const screenHeight = Dimensions.get("screen").height;
   const noteVisibleHeight = noteSheetKeyboardVisible && !noteWindowAlreadyKeyboardSized
     ? windowHeight - keyboardHeight
     : windowHeight;
@@ -752,7 +754,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                     </View>
                   ) : null}
                   <View style={styles.reviewActionBlock}>
-                    <Text style={styles.meta}>Capture actions</Text>
+                    <Text style={styles.reviewActionLabel}>Capture actions</Text>
                     <View style={styles.reviewActionGroup}>
                       <Pressable
                         accessibilityRole="button"
@@ -760,7 +762,9 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                         style={({ pressed }) => [styles.reviewActionRow, pressed && styles.subtlePressed]}
                         testID="pc.review.note.open"
                       >
-                        <StickyNote color={colors.muted} size={19} weight="regular" />
+                        <View style={styles.reviewActionIconWell}>
+                          <StickyNote color={colors.secondary} size={19} weight="regular" />
+                        </View>
                         <View style={styles.noteActionCopy}>
                           <View style={styles.noteActionHeader}>
                             <Text style={styles.compactActionText}>
@@ -776,6 +780,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                             <Text numberOfLines={2} style={styles.noteActionPreview}>{draftNote}</Text>
                           ) : null}
                         </View>
+                        <CaretRight color={colors.muted} size={18} weight="bold" />
                       </Pressable>
                       <Pressable
                         accessibilityRole="button"
@@ -787,7 +792,9 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                         ]}
                         testID="pc.capture.delete"
                       >
-                        <Trash2 color={colors.danger} size={19} weight="regular" />
+                        <View style={[styles.reviewActionIconWell, styles.reviewActionIconWellDanger]}>
+                          <Trash2 color={colors.danger} size={19} weight="regular" />
+                        </View>
                         <Text style={styles.dangerButtonText}>Delete capture</Text>
                       </Pressable>
                     </View>
@@ -830,12 +837,11 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                 {
                   marginBottom: noteSheetBottomInset,
                   maxHeight: noteSheetMaxHeight,
-                  opacity: captureComposerMotion,
                   transform: [
                     {
                       translateY: captureComposerMotion.interpolate({
                         inputRange: [0, 1],
-                        outputRange: [28, 0]
+                        outputRange: [screenHeight, 0]
                       })
                     }
                   ]
@@ -883,14 +889,12 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
           </KeyboardAvoidingView>
         </View>
       ) : null}
-      {quickIntentOpen ? (
-        <View style={styles.modalLayer} pointerEvents="box-none">
-          <Pressable
-            accessibilityLabel="Close Purpose choices"
-            onPress={() => setQuickIntentOpen(false)}
-            style={styles.modalBackdrop}
-          />
-          <View style={[styles.actionSheet, styles.purposeSheet]}>
+      <AnimatedBottomSheet
+        closeLabel="Close Purpose choices"
+        onClose={() => setQuickIntentOpen(false)}
+        sheetStyle={[styles.actionSheet, styles.purposeSheet]}
+        visible={quickIntentOpen}
+      >
             <View style={styles.sheetGrabber} />
             <View style={styles.sheetHeader}>
               <View style={styles.sheetHeaderCopy}>
@@ -944,9 +948,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                 </Text>
               </Pressable>
             </View>
-          </View>
-        </View>
-      ) : null}
+      </AnimatedBottomSheet>
       <CaptureImageViewer
         cacheKey={imageViewerSource?.cacheKey || ""}
         imageUrl={imageViewerSource?.url || ""}

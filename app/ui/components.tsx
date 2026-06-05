@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Animated, Easing, Pressable, Text, View } from "react-native";
+import type { StyleProp, ViewStyle } from "react-native";
+import { Animated, Dimensions, Easing, Pressable, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { Check, ClockClockwise, ClockCounterClockwise, Folder, Folders, GearSix, Info, Plus, Sparkle, Warning } from "phosphor-react-native";
 
@@ -29,6 +30,80 @@ import {
 } from "../capturePresentation";
 import { colors } from "./theme";
 import { styles } from "./styles";
+
+export function AnimatedBottomSheet({
+  children,
+  closeLabel,
+  onClose,
+  sheetStyle,
+  variant = "modal",
+  visible
+}: {
+  children: ReactNode;
+  closeLabel: string;
+  onClose: () => void;
+  sheetStyle?: StyleProp<ViewStyle>;
+  variant?: "modal" | "sheet";
+  visible: boolean;
+}) {
+  const motion = useRef(new Animated.Value(visible ? 1 : 0)).current;
+  const [mounted, setMounted] = useState(visible);
+
+  useEffect(() => {
+    motion.stopAnimation();
+    if (visible) {
+      if (!mounted) {
+        setMounted(true);
+        return;
+      }
+      setMounted(true);
+      motion.setValue(0);
+      const frame = requestAnimationFrame(() => {
+        Animated.timing(motion, {
+          duration: 165,
+          easing: Easing.out(Easing.cubic),
+          toValue: 1,
+          useNativeDriver: true
+        }).start();
+      });
+      return () => cancelAnimationFrame(frame);
+    }
+    if (!mounted) return;
+    Animated.timing(motion, {
+      duration: 135,
+      easing: Easing.in(Easing.cubic),
+      toValue: 0,
+      useNativeDriver: true
+    }).start(({ finished }) => {
+      if (finished) setMounted(false);
+    });
+  }, [mounted, motion, visible]);
+
+  if (!mounted) return null;
+
+  const offscreenY = Math.max(560, Dimensions.get("screen").height);
+  const translateY = motion.interpolate({
+    inputRange: [0, 1],
+    outputRange: [offscreenY, 0]
+  });
+
+  return (
+    <View style={variant === "sheet" ? styles.sheetLayer : styles.modalLayer} pointerEvents="box-none">
+      <View pointerEvents="none" style={variant === "sheet" ? styles.sheetBackdrop : styles.modalBackdrop} />
+      <Pressable accessibilityLabel={closeLabel} onPress={onClose} style={styles.sheetBackdropHit} />
+      <Animated.View
+        style={[
+          sheetStyle,
+          {
+            transform: [{ translateY }]
+          }
+        ]}
+      >
+        {children}
+      </Animated.View>
+    </View>
+  );
+}
 
 export function RecentNavIcon({ color, selected = false, size = 24 }: NavIconProps) {
   return <ClockCounterClockwise color={color} size={size} weight={selected ? "fill" : "regular"} />;

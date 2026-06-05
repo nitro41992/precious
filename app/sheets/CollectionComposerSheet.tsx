@@ -64,12 +64,11 @@ export function CollectionComposerSheet({
             {
               marginBottom: sheetBottomInset,
               maxHeight: sheetMaxHeight,
-              opacity: captureComposerMotion,
               transform: [
                 {
                   translateY: captureComposerMotion.interpolate({
                     inputRange: [0, 1],
-                    outputRange: [28, 0]
+                    outputRange: [screenHeight, 0]
                   })
                 }
               ]
