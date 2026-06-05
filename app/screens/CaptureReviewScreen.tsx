@@ -71,7 +71,6 @@ type CaptureReviewScreenProps = {
     faviconFailures: Record<string, boolean>;
     keyboardHeight: number;
     noteInputRef: RefObject<TextInput | null>;
-    placeResolving: boolean;
     reviewMotion: Animated.Value;
     selected: Capture;
     toast: ReactNode;
@@ -307,7 +306,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     faviconFailures,
     keyboardHeight,
     noteInputRef,
-    placeResolving,
     reviewMotion,
     selected,
     toast,
@@ -387,13 +385,10 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     ? selectedVisitTarget.resolvedPlace
     : null;
   const primaryMapCandidate = selectedVisitTargetMapCandidates[0] || null;
-  const locationInlineValue = placeResolving && !resolvedPlace
-    ? "Finding this place"
-    : resolvedPlace?.displayName || selectedVisitTarget?.name || "";
+  const locationInlineValue = resolvedPlace?.displayName || selectedVisitTarget?.name || "";
   const showLocationInline = Boolean(
     selectedVisitTarget &&
-      locationInlineValue &&
-      (placeResolving || primaryMapCandidate || resolvedPlace)
+      locationInlineValue
   );
   const selectedCapturedMeta = `Captured ${formatDateTime(selected.createdAt)}`;
   const selectedNeedsReview = displayStatus(selected) === "needs_review";

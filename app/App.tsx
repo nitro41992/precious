@@ -211,7 +211,6 @@ export default function App() {
   const [collectionPickerQuery, setCollectionPickerQuery] = useState("");
   const [collectionSelectionIds, setCollectionSelectionIds] = useState<string[]>([]);
   const [collectionChoiceSaving, setCollectionChoiceSaving] = useState<string | null>(null);
-  const [placeResolvingByCapture, setPlaceResolvingByCapture] = useState<Record<string, boolean>>({});
   const [reviewDraftsByCapture, setReviewDraftsByCapture] = useState<Record<string, CaptureReviewDraft>>({});
   const [reviewDraftsLoaded, setReviewDraftsLoaded] = useState(false);
   const [noteSaveState, setNoteSaveState] = useState<NoteSaveState>("idle");
@@ -444,7 +443,6 @@ export default function App() {
     setCollectionCapturesError("");
     captureDetailHydrationRef.current.clear();
     placeResolutionRef.current.clear();
-    setPlaceResolvingByCapture({});
     collectionsPrefetchStartedRef.current = false;
     setCaptureReturnCollectionId(null);
     setCaptureReviewOrigin(null);
@@ -824,7 +822,6 @@ export default function App() {
       return;
     }
     placeResolutionRef.current.add(placeResolutionKey);
-    setPlaceResolvingByCapture((current) => ({ ...current, [captureRef]: true }));
     try {
       const json = await withFreshAccessToken((accessToken) =>
         requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
@@ -845,13 +842,6 @@ export default function App() {
       }
     } catch (error) {
       placeResolutionRef.current.delete(placeResolutionKey);
-    } finally {
-      setPlaceResolvingByCapture((current) => {
-        if (!current[captureRef]) return current;
-        const next = { ...current };
-        delete next[captureRef];
-        return next;
-      });
     }
   }, [config, session, withFreshAccessToken]);
 
@@ -2557,7 +2547,6 @@ export default function App() {
           faviconFailures,
           keyboardHeight,
           noteInputRef,
-          placeResolving: Boolean(placeResolvingByCapture[capture.remoteId || capture.id]),
           reviewMotion,
           selected: capture,
           toast: renderToast("footer"),
