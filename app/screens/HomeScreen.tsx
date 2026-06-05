@@ -6,11 +6,10 @@ import {
   KeyboardAvoidingView,
   Pressable,
   StatusBar,
-  Text,
-  TextInput,
   View
 } from "react-native";
 import type { FlatListProps, ListRenderItemInfo } from "react-native";
+import type { TextInput as NativeTextInput } from "react-native";
 import {
   Check,
   ImageSquare as ImageIcon,
@@ -25,6 +24,7 @@ import type { CaptureComposerMode, HomeListRow } from "../types";
 import { colors } from "../ui/theme";
 import { styles } from "../ui/styles";
 import { IconButton } from "../ui/components";
+import { Text, TextInput } from "../ui/typography";
 
 type HomeScreenProps = {
   data: {
@@ -36,7 +36,7 @@ type HomeScreenProps = {
     homeCaptures: HomeListRow[];
     listPerfProps: Partial<FlatListProps<HomeListRow>>;
     toast: ReactNode;
-    sourceInputRef: RefObject<TextInput | null>;
+    sourceInputRef: RefObject<NativeTextInput | null>;
     visibleHomeRows: HomeListRow[];
     windowHeight: number;
   };
@@ -57,7 +57,7 @@ type HomeScreenProps = {
   };
   actions: {
     chooseCaptureMode: (mode: CaptureComposerMode) => void;
-    closeCaptureComposer: () => void;
+    closeCaptureComposer: (options?: { keyboardHidden?: boolean }) => void;
     loadCaptures: () => void;
     loadMoreActiveCaptures: () => void;
     openCaptureComposer: () => void;
@@ -129,14 +129,19 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
   const composerVisibleHeight = composerKeyboardVisible && !windowAlreadyKeyboardSized
     ? windowHeight - keyboardHeight
     : windowHeight;
+  const composerKeyboardGap = composerKeyboardVisible ? 16 : 0;
   const composerAvailableHeight = composerKeyboardVisible
-    ? Math.max(320, composerVisibleHeight - 24)
+    ? Math.max(320, composerVisibleHeight - 24 - composerKeyboardGap)
     : Math.max(360, windowHeight * 0.72);
   const captureSheetMaxHeight = composerKeyboardVisible
     ? Math.min(430, composerAvailableHeight)
     : Math.min(560, Math.max(340, windowHeight * 0.72));
   const captureSourcePlaceholder = captureMode === "link" ? "Paste a link" : "Write a note";
-  const captureSheetBottomInset = windowAlreadyKeyboardSized ? 0 : captureKeyboardInset;
+  const captureSheetBottomInset = windowAlreadyKeyboardSized
+    ? composerKeyboardGap
+    : composerKeyboardVisible
+      ? Animated.add(captureKeyboardInset, composerKeyboardGap)
+      : captureKeyboardInset;
 
   return (
     <View style={styles.safe}>
@@ -259,7 +264,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
         <View style={styles.sheetLayer} pointerEvents="box-none">
           <Pressable
             accessibilityLabel="Close capture composer"
-            onPress={closeCaptureComposer}
+            onPress={() => closeCaptureComposer()}
             style={styles.sheetBackdrop}
           />
           <KeyboardAvoidingView pointerEvents="box-none" style={styles.sheetKeyboard}>
@@ -287,7 +292,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                   <Text style={styles.sheetTitle}>New capture</Text>
                 </View>
                 <View style={styles.sheetActions}>
-                  <IconButton Icon={X} label="Close" onPress={closeCaptureComposer} />
+                  <IconButton Icon={X} label="Close" onPress={() => closeCaptureComposer()} />
                   <IconButton
                     Icon={Check}
                     label={savingCapture ? "Saving capture" : "Save capture"}

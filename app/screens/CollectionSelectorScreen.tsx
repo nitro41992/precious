@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
-import { Animated, FlatList, Platform, Pressable, StatusBar, Text, TextInput, View } from "react-native";
+import { Animated, FlatList, Platform, Pressable, StatusBar, View } from "react-native";
 import type { FlatListProps } from "react-native";
 import { ArrowLeft, Check, Folder, MagnifyingGlass as Search, X } from "phosphor-react-native";
 
@@ -9,6 +9,7 @@ import { collectionCountLabel } from "../capturePresentation";
 import { colors } from "../ui/theme";
 import { styles } from "../ui/styles";
 import { IconButton } from "../ui/components";
+import { Text, TextInput } from "../ui/typography";
 
 type CollectionSelectorScreenProps = {
   data: {

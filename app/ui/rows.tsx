@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactElement } from "react";
-import { Animated, Pressable, Text, View } from "react-native";
+import { Animated, Pressable, View } from "react-native";
 import { Image } from "expo-image";
 import { CalendarBlank, Folder, ImageSquare, Lightbulb } from "phosphor-react-native";
 
@@ -18,6 +18,7 @@ import {
 import { colors } from "./theme";
 import { styles } from "./styles";
 import { CollectionMeaningToken, MeaningToken, SkeletonRevealFrame, SourceMark, StatusGlyph } from "./components";
+import { Text } from "./typography";
 
 type SkeletonBlockRenderer = ({ style }: { style?: any }) => ReactElement;
 

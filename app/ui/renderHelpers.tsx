@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { Animated, Pressable, Text, View } from "react-native";
+import { Animated, Pressable, View } from "react-native";
 
 import { matchReasonForCapture } from "../capturePresentation";
 import type {
@@ -23,6 +23,7 @@ import {
   CollectionSkeletonRows
 } from "./rows";
 import { styles } from "./styles";
+import { Text } from "./typography";
 
 export type AppRenderHelpersInput = {
   activeCapturesLoadedOnce: boolean;

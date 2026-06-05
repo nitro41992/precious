@@ -1,11 +1,13 @@
 import type { RefObject } from "react";
-import { Animated, Dimensions, KeyboardAvoidingView, Pressable, Text, TextInput, View } from "react-native";
+import { Animated, Dimensions, KeyboardAvoidingView, Pressable, View } from "react-native";
+import type { TextInput as NativeTextInput } from "react-native";
 import { Check, X } from "phosphor-react-native";
 
 import type { Collection } from "../types";
 import { IconButton } from "../ui/components";
 import { styles } from "../ui/styles";
 import { colors } from "../ui/theme";
+import { Text, TextInput } from "../ui/typography";
 
 export function CollectionComposerSheet({
   captureComposerMotion,
@@ -26,7 +28,7 @@ export function CollectionComposerSheet({
   captureKeyboardInset: Animated.Value;
   collectionDescription: string;
   collectionTitle: string;
-  collectionTitleInputRef: RefObject<TextInput | null>;
+  collectionTitleInputRef: RefObject<NativeTextInput | null>;
   keyboardHeight: number;
   onClose: () => void;
   onSave: () => void;
@@ -43,10 +45,15 @@ export function CollectionComposerSheet({
   const visibleHeight = keyboardVisible && !windowAlreadyKeyboardSized
     ? windowHeight - keyboardHeight
     : windowHeight;
+  const keyboardSheetGap = keyboardVisible ? 16 : 0;
   const sheetMaxHeight = keyboardVisible
-    ? Math.min(430, Math.max(320, visibleHeight - 24))
+    ? Math.min(430, Math.max(320, visibleHeight - 24 - keyboardSheetGap))
     : Math.min(440, Math.max(340, windowHeight * 0.62));
-  const sheetBottomInset = windowAlreadyKeyboardSized ? 0 : captureKeyboardInset;
+  const sheetBottomInset = windowAlreadyKeyboardSized
+    ? keyboardSheetGap
+    : keyboardVisible
+      ? Animated.add(captureKeyboardInset, keyboardSheetGap)
+      : captureKeyboardInset;
   const saveDisabled = !collectionTitle.trim() || !collectionDescription.trim();
 
   return (

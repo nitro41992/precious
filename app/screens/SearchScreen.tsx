@@ -6,8 +6,6 @@ import {
   Platform,
   Pressable,
   StatusBar,
-  Text,
-  TextInput,
   View
 } from "react-native";
 import type { FlatListProps, ListRenderItemInfo } from "react-native";
@@ -18,6 +16,7 @@ import { SEARCH_PROMPTS } from "../capturePresentation";
 import { IconButton } from "../ui/components";
 import { colors } from "../ui/theme";
 import { styles } from "../ui/styles";
+import { Text, TextInput } from "../ui/typography";
 
 type SearchScreenProps = {
   data: {

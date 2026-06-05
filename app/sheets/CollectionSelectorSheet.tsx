@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
-import { Animated, FlatList, Platform, Pressable, Text, TextInput, View } from "react-native";
+import { Animated, FlatList, Platform, Pressable, View } from "react-native";
 import type { FlatListProps } from "react-native";
 import { Check, Folder, MagnifyingGlass as Search, X } from "phosphor-react-native";
 
@@ -9,6 +9,7 @@ import { captureFieldRationale, collectionCountLabel } from "../capturePresentat
 import { AiFieldInsight, AnimatedBottomSheet, IconButton } from "../ui/components";
 import { styles } from "../ui/styles";
 import { colors } from "../ui/theme";
+import { Text, TextInput } from "../ui/typography";
 
 type CollectionSelectorSheetProps = {
   data: {

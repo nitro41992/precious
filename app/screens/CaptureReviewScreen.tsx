@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Dispatch, ReactNode, RefObject, SetStateAction } from "react";
 import type { GestureResponderEvent } from "react-native";
+import type { TextInput as NativeTextInput } from "react-native";
 import {
   Animated,
   Dimensions,
@@ -9,8 +10,6 @@ import {
   Platform,
   Pressable,
   StatusBar,
-  Text,
-  TextInput,
   View
 } from "react-native";
 import { Image } from "expo-image";
@@ -62,6 +61,7 @@ import { ReminderEditorSheet } from "../sheets/ReminderEditorSheet";
 import { colors } from "../ui/theme";
 import { styles } from "../ui/styles";
 import { AiFieldInsight, AnimatedBottomSheet, IconButton, SourceMark } from "../ui/components";
+import { Text, TextInput } from "../ui/typography";
 
 type CaptureReviewScreenProps = {
   data: {
@@ -71,7 +71,7 @@ type CaptureReviewScreenProps = {
     captureReturnCollectionId: string | null;
     faviconFailures: Record<string, boolean>;
     keyboardHeight: number;
-    noteInputRef: RefObject<TextInput | null>;
+    noteInputRef: RefObject<NativeTextInput | null>;
     reviewMotion: Animated.Value;
     selected: Capture;
     toast: ReactNode;
@@ -93,7 +93,7 @@ type CaptureReviewScreenProps = {
     reminderSheetOpen: boolean;
   };
   actions: {
-    closeNoteSheet: () => void;
+    closeNoteSheet: (options?: { keyboardHidden?: boolean }) => void;
     deleteCapture: () => void;
     copySource: () => void;
     markFaviconFailed: (host: string) => void;
@@ -826,7 +826,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
         <View style={styles.sheetLayer} pointerEvents="box-none">
           <Pressable
             accessibilityLabel="Close note editor"
-            onPress={closeNoteSheet}
+            onPress={() => closeNoteSheet()}
             style={styles.sheetBackdrop}
           />
           <KeyboardAvoidingView pointerEvents="box-none" style={styles.sheetKeyboard}>
@@ -854,8 +854,8 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                   <Text style={styles.sheetTitle}>Note</Text>
                 </View>
                 <View style={styles.sheetActions}>
-                  <IconButton Icon={X} label="Close note editor" onPress={closeNoteSheet} />
-                  <IconButton Icon={Check} label="Done" onPress={closeNoteSheet} tone="primary" />
+                  <IconButton Icon={X} label="Close note editor" onPress={() => closeNoteSheet()} />
+                  <IconButton Icon={Check} label="Done" onPress={() => closeNoteSheet()} tone="primary" />
                 </View>
               </View>
               <View

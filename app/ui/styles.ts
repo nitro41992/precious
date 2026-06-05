@@ -625,6 +625,7 @@ export const styles = StyleSheet.create({
   },
   groupHeader: {
     color: colors.muted,
+    ...typefaces.bold,
     fontSize: 12,
     fontWeight: "800",
     paddingBottom: 2,
@@ -789,10 +790,10 @@ export const styles = StyleSheet.create({
   },
   captureTitle: {
     color: colors.ink,
-    ...typefaces.bold,
+    ...typefaces.medium,
     flex: 1,
     fontSize: 17.5,
-    fontWeight: "700",
+    fontWeight: "600",
     lineHeight: 22.5
   },
   status: {
@@ -1486,8 +1487,9 @@ export const styles = StyleSheet.create({
   },
   collectionCardTitle: {
     color: colors.ink,
+    ...typefaces.medium,
     fontSize: 15,
-    fontWeight: "700",
+    fontWeight: "600",
     lineHeight: 19
   },
   collectionCardMeta: {
@@ -2069,9 +2071,9 @@ export const styles = StyleSheet.create({
   },
   reviewTitleInput: {
     color: colors.ink,
-    ...typefaces.black,
+    ...typefaces.medium,
     fontSize: 25,
-    fontWeight: "900",
+    fontWeight: "600",
     lineHeight: 31,
     padding: 0,
     paddingVertical: 0

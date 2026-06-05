@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, View } from "react-native";
 import { DateTimePicker } from "@expo/ui/community/datetime-picker";
 import { Bell, Calendar, Clock, X } from "phosphor-react-native";
 
@@ -18,6 +18,7 @@ import {
 } from "../capturePresentation";
 import { AiFieldInsight, AnimatedBottomSheet, IconButton } from "../ui/components";
 import { styles } from "../ui/styles";
+import { Text } from "../ui/typography";
 import { colors } from "../ui/theme";
 
 type PickerMode = "date" | "time" | null;

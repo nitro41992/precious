@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
-import { Animated, Dimensions, Easing, Pressable, Text, View } from "react-native";
+import { Animated, Dimensions, Easing, Pressable, View } from "react-native";
 import { Image } from "expo-image";
 import { Check, ClockClockwise, ClockCounterClockwise, Folder, Folders, GearSix, Info, Plus, Sparkle, Warning } from "phosphor-react-native";
 
@@ -30,6 +30,7 @@ import {
 } from "../capturePresentation";
 import { colors } from "./theme";
 import { styles } from "./styles";
+import { Text } from "./typography";
 
 export function AnimatedBottomSheet({
   children,

@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
-import { Pressable, StatusBar, Text, View } from "react-native";
+import { Pressable, StatusBar, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import type { FlashListProps, ListRenderItemInfo } from "@shopify/flash-list";
 import { Folder, Plus } from "phosphor-react-native";
@@ -7,6 +7,7 @@ import { Folder, Plus } from "phosphor-react-native";
 import type { Collection, LoadPhase } from "../types";
 import { colors } from "../ui/theme";
 import { styles } from "../ui/styles";
+import { Text } from "../ui/typography";
 
 type CollectionsScreenProps = {
   data: {

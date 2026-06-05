@@ -3,8 +3,6 @@ import {
   Pressable,
   ScrollView,
   StatusBar,
-  Text,
-  TextInput,
   View
 } from "react-native";
 import { ArrowLeft, Check, EnvelopeSimple as Mail } from "phosphor-react-native";
@@ -12,6 +10,7 @@ import { ArrowLeft, Check, EnvelopeSimple as Mail } from "phosphor-react-native"
 import type { AuthLoadingState, AuthScreenMode } from "../types";
 import { colors } from "../ui/theme";
 import { styles } from "../ui/styles";
+import { Text, TextInput } from "../ui/typography";
 
 type AuthScreenProps = {
   data: {

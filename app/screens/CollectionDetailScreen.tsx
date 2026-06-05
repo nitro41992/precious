@@ -4,8 +4,6 @@ import {
   Platform,
   Pressable,
   StatusBar,
-  Text,
-  TextInput,
   View
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
@@ -16,6 +14,7 @@ import type { Capture, Collection, CollectionCapturesLoadPhase } from "../types"
 import { colors } from "../ui/theme";
 import { styles } from "../ui/styles";
 import { IconButton } from "../ui/components";
+import { Text, TextInput } from "../ui/typography";
 
 type CollectionDetailScreenProps = {
   data: {

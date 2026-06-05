@@ -1,4 +1,4 @@
-import { Pressable, Text, View } from "react-native";
+import { Pressable, View } from "react-native";
 import {
   SignOut as LogOut,
   X
@@ -7,6 +7,7 @@ import {
 import { AnimatedBottomSheet, IconButton } from "../ui/components";
 import { styles } from "../ui/styles";
 import { colors } from "../ui/theme";
+import { Text } from "../ui/typography";
 
 export function AppSheets({
   accountSheetOpen,

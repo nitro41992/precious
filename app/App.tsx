@@ -11,10 +11,10 @@ import {
   Linking,
   Platform,
   StatusBar,
-  TextInput,
   View,
   useWindowDimensions
 } from "react-native";
+import type { TextInput } from "react-native";
 import { Image } from "expo-image";
 import type { FlashListRef } from "@shopify/flash-list";
 
@@ -1000,28 +1000,21 @@ export default function App() {
     captureKeyboardInset.stopAnimation();
     captureComposerClosingRef.current = true;
     setCaptureComposerClosing(true);
-    const animation = options.keyboardHidden
-      ? Animated.parallel([
-          Animated.timing(captureComposerMotion, {
-            duration: 135,
-            easing: Easing.in(Easing.cubic),
-            toValue: 0,
-            useNativeDriver: false
-          }),
-          Animated.timing(captureKeyboardInset, {
-            duration: 135,
-            easing: Easing.in(Easing.cubic),
-            toValue: 0,
-            useNativeDriver: false
-          })
-        ])
-      : Animated.timing(captureComposerMotion, {
-          duration: 135,
-          easing: Easing.in(Easing.cubic),
-          toValue: 0,
-          useNativeDriver: false
-        });
-    animation.start(() => {
+    if (options.keyboardHidden) {
+      onClosed();
+      setKeyboardHeight(0);
+      captureKeyboardInset.setValue(0);
+      captureComposerMotion.setValue(0);
+      setCaptureComposerClosing(false);
+      captureComposerClosingRef.current = false;
+      return;
+    }
+    Animated.timing(captureComposerMotion, {
+      duration: 135,
+      easing: Easing.in(Easing.cubic),
+      toValue: 0,
+      useNativeDriver: false
+    }).start(() => {
       onClosed();
       setKeyboardHeight(0);
       captureKeyboardInset.setValue(0);

@@ -5,9 +5,9 @@ import {
   BackHandler,
   Easing,
   Keyboard,
-  Platform,
-  TextInput
+  Platform
 } from "react-native";
+import type { TextInput } from "react-native";
 
 import { normalizeIntent } from "../capturePresentation";
 import type {
