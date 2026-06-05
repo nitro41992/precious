@@ -33,6 +33,13 @@ function normalizeIntent(value, allowedIntents = []) {
   return allowedIntents.includes(value) ? value : "";
 }
 
+function captureIntentPatchBody(captureId, currentSaveIntent) {
+  return {
+    captureId,
+    currentSaveIntent: currentSaveIntent || null
+  };
+}
+
 function mapsSearchUrls(query) {
   const cleaned = String(query || "").trim();
   if (!cleaned) return { google: "", apple: "" };
@@ -355,6 +362,7 @@ module.exports = {
   LOCAL_PROCESSING_GRACE_MS,
   REVIEW_TARGETS,
   captureIdentityAliases,
+  captureIntentPatchBody,
   capturesForListMode,
   capturesForSearchScope,
   capturesShareIdentity,

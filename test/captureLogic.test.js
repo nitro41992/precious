@@ -4,6 +4,7 @@ const test = require("node:test");
 const {
   LOCAL_PROCESSING_GRACE_MS,
   captureIdentityAliases,
+  captureIntentPatchBody,
   capturesForListMode,
   capturesForSearchScope,
   capturesShareIdentity,
@@ -285,6 +286,25 @@ test("capture fields fall back to add labels when empty", () => {
     captureFieldState({ kind: "later", emptyLabel: "Add reminder" }).displayValue,
     "Add reminder"
   );
+});
+
+test("capture intent patch body uses direct field editing contract", () => {
+  assert.deepEqual(
+    captureIntentPatchBody("capture-123", "watch"),
+    {
+      captureId: "capture-123",
+      currentSaveIntent: "watch"
+    }
+  );
+  assert.deepEqual(
+    captureIntentPatchBody("capture-123", null),
+    {
+      captureId: "capture-123",
+      currentSaveIntent: null
+    }
+  );
+  assert.equal(Object.hasOwn(captureIntentPatchBody("capture-123", "read"), "action"), false);
+  assert.equal(Object.hasOwn(captureIntentPatchBody("capture-123", "read"), "resolvedTargets"), false);
 });
 
 test("displayStatus keeps extracted failed captures visible as ready but blocks analysis review", () => {

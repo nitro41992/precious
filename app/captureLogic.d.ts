@@ -75,6 +75,13 @@ type SortableCapture = StatusCapture & {
 export const LOCAL_PROCESSING_GRACE_MS: number;
 export const REVIEW_TARGETS: ReviewReason[];
 export function captureIdentityAliases(capture?: { id?: string; remoteId?: string } | null): string[];
+export function captureIntentPatchBody(
+  captureId: string,
+  currentSaveIntent: string | null | undefined
+): {
+  captureId: string;
+  currentSaveIntent: string | null;
+};
 export function capturesForListMode<T extends { archivedAt?: number | null; deletedAt?: number | null; rejectedAt?: number | null; analysisMode?: string }>(
   captures: T[] | null | undefined,
   listMode: "active" | "archived"

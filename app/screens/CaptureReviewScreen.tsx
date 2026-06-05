@@ -630,7 +630,10 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                         accessibilityLabel={`Purpose: ${purposeField.displayValue}`}
                         accessibilityRole="button"
                         onPress={() => openInlineField("purpose")}
-                        style={[styles.inlineMeaningChipText, !purposeField.hasValue && styles.inlineMeaningChipTextEmpty]}
+                        style={[
+                          styles.inlineMeaningChipText,
+                          !purposeField.hasValue && styles.inlineMeaningChipTextPending
+                        ]}
                         testID="pc.review.intent.open"
                       >
                         {purposeField.displayValue}

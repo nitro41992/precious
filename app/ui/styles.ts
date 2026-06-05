@@ -1762,9 +1762,6 @@ export const styles = StyleSheet.create({
     fontWeight: "900",
     lineHeight: 35
   },
-  inlineMeaningChipTextEmpty: {
-    color: colors.accent
-  },
   inlineMeaningChipTextPending: {
     color: colors.review
   },

@@ -39,7 +39,6 @@ import type {
   CollectionCapturesLoadPhase,
   CollectionDraftAction,
   CollectionListMode,
-  CollectionReviewDecision,
   LinkedCollection,
   LoadPhase,
   NoteSaveState,
@@ -48,8 +47,6 @@ import type {
   RemoteCollectionPage,
   ReminderDraftAction,
   ReminderScheduleDraft,
-  ReminderReviewDecision,
-  ReviewTarget,
   ToastState,
 } from "./types";
 import { DEFAULT_CAPTURE_COMPOSER_MODE } from "./types";
@@ -65,11 +62,8 @@ import {
   cleanedReviewDraft,
   friendlyError,
   isCaptureImageCancel,
-  linkedCollectionDraftKey,
   normalizeIntent,
-  reminderDraftKey,
   reminderSuggestionFromSchedule,
-  suggestedCollectionDraftKey,
   uniqueCaptures,
   uniqueCollections
 } from "./capturePresentation";
@@ -100,6 +94,7 @@ import { SearchScreen } from "./screens/SearchScreen";
 
 import type { MapSearchCandidate } from "./captureLogic";
 import {
+  captureIntentPatchBody,
   collectionSelectionActionState,
   capturesForListMode,
   extractHttpUrl,
@@ -1594,52 +1589,16 @@ export default function App() {
 
   async function saveReviewDecisions() {
     if (!selected) return;
-    const reminderDecisions: ReminderReviewDecision[] = (selected.suggestedReminders || [])
-      .map((reminder, index) => ({
-        index,
-        action: reminderDrafts[reminderDraftKey(reminder, index)] || "keep"
-      }))
-      .filter((decision) => decision.action === "remove");
-    const collectionDecisions: CollectionReviewDecision[] = [
-      ...(selected.linkedCollections || [])
-        .map((collection) => ({
-          kind: "linked" as const,
-          collectionId: collection.id,
-          action: collectionDrafts[linkedCollectionDraftKey(collection.id)] === "remove" ? "remove" as const : "keep" as const
-        }))
-        .filter((decision) => decision.action === "remove"),
-      ...(selected.collectionDecisions || [])
-        .map((collection, index) => {
-          const action = collectionDrafts[suggestedCollectionDraftKey(collection, index)] || "ignore";
-          const reviewAction: "ignore" | "link" | "create" =
-            action === "link" || action === "create" ? action : "ignore";
-          return {
-            kind: "suggested" as const,
-            index,
-            type: collection.type,
-            collectionId: collection.collectionId,
-            title: collection.title,
-            description: collection.description,
-            rationale: collection.rationale,
-            confidence: collection.confidence,
-            action: reviewAction
-          };
-        })
-        .filter((decision) => decision.action === "link" || decision.action === "create")
-    ];
     const currentSaveIntent = draftIntentDirty ? draftIntent || null : undefined;
 
     if (config?.apiUrl && session?.accessToken) {
       try {
         const body: Record<string, unknown> = {
           captureId: selected.remoteId || selected.id,
-          action: "save_review_decisions",
           title: draftTitle.trim(),
           note: draftNote.trim()
         };
         if (currentSaveIntent !== undefined) body.currentSaveIntent = currentSaveIntent;
-        if (reminderDecisions.length) body.reminderDecisions = reminderDecisions;
-        if (collectionDecisions.length) body.collectionDecisions = collectionDecisions;
         const json = await withFreshAccessToken((accessToken) =>
           requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
             method: "PATCH",
@@ -1673,38 +1632,7 @@ export default function App() {
       draftNote.trim(),
       draftIntentDirty ? draftIntent || null : selected.defaultIntent || null
     );
-    const locallyResolvedTargets = new Set<ReviewTarget>(["analysis"]);
-    if (draftIntentDirty) locallyResolvedTargets.add("intent");
-    if (collectionDecisions.length) locallyResolvedTargets.add("collections");
-    if (reminderDecisions.length) locallyResolvedTargets.add("reminder");
-    const next = (JSON.parse(raw || "[]") as Capture[]).map((capture) => {
-      if (capture.id !== selected.id) return capture;
-      const reviewTargets = (capture.reviewTargets || []).filter((target) => !locallyResolvedTargets.has(target));
-      const stillNeedsReview = reviewTargets.length > 0;
-      return {
-        ...capture,
-        needsReview: stillNeedsReview,
-        reviewTargets,
-        status: stillNeedsReview ? capture.status : ("ready" as const),
-        suggestedReminders: reminderDecisions.length
-          ? (capture.suggestedReminders || []).filter((reminder, index) => {
-              return reminderDrafts[reminderDraftKey(reminder, index)] !== "remove";
-            })
-          : capture.suggestedReminders,
-        linkedCollections: collectionDecisions.length
-          ? (capture.linkedCollections || []).filter((collection) => {
-              return collectionDrafts[linkedCollectionDraftKey(collection.id)] !== "remove";
-            })
-          : capture.linkedCollections,
-        collectionDecisions: collectionDecisions.length
-          ? (capture.collectionDecisions || []).filter((collection, index) => {
-              const action = collectionDrafts[suggestedCollectionDraftKey(collection, index)] || "ignore";
-              return action !== "link" && action !== "create";
-            })
-          : capture.collectionDecisions
-      };
-    });
-    replaceLocalCaptureLists(next);
+    replaceLocalCaptureLists(JSON.parse(raw || "[]") as Capture[]);
     setDraftTitleDirty(false);
     setDraftNoteDirty(false);
     setDraftIntentDirty(false);
@@ -1714,30 +1642,10 @@ export default function App() {
     showToast("Review saved.", "success");
   }
 
-  async function resolveReviewTargets(
-    targets: ReviewTarget[],
-    options: { acceptCollectionSuggestions?: boolean; currentSaveIntent?: string | null } = {}
-  ) {
+  async function savePurposeIntent(intent: string | null) {
     if (!selected) return;
-    const resolvedTargets = [...new Set(targets)].filter((target): target is ReviewTarget =>
-      target === "intent" || target === "collections" || target === "reminder" || target === "analysis"
-    );
-    if (!resolvedTargets.length) return;
     if (config?.apiUrl && session?.accessToken) {
       try {
-        const body: Record<string, unknown> = {
-          captureId: selected.remoteId || selected.id,
-          action: "resolve_review_targets",
-          resolvedTargets
-        };
-        if (Object.prototype.hasOwnProperty.call(options, "currentSaveIntent")) {
-          body.currentSaveIntent = options.currentSaveIntent ?? null;
-        } else if (resolvedTargets.includes("intent")) {
-          body.currentSaveIntent = normalizeIntent(selected.defaultIntent) || null;
-        }
-        if (Object.prototype.hasOwnProperty.call(options, "acceptCollectionSuggestions")) {
-          body.acceptCollectionSuggestions = options.acceptCollectionSuggestions !== false;
-        }
         const json = await withFreshAccessToken((accessToken) =>
           requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
             method: "PATCH",
@@ -1746,52 +1654,37 @@ export default function App() {
               authorization: `Bearer ${accessToken}`,
               "content-type": "application/json"
             },
-            body
+            body: captureIntentPatchBody(selected.remoteId || selected.id, intent)
           })
         );
         const updatedCapture = captureFromRemote(json.capture);
         applyUpdatedCapture(updatedCapture, selected.id);
+        setDraftIntent(normalizeIntent(updatedCapture.defaultIntent));
         setDraftIntentDirty(false);
-        showToast("Review updated.", "success");
+        setQuickIntentOpen(false);
+        showToast("Purpose updated.", "success");
       } catch (error) {
-        showErrorToast(error, "Could not update review.");
+        showErrorToast(error, "Could not update purpose.");
       }
       return;
     }
 
-    const resolved = new Set(resolvedTargets);
-    const shouldAcceptCollectionSuggestions = options.acceptCollectionSuggestions !== false;
-    const acceptedCollectionLinks = resolved.has("collections") && shouldAcceptCollectionSuggestions
-      ? pendingDecisionLinkedCollections(selected)
-      : [];
-    const updatedCapture: Capture = {
-      ...selected,
-      defaultIntent: Object.prototype.hasOwnProperty.call(options, "currentSaveIntent")
-        ? options.currentSaveIntent || undefined
-        : resolved.has("intent")
-        ? normalizeIntent(selected.defaultIntent) || undefined
-        : selected.defaultIntent,
-      reviewTargets: (selected.reviewTargets || []).filter((target) => !resolved.has(target)),
-      linkedCollections: resolved.has("collections")
-        ? [...(selected.linkedCollections || []), ...acceptedCollectionLinks]
-        : selected.linkedCollections,
-      collectionDecisions: resolved.has("collections") ? [] : selected.collectionDecisions,
-      suggestedCollections: resolved.has("collections") ? [] : selected.suggestedCollections,
-      suggestedReminders: resolved.has("reminder")
-        ? (selected.suggestedReminders || []).map((reminder) => ({ ...reminder, status: "confirmed" }))
-        : selected.suggestedReminders
-    };
-    const stillNeedsReview = Boolean(updatedCapture.reviewTargets?.length);
-    updatedCapture.needsReview = stillNeedsReview;
-    updatedCapture.status = stillNeedsReview ? selected.status : "ready";
-    updatedCapture.reviewConfirmedAt = stillNeedsReview ? selected.reviewConfirmedAt : Date.now();
-    applyUpdatedCapture(updatedCapture, selected.id);
-    setDraftIntentDirty(false);
-    showToast("Review updated.", "success");
-  }
-
-  async function savePurposeIntent(intent: string | null) {
-    await resolveReviewTargets(["intent"], { currentSaveIntent: intent });
+    if (!nativeStore) return;
+    try {
+      const raw = await nativeStore.updateCapture(
+        selected.id,
+        selected.title,
+        selected.note,
+        intent
+      );
+      replaceLocalCaptureLists(JSON.parse(raw || "[]") as Capture[]);
+      setDraftIntent(intent || "");
+      setDraftIntentDirty(false);
+      setQuickIntentOpen(false);
+      showToast("Purpose updated.", "success");
+    } catch (error) {
+      showErrorToast(error, "Could not update purpose.");
+    }
   }
 
   async function collectionRequest<T>(
@@ -2113,15 +2006,9 @@ export default function App() {
     }
     const removeReminder = (capture: Capture) => {
       if (capture.id !== selected.id) return capture;
-      const reviewTargets = (capture.reviewTargets || []).filter((target) => target !== "reminder");
-      const stillNeedsReview = reviewTargets.length > 0;
       return {
         ...capture,
-        suggestedReminders: (capture.suggestedReminders || []).filter((_, index) => index !== reminderIndex),
-        reviewTargets,
-        needsReview: stillNeedsReview,
-        status: stillNeedsReview ? capture.status : ("ready" as const),
-        reviewConfirmedAt: stillNeedsReview ? capture.reviewConfirmedAt : capture.reviewConfirmedAt || Date.now()
+        suggestedReminders: (capture.suggestedReminders || []).filter((_, index) => index !== reminderIndex)
       };
     };
     setCaptures((current) => capturesForListMode(current.map(removeReminder), "active"));
@@ -2193,15 +2080,9 @@ export default function App() {
     } else {
       nextReminders.unshift(nextReminder);
     }
-    const reviewTargets = (selected.reviewTargets || []).filter((target) => target !== "reminder");
-    const stillNeedsReview = reviewTargets.length > 0;
     const updatedCapture: Capture = {
       ...selected,
-      suggestedReminders: nextReminders,
-      reviewTargets,
-      needsReview: stillNeedsReview,
-      status: stillNeedsReview ? selected.status : "ready",
-      reviewConfirmedAt: stillNeedsReview ? selected.reviewConfirmedAt : selected.reviewConfirmedAt || Date.now()
+      suggestedReminders: nextReminders
     };
     applyUpdatedCapture(updatedCapture, selected.id);
     setReminderDrafts({});
