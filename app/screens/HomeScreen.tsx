@@ -145,7 +145,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
 
   return (
     <View style={styles.edgeToEdgeSafe}>
-      <StatusBar backgroundColor="transparent" barStyle={appTheme.statusBarStyle} translucent />
+      <StatusBar backgroundColor={colors.transparent} barStyle={appTheme.statusBarStyle} translucent />
       <View style={styles.topAppBarScreen}>
         <View style={[styles.header, styles.topAppBarOverlay]} testID="pc.home.captures">
           <HeaderContentGradient density="compact" />

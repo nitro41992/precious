@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 import type { StatusBarStyle } from "react-native";
 
 export const colors = {
+  transparent: "transparent",
   paper: "#f6f1e8",
   surface: "#fffefa",
   surfaceContainer: "#fff9f0",
@@ -46,6 +47,7 @@ export const colors = {
   scrim: "rgba(31, 43, 36, 0.36)",
   mediaControl: "rgba(16, 20, 17, 0.72)",
   mediaControlStrong: "rgba(3, 7, 5, 0.68)",
+  mediaDangerControl: "rgba(92, 24, 19, 0.78)",
   mediaControlLine: "rgba(238, 245, 239, 0.18)",
   mediaOnControl: "#eef5ef",
   onMediaControl: "#eef5ef",

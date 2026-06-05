@@ -114,7 +114,7 @@ export const styles = StyleSheet.create({
   },
   iconButton: {
     alignItems: "center",
-    backgroundColor: "transparent",
+    backgroundColor: colors.transparent,
     borderRadius: 8,
     justifyContent: "center",
     minHeight: 44,
@@ -1961,7 +1961,7 @@ export const styles = StyleSheet.create({
     width: 48
   },
   reviewMediaDangerButton: {
-    backgroundColor: "rgba(92, 24, 19, 0.78)"
+    backgroundColor: colors.mediaDangerControl
   },
   reviewMediaStatusPill: {
     backgroundColor: colors.mediaControl,

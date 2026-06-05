@@ -468,7 +468,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
 
   return (
     <View style={styles.reviewSafe}>
-      <StatusBar backgroundColor="transparent" barStyle={appTheme.mediaStatusBarStyle} translucent />
+      <StatusBar backgroundColor={colors.transparent} barStyle={appTheme.mediaStatusBarStyle} translucent />
       <Animated.View
         style={[
           styles.reviewShell,
