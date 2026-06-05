@@ -179,7 +179,9 @@ function normalizedFieldRationales(analysis: Record<string, unknown>) {
         selection_label: stringValue(record.selection_label) || null,
         text: stringValue(record.text) || null,
       };
-    }).filter((item) => item.collection_id && item.selection_label)
+    }).filter((item) =>
+      Boolean(item.collection_id || item.selection_label || item.text)
+    )
     : [];
   return {
     purpose: {

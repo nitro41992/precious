@@ -62,10 +62,12 @@ export type CaptureFieldRationaleVisibilityInput = ReviewableCapture & {
   fieldRationales?: {
     purpose?: {
       selectionKey?: string | null;
+      selectionLabel?: string | null;
       text?: string | null;
     };
     collections?: Array<{
       collectionId?: string | null;
+      selectionLabel?: string | null;
       text?: string | null;
     }>;
     reminder?: {

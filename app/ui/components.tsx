@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Animated, Easing, Pressable, Text, View } from "react-native";
 import { Image } from "expo-image";
-import { Check, ClockClockwise, ClockCounterClockwise, Folder, Folders, GearSix, Info, Plus, Warning } from "phosphor-react-native";
+import { Check, ClockClockwise, ClockCounterClockwise, Folder, Folders, GearSix, Info, Plus, Sparkle, Warning } from "phosphor-react-native";
 
 import type {
   AppIconComponent,
   Capture,
+  CaptureFieldRationale,
   CaptureImageLoadState,
   CaptureStatus,
   LinkedCollection,
@@ -81,6 +82,20 @@ export function IconButton({
     >
       <Icon color={iconColor} size={20} weight={tone === "primary" || selected ? "bold" : "regular"} />
     </Pressable>
+  );
+}
+
+export function AiFieldInsight({ insight }: { insight: CaptureFieldRationale }) {
+  return (
+    <View style={styles.aiInsight}>
+      <View style={styles.aiInsightHeader}>
+        <View style={styles.aiInsightIcon}>
+          <Sparkle color={colors.accent} size={16} weight="fill" />
+        </View>
+        <Text style={styles.aiInsightTitle}>{insight.title || "AI insight"}</Text>
+      </View>
+      <Text style={styles.aiInsightText}>{insight.text}</Text>
+    </View>
   );
 }
 
@@ -163,7 +178,7 @@ export function SourceMark({
   imageUnavailable?: boolean;
   onFaviconFailure: (host: string) => void;
   onImageLoadState?: (key: string, state: CaptureImageLoadState) => void;
-  size?: "row" | "detail" | "inline";
+  size?: "row" | "detail" | "inline" | "meta";
 }) {
   const host = captureSourceHost(capture).replace(/^www\./i, "");
   const iconHost =
@@ -176,8 +191,15 @@ export function SourceMark({
   const imageUri = size === "row" && !imageUnavailable ? captureImageUrl(capture) : "";
   const Icon = sourceIconForCapture(capture);
   const itemStatus = displayStatus(capture);
-  const markStyle = size === "inline" ? styles.sourceMarkInline : size === "detail" ? styles.sourceMarkDetail : styles.sourceMark;
-  const iconSize = size === "inline" ? 24 : size === "detail" ? 16 : 42;
+  const markStyle =
+    size === "meta"
+      ? styles.sourceMarkMeta
+      : size === "inline"
+        ? styles.sourceMarkInline
+        : size === "detail"
+          ? styles.sourceMarkDetail
+          : styles.sourceMark;
+  const iconSize = size === "meta" ? 14 : size === "inline" ? 24 : size === "detail" ? 16 : 42;
   if (imageUri) {
     return (
       <View
@@ -206,8 +228,8 @@ export function SourceMark({
       accessible
       style={[
         markStyle,
-        size !== "inline" && itemStatus === "processing" && styles.sourceMarkProcessing,
-        size !== "inline" && itemStatus === "failed" && styles.sourceMarkFailed
+        size !== "inline" && size !== "meta" && itemStatus === "processing" && styles.sourceMarkProcessing,
+        size !== "inline" && size !== "meta" && itemStatus === "failed" && styles.sourceMarkFailed
       ]}
     >
       {faviconUri ? (
@@ -216,7 +238,15 @@ export function SourceMark({
           contentFit="contain"
           onError={() => onFaviconFailure(host)}
           source={{ uri: faviconUri }}
-          style={size === "inline" ? styles.sourceFaviconInline : size === "detail" ? styles.sourceFaviconDetail : styles.sourceFavicon}
+          style={
+            size === "meta"
+              ? styles.sourceFaviconMeta
+              : size === "inline"
+                ? styles.sourceFaviconInline
+                : size === "detail"
+                  ? styles.sourceFaviconDetail
+                  : styles.sourceFavicon
+          }
         />
       ) : (
         <Icon color={sourceIconColor(itemStatus)} size={iconSize} weight={itemStatus === "ready" ? "regular" : "bold"} />
@@ -261,10 +291,18 @@ export function StatusGlyph({ capture }: { capture: Capture }) {
   );
 }
 
-export function MeaningToken({ Icon, text }: { Icon: AppIconComponent; text: string }) {
+export function MeaningToken({
+  Icon,
+  iconColor = colors.muted,
+  text
+}: {
+  Icon: AppIconComponent;
+  iconColor?: string;
+  text: string;
+}) {
   return (
     <View style={styles.meaningToken}>
-      <Icon color={colors.muted} size={13} weight="regular" />
+      <Icon color={iconColor} size={13} weight="regular" />
       <Text numberOfLines={1} style={styles.meaningTokenText}>
         {text}
       </Text>
@@ -291,7 +329,7 @@ export function CollectionMeaningToken({ collections }: { collections: LinkedCol
       ]}
     >
       <Folder
-        color={overflowCount > 0 ? colors.accent : colors.muted}
+        color={colors.tertiary}
         size={13}
         weight={overflowCount > 0 ? "fill" : "regular"}
       />

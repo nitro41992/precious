@@ -6,7 +6,7 @@ import { Check, Folder, MagnifyingGlass as Search, X } from "phosphor-react-nati
 import type { Capture, Collection, LoadPhase } from "../types";
 import { collectionSelectionActionState } from "../captureLogic";
 import { captureFieldRationale, collectionCountLabel } from "../capturePresentation";
-import { IconButton } from "../ui/components";
+import { AiFieldInsight, IconButton } from "../ui/components";
 import { styles } from "../ui/styles";
 import { colors } from "../ui/theme";
 
@@ -114,10 +114,7 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
           />
         </View>
         {rationale.visible ? (
-          <View style={styles.fieldRationaleBox}>
-            <Text style={styles.fieldRationaleTitle}>{rationale.title}</Text>
-            <Text style={styles.fieldRationaleText}>{rationale.text}</Text>
-          </View>
+          <AiFieldInsight insight={rationale} />
         ) : null}
         <FlatList
           {...collectionsListPerfProps}

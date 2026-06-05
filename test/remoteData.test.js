@@ -250,6 +250,78 @@ test("captureFromRemote maps structured field rationales", () => {
   });
 });
 
+test("captureFromRemote preserves no-choice field rationales", () => {
+  const { captureFromRemote } = loadRemoteData();
+  const capture = captureFromRemote({
+    id: "no-choice-rationale-capture",
+    client_capture_key: "no-choice-rationale-client",
+    created_at: "2026-06-05T07:22:09.169Z",
+    updated_at: "2026-06-05T07:22:10.914Z",
+    display_title: "Saved note",
+    source_text: "Useful but not clearly actionable.",
+    analysis_state: "ready",
+    analysis_provider: "openai",
+    current_save_intent: null,
+    linked_collections: [],
+    analysis: {
+      default_intent: {
+        category: null,
+        confidence: 0,
+        rationale: "No intent because no concrete action is clear."
+      },
+      field_rationales: {
+        purpose: {
+          selection_key: null,
+          selection_label: "No intent",
+          text: "No intent because no concrete action is clear."
+        },
+        collections: [
+          {
+            collection_id: null,
+            selection_label: "No collection",
+            text: "No collection because no saved Collection strongly matches."
+          }
+        ],
+        reminder: {
+          trigger_value: "No Reminder idea",
+          start_date: null,
+          end_date: null,
+          start_time: null,
+          end_time: null,
+          text: "No Reminder idea because no future date appears."
+        }
+      },
+      suggested_reminders: [],
+      entities: [],
+      collection_decisions: [],
+      search_phrases: []
+    }
+  });
+
+  assert.deepEqual(capture.fieldRationales, {
+    purpose: {
+      selectionKey: null,
+      selectionLabel: "No intent",
+      text: "No intent because no concrete action is clear."
+    },
+    collections: [
+      {
+        collectionId: null,
+        selectionLabel: "No collection",
+        text: "No collection because no saved Collection strongly matches."
+      }
+    ],
+    reminder: {
+      triggerValue: "No Reminder idea",
+      startDate: null,
+      endDate: null,
+      startTime: null,
+      endTime: null,
+      text: "No Reminder idea because no future date appears."
+    }
+  });
+});
+
 test("captureFromRemote separates user media from source preview media", () => {
   const { captureFromRemote } = loadRemoteData();
   const capture = captureFromRemote({

@@ -312,14 +312,40 @@ function reminderFieldSelectionMatches(reminder, fieldReminder) {
   return checks.every(([current, aiValue]) => !aiValue || String(current || "") === String(aiValue || ""));
 }
 
+function fieldPurposeSelectionKey(capture) {
+  const purpose = capture.fieldRationales?.purpose;
+  if (purpose && Object.prototype.hasOwnProperty.call(purpose, "selectionKey")) {
+    return purpose.selectionKey || "";
+  }
+  return capture.aiDefaultIntent || capture.defaultIntent || "";
+}
+
+function fieldCollectionIds(capture) {
+  return (capture.fieldRationales?.collections || [])
+    .map((collection) => collection.collectionId || "")
+    .filter(Boolean);
+}
+
+function hasNoCollectionFieldRationale(capture) {
+  return (capture.fieldRationales?.collections || []).some((collection) =>
+    !collection.collectionId && collection.text
+  );
+}
+
+function fieldReminderHasNoSelection(fieldReminder) {
+  if (!fieldReminder?.text) return false;
+  return !fieldReminder.startDate &&
+    !fieldReminder.endDate &&
+    !fieldReminder.startTime &&
+    !fieldReminder.endTime;
+}
+
 function captureFieldRationaleVisible(capture, field, options = {}) {
   if (!capture) return false;
   if (field === "purpose") {
     const allowedIntents = options.allowedIntents || [];
     const rawCurrentIntent = capture.defaultIntent;
-    const rawAiIntent = capture.fieldRationales?.purpose?.selectionKey ||
-        capture.aiDefaultIntent ||
-        capture.defaultIntent;
+    const rawAiIntent = fieldPurposeSelectionKey(capture);
     const currentIntent = allowedIntents.length
       ? normalizeIntent(rawCurrentIntent, allowedIntents)
       : String(rawCurrentIntent || "");
@@ -327,30 +353,31 @@ function captureFieldRationaleVisible(capture, field, options = {}) {
       ? normalizeIntent(rawAiIntent, allowedIntents)
       : String(rawAiIntent || "");
     const hasText = Boolean(capture.fieldRationales?.purpose?.text || capture.intentRationale);
-    return Boolean(hasText && currentIntent && aiIntent && currentIntent === aiIntent);
+    return Boolean(hasText && currentIntent === aiIntent);
   }
   if (field === "collection") {
-    const aiCollectionIds = (capture.fieldRationales?.collections || [])
-      .map((collection) => collection.collectionId || "")
-      .filter(Boolean);
+    const aiCollectionIds = fieldCollectionIds(capture);
     const fallbackAiCollectionIds = (capture.linkedCollections || [])
       .filter((collection) => collection.createdBy === "analysis")
       .map((collection) => collection.id);
     const expectedIds = aiCollectionIds.length ? aiCollectionIds : fallbackAiCollectionIds;
+    const noCollectionRationale = hasNoCollectionFieldRationale(capture);
     const currentIds = options.collectionSelectionIds ||
       (capture.linkedCollections || []).map((collection) => collection.id);
     const hasText = Boolean(
       (capture.fieldRationales?.collections || []).some((collection) => collection.text) ||
         (capture.linkedCollections || []).some((collection) => collection.createdBy === "analysis" && collection.rationale)
     );
-    return Boolean(hasText && expectedIds.length && sameStringSet(currentIds, expectedIds));
+    return Boolean(hasText && (expectedIds.length || noCollectionRationale) && sameStringSet(currentIds, expectedIds));
   }
   if (field === "later") {
     const reminder = (capture.suggestedReminders || [])[0];
-    const structuredText = capture.fieldRationales?.reminder?.text;
+    const fieldReminder = capture.fieldRationales?.reminder;
+    const structuredText = fieldReminder?.text;
     const hasText = Boolean(structuredText || reminder?.rationale);
     if (!hasText || reminder?.source === "manual") return false;
-    if (structuredText) return reminderFieldSelectionMatches(reminder, capture.fieldRationales?.reminder);
+    if (structuredText && fieldReminderHasNoSelection(fieldReminder)) return !reminder;
+    if (structuredText) return reminderFieldSelectionMatches(reminder, fieldReminder);
     return true;
   }
   return false;

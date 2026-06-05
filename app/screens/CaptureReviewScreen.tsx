@@ -62,7 +62,7 @@ import {
 import { ReminderEditorSheet } from "../sheets/ReminderEditorSheet";
 import { colors } from "../ui/theme";
 import { styles } from "../ui/styles";
-import { IconButton, SourceMark } from "../ui/components";
+import { AiFieldInsight, IconButton, SourceMark } from "../ui/components";
 
 type CaptureReviewScreenProps = {
   data: {
@@ -865,10 +865,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
               <IconButton Icon={X} label="Close Purpose choices" onPress={() => setQuickIntentOpen(false)} />
             </View>
             {purposeRationale.visible ? (
-              <View style={styles.fieldRationaleBox}>
-                <Text style={styles.fieldRationaleTitle}>{purposeRationale.title}</Text>
-                <Text style={styles.fieldRationaleText}>{purposeRationale.text}</Text>
-              </View>
+              <AiFieldInsight insight={purposeRationale} />
             ) : null}
             <View style={styles.purposeOptionGrid}>
               {INTENT_OPTIONS.map((intent) => {

@@ -1191,72 +1191,75 @@ export function captureFieldRationale(
 ): CaptureFieldRationale {
   const base = {
     field,
-    title: "Why AI picked this",
+    title: "AI insight",
     text: "",
     visible: false
   };
   if (field === "purpose") {
     const currentIntent = normalizeIntent(capture.defaultIntent);
-    const aiIntent = normalizeIntent(
-      capture.fieldRationales?.purpose?.selectionKey ||
-        capture.aiDefaultIntent ||
-        capture.defaultIntent
-    );
+    const purposeRationale = capture.fieldRationales?.purpose;
+    const rawAiIntent = purposeRationale && Object.prototype.hasOwnProperty.call(purposeRationale, "selectionKey")
+      ? purposeRationale.selectionKey || ""
+      : capture.aiDefaultIntent || capture.defaultIntent;
+    const aiIntent = normalizeIntent(rawAiIntent);
     const structuredText = rationaleLine(capture.fieldRationales?.purpose?.text);
     const fallbackText = rationaleLine(capture.intentRationale);
-    const text = structuredText || fallbackText;
+    const legacyText = !structuredText && !fallbackText
+      ? authoredRationaleLine(capture, "intent", capture.reviewRationale?.intent)
+      : "";
+    const text = structuredText || fallbackText || legacyText;
+    const legacyVisible = Boolean(legacyText && currentIntent === aiIntent);
     return {
       ...base,
       text,
       visible: Boolean(
         text &&
-          currentIntent &&
-          aiIntent &&
-          currentIntent === aiIntent &&
-          captureFieldRationaleVisible(capture, field, { allowedIntents: INTENT_OPTIONS })
+          (captureFieldRationaleVisible(capture, field, { allowedIntents: INTENT_OPTIONS }) || legacyVisible)
       )
     };
   }
   if (field === "collection") {
-    const aiCollectionIds = (capture.fieldRationales?.collections || [])
-      .map((collection) => collection.collectionId || "")
-      .filter(Boolean);
     const fallbackAiCollections = (capture.linkedCollections || [])
       .filter((collection) => collection.createdBy === "analysis");
-    const fallbackAiCollectionIds = fallbackAiCollections.map((collection) => collection.id);
     const currentIds = options.collectionSelectionIds ||
       (capture.linkedCollections || []).map((collection) => collection.id);
-    const expectedIds = aiCollectionIds.length ? aiCollectionIds : fallbackAiCollectionIds;
     const structuredText = (capture.fieldRationales?.collections || [])
       .map((collection) => rationaleLine(collection.text))
       .find(Boolean) || "";
     const fallbackText = fallbackAiCollections
       .map((collection) => rationaleLine(collection.rationale))
       .find(Boolean) || "";
-    const rationaleText = structuredText || fallbackText;
+    const legacyText = !structuredText && !fallbackText
+      ? authoredRationaleLine(capture, "collections", capture.reviewRationale?.collections)
+      : "";
+    const rationaleText = structuredText || fallbackText || legacyText;
+    const legacyVisible = Boolean(legacyText && currentIds.length === 0);
     return {
       ...base,
       text: rationaleText,
       visible: Boolean(
         rationaleText &&
-          expectedIds.length &&
-          captureFieldRationaleVisible(capture, field, {
+          (captureFieldRationaleVisible(capture, field, {
             allowedIntents: INTENT_OPTIONS,
             collectionSelectionIds: currentIds
-          })
+          }) || legacyVisible)
       )
     };
   }
   const reminder = (capture.suggestedReminders || [])[0];
   const structuredText = rationaleLine(capture.fieldRationales?.reminder?.text);
   const fallbackText = rationaleLine(reminder?.rationale);
-  const reminderRationale = structuredText || fallbackText;
+  const legacyText = !structuredText && !fallbackText
+    ? authoredRationaleLine(capture, "reminder", capture.reviewRationale?.reminder)
+    : "";
+  const reminderRationale = structuredText || fallbackText || legacyText;
+  const legacyVisible = Boolean(legacyText && reminder?.source !== "manual");
   return {
     ...base,
     text: reminderRationale,
     visible: Boolean(
       reminderRationale &&
-        captureFieldRationaleVisible(capture, field, { allowedIntents: INTENT_OPTIONS })
+        (captureFieldRationaleVisible(capture, field, { allowedIntents: INTENT_OPTIONS }) || legacyVisible)
     )
   };
 }

@@ -710,6 +710,12 @@ Deno.test("analysis prompt requires evidence-rich review rationale", () => {
     "prompt should constrain field rationale length",
   );
   assert(
+    prompt.includes("plain human language for a phone app") &&
+      prompt.includes("layman's terms") &&
+      prompt.includes("saved-value match"),
+    "prompt should require layperson field rationale copy and ban internal phrasing",
+  );
+  assert(
     prompt.includes("Each header value must be at most 36 characters") &&
       prompt.includes("shorten only these header values when needed"),
     "prompt should constrain structured field rationale headers",
@@ -719,6 +725,12 @@ Deno.test("analysis prompt requires evidence-rich review rationale", () => {
       prompt.includes("I picked [Collection label] because") &&
       prompt.includes("I suggested [Later label] because"),
     "prompt should require fixed structured field rationale phrases",
+  );
+  assert(
+    prompt.includes("selection_label to No intent") &&
+      prompt.includes("selection_label No collection") &&
+      prompt.includes("trigger_value to No Reminder idea"),
+    "prompt should require structured rationale for explicit no-choice fields",
   );
   assert(
     prompt.includes(
@@ -769,6 +781,12 @@ Deno.test("analysis schema exposes structured field rationales", () => {
     "purpose rationale schema should describe fixed phrase",
   );
   assert(
+    fieldRationales.properties.purpose.properties.text.description.includes(
+      "No intent because",
+    ),
+    "purpose rationale schema should describe no-intent phrase",
+  );
+  assert(
     fieldRationales.properties.purpose.properties.selection_label.description
       .includes("at most 36 characters"),
     "purpose header should be length-limited by schema description",
@@ -777,6 +795,11 @@ Deno.test("analysis schema exposes structured field rationales", () => {
     fieldRationales.properties.collections.items.properties.text.description
       .includes("I picked [Collection title] because"),
     "collection rationale schema should describe fixed phrase",
+  );
+  assert(
+    fieldRationales.properties.collections.items.properties.text.description
+      .includes("No collection because"),
+    "collection rationale schema should describe no-collection phrase",
   );
   assert(
     fieldRationales.properties.collections.items.properties.selection_label
@@ -790,6 +813,12 @@ Deno.test("analysis schema exposes structured field rationales", () => {
     "reminder rationale schema should describe fixed phrase",
   );
   assert(
+    fieldRationales.properties.reminder.properties.text.description.includes(
+      "No Reminder idea because",
+    ),
+    "reminder rationale schema should describe no-reminder phrase",
+  );
+  assert(
     fieldRationales.properties.reminder.properties.trigger_value.description
       .includes("at most 36 characters"),
     "reminder header should be length-limited by schema description",
@@ -799,6 +828,66 @@ Deno.test("analysis schema exposes structured field rationales", () => {
       .join("|"),
     "collection-1|",
     "collection rationale ids should share retrieved collection enum",
+  );
+});
+
+Deno.test("normalization preserves no-choice field rationales without review work", () => {
+  const normalized = urlEvidence.normalizedReviewAnalysis({
+    display_title: "Saved note",
+    summary: "Useful but not clearly actionable.",
+    default_intent: {
+      category: null,
+      confidence: 0,
+      rationale: "No intent because no concrete action is clear.",
+    },
+    field_rationales: {
+      purpose: {
+        selection_key: null,
+        selection_label: "No intent",
+        text: "No intent because no concrete action is clear.",
+      },
+      collections: [
+        {
+          collection_id: null,
+          selection_label: "No collection",
+          text: "No collection because no saved Collection strongly matches.",
+        },
+      ],
+      reminder: {
+        trigger_value: "No Reminder idea",
+        start_date: null,
+        end_date: null,
+        start_time: null,
+        end_time: null,
+        text: "No Reminder idea because no future date appears.",
+      },
+    },
+    collection_decisions: [],
+    suggested_reminders: [],
+    confidence_label: "Looks right",
+    needs_review: false,
+  });
+
+  assertEqual(
+    JSON.stringify(normalized.field_rationales.collections),
+    JSON.stringify([
+      {
+        collection_id: null,
+        selection_label: "No collection",
+        text: "No collection because no saved Collection strongly matches.",
+      },
+    ]),
+    "no-collection rationale should survive normalization",
+  );
+  assertEqual(
+    normalized.field_rationales.reminder.text,
+    "No Reminder idea because no future date appears.",
+    "no-reminder rationale should survive normalization",
+  );
+  assertEqual(
+    normalized.needs_review,
+    false,
+    "no-choice field rationales should not create review state",
   );
 });
 

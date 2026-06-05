@@ -16,7 +16,7 @@ import {
   reminderTimeLabel,
   timeStringFromDate
 } from "../capturePresentation";
-import { IconButton } from "../ui/components";
+import { AiFieldInsight, IconButton } from "../ui/components";
 import { styles } from "../ui/styles";
 import { colors } from "../ui/theme";
 
@@ -204,10 +204,7 @@ export function ReminderEditorSheet({
           style={styles.reminderSheetScroll}
         >
           {rationale?.visible && !draftChanged ? (
-            <View style={styles.fieldRationaleBox}>
-              <Text style={styles.fieldRationaleTitle}>{rationale.title}</Text>
-              <Text style={styles.fieldRationaleText}>{rationale.text}</Text>
-            </View>
+            <AiFieldInsight insight={rationale} />
           ) : null}
           <View style={styles.reminderFieldGroup}>
             <View style={styles.reminderFieldSectionHeader}>

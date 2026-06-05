@@ -419,6 +419,41 @@ export const styles = StyleSheet.create({
     fontWeight: "600",
     lineHeight: 19
   },
+  aiInsight: {
+    backgroundColor: colors.surfaceContainerHighest,
+    borderRadius: 8,
+    gap: 10,
+    marginBottom: 2,
+    paddingHorizontal: 14,
+    paddingVertical: 14
+  },
+  aiInsightHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8
+  },
+  aiInsightIcon: {
+    alignItems: "center",
+    backgroundColor: colors.accentSoft,
+    borderRadius: 8,
+    height: 28,
+    justifyContent: "center",
+    width: 28
+  },
+  aiInsightTitle: {
+    color: colors.secondary,
+    ...typefaces.bold,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 16
+  },
+  aiInsightText: {
+    color: colors.ink,
+    ...typefaces.medium,
+    fontSize: 15,
+    fontWeight: "600",
+    lineHeight: 21
+  },
   purposeOptionGrid: {
     flexDirection: "row",
     flexWrap: "wrap",

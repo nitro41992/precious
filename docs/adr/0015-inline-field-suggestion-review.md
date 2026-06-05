@@ -32,7 +32,9 @@ composition. Capture Analysis returns a `field_rationales` object for Purpose,
 Collections, and Later. Each user-facing rationale is capped at 12 words, each
 structured field header is capped at 36 characters, and the copy uses
 field-specific wording: `I chose [Purpose] because ...`, `I picked [Collection]
-because ...`, or `I suggested [Later] because ...`.
+because ...`, or `I suggested [Later] because ...`. When Capture Analysis
+chooses no value, the same field rationale contract explains that explicit
+non-choice with `No intent`, `No collection`, or `No Reminder idea` copy.
 
 The UI may decide whether a rationale is still fresh by comparing structured
 field values, such as intent key, Collection ids, and Reminder interval fields,

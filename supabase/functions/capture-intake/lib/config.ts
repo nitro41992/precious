@@ -333,12 +333,12 @@ export const analysisSchema = {
             selection_label: {
               type: ["string", "null"],
               description:
-                "Short header text for the selected Purpose, at most 36 characters.",
+                "Short header text for the selected Purpose, or No intent when no Purpose was chosen, at most 36 characters.",
             },
             text: {
               type: ["string", "null"],
               description:
-                "At most 12 words, phrased like: I chose [Intent label] because [specific evidence].",
+                "At most 12 words in plain human language, phrased like: I chose [Intent label] because [plain evidence], or No intent because [plain reason no concrete action is clear]. Never use internal terms such as saved value, durable value, rerank, taxonomy, schema, or field rationale.",
             },
           },
         },
@@ -353,12 +353,12 @@ export const analysisSchema = {
               selection_label: {
                 type: ["string", "null"],
                 description:
-                  "Short header text for this Collection selection, at most 36 characters.",
+                  "Short header text for this Collection selection, or No collection when no Collection was chosen, at most 36 characters.",
               },
               text: {
                 type: ["string", "null"],
                 description:
-                  "At most 12 words, phrased like: I picked [Collection title] because [specific evidence].",
+                  "At most 12 words in plain human language, phrased like: I picked [Collection title] because [plain evidence], or No collection because [plain reason it does not clearly fit existing collections]. Never use internal terms such as saved value, durable value, rerank, taxonomy, schema, or field rationale.",
               },
             },
           },
@@ -378,7 +378,7 @@ export const analysisSchema = {
             trigger_value: {
               type: ["string", "null"],
               description:
-                "Short header text for the Later selection, at most 36 characters.",
+                "Short header text for the Later selection, or No Reminder idea when no Reminder was chosen, at most 36 characters.",
             },
             start_date: { type: ["string", "null"] },
             end_date: { type: ["string", "null"] },
@@ -387,7 +387,7 @@ export const analysisSchema = {
             text: {
               type: ["string", "null"],
               description:
-                "At most 12 words, phrased like: I suggested [Later value] because [specific evidence].",
+                "At most 12 words in plain human language, phrased like: I suggested [Later value] because [plain evidence], or No Reminder idea because [plain reason no future date or deadline is clear]. Never use internal terms such as saved value, durable value, rerank, taxonomy, schema, or field rationale.",
             },
           },
         },

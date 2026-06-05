@@ -273,6 +273,42 @@ test("field rationale visibility follows current AI-selected field values", () =
     ),
     false
   );
+  assert.equal(
+    captureFieldRationaleVisible(
+      capture({
+        defaultIntent: null,
+        aiDefaultIntent: null,
+        fieldRationales: {
+          purpose: {
+            selectionKey: null,
+            selectionLabel: "No intent",
+            text: "No intent because no concrete action is clear."
+          }
+        }
+      }),
+      "purpose",
+      { allowedIntents: ["learn", "read"] }
+    ),
+    true
+  );
+  assert.equal(
+    captureFieldRationaleVisible(
+      capture({
+        defaultIntent: "learn",
+        aiDefaultIntent: null,
+        fieldRationales: {
+          purpose: {
+            selectionKey: null,
+            selectionLabel: "No intent",
+            text: "No intent because no concrete action is clear."
+          }
+        }
+      }),
+      "purpose",
+      { allowedIntents: ["learn", "read"] }
+    ),
+    false
+  );
 
   const collectionCapture = capture({
     linkedCollections: [
@@ -301,6 +337,44 @@ test("field rationale visibility follows current AI-selected field values", () =
     captureFieldRationaleVisible(collectionCapture, "collection", {
       collectionSelectionIds: ["collection-b"]
     }),
+    false
+  );
+  assert.equal(
+    captureFieldRationaleVisible(
+      capture({
+        linkedCollections: [],
+        fieldRationales: {
+          collections: [
+            {
+              collectionId: null,
+              selectionLabel: "No collection",
+              text: "No collection because no saved Collection strongly matches."
+            }
+          ]
+        }
+      }),
+      "collection",
+      { collectionSelectionIds: [] }
+    ),
+    true
+  );
+  assert.equal(
+    captureFieldRationaleVisible(
+      capture({
+        linkedCollections: [],
+        fieldRationales: {
+          collections: [
+            {
+              collectionId: null,
+              selectionLabel: "No collection",
+              text: "No collection because no saved Collection strongly matches."
+            }
+          ]
+        }
+      }),
+      "collection",
+      { collectionSelectionIds: ["collection-a"] }
+    ),
     false
   );
 
@@ -372,6 +446,52 @@ test("field rationale visibility follows current AI-selected field values", () =
             startDate: "2026-06-05",
             endDate: "2026-06-05",
             text: "I suggested June 5 because the event starts then."
+          }
+        }
+      }),
+      "later"
+    ),
+    false
+  );
+  assert.equal(
+    captureFieldRationaleVisible(
+      capture({
+        suggestedReminders: [],
+        fieldRationales: {
+          reminder: {
+            triggerValue: "No Reminder idea",
+            startDate: null,
+            endDate: null,
+            startTime: null,
+            endTime: null,
+            text: "No Reminder idea because no future date appears."
+          }
+        }
+      }),
+      "later"
+    ),
+    true
+  );
+  assert.equal(
+    captureFieldRationaleVisible(
+      capture({
+        suggestedReminders: [
+          {
+            trigger_value: "June 5",
+            start_date: "2026-06-05",
+            end_date: "2026-06-05",
+            rationale: "Manual reminder",
+            source: "manual"
+          }
+        ],
+        fieldRationales: {
+          reminder: {
+            triggerValue: "No Reminder idea",
+            startDate: null,
+            endDate: null,
+            startTime: null,
+            endTime: null,
+            text: "No Reminder idea because no future date appears."
           }
         }
       }),
