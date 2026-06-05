@@ -104,6 +104,54 @@ Immediate next steps:
 - Keep prompt changes minimal. Add tests around repeated boundaries first, and
   only promote a compact rule when review confirms Precious should change.
 
+## GPT-5.4 Model Comparison, 2026-06-05
+
+The combined 100-row `gold-v4` eval was rerun against the same manifest and
+reviewed labels to compare `gpt-5.4-mini` and `gpt-5.4-nano` with the current
+pipeline. Both runs used runtime Exa evidence and the hosted Supabase Edge
+Function path. The hosted `OPENAI_MODEL` secret was restored to
+`gpt-5.4-mini` after the nano run.
+
+- `gpt-5.4-mini`:
+  - Terminal outcome: 96.0%.
+  - Save Intent: 87.5%.
+  - Visit Target: 87.0%.
+  - Reminder: 93.0%.
+  - Collection precision: 89.9%.
+  - Collection recall: 76.4%.
+  - Collection exact: 63.0%.
+  - Terminal states: 98 ready, 1 rejected, 1 failed.
+- `gpt-5.4-nano`:
+  - Terminal outcome: 96.0%.
+  - Save Intent: 77.1%.
+  - Visit Target: 85.0%.
+  - Reminder: 87.0%.
+  - Collection precision: 92.2%.
+  - Collection recall: 59.3%.
+  - Collection exact: 52.0%.
+  - Terminal states: 98 ready, 1 rejected, 1 failed.
+- Prior repaired `gold-v4` run:
+  - Terminal outcome: 94.0%.
+  - Save Intent: 80.2%.
+  - Visit Target: 88.0%.
+  - Reminder: 90.0%.
+  - Collection precision: 93.8%.
+  - Collection recall: 65.0%.
+  - Collection exact: 61.0%.
+
+Interpretation:
+
+- `gpt-5.4-mini` is the best current default candidate for the main analyzer.
+  It improves Save Intent, Reminder, terminal outcome, Collection exact, and
+  especially Collection recall against the prior repaired run, while only
+  slightly trailing on Visit Target and Collection precision.
+- `gpt-5.4-nano` is not strong enough for the main extraction path on this
+  corpus. It matches mini on terminal outcome, but loses materially on Save
+  Intent, Reminder, Visit Target, Collection exact, and Collection recall.
+- Nano may still be worth considering for cheaper bounded gates or preflight
+  stages, but not for analyzer-owned extraction and Collection selection unless
+  a narrower task-specific eval supports it.
+
 ## Collection Recall Recovery Plan, 2026-06-03
 
 The reviewed `gold-v4` 100-row baseline shows high Collection precision
