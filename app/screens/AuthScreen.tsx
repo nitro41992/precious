@@ -8,7 +8,7 @@ import {
   TextInput,
   View
 } from "react-native";
-import { ArrowLeft, Check, Mail } from "lucide-react-native";
+import { ArrowLeft, Check, EnvelopeSimple as Mail } from "phosphor-react-native";
 
 import type { AuthLoadingState, AuthScreenMode } from "../types";
 import { colors } from "../ui/theme";
@@ -92,7 +92,7 @@ export function AuthScreen({ actions, data, state }: AuthScreenProps) {
               ]}
               testID="pc.auth.sign-in-link"
             >
-              <Mail color={colors.onAccent} size={20} strokeWidth={2.4} />
+              <Mail color={colors.onAccent} size={20} weight="bold" />
               <Text style={styles.primaryButtonText}>
                 {authLoading === "magiclink" ? "Sending..." : "Send sign-in link"}
               </Text>
@@ -109,14 +109,14 @@ export function AuthScreen({ actions, data, state }: AuthScreenProps) {
                 style={styles.iconButton}
                 testID="pc.auth.check.back"
               >
-                <ArrowLeft color={colors.ink} size={26} strokeWidth={2.2} />
+                <ArrowLeft color={colors.ink} size={26} weight="regular" />
               </Pressable>
               <View style={styles.authHeaderCopy}>
                 <Text style={[styles.title, styles.authTitle]}>Check your email</Text>
               </View>
             </View>
             <View style={styles.authSuccessMark}>
-              <Check color={colors.onAccent} size={28} strokeWidth={2.5} />
+              <Check color={colors.onAccent} size={28} weight="bold" />
             </View>
             <Text style={[styles.supportingText, styles.authSupportingText]}>
               We sent a secure link to {authPendingEmail || authEmail.trim() || "your email"}. Open it on this phone to continue.

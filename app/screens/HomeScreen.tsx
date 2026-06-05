@@ -12,7 +12,16 @@ import {
   View
 } from "react-native";
 import type { FlatListProps, ListRenderItemInfo } from "react-native";
-import { Check, Image as ImageIcon, Info, Link2, Plus, Search, StickyNote, X } from "lucide-react-native";
+import {
+  Check,
+  ImageSquare as ImageIcon,
+  Info,
+  Link as Link2,
+  MagnifyingGlass as Search,
+  Note as StickyNote,
+  Plus,
+  X
+} from "phosphor-react-native";
 
 import { displayStatus } from "../captureLogic";
 import type { CaptureComposerMode, HomeListRow } from "../types";
@@ -157,7 +166,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
               style={({ pressed }) => [styles.quickLookSummary, pressed && styles.subtlePressed]}
               testID="pc.home.quick-look"
             >
-              <Info color={colors.review} size={15} strokeWidth={2.4} />
+              <Info color={colors.review} size={15} weight="fill" />
               <Text style={styles.quickLookSummaryText}>
                 {quickLookCount === 1 ? "1 needs a quick look" : `${quickLookCount} need a quick look`}
               </Text>
@@ -203,7 +212,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                   <View style={styles.homeEmptyTileStack}>
                     <View style={[styles.homeEmptyTile, styles.homeEmptyTilePrimary]}>
                       <View style={styles.homeEmptyIconMark}>
-                        <Link2 color={colors.accent} size={19} strokeWidth={2.4} />
+                        <Link2 color={colors.accent} size={19} weight="regular" />
                       </View>
                       <View style={styles.homeEmptyLineGroup}>
                         <View style={styles.homeEmptyLineStrong} />
@@ -212,20 +221,20 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                     </View>
                     <View style={styles.homeEmptyTileRow}>
                       <View style={[styles.homeEmptyTile, styles.homeEmptyTileSmall]}>
-                        <StickyNote color={colors.secondary} size={20} strokeWidth={2.2} />
+                        <StickyNote color={colors.secondary} size={20} weight="regular" />
                         <View style={styles.homeEmptyMiniLines}>
                           <View style={styles.homeEmptyMiniLine} />
                           <View style={styles.homeEmptyMiniLineShort} />
                         </View>
                       </View>
                       <View style={[styles.homeEmptyTile, styles.homeEmptyTileSmall, styles.homeEmptyTileImage]}>
-                        <ImageIcon color={colors.processing} size={20} strokeWidth={2.2} />
+                        <ImageIcon color={colors.processing} size={20} weight="regular" />
                         <View style={styles.homeEmptyImageFrame} />
                       </View>
                     </View>
                   </View>
                   <View style={styles.homeEmptySearchHint}>
-                    <Search color={colors.muted} size={16} strokeWidth={2.2} />
+                    <Search color={colors.muted} size={16} weight="regular" />
                   </View>
                 </View>
                 <View style={styles.homeEmptyCopy}>
@@ -239,11 +248,11 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                   style={({ pressed }) => [styles.homeEmptyPrimary, pressed && styles.homeEmptyPrimaryPressed]}
                   testID="pc.capture.empty.open"
                 >
-                  <Plus color={colors.onAccent} size={20} strokeWidth={2.5} />
+                  <Plus color={colors.onAccent} size={20} weight="bold" />
                   <Text style={styles.homeEmptyPrimaryText}>Paste link or note</Text>
                 </Pressable>
                 <View style={styles.homeEmptyCue}>
-                  <Check color={colors.accent} size={16} strokeWidth={2.4} />
+                  <Check color={colors.accent} size={16} weight="bold" />
                   <Text style={[styles.emptyCue, styles.homeEmptyCueText]}>
                     You can review details after the capture is saved.
                   </Text>
@@ -325,7 +334,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                       ]}
                       testID={`pc.capture.mode.${mode}`}
                     >
-                      <Icon color={selectedMode ? colors.onAccent : colors.muted} size={16} strokeWidth={2.4} />
+                      <Icon color={selectedMode ? colors.onAccent : colors.muted} size={16} weight={selectedMode ? "fill" : "regular"} />
                       <Text
                         numberOfLines={1}
                         style={[

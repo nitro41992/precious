@@ -1,4 +1,5 @@
 import type { ComponentType } from "react";
+import type { Icon as PhosphorIcon } from "phosphor-react-native";
 
 export type CaptureStatus = "processing" | "ready" | "needs_review" | "failed";
 export type ReviewTarget = "intent" | "collections" | "reminder" | "analysis";
@@ -8,10 +9,14 @@ export type UrlEvidence = {
   evidence_quality?: "high" | "medium" | "low" | "none";
   user_facing_message?: string;
   failure_reason?: string;
+  final_url?: string | null;
   canonical_url?: string;
   client_resolved_url?: string;
+  source_domain?: string | null;
+  site_name?: string | null;
   missing_evidence?: string[];
   image_url?: string;
+  favicon?: string | null;
 };
 
 export type ReviewRationale = {
@@ -333,11 +338,7 @@ export type RemoteCaptureDetail = {
   capture?: Record<string, any>;
 };
 
-export type LucideIconComponent = ComponentType<{
-  color?: string;
-  size?: number;
-  strokeWidth?: number;
-}>;
+export type AppIconComponent = PhosphorIcon;
 
 export type NavIconProps = {
   color: string;

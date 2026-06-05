@@ -20,13 +20,12 @@ import {
   ArrowLeft,
   Check,
   Copy,
-  ExternalLink,
   MapPin,
-  Pencil,
-  StickyNote,
-  Trash2,
+  Note as StickyNote,
+  PencilSimple as Pencil,
+  Trash as Trash2,
   X
-} from "lucide-react-native";
+} from "phosphor-react-native";
 
 import type { MapSearchCandidate } from "../captureLogic";
 import { displayStatus, reviewReasons } from "../captureLogic";
@@ -290,7 +289,7 @@ function CaptureImageViewer({
           onPress={onClose}
           style={({ pressed }) => [styles.imageViewerClose, pressed && styles.subtlePressed]}
         >
-          <X color={colors.ink} size={22} strokeWidth={2.4} />
+          <X color={colors.ink} size={22} weight="bold" />
         </Pressable>
         <View pointerEvents="none" style={styles.imageViewerCaption}>
           <Text numberOfLines={1} style={styles.imageViewerCaptionText}>{title}</Text>
@@ -384,7 +383,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const urlEvidenceNotice = urlEvidenceMessage(selected.urlEvidence);
   const selectedVisitTarget = selected.visitTarget;
   const selectedVisitTargetMapCandidates = selectedVisitTarget ? visitTargetMapCandidates : [];
-  const selectedSourceMeta = `${captureSourceLabel(selected)} · ${formatDateTime(selected.createdAt)}`;
+  const selectedCapturedMeta = `Captured ${formatDateTime(selected.createdAt)}`;
   const selectedNeedsReview = displayStatus(selected) === "needs_review";
   const selectedReviewState = selectedNeedsReview
     ? "Needs a quick look"
@@ -503,6 +502,47 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                 </Text>
               ) : null}
             </View>
+            <View style={styles.reviewPrimaryBlock}>
+              <TextInput
+                multiline
+                onChangeText={(value) => {
+                  setDraftTitleDirty(true);
+                  setDraftTitle(value);
+                  updateSelectedReviewDraft({ title: value, titleDirty: true });
+                }}
+                placeholder="Title"
+                placeholderTextColor={colors.muted}
+                style={styles.reviewTitleInput}
+                testID="pc.review.title"
+                value={draftTitle}
+              />
+              <View style={styles.reviewMetaRow}>
+                <View style={styles.reviewSourceCluster}>
+                  <SourceMark
+                    capture={selected}
+                    failedFavicons={faviconFailures}
+                    onFaviconFailure={markFaviconFailed}
+                    size="inline"
+                  />
+                  <Text numberOfLines={1} style={styles.reviewSourceName}>{captureSourceLabel(selected)}</Text>
+                  {sourceValue ? (
+                    <Pressable
+                      accessibilityLabel="Copy source"
+                      accessibilityRole="button"
+                      hitSlop={8}
+                      onPress={() => void copySource()}
+                      style={({ pressed }) => [styles.reviewSourceCopyButton, pressed && styles.subtlePressed]}
+                    >
+                      <Copy color={colors.secondary} size={17} weight="regular" />
+                    </Pressable>
+                  ) : null}
+                </View>
+              </View>
+              <Text numberOfLines={1} style={styles.reviewCapturedMeta}>{selectedCapturedMeta}</Text>
+              {showReviewStateText ? (
+                <Text style={styles.reviewSentenceSubtext}>{selectedReviewState}</Text>
+              ) : null}
+            </View>
             <Pressable
               accessibilityHint={
                 selectedMediaOpensImage
@@ -573,33 +613,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                 </View>
               )}
             </Pressable>
-            <View style={styles.reviewPrimaryBlock}>
-              <TextInput
-                multiline
-                onChangeText={(value) => {
-                  setDraftTitleDirty(true);
-                  setDraftTitle(value);
-                  updateSelectedReviewDraft({ title: value, titleDirty: true });
-                }}
-                placeholder="Title"
-                placeholderTextColor={colors.muted}
-                style={styles.reviewTitleInput}
-                testID="pc.review.title"
-                value={draftTitle}
-              />
-              <View style={styles.reviewSourceRow}>
-                <SourceMark
-                  capture={selected}
-                  failedFavicons={faviconFailures}
-                  onFaviconFailure={markFaviconFailed}
-                  size="detail"
-                />
-                <Text numberOfLines={1} style={styles.reviewSourceMeta}>{selectedSourceMeta}</Text>
-              </View>
-              {showReviewStateText ? (
-                <Text style={styles.reviewSentenceSubtext}>{selectedReviewState}</Text>
-              ) : null}
-            </View>
             <View style={styles.quickEditBlock}>
               <View style={styles.inlineMeaningBlock}>
                 <View style={styles.inlineMeaningSentence}>
@@ -652,7 +665,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
               <View style={styles.sourceBlock}>
                 <Text style={styles.meta}>Open in Maps</Text>
                 <View style={styles.mapTargetRow}>
-                  <MapPin color={colors.muted} size={18} strokeWidth={2.2} />
+                  <MapPin color={colors.muted} size={18} weight="regular" />
                   <View style={styles.mapTargetCopy}>
                     <Text numberOfLines={1} style={styles.compactActionText}>{selectedVisitTarget.name}</Text>
                     <Text numberOfLines={2} style={styles.supportingText}>
@@ -696,7 +709,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                 style={({ pressed }) => [styles.compactActionRow, pressed && styles.subtlePressed]}
                 testID="pc.review.note.open"
               >
-                <StickyNote color={colors.muted} size={18} strokeWidth={2.2} />
+                <StickyNote color={colors.muted} size={18} weight="regular" />
                 <View style={styles.noteActionCopy}>
                   <View style={styles.noteActionHeader}>
                     <Text style={styles.compactActionText}>
@@ -712,35 +725,15 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                     <Text numberOfLines={2} style={styles.noteActionPreview}>{draftNote}</Text>
                   ) : null}
                 </View>
-                <Pencil color={colors.muted} size={16} strokeWidth={2.2} />
+                <Pencil color={colors.muted} size={16} weight="regular" />
               </Pressable>
-            </View>
-            <View style={styles.sourceBlock}>
-              <View style={styles.sourceDisclosureRow}>
-                <View style={styles.sourceDisclosureCopy}>
-                  <Text style={styles.meta}>Source</Text>
-                  <Text numberOfLines={1} style={styles.reviewSourceMeta}>{captureSourceLabel(selected)}</Text>
-                </View>
-                <View style={styles.sourceDisclosureActions}>
-                  {selectedOpenUrl ? (
-                    <IconButton
-                      Icon={ExternalLink}
-                      label="Open source"
-                      onPress={() => void openCaptureUrl(selectedOpenUrl)}
-                    />
-                  ) : null}
-                  {sourceValue ? (
-                    <IconButton Icon={Copy} label="Copy source" onPress={() => void copySource()} />
-                  ) : null}
-                </View>
-              </View>
             </View>
             <Pressable
               onPress={deleteCapture}
               style={({ pressed }) => [styles.destructiveRow, pressed && styles.subtlePressed]}
               testID="pc.capture.delete"
             >
-              <Trash2 color={colors.danger} size={18} strokeWidth={2.2} />
+              <Trash2 color={colors.danger} size={18} weight="regular" />
               <Text style={styles.dangerButtonText}>Delete capture</Text>
             </Pressable>
           </ScrollView>

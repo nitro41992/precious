@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from "react";
 import { FlatList, Pressable, SafeAreaView, StatusBar, Text, View } from "react-native";
 import type { FlatListProps, ListRenderItemInfo } from "react-native";
-import { Folder, Plus } from "lucide-react-native";
+import { Folder, Plus } from "phosphor-react-native";
 
 import type { Collection, LoadPhase } from "../types";
 import { colors } from "../ui/theme";
@@ -92,18 +92,14 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
                   <View style={styles.collectionsEmptyFolderBack} />
                   <View style={styles.collectionsEmptyFolder}>
                     <View style={styles.collectionsEmptyFolderTab} />
-                    <Folder
-                      color={colors.accent}
-                      size={28}
-                      strokeWidth={2.2}
-                    />
+                    <Folder color={colors.accent} size={28} weight="regular" />
                     <View style={styles.collectionsEmptyLines}>
                       <View style={styles.collectionsEmptyLineStrong} />
                       <View style={styles.collectionsEmptyLineSoft} />
                     </View>
                   </View>
                   <View style={styles.collectionsEmptyBadge}>
-                    <Plus color={colors.onAccent} size={18} strokeWidth={2.5} />
+                    <Plus color={colors.onAccent} size={18} weight="bold" />
                   </View>
                 </View>
                 <View style={styles.collectionsEmptyCopy}>
@@ -117,7 +113,7 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
                   style={({ pressed }) => [styles.homeEmptyPrimary, pressed && styles.homeEmptyPrimaryPressed]}
                   testID="pc.collections.empty.create"
                 >
-                  <Plus color={colors.onAccent} size={20} strokeWidth={2.5} />
+                  <Plus color={colors.onAccent} size={20} weight="bold" />
                   <Text style={styles.homeEmptyPrimaryText}>Create collection</Text>
                 </Pressable>
               </View>

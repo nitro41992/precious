@@ -1,6 +1,6 @@
 import type { RefObject } from "react";
 import { Animated, Dimensions, KeyboardAvoidingView, Pressable, Text, TextInput, View } from "react-native";
-import { Check, X } from "lucide-react-native";
+import { Check, X } from "phosphor-react-native";
 
 import type { Collection } from "../types";
 import { IconButton } from "../ui/components";

@@ -79,8 +79,8 @@ New Capture must:
 Capture Review must:
 
 - Feel like editing a saved memory, not inspecting an analysis report.
-- Lead with existing capture imagery or source media when available. Tapping uploaded image or screenshot media opens a full-screen image viewer with pinch zoom; tapping source/link preview media opens the source URL when one is available.
-- Make the editable title the primary text under the media/source header.
+- Lead with the editable title and source context, followed by existing capture imagery or source media when available. Tapping uploaded image or screenshot media opens a full-screen image viewer with pinch zoom; tapping source/link preview media opens the source URL when one is available.
+- Make the editable title the primary text above the media/source preview.
 - Show Save Intent, Collections, and Reminder as one compact editable sentence below the title/source area, using language like `Saved as [Purpose] in [Collection] for [Later]`. Use Material 3 Expressive-style emphasis through type, color, underline, and touch target sizing rather than pill cards.
 - Show current AI-selected values as normal editable values. Show `Add intent`, `Add collection`, or `Add reminder` only when the field has no current value. Blank intent remains valid when no concrete action is inferable.
 - Tapping Purpose, Collection, or Later opens a focused bottom sheet editor. Collection selection includes existing active Collections and `No collection` as a valid clearing state.

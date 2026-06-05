@@ -606,6 +606,13 @@ export const styles = StyleSheet.create({
     overflow: "hidden",
     width: 28
   },
+  sourceMarkInline: {
+    alignItems: "center",
+    height: 28,
+    justifyContent: "center",
+    overflow: "hidden",
+    width: 28
+  },
   sourceMarkProcessing: {
     backgroundColor: colors.processingSoft,
     borderColor: "#2b526b"
@@ -625,6 +632,10 @@ export const styles = StyleSheet.create({
   sourceFaviconDetail: {
     height: 16,
     width: 16
+  },
+  sourceFaviconInline: {
+    height: 24,
+    width: 24
   },
   captureThumbnailFrame: {
     backgroundColor: colors.surfaceContainer,
@@ -1744,28 +1755,50 @@ export const styles = StyleSheet.create({
     color: colors.accent
   },
   reviewPrimaryBlock: {
-    gap: 8,
+    gap: 10,
     paddingHorizontal: 2
   },
   reviewTitleInput: {
     color: colors.ink,
-    fontSize: 27,
-    fontWeight: "800",
-    lineHeight: 33,
+    fontSize: 22,
+    fontWeight: "700",
+    lineHeight: 28,
     padding: 0,
     paddingVertical: 2
   },
-  reviewSourceRow: {
+  reviewCapturedMeta: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 18
+  },
+  reviewMetaRow: {
     alignItems: "center",
     flexDirection: "row",
     gap: 8,
-    minHeight: 30
+    minHeight: 36
   },
-  reviewSourceMeta: {
-    color: colors.muted,
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 18
+  reviewSourceCluster: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexShrink: 1,
+    gap: 8,
+    minWidth: 0
+  },
+  reviewSourceName: {
+    color: colors.secondary,
+    flexShrink: 1,
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 19
+  },
+  reviewSourceCopyButton: {
+    alignItems: "center",
+    borderRadius: 8,
+    height: 34,
+    justifyContent: "center",
+    marginLeft: -4,
+    width: 34
   },
   reviewEditRail: {
     alignItems: "stretch",
@@ -2370,23 +2403,6 @@ export const styles = StyleSheet.create({
     lineHeight: 22,
     maxHeight: 260,
     minHeight: 170
-  },
-  sourceDisclosureRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 10,
-    justifyContent: "space-between",
-    minHeight: 50
-  },
-  sourceDisclosureCopy: {
-    flex: 1,
-    gap: 2,
-    minWidth: 0
-  },
-  sourceDisclosureActions: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 2
   },
   destructiveRow: {
     alignItems: "center",

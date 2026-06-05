@@ -321,6 +321,7 @@ export function compactUrlEvidence(
     published_at: evidence.publishedAt,
     modified_at: evidence.modifiedAt,
     image_url: evidence.image,
+    favicon: evidence.favicon,
     media_url: evidence.video,
     readable_text_excerpt: evidence.text ? evidence.text.slice(0, 1200) : null,
     entities: evidence.entities.slice(0, 8),

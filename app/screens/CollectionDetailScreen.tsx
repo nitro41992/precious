@@ -11,7 +11,7 @@ import {
   View
 } from "react-native";
 import type { FlatListProps, ListRenderItemInfo } from "react-native";
-import { ArrowLeft } from "lucide-react-native";
+import { ArrowLeft } from "phosphor-react-native";
 
 import type { Capture, Collection, CollectionCapturesLoadPhase } from "../types";
 import { colors } from "../ui/theme";

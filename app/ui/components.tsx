@@ -2,27 +2,25 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Animated, Easing, Pressable, Text, View } from "react-native";
 import { Image } from "expo-image";
-import { AlertTriangle, Check, Clock3, Folder, Info, Plus } from "lucide-react-native";
-import Svg, { Circle, Path } from "react-native-svg";
+import { Check, ClockClockwise, ClockCounterClockwise, Folder, Folders, GearSix, Info, Plus, Warning } from "phosphor-react-native";
 
 import type {
+  AppIconComponent,
   Capture,
   CaptureImageLoadState,
   CaptureStatus,
   LinkedCollection,
-  LucideIconComponent,
   NavIconComponent,
   NavIconProps,
   ToastPlacement,
   ToastState,
   ToastTone
 } from "../types";
-import { displayStatus } from "../captureLogic";
+import { displayStatus, hostFromUrl } from "../captureLogic";
 import {
   captureImageUrl,
   captureSourceHost,
   captureStatusLabel,
-  isMapSource,
   sourceFaviconUrl,
   sourceIconForCapture,
   uniqueStrings
@@ -30,68 +28,16 @@ import {
 import { colors } from "./theme";
 import { styles } from "./styles";
 
-const SETTINGS_ICON_PATH = "M19.43 12.98c.04-.32.07-.65.07-.98s-.02-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.37-.31-.6-.22l-2.49 1a7.28 7.28 0 0 0-1.69-.98l-.38-2.65A.5.5 0 0 0 14 2h-4a.5.5 0 0 0-.5.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1a.5.5 0 0 0-.6.22l-2 3.46a.5.5 0 0 0 .12.64l2.11 1.65c-.05.32-.08.65-.08.98s.03.66.08.98l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46c.12.22.37.31.6.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.48 0 .6-.22l2-3.46a.5.5 0 0 0-.12-.64l-2.11-1.65ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z";
-
 export function RecentNavIcon({ color, selected = false, size = 24 }: NavIconProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      {selected ? (
-        <Path
-          d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 5h-2v6l5.25 3.15.75-1.23-4-2.37V7Z"
-          fill={color}
-          fillRule="evenodd"
-          clipRule="evenodd"
-        />
-      ) : (
-        <>
-          <Circle cx="12" cy="12" r="8.5" stroke={color} strokeWidth="2.1" />
-          <Path
-            d="M12 7.2v5.1l3.55 2.13"
-            stroke={color}
-            strokeWidth="2.1"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </>
-      )}
-    </Svg>
-  );
+  return <ClockCounterClockwise color={color} size={size} weight={selected ? "fill" : "regular"} />;
 }
 
 export function CollectionsNavIcon({ color, selected = false, size = 24 }: NavIconProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      {selected ? (
-        <Path
-          d="M3 6.75A2.75 2.75 0 0 1 5.75 4h3.42c.78 0 1.51.35 2 .95l1.05 1.3h6.03A2.75 2.75 0 0 1 21 9v7.25A2.75 2.75 0 0 1 18.25 19H5.75A2.75 2.75 0 0 1 3 16.25v-9.5Z"
-          fill={color}
-        />
-      ) : (
-        <Path
-          d="M3.5 6.9A2.4 2.4 0 0 1 5.9 4.5h3.18c.68 0 1.33.31 1.77.84l1.13 1.36h6.12a2.4 2.4 0 0 1 2.4 2.4v7a2.4 2.4 0 0 1-2.4 2.4H5.9a2.4 2.4 0 0 1-2.4-2.4V6.9Z"
-          stroke={color}
-          strokeWidth="2.1"
-          strokeLinejoin="round"
-        />
-      )}
-    </Svg>
-  );
+  return <Folders color={color} size={size} weight={selected ? "fill" : "regular"} />;
 }
 
 export function SettingsNavIcon({ color, selected = false, size = 24 }: NavIconProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d={SETTINGS_ICON_PATH}
-        fill={selected ? color : "none"}
-        stroke={selected ? "none" : color}
-        strokeWidth={selected ? 0 : 1.35}
-        strokeLinejoin="round"
-        fillRule="evenodd"
-        clipRule="evenodd"
-      />
-    </Svg>
-  );
+  return <GearSix color={color} size={size} weight={selected ? "fill" : "regular"} />;
 }
 
 export function IconButton({
@@ -103,7 +49,7 @@ export function IconButton({
   tone = "default",
   testID
 }: {
-  Icon: LucideIconComponent;
+  Icon: AppIconComponent;
   label: string;
   onPress: () => void;
   disabled?: boolean;
@@ -133,7 +79,7 @@ export function IconButton({
       ]}
       testID={testID}
     >
-      <Icon color={iconColor} size={20} strokeWidth={2.3} />
+      <Icon color={iconColor} size={20} weight={tone === "primary" || selected ? "bold" : "regular"} />
     </Pressable>
   );
 }
@@ -217,15 +163,21 @@ export function SourceMark({
   imageUnavailable?: boolean;
   onFaviconFailure: (host: string) => void;
   onImageLoadState?: (key: string, state: CaptureImageLoadState) => void;
-  size?: "row" | "detail";
+  size?: "row" | "detail" | "inline";
 }) {
   const host = captureSourceHost(capture).replace(/^www\./i, "");
-  const faviconUri = size === "detail" && !isMapSource(capture) && !failedFavicons[host] ? sourceFaviconUrl(host) : "";
+  const iconHost =
+    hostFromUrl(capture.urlEvidence?.final_url) ||
+    hostFromUrl(capture.urlEvidence?.canonical_url) ||
+    hostFromUrl(capture.urlEvidence?.client_resolved_url) ||
+    host;
+  const extractedFavicon = typeof capture.urlEvidence?.favicon === "string" ? capture.urlEvidence.favicon.trim() : "";
+  const faviconUri = host && !failedFavicons[host] ? sourceFaviconUrl(iconHost) || extractedFavicon : "";
   const imageUri = size === "row" && !imageUnavailable ? captureImageUrl(capture) : "";
   const Icon = sourceIconForCapture(capture);
   const itemStatus = displayStatus(capture);
-  const markStyle = size === "detail" ? styles.sourceMarkDetail : styles.sourceMark;
-  const iconSize = size === "detail" ? 16 : 20;
+  const markStyle = size === "inline" ? styles.sourceMarkInline : size === "detail" ? styles.sourceMarkDetail : styles.sourceMark;
+  const iconSize = size === "inline" ? 24 : size === "detail" ? 16 : 20;
   if (imageUri) {
     return (
       <View
@@ -254,9 +206,9 @@ export function SourceMark({
       accessible
       style={[
         markStyle,
-        itemStatus === "processing" && styles.sourceMarkProcessing,
-        itemStatus === "needs_review" && styles.sourceMarkReview,
-        itemStatus === "failed" && styles.sourceMarkFailed
+        size !== "inline" && itemStatus === "processing" && styles.sourceMarkProcessing,
+        size !== "inline" && itemStatus === "needs_review" && styles.sourceMarkReview,
+        size !== "inline" && itemStatus === "failed" && styles.sourceMarkFailed
       ]}
     >
       {faviconUri ? (
@@ -265,10 +217,10 @@ export function SourceMark({
           contentFit="contain"
           onError={() => onFaviconFailure(host)}
           source={{ uri: faviconUri }}
-          style={size === "detail" ? styles.sourceFaviconDetail : styles.sourceFavicon}
+          style={size === "inline" ? styles.sourceFaviconInline : size === "detail" ? styles.sourceFaviconDetail : styles.sourceFavicon}
         />
       ) : (
-        <Icon color={sourceIconColor(itemStatus)} size={iconSize} strokeWidth={2.3} />
+        <Icon color={sourceIconColor(itemStatus)} size={iconSize} weight={itemStatus === "ready" ? "regular" : "bold"} />
       )}
     </View>
   );
@@ -285,9 +237,9 @@ export function StatusGlyph({ capture }: { capture: Capture }) {
   const status = displayStatus(capture);
   if (status === "ready") return null;
   const Icon = status === "processing"
-      ? Clock3
+      ? ClockClockwise
       : status === "failed"
-        ? AlertTriangle
+        ? Warning
         : Info;
   const label = captureStatusLabel(capture);
   const iconColor = status === "processing"
@@ -306,7 +258,7 @@ export function StatusGlyph({ capture }: { capture: Capture }) {
         status === "failed" && styles.statusGlyphFailed
       ]}
     >
-      <Icon color={iconColor} size={15} strokeWidth={2.5} />
+      <Icon color={iconColor} size={15} weight="fill" />
       {status === "processing" ? (
         <Text numberOfLines={1} style={styles.statusGlyphProcessingText}>
           Analyzing
@@ -316,10 +268,10 @@ export function StatusGlyph({ capture }: { capture: Capture }) {
   );
 }
 
-export function MeaningToken({ Icon, text }: { Icon: LucideIconComponent; text: string }) {
+export function MeaningToken({ Icon, text }: { Icon: AppIconComponent; text: string }) {
   return (
     <View style={styles.meaningToken}>
-      <Icon color={colors.muted} size={13} strokeWidth={2.2} />
+      <Icon color={colors.muted} size={13} weight="regular" />
       <Text numberOfLines={1} style={styles.meaningTokenText}>
         {text}
       </Text>
@@ -345,7 +297,11 @@ export function CollectionMeaningToken({ collections }: { collections: LinkedCol
         overflowCount > 0 && styles.collectionMeaningTokenMulti
       ]}
     >
-      <Folder color={overflowCount > 0 ? colors.accent : colors.muted} size={13} strokeWidth={2.2} />
+      <Folder
+        color={overflowCount > 0 ? colors.accent : colors.muted}
+        size={13}
+        weight={overflowCount > 0 ? "fill" : "regular"}
+      />
       <Text numberOfLines={1} style={[styles.meaningTokenText, styles.collectionMeaningTokenText]}>
         {primaryCollection}
       </Text>
@@ -413,7 +369,7 @@ export function ToastHost({
       ]}
     >
       <View style={[styles.toastIconWell, toastIconWellStyle(tone)]}>
-        <Icon color={iconColor} size={17} strokeWidth={2.7} />
+        <Icon color={iconColor} size={17} weight="fill" />
       </View>
       <Text style={styles.toastText}>{visibleToast.text}</Text>
       {visibleToast.action && visibleToast.actionLabel ? (
@@ -434,8 +390,8 @@ export function ToastHost({
 
 function toastIconForTone(tone: ToastTone) {
   if (tone === "success") return Check;
-  if (tone === "error" || tone === "destructive") return AlertTriangle;
-  if (tone === "processing") return Clock3;
+  if (tone === "error" || tone === "destructive") return Warning;
+  if (tone === "processing") return ClockClockwise;
   return Info;
 }
 
@@ -535,7 +491,7 @@ export function BottomAppBar({
           style={({ pressed }) => [styles.bottomNavFab, pressed && styles.bottomNavFabPressed]}
           testID={collectionAction ? "pc.nav.collection-create" : "pc.nav.capture"}
         >
-          <Plus color={colors.onAccent} size={24} strokeWidth={2.55} />
+          <Plus color={colors.onAccent} size={24} weight="bold" />
         </Pressable>
       </View>
     </View>

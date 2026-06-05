@@ -1,8 +1,8 @@
 import { Pressable, Text, View } from "react-native";
 import {
-  LogOut,
+  SignOut as LogOut,
   X
-} from "lucide-react-native";
+} from "phosphor-react-native";
 
 import { IconButton } from "../ui/components";
 import { styles } from "../ui/styles";
@@ -41,7 +41,7 @@ export function AppSheets({
             }}
             style={({ pressed }) => [styles.sheetActionRow, pressed && styles.subtlePressed]}
           >
-            <LogOut color={colors.danger} size={20} strokeWidth={2.3} />
+            <LogOut color={colors.danger} size={20} weight="regular" />
             <View style={styles.sheetActionCopy}>
               <Text style={[styles.sheetActionTitle, styles.sheetActionDanger]}>Sign out</Text>
               <Text style={styles.sheetActionText}>Remove this session from the phone.</Text>

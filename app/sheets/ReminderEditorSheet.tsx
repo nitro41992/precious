@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { DateTimePicker } from "@expo/ui/community/datetime-picker";
-import { Bell, CalendarDays, Clock, X } from "lucide-react-native";
+import { Bell, Calendar, Clock, X } from "phosphor-react-native";
 
 import type { CaptureFieldRationale, ReminderDatePrecision, ReminderScheduleDraft, ReminderSuggestion, ReminderTimePrecision } from "../types";
 import {
@@ -187,7 +187,7 @@ export function ReminderEditorSheet({
         <View style={styles.sheetGrabber} />
         <View style={styles.rationaleSheetHeader}>
           <View style={[styles.rationaleSheetHeaderIcon, styles.reminderSheetHeaderIcon]}>
-            <Bell color={colors.accent} size={22} strokeWidth={2.4} />
+            <Bell color={colors.accent} size={22} weight="regular" />
           </View>
           <View style={styles.rationaleSheetHeaderCopy}>
             <Text style={styles.sheetTitle}>Reminder</Text>
@@ -211,7 +211,7 @@ export function ReminderEditorSheet({
           ) : null}
           <View style={styles.reminderFieldGroup}>
             <View style={styles.reminderFieldSectionHeader}>
-              <CalendarDays color={colors.muted} size={18} strokeWidth={2.3} />
+              <Calendar color={colors.muted} size={18} weight="regular" />
               <Text style={styles.reminderFieldLabel}>Date</Text>
             </View>
             <Pressable
@@ -239,7 +239,7 @@ export function ReminderEditorSheet({
           </View>
           <View style={styles.reminderFieldGroup}>
             <View style={styles.reminderFieldSectionHeader}>
-              <Clock color={colors.muted} size={18} strokeWidth={2.3} />
+              <Clock color={colors.muted} size={18} weight="regular" />
               <Text style={styles.reminderFieldLabel}>Time</Text>
               {draft.startTime || draft.endTime ? (
                 <Pressable onPress={() => setTimeRange("", "")} hitSlop={8}>

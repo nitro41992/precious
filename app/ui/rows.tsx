@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { Animated, Pressable, Text, View } from "react-native";
-import { BookOpen, Folder, StickyNote } from "lucide-react-native";
+import { BookOpen, Folder, Note as StickyNote } from "phosphor-react-native";
 
 import { displayStatus } from "../captureLogic";
 import type { Capture, CaptureImageLoadState, Collection } from "../types";
@@ -280,7 +280,7 @@ export function CollectionRow({
       >
         <View style={styles.collectionRowTop}>
           <View style={styles.collectionIconMark}>
-            <Folder color={colors.accent} size={18} strokeWidth={2.2} />
+            <Folder color={colors.accent} size={18} weight="regular" />
           </View>
           <View style={styles.collectionRowCopy}>
             <Text numberOfLines={1} style={styles.captureTitle}>

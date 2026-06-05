@@ -125,6 +125,7 @@ export type LlMUrlEvidence = {
   published_at: string | null;
   modified_at: string | null;
   image_url: string | null;
+  favicon: string | null;
   media_url: string | null;
   readable_text_excerpt: string | null;
   entities: UrlEvidence["entities"];

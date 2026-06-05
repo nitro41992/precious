@@ -111,6 +111,13 @@ Rules:
 - Use sentence case for user-facing labels. Uppercase is acceptable only for compact metadata labels.
 - Letter spacing should stay `0`.
 
+### Iconography
+
+- Use `phosphor-react-native` as the app icon family.
+- Use `regular` weight for default outline icons, `bold` for compact tappable actions, and `fill` only for selected navigation, confirmed states, or compact status marks.
+- Pair icon-only controls with accessible labels, and pair state color with icon shape or text.
+- Avoid mixing icon families or custom SVG glyphs unless a Phosphor equivalent is unavailable.
+
 ### Spacing And Shape
 
 - Use a compact spacing scale: 4, 8, 12, 16, 22 or 24, 32.

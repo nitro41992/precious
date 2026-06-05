@@ -1,12 +1,12 @@
 import {
   BookOpen,
-  CalendarDays,
-  Image as ImageIcon,
-  Link2,
+  Calendar,
+  ImageSquare as ImageIcon,
+  Link,
   MapPin,
   ShoppingBag,
-  StickyNote
-} from "lucide-react-native";
+  Note
+} from "phosphor-react-native";
 
 import saveIntents from "../supabase/functions/_shared/save-intents.json";
 import type {
@@ -19,7 +19,7 @@ import type {
   CaptureFieldState,
   HomeListRow,
   LinkedCollection,
-  LucideIconComponent,
+  AppIconComponent,
   ReminderDatePrecision,
   ReminderDurationUnit,
   ReminderScheduleDraft,
@@ -62,10 +62,10 @@ export const AUTH_CALLBACK_URL = "preciouscaptures://auth/callback";
 
 export const SEARCH_PROMPTS = [
   { label: "Places", query: "places", Icon: MapPin },
-  { label: "Links from yesterday", query: "links from yesterday", Icon: Link2 },
+  { label: "Links from yesterday", query: "links from yesterday", Icon: Link },
   { label: "Things to read", query: "things to read", Icon: BookOpen },
   { label: "Products", query: "products", Icon: ShoppingBag },
-  { label: "Travel ideas", query: "travel ideas", Icon: CalendarDays }
+  { label: "Travel ideas", query: "travel ideas", Icon: Calendar }
 ];
 
 export function formatDateTime(value: number) {
@@ -772,7 +772,7 @@ export function isMapSource(capture: Capture) {
   );
 }
 
-export function sourceIconForCapture(capture: Capture): LucideIconComponent {
+export function sourceIconForCapture(capture: Capture): AppIconComponent {
   const host = captureSourceHost(capture).toLowerCase();
   const intent = capture.defaultIntent || "";
   if (isMapSource(capture)) {
@@ -787,9 +787,9 @@ export function sourceIconForCapture(capture: Capture): LucideIconComponent {
   if (host.includes("youtube") || host.includes("instagram") || host.includes("tiktok") || host.includes("photos")) {
     return ImageIcon;
   }
-  if (intent.includes("event") || intent.includes("reminder")) return CalendarDays;
-  if (capture.sourceUrl) return Link2;
-  return StickyNote;
+  if (intent.includes("event") || intent.includes("reminder")) return Calendar;
+  if (capture.sourceUrl) return Link;
+  return Note;
 }
 
 export function captureStatusLabel(capture: Capture) {

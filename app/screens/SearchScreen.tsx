@@ -12,7 +12,7 @@ import {
   View
 } from "react-native";
 import type { FlatListProps, ListRenderItemInfo } from "react-native";
-import { ArrowLeft, Search, X } from "lucide-react-native";
+import { ArrowLeft, MagnifyingGlass as Search, X } from "phosphor-react-native";
 
 import type { Capture } from "../types";
 import { SEARCH_PROMPTS } from "../capturePresentation";
@@ -94,7 +94,7 @@ export function SearchScreen({ actions, data, state }: SearchScreenProps) {
             <View style={styles.searchBarRow}>
               <IconButton Icon={ArrowLeft} label="Back" onPress={closeSearch} />
               <View style={styles.searchInputWrap}>
-                <Search color={colors.muted} size={19} strokeWidth={2.3} />
+                <Search color={colors.muted} size={19} weight="regular" />
                 <TextInput
                   autoFocus
                   onChangeText={setSearchQuery}
@@ -112,7 +112,7 @@ export function SearchScreen({ actions, data, state }: SearchScreenProps) {
                     hitSlop={8}
                     onPress={() => setSearchQuery("")}
                   >
-                    <X color={colors.muted} size={18} strokeWidth={2.4} />
+                    <X color={colors.muted} size={18} weight="bold" />
                   </Pressable>
                 ) : null}
               </View>
@@ -145,7 +145,7 @@ export function SearchScreen({ actions, data, state }: SearchScreenProps) {
                           onPress={() => setSearchQuery(query)}
                           style={({ pressed }) => [styles.promptChip, pressed && styles.subtlePressed]}
                         >
-                          <Icon color={colors.muted} size={15} strokeWidth={2.2} />
+                          <Icon color={colors.muted} size={15} weight="regular" />
                           <Text style={styles.promptChipText}>{label}</Text>
                         </Pressable>
                       ))}

@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from "react";
 import { Animated, FlatList, Platform, Pressable, Text, TextInput, View } from "react-native";
 import type { FlatListProps } from "react-native";
-import { Check, Folder, Search, X } from "lucide-react-native";
+import { Check, Folder, MagnifyingGlass as Search, X } from "phosphor-react-native";
 
 import type { Capture, Collection, LoadPhase } from "../types";
 import { collectionSelectionActionState } from "../captureLogic";
@@ -103,7 +103,7 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
           <IconButton Icon={X} label="Close Collection selection" onPress={closeCollectionPicker} />
         </View>
         <View style={styles.collectionSelectorSearchInput}>
-          <Search color={colors.muted} size={18} strokeWidth={2.2} />
+          <Search color={colors.muted} size={18} weight="regular" />
           <TextInput
             onChangeText={setCollectionPickerQuery}
             placeholder="Search collections"
@@ -139,7 +139,7 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
                   <View style={styles.collectionChoiceBody}>
                     <View style={styles.collectionRowTop}>
                       <View style={styles.collectionIconMark}>
-                        <Folder color={colors.accent} size={18} strokeWidth={2.2} />
+                        <Folder color={colors.accent} size={18} weight="regular" />
                       </View>
                       <View style={styles.collectionRowCopy}>
                         <Text numberOfLines={1} style={styles.captureTitle}>
@@ -155,7 +155,7 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
                     ) : null}
                   </View>
                   <View style={[styles.collectionSelectionControl, selectedRow && styles.collectionSelectionControlSelected]}>
-                    {selectedRow ? <Check color={colors.paper} size={15} strokeWidth={3} /> : null}
+                    {selectedRow ? <Check color={colors.paper} size={15} weight="bold" /> : null}
                   </View>
                 </Pressable>
               </Animated.View>
@@ -181,7 +181,7 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
                     <X
                       color={collectionSelectionIds.length === 0 ? colors.accent : colors.muted}
                       size={18}
-                      strokeWidth={2.2}
+                      weight={collectionSelectionIds.length === 0 ? "bold" : "regular"}
                     />
                   </View>
                   <View style={styles.collectionRowCopy}>
@@ -196,7 +196,7 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
                   collectionSelectionIds.length === 0 && styles.collectionSelectionControlSelected
                 ]}
               >
-                {collectionSelectionIds.length === 0 ? <Check color={colors.paper} size={15} strokeWidth={3} /> : null}
+                {collectionSelectionIds.length === 0 ? <Check color={colors.paper} size={15} weight="bold" /> : null}
               </View>
             </Pressable>
           }
@@ -232,7 +232,7 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
         >
           <View style={styles.primaryButtonContent}>
             {!selectionSaving && selectionAction.shouldSave ? (
-              <Check color={colors.onAccent} size={18} strokeWidth={2.8} />
+              <Check color={colors.onAccent} size={18} weight="bold" />
             ) : null}
             <Text style={styles.primaryButtonText}>
               {selectionSaving ? "Saving..." : selectionAction.label}
