@@ -351,6 +351,52 @@ Deno.test("review rationale drops source-format explanations when source fallbac
   );
 });
 
+Deno.test("review rationale keeps content evidence when a source is mentioned", () => {
+  const reviewRationale = {
+    focus: "Choose a Save Intent",
+    summary:
+      "This looks like a hair/style Instagram reel saved for inspiration, so no active action is clear.",
+    intent:
+      "No intent applies because the capture text names a personal hair-style anecdote rather than a concrete action.",
+    collections:
+      "No Collection matched because the retrieved Collections are about other topics.",
+    reminder:
+      "No Reminder idea because there is no future date, deadline, or booking window.",
+  };
+  const normalized = urlEvidence.normalizedReviewAnalysis({
+    display_title: "Instagram reel: hair styling note",
+    summary:
+      "A hair/style reel about not having a perm and not using product.",
+    default_intent: {
+      category: null,
+      confidence: 0,
+      rationale:
+        "No clear active Save Intent was found from the hair-style anecdote.",
+    },
+    review_rationale: reviewRationale,
+    review_targets: ["intent", "collections"],
+    confidence_label: "Couldn't tell",
+    needs_review: true,
+    content_evidence_profile: {
+      content_limited: false,
+      source_fallback_allowed: false,
+      content_signals: ["url_title", "readable_text", "url_image_evidence"],
+      limited_reasons: [],
+    },
+  });
+
+  assertEqual(
+    JSON.stringify(normalized.review_rationale),
+    JSON.stringify(reviewRationale),
+    "source mentions with concrete content evidence should not be erased",
+  );
+  assertEqual(
+    normalized.review_rationale_status,
+    "accepted",
+    "content-rich rationale should be accepted",
+  );
+});
+
 Deno.test("valid analyzer review rationale is preserved exactly", () => {
   const reviewRationale = {
     focus: "Save Intent looks ready",
@@ -386,6 +432,16 @@ Deno.test("valid analyzer review rationale is preserved exactly", () => {
     normalized.needs_review,
     false,
     "valid analyzer rationale should not add review by itself",
+  );
+  assertEqual(
+    normalized.review_rationale_status,
+    "accepted",
+    "valid analyzer rationale should be marked accepted",
+  );
+  assertEqual(
+    normalized.review_rationale_invalid_reason,
+    null,
+    "valid analyzer rationale should not record an invalid reason",
   );
 });
 
@@ -436,6 +492,21 @@ Deno.test("invalid review rationale does not synthesize clipped fallback copy", 
     normalized.default_intent.category,
     "visit",
     "invalid rationale should not change Save Intent data",
+  );
+  assertEqual(
+    normalized.review_rationale_status,
+    "neutral_fallback",
+    "malformed rationale should record neutral fallback status",
+  );
+  assertEqual(
+    normalized.review_rationale_invalid_field,
+    "summary",
+    "malformed rationale should record the first invalid field",
+  );
+  assertEqual(
+    normalized.review_rationale_invalid_reason,
+    "malformed",
+    "clipped Instagram rationale should record the validation reason",
   );
 });
 
@@ -514,6 +585,21 @@ Deno.test("debug-like review rationale is neutral without changing extracted dat
     normalized.visit_target_name,
     "Weekend Cafe Popup",
     "invalid rationale should not change Visit Target data",
+  );
+  assertEqual(
+    normalized.review_rationale_status,
+    "neutral_fallback",
+    "debug-like rationale should record neutral fallback status",
+  );
+  assertEqual(
+    normalized.review_rationale_invalid_field,
+    "summary",
+    "debug-like rationale should record the first invalid field",
+  );
+  assertEqual(
+    normalized.review_rationale_invalid_reason,
+    "debug_like",
+    "debug-like rationale should record the validation reason",
   );
 });
 

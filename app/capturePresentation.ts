@@ -52,6 +52,13 @@ export const INTENT_CONFIG = (saveIntents as SaveIntentConfig[]).filter((intent)
 export const INTENT_OPTIONS = INTENT_CONFIG.map((intent) => intent.key);
 export const INTENT_LABELS = new Map(INTENT_CONFIG.map((intent) => [intent.key, intent.label]));
 export const ADD_INTENT_LABEL = "Add intent";
+const NEUTRAL_REVIEW_RATIONALE: Required<ReviewRationale> = {
+  focus: "Review insight",
+  summary: "Review the suggested details",
+  intent: "Review the Save Intent suggestion",
+  collections: "Review the Collection decision",
+  reminder: "Review the Reminder idea"
+};
 
 export const AUTH_CALLBACK_URL = "preciouscaptures://auth/callback";
 
@@ -1080,12 +1087,49 @@ export function rationaleLine(value: string | null | undefined) {
   return text;
 }
 
+function neutralReviewRationaleText(key: keyof ReviewRationale) {
+  return cleanSentence(NEUTRAL_REVIEW_RATIONALE[key]);
+}
+
+function reviewRationaleFieldIsNeutral(
+  capture: Capture,
+  key: keyof ReviewRationale,
+  value: string | null | undefined
+) {
+  if (!value) return false;
+  if (capture.reviewRationaleStatus === "neutral_fallback") return true;
+  return cleanSentence(value) === neutralReviewRationaleText(key);
+}
+
+function reviewRationaleIsNeutral(capture: Capture) {
+  if (capture.reviewRationaleStatus === "neutral_fallback") return true;
+  const rationale = capture.reviewRationale || {};
+  const keys = ["focus", "summary", "intent", "collections", "reminder"] as const;
+  const presentKeys = keys.filter((key) => Boolean(rationale[key]));
+  return Boolean(presentKeys.length) &&
+    presentKeys.every((key) => reviewRationaleFieldIsNeutral(capture, key, rationale[key]));
+}
+
+function authoredRationaleLine(
+  capture: Capture,
+  key: keyof ReviewRationale,
+  value: string | null | undefined
+) {
+  const text = rationaleLine(value);
+  if (!text || reviewRationaleFieldIsNeutral(capture, key, text)) return "";
+  return text;
+}
+
 export function reviewFocusForCapture(capture: Capture, intentText: string) {
   const rationale = capture.reviewRationale || {};
-  const providedFocus = rationaleLine(rationale.focus);
+  const providedFocus = authoredRationaleLine(capture, "focus", rationale.focus);
   if (providedFocus) return conciseText(providedFocus, 88);
   if (displayStatus(capture) === "failed") return "Review source details";
   const reviewTargets = reviewTargetsForCapture(capture);
+  if (reviewTargets.includes("intent")) {
+    const intentLabel = activeIntentLabel(capture.defaultIntent);
+    return intentLabel ? `Confirm Save Intent: ${intentLabel}` : "Choose a Save Intent";
+  }
   if (reviewTargets.includes("collections")) {
     const collectionsLabel = linkedCollectionsLabel(capture.linkedCollections || []);
     return collectionsLabel === "Add collections"
@@ -1127,7 +1171,7 @@ export function reviewChecklistTasksForCapture(capture: Capture): ReviewChecklis
     title: "Save Intent",
     value: intentValue ? `Use ${intentValue}?` : "Leave without intent?",
     rationale:
-      rationaleLine(rationale.intent) ||
+      authoredRationaleLine(capture, "intent", rationale.intent) ||
       rationaleLine(capture.intentRationale) ||
       (intentValue
         ? `Confirm ${intentValue} is the right action for this capture.`
@@ -1145,7 +1189,7 @@ export function reviewChecklistTasksForCapture(capture: Capture): ReviewChecklis
         ? "Leave ungrouped?"
         : `Keep ${collectionTaskValue}?`,
     rationale:
-      rationaleLine(rationale.collections) ||
+      authoredRationaleLine(capture, "collections", rationale.collections) ||
       (capture.linkedCollections || [])
         .map((collection) => rationaleLine(collection.rationale))
         .find(Boolean) ||
@@ -1170,7 +1214,7 @@ export function reviewChecklistTasksForCapture(capture: Capture): ReviewChecklis
     title: "Reminder",
     value: primaryReminder ? `Keep ${reminderLabel(primaryReminder)}?` : "Leave without reminder?",
     rationale:
-      rationaleLine(rationale.reminder) ||
+      authoredRationaleLine(capture, "reminder", rationale.reminder) ||
       rationaleLine(primaryReminder?.rationale) ||
       "Confirm this only if the idea should stay with the capture.",
     confirmLabel: primaryReminder ? `Yes, keep ${reminderLabel(primaryReminder)}` : "Yes, leave without reminder",
@@ -1182,7 +1226,7 @@ export function reviewChecklistTasksForCapture(capture: Capture): ReviewChecklis
     title: "Analysis",
     value: "Do these details look usable?",
     rationale:
-      rationaleLine(rationale.summary) ||
+      authoredRationaleLine(capture, "summary", rationale.summary) ||
       "Confirm the extracted details look usable, or edit the title and note before saving.",
     confirmLabel: "Yes, mark reviewed",
     clearLabel: "No, dismiss this review question"
@@ -1207,16 +1251,16 @@ export function reviewInsightForCapture(capture: Capture): ReviewInsight {
     .map((reminder) => rationaleLine(reminder.rationale))
     .find(Boolean) || "";
   const intentText =
-    rationaleLine(rationale.intent) ||
+    authoredRationaleLine(capture, "intent", rationale.intent) ||
     rationaleLine(capture.intentRationale);
   const collectionsText =
-    rationaleLine(rationale.collections) ||
+    authoredRationaleLine(capture, "collections", rationale.collections) ||
     collectionRationale;
   const reminderText =
-    rationaleLine(rationale.reminder) ||
+    authoredRationaleLine(capture, "reminder", rationale.reminder) ||
     reminderRationale;
   const summary =
-    rationaleLine(rationale.summary) ||
+    authoredRationaleLine(capture, "summary", rationale.summary) ||
     conciseText([intentText, collectionsText, reminderText].filter(Boolean).join(" "), 140);
   const focus = reviewFocusForCapture(capture, intentText);
   return {
@@ -1226,7 +1270,8 @@ export function reviewInsightForCapture(capture: Capture): ReviewInsight {
       { label: "Save Intent", text: intentText },
       { label: "Collections", text: collectionsText },
       { label: "Reminder idea", text: reminderText }
-    ].filter((section) => Boolean(section.text))
+    ].filter((section) => Boolean(section.text)),
+    isFallback: reviewRationaleIsNeutral(capture)
   };
 }
 

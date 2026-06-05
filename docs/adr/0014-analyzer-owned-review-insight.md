@@ -23,7 +23,9 @@ reject missing, source-only, debug-like, generic, too-long, or malformed copy,
 but it must not compose explanatory rationale from summaries, titles, intents,
 Collection names, or Reminder fields. Invalid Review Insight degrades to
 neutral review copy and adds an `analysis` review target when the user has not
-already confirmed review.
+already confirmed review. The normalized analysis also records the invalid
+field and validation reason so fallback cases can be diagnosed without showing
+the rejected copy to users.
 
 ## Consequences
 
@@ -31,4 +33,6 @@ already confirmed review.
 - Backend validation remains a guardrail, not a second copywriter.
 - Bad insight copy asks for review instead of creating polished but misleading
   rationale.
+- Neutral fallback copy is review scaffolding, not authored AI insight, so the
+  UI should not present those neutral rows under an `AI insight` label.
 - Existing persisted Review Insight is not backfilled by this decision.

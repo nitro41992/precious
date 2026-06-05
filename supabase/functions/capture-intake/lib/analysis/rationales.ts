@@ -50,8 +50,16 @@ export function sourceFallbackAllowedFromAnalysis(
 }
 
 export function sourceOnlyRationale(value: string) {
-  return /\b(instagram|tiktok|youtube|facebook|threads|reddit|reel|shorts?|social post|source app|platform|host|domain|url path|video format|media format)\b/i
-    .test(value);
+  const text = value.trim();
+  const sourceAsBasis =
+    /\b(?:because|since|as|based on|from)\s+(?:it|this|the (?:capture|item|source|link|url|post|video))\s+(?:is|was|comes from|came from|appears to be|looks like)?\s*(?:an?\s+)?(?:instagram|tiktok|youtube|facebook|threads|reddit|reel|shorts?|social post|short social video|source app|platform|host|domain|url path|video format|media format)\b/i;
+  const sourceMetadataAsBasis =
+    /\b(?:because|since|as|based on|from)\s+(?:the\s+)?(?:source app|platform|host|domain|url path|video format|media format)\b/i;
+  const bareSourceLabel =
+    /^(?:an?\s+)?(?:instagram|tiktok|youtube|facebook|threads|reddit)\s+(?:reel|short|shorts?|post|video|social post)$/i;
+  return sourceAsBasis.test(text) ||
+    sourceMetadataAsBasis.test(text) ||
+    bareSourceLabel.test(text);
 }
 
 export function rationaleForAnalysis(
@@ -154,12 +162,13 @@ export function reviewRationaleValidation(
       return {
         valid: false,
         reason,
+        field: key,
         rationale: { ...neutralReviewRationale },
       };
     }
     next[key] = stringValue(reviewRationale[key]) || "";
   }
-  return { valid: true, reason: "", rationale: next };
+  return { valid: true, reason: "", field: "", rationale: next };
 }
 
 export function reviewRationaleFromAnalysis(analysis: Record<string, unknown>) {

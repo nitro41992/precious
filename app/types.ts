@@ -21,11 +21,13 @@ export type ReviewRationale = {
   collections?: string;
   reminder?: string;
 };
+export type ReviewRationaleStatus = "accepted" | "neutral_fallback";
 
 export type ReviewInsight = {
   focus: string;
   summary: string;
   sections: Array<{ label: string; text: string }>;
+  isFallback?: boolean;
 };
 
 export type ReviewChecklistTask = {
@@ -68,6 +70,9 @@ export type Capture = {
   defaultIntent?: string;
   intentRationale?: string;
   reviewRationale?: ReviewRationale;
+  reviewRationaleStatus?: ReviewRationaleStatus;
+  reviewRationaleInvalidReason?: string;
+  reviewRationaleInvalidField?: string;
   confidenceLabel?: string;
   needsReview?: boolean;
   reviewTargets?: ReviewTarget[];

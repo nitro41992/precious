@@ -329,6 +329,15 @@ export function normalizedReviewAnalysis(
     ...normalizedAnalysis,
     ...normalizeVisitTargetFields(normalizedAnalysis),
     review_rationale: reviewRationale.rationale,
+    review_rationale_status: reviewRationale.valid
+      ? "accepted"
+      : "neutral_fallback",
+    review_rationale_invalid_reason: reviewRationale.valid
+      ? null
+      : reviewRationale.reason,
+    review_rationale_invalid_field: reviewRationale.valid
+      ? null
+      : reviewRationale.field,
     review_targets: reviewTargets,
     needs_review: reviewTargets.length > 0,
   };

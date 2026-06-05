@@ -89,6 +89,12 @@ export function captureFromRemote(row: Record<string, any>): Capture {
     defaultIntent: row.current_save_intent || row.default_intent || defaultIntent.category || undefined,
     intentRationale: row.intent_rationale || defaultIntent.rationale || undefined,
     reviewRationale: reviewRationaleFromRemote(analysis.review_rationale),
+    reviewRationaleStatus:
+      analysis.review_rationale_status === "accepted" || analysis.review_rationale_status === "neutral_fallback"
+        ? analysis.review_rationale_status
+        : undefined,
+    reviewRationaleInvalidReason: nullableValue(analysis.review_rationale_invalid_reason),
+    reviewRationaleInvalidField: nullableValue(analysis.review_rationale_invalid_field),
     confidenceLabel: analysis.confidence_label || undefined,
     reviewTargets,
     needsReview: Boolean(

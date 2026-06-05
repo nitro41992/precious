@@ -402,11 +402,14 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     ? selectedReviewInsight.focus
     : reviewStatusCue(selected, selectedReviewReasons.length > 0);
   const showReviewStateText = selectedReviewState !== "Ready" && selectedReviewState !== captureStatusLabel(selected);
+  const hasAuthoredReviewInsight = Boolean(
+    !selectedReviewInsight.isFallback &&
+      (selectedReviewInsight.summary || selectedReviewInsight.sections.length)
+  );
   const showReviewInsight = Boolean(
     selectedNeedsReview ||
-      selected.reviewRationale ||
+      hasAuthoredReviewInsight ||
       selected.intentRationale ||
-      activeIntentLabel(selected.defaultIntent) ||
       selected.suggestedReminders?.length ||
       selected.linkedCollections?.some((collection) => collection.rationale)
   );
