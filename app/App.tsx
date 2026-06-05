@@ -537,7 +537,7 @@ export default function App() {
     const loadingSetter = mode === "archived" ? setArchivedCapturesLoading : setCapturesLoading;
     const phaseSetter = mode === "archived" ? setArchivedCapturesLoadPhase : setCapturesLoadPhase;
     const errorSetter = mode === "archived" ? setArchivedCapturesError : setCapturesError;
-    if (!authReady || (config?.apiUrl && !session?.accessToken)) {
+    if (!authReady || (config?.apiUrl && !session)) {
       if (!options.append) phaseSetter("cold");
       return;
     }
@@ -552,7 +552,7 @@ export default function App() {
       if (mode === "active") await hydrateLocalProcessingCaptures();
     }
     let succeeded = false;
-    if (config?.apiUrl && session?.accessToken) {
+    if (config?.apiUrl && session) {
       try {
         const json = await withFreshAccessToken(async (accessToken) => {
           return await requestJson(
@@ -681,7 +681,7 @@ export default function App() {
     setCollectionsLoading(true);
     setCollectionsError("");
     if (!options.append) await hydrateCachedCollectionPage(mode);
-    if (!config?.apiUrl || !session?.accessToken) {
+    if (!config?.apiUrl || !session) {
       collectionsCacheRef.current[mode] = [];
       collectionsCursorCacheRef.current[mode] = null;
       setCollectionsNextCursor((current) => ({ ...current, [mode]: null }));
@@ -744,7 +744,7 @@ export default function App() {
   ) => {
     const prefetch = Boolean(options.prefetch);
     const phase = options.phase || (options.append ? "append" : "initial");
-    if (!config?.apiUrl || !session?.accessToken) {
+    if (!config?.apiUrl || !session) {
       if (prefetch) return;
       setCollectionCaptures([]);
       setCollectionCapturesForId(collectionId);
@@ -829,7 +829,7 @@ export default function App() {
 
   const loadCaptureDetail = useCallback(async (capture: Capture) => {
     const captureRef = capture.remoteId || capture.id;
-    if (!captureRef || !config?.apiUrl || !session?.accessToken) return;
+    if (!captureRef || !config?.apiUrl || !session) return;
     if (captureDetailHydrationRef.current.has(captureRef)) return;
     captureDetailHydrationRef.current.add(captureRef);
     try {
@@ -864,7 +864,7 @@ export default function App() {
       !capture.visitTarget ||
       !shouldAttemptResolution ||
       !config?.apiUrl ||
-      !session?.accessToken ||
+      !session ||
       placeResolutionRef.current.has(placeResolutionKey)
     ) {
       return;
@@ -1232,7 +1232,7 @@ export default function App() {
       collectionsMode !== "active" ||
       collectionsLoading ||
       !config?.apiUrl ||
-      !session?.accessToken
+      !session
     ) {
       return;
     }
@@ -1266,7 +1266,7 @@ export default function App() {
     config?.apiUrl,
     loadCollectionCaptures,
     selectedCollectionId,
-    session?.accessToken
+    session?.userId
   ]);
 
   useEffect(() => {
@@ -1300,24 +1300,24 @@ export default function App() {
   }, [handleAuthCallbackUrl, loadCaptures, selectCapture]);
 
   useEffect(() => {
-    if (!authReady || (config?.apiUrl && !session?.accessToken)) {
+    if (!authReady || (config?.apiUrl && !session)) {
       setCapturesLoadPhase("cold");
       return;
     }
     void loadCaptures().catch((error) => {
       setCapturesError((current) => current || friendlyError(error, "Could not load captures"));
     });
-  }, [authReady, config?.apiUrl, loadCaptures, session?.accessToken]);
+  }, [authReady, config?.apiUrl, loadCaptures, session?.userId]);
 
   useEffect(() => {
-    if (!config?.apiUrl || !session?.accessToken || collectionsPrefetchStartedRef.current) return;
+    if (!config?.apiUrl || !session || collectionsPrefetchStartedRef.current) return;
     collectionsPrefetchStartedRef.current = true;
     return scheduleIdleTask(() => {
       void loadCollections("active").catch(() => {
         collectionsPrefetchStartedRef.current = false;
       });
     });
-  }, [config?.apiUrl, loadCollections, session?.accessToken]);
+  }, [config?.apiUrl, loadCollections, session?.userId]);
 
   const selected = selectedId
     ? captures.find((capture) => capture.id === selectedId) ??
@@ -1705,7 +1705,7 @@ export default function App() {
   async function saveContextNote(capture: Capture, noteValue: string) {
     const captureKey = captureDraftKey(capture);
     setNoteSaveState("saving");
-    if (config?.apiUrl && session?.accessToken && capture.remoteId) {
+    if (config?.apiUrl && session && capture.remoteId) {
       try {
         const json = await withFreshAccessToken((accessToken) =>
           requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
@@ -1753,7 +1753,7 @@ export default function App() {
     if (!selected) return;
     const currentSaveIntent = draftIntentDirty ? draftIntent || null : undefined;
 
-    if (config?.apiUrl && session?.accessToken) {
+    if (config?.apiUrl && session) {
       try {
         const body: Record<string, unknown> = {
           captureId: selected.remoteId || selected.id,
@@ -1806,7 +1806,7 @@ export default function App() {
 
   async function savePurposeIntent(intent: string | null) {
     if (!selected) return;
-    if (config?.apiUrl && session?.accessToken) {
+    if (config?.apiUrl && session) {
       try {
         const json = await withFreshAccessToken((accessToken) =>
           requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
@@ -1853,7 +1853,7 @@ export default function App() {
     resource: "collections" | "collection-links",
     input: { method: string; body?: unknown }
   ) {
-    if (!config?.apiUrl || !session?.accessToken) throw new Error("Sign in to manage collections.");
+    if (!config?.apiUrl || !session) throw new Error("Sign in to manage collections.");
     return withFreshAccessToken((accessToken) =>
       requestJson<T>(edgeResourceUrl(config.apiUrl, resource), {
         method: input.method,
@@ -1886,7 +1886,7 @@ export default function App() {
     options: { closePicker?: boolean; toastMessage?: string } = {}
   ) {
     if (!selected) return;
-    if (!config?.apiUrl || !session?.accessToken) {
+    if (!config?.apiUrl || !session) {
       showToast("Sign in to manage collections.", "error");
       return;
     }
@@ -2138,7 +2138,7 @@ export default function App() {
 
   async function dismissReminder(reminderIndex: number) {
     if (!selected) return;
-    if (config?.apiUrl && session?.accessToken) {
+    if (config?.apiUrl && session) {
       try {
         const json = await withFreshAccessToken((accessToken) =>
           requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
@@ -2179,7 +2179,7 @@ export default function App() {
 
   async function saveReminder(draft: ReminderScheduleDraft, reminderIndex: number | null) {
     if (!selected) return;
-    if (config?.apiUrl && session?.accessToken) {
+    if (config?.apiUrl && session) {
       try {
         const json = await withFreshAccessToken((accessToken) =>
           requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
@@ -2293,7 +2293,7 @@ export default function App() {
 
   async function undoDeleteCapture(capture: Capture, returnCollectionId: string | null = null) {
     const captureRef = capture.remoteId || capture.id;
-    if (config?.apiUrl && session?.accessToken && capture.remoteId) {
+    if (config?.apiUrl && session && capture.remoteId) {
       try {
         const json = await withFreshAccessToken((accessToken) =>
           requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
@@ -2363,7 +2363,7 @@ export default function App() {
       actionLabel: "Undo",
       action: () => void undoDeleteCapture(capture, returnCollectionId)
     });
-    if (config?.apiUrl && session?.accessToken && capture.remoteId) {
+    if (config?.apiUrl && session && capture.remoteId) {
       try {
         await withFreshAccessToken((accessToken) =>
           requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {

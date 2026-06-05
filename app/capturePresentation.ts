@@ -758,6 +758,18 @@ export function captureImageLoadKey(capture: Capture) {
   const imageUri = captureImageUrl(capture);
   if (!imageUri) return "";
   if (capture.imageAssetUrl && imageUri === capture.imageAssetUrl) {
+    return [capture.imageAssetCacheKey, imageUri].filter(Boolean).join(":");
+  }
+  if (capture.sourcePreviewAssetUrl && imageUri === capture.sourcePreviewAssetUrl) {
+    return [capture.sourcePreviewAssetCacheKey, imageUri].filter(Boolean).join(":");
+  }
+  return imageUri;
+}
+
+export function captureImageCacheKey(capture: Capture) {
+  const imageUri = captureImageUrl(capture);
+  if (!imageUri) return "";
+  if (capture.imageAssetUrl && imageUri === capture.imageAssetUrl) {
     return capture.imageAssetCacheKey || imageUri;
   }
   if (capture.sourcePreviewAssetUrl && imageUri === capture.sourcePreviewAssetUrl) {
@@ -767,6 +779,23 @@ export function captureImageLoadKey(capture: Capture) {
 }
 
 export function captureFullImageLoadKey(capture: Capture) {
+  const imageUri = captureFullImageUrl(capture);
+  if (!imageUri) return "";
+  if (
+    capture.imageAssetFullUrl && imageUri === capture.imageAssetFullUrl
+  ) {
+    return [capture.imageAssetFullCacheKey || capture.imageAssetCacheKey, imageUri].filter(Boolean).join(":");
+  }
+  if (capture.imageAssetUrl && imageUri === capture.imageAssetUrl) {
+    return [capture.imageAssetCacheKey, imageUri].filter(Boolean).join(":");
+  }
+  if (capture.sourcePreviewAssetUrl && imageUri === capture.sourcePreviewAssetUrl) {
+    return [capture.sourcePreviewAssetCacheKey, imageUri].filter(Boolean).join(":");
+  }
+  return imageUri;
+}
+
+export function captureFullImageCacheKey(capture: Capture) {
   const imageUri = captureFullImageUrl(capture);
   if (!imageUri) return "";
   if (

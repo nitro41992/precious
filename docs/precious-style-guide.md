@@ -103,7 +103,7 @@ Rules:
 
 ### Typography
 
-- Use bundled Satoshi for the Android product UI, with native system fallback when the bundled family is unavailable. Avoid Inter as the primary product typeface.
+- Use bundled Clash Display for page headers, section headers, sheet headers, Capture Review title headers, capture row titles, Collection titles, and card titles. Use medium-weight Clash for dense row/card titles and reserve heavier Clash cuts for page-level hierarchy. Use bundled Satoshi for body copy, metadata, inputs, buttons, navigation, labels, and non-title row content. Native system fonts remain the fallback when bundled families are unavailable. Avoid Inter as the primary product typeface.
 - Page title: 28-30px, 800-900 weight, tight but readable line height.
 - Section title: 17-19px, 700 weight.
 - Row title: 17-18px, 600-700 weight, usually one line.

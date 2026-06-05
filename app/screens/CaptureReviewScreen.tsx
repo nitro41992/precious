@@ -40,9 +40,9 @@ import {
   activeIntentLabel,
   captureFieldRationale,
   captureFieldStates,
-  captureFullImageLoadKey,
+  captureFullImageCacheKey,
   captureFullImageUrl,
-  captureImageLoadKey,
+  captureImageCacheKey,
   captureImageUrl,
   captureIntentLabel,
   captureOpenUrl,
@@ -359,9 +359,9 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const selectedSourceIsSharedImage = selectedSourceLabel === "Shared Image";
   const selectedOpenUrl = captureOpenUrl(selected);
   const selectedImageUrl = captureImageUrl(selected);
-  const selectedImageLoadKey = captureImageLoadKey(selected);
+  const selectedImageCacheKey = captureImageCacheKey(selected);
   const selectedFullImageUrl = captureFullImageUrl(selected);
-  const selectedFullImageLoadKey = captureFullImageLoadKey(selected);
+  const selectedFullImageCacheKey = captureFullImageCacheKey(selected);
   const selectedMediaOpensImage = Boolean(selectedImageUrl && isImageCapture(selected));
   const selectedMediaPressEnabled = selectedMediaOpensImage || Boolean(selectedOpenUrl);
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
@@ -523,7 +523,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                   onPress={() => {
                     if (selectedMediaOpensImage) {
                       setImageViewerSource({
-                        cacheKey: selectedFullImageUrl ? selectedFullImageLoadKey : selectedImageLoadKey,
+                        cacheKey: selectedFullImageUrl ? selectedFullImageCacheKey : selectedImageCacheKey,
                         url: selectedFullImageUrl || selectedImageUrl
                       });
                       setImageViewerOpen(true);
@@ -549,7 +549,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                         <Image
                           cachePolicy="memory-disk"
                           contentFit="cover"
-                          source={selectedImageLoadKey ? { uri: selectedImageUrl, cacheKey: selectedImageLoadKey } : { uri: selectedImageUrl }}
+                          source={selectedImageCacheKey ? { uri: selectedImageUrl, cacheKey: selectedImageCacheKey } : { uri: selectedImageUrl }}
                           style={styles.reviewMediaImage}
                         />
                       </Animated.View>
@@ -764,7 +764,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                   </View>
                   {urlEvidenceNotice ? (
                     <View style={styles.sourceBlock}>
-                      <Text style={styles.meta}>Link evidence</Text>
+                      <Text style={styles.sectionTitle}>Link evidence</Text>
                       <Text style={styles.supportingText}>{urlEvidenceNotice}</Text>
                       {selected.urlEvidence?.status === "needs_client_resolution" && selected.sourceUrl ? (
                         <>

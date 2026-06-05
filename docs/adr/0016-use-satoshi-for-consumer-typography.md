@@ -4,7 +4,7 @@ Date: 2026-06-05
 
 ## Status
 
-Accepted
+Accepted, amended by `0019-use-clash-display-for-display-typography.md`
 
 ## Context
 

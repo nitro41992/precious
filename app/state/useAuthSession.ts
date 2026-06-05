@@ -109,6 +109,20 @@ export function useAuthSession({
     void handleAuthCallbackUrl(url);
   }, [config, handleAuthCallbackUrl]);
 
+  useEffect(() => {
+    if (!configLoaded || !sessionLoaded || session || !nativeAuth) return;
+    let cancelled = false;
+    nativeAuth.refreshSession()
+      .then((raw) => {
+        if (cancelled || !raw) return;
+        setSession(JSON.parse(raw) as AuthSession);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [configLoaded, session, sessionLoaded]);
+
   const getFreshSession = useCallback(async (force = false) => {
     if (!session) return null;
     const raw = force && nativeAuth?.forceRefreshSession

@@ -97,9 +97,9 @@ export const styles = StyleSheet.create({
   },
   title: {
     color: colors.ink,
-    ...typefaces.black,
     fontSize: 30,
     fontWeight: "900",
+    ...typefaces.displayBold,
     letterSpacing: 0,
     lineHeight: 35
   },
@@ -333,10 +333,20 @@ export const styles = StyleSheet.create({
     paddingVertical: 10
   },
   collectionSheetTitleInput: {
+    ...typefaces.displayMedium,
+    fontSize: 18,
+    fontWeight: "400",
+    lineHeight: 24,
     maxHeight: 64,
     minHeight: 54,
     paddingVertical: 10,
     textAlignVertical: "center"
+  },
+  collectionDetailTitleInput: {
+    ...typefaces.displayMedium,
+    fontSize: 18,
+    fontWeight: "400",
+    lineHeight: 24
   },
   collectionSheetDescriptionInput: {
     minHeight: 96
@@ -451,9 +461,9 @@ export const styles = StyleSheet.create({
   },
   fieldRationaleTitle: {
     color: colors.secondary,
-    ...typefaces.bold,
     fontSize: 12,
     fontWeight: "800",
+    ...typefaces.displaySemibold,
     lineHeight: 16
   },
   fieldRationaleText: {
@@ -486,9 +496,9 @@ export const styles = StyleSheet.create({
   },
   aiInsightTitle: {
     color: colors.secondary,
-    ...typefaces.bold,
     fontSize: 12,
     fontWeight: "800",
+    ...typefaces.displaySemibold,
     lineHeight: 16
   },
   aiInsightText: {
@@ -664,9 +674,9 @@ export const styles = StyleSheet.create({
   },
   groupHeader: {
     color: colors.muted,
-    ...typefaces.bold,
     fontSize: 12,
     fontWeight: "800",
+    ...typefaces.displaySemibold,
     paddingHorizontal: 22,
     paddingBottom: 2,
     paddingTop: 16
@@ -822,11 +832,11 @@ export const styles = StyleSheet.create({
   },
   captureTitle: {
     color: colors.ink,
-    ...typefaces.medium,
     flex: 1,
-    fontSize: 17.5,
-    fontWeight: "600",
-    lineHeight: 22.5
+    fontSize: 19,
+    fontWeight: "400",
+    ...typefaces.displayMedium,
+    lineHeight: 24
   },
   status: {
     color: colors.ink,
@@ -847,6 +857,14 @@ export const styles = StyleSheet.create({
     ...typefaces.medium,
     flexShrink: 1,
     fontSize: 13,
+    lineHeight: 18
+  },
+  sectionTitle: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "800",
+    ...typefaces.displaySemibold,
+    letterSpacing: 0,
     lineHeight: 18
   },
   rowMetaLine: {
@@ -1118,9 +1136,9 @@ export const styles = StyleSheet.create({
   },
   emptyTitle: {
     color: colors.ink,
-    ...typefaces.bold,
     fontSize: 22,
     fontWeight: "700",
+    ...typefaces.displayBold,
     marginBottom: 8
   },
   emptyText: {
@@ -1518,9 +1536,9 @@ export const styles = StyleSheet.create({
   },
   collectionCardTitle: {
     color: colors.ink,
-    ...typefaces.medium,
     fontSize: 15,
-    fontWeight: "600",
+    fontWeight: "400",
+    ...typefaces.displayMedium,
     lineHeight: 19
   },
   collectionCardMeta: {
@@ -1898,9 +1916,9 @@ export const styles = StyleSheet.create({
   },
   titleInput: {
     color: colors.ink,
-    ...typefaces.bold,
     fontSize: 28,
     fontWeight: "700",
+    ...typefaces.displayBold,
     lineHeight: 34,
     paddingVertical: 6
   },
@@ -2064,9 +2082,9 @@ export const styles = StyleSheet.create({
   },
   reviewMediaFallbackTitle: {
     color: colors.ink,
-    ...typefaces.bold,
     fontSize: 20,
     fontWeight: "800",
+    ...typefaces.displayBold,
     lineHeight: 25,
     textAlign: "center"
   },
@@ -2130,9 +2148,9 @@ export const styles = StyleSheet.create({
   },
   reviewTitleInput: {
     color: colors.ink,
-    ...typefaces.medium,
     fontSize: 25,
-    fontWeight: "600",
+    fontWeight: "400",
+    ...typefaces.displayMedium,
     lineHeight: 31,
     padding: 0,
     paddingVertical: 0
@@ -2411,7 +2429,8 @@ export const styles = StyleSheet.create({
   sheetTitle: {
     color: colors.ink,
     fontSize: 18,
-    fontWeight: "800"
+    fontWeight: "800",
+    ...typefaces.displayBold
   },
   sheetSubtitle: {
     color: colors.muted,
@@ -2474,6 +2493,13 @@ export const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 13,
     fontWeight: "800",
+    lineHeight: 17
+  },
+  reminderFieldSectionTitle: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "800",
+    ...typefaces.displaySemibold,
     lineHeight: 17
   },
   reminderFieldValue: {
@@ -2828,10 +2854,10 @@ export const styles = StyleSheet.create({
   },
   noteActionTitle: {
     color: colors.ink,
-    ...typefaces.bold,
     flex: 1,
     fontSize: 17,
     fontWeight: "700",
+    ...typefaces.displaySemibold,
     lineHeight: 22
   },
   noteActionPreview: {

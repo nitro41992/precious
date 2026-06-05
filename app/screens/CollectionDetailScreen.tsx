@@ -131,7 +131,7 @@ export function CollectionDetailScreen({ actions, data, state }: CollectionDetai
               <Text style={styles.title}>{selectedCollection.title}</Text>
               <Text style={styles.sourceText}>{selectedCollection.description}</Text>
               <View style={styles.sectionHeader}>
-                <Text style={styles.meta}>Captures</Text>
+                <Text style={styles.sectionTitle}>Captures</Text>
               </View>
             </View>
           }
@@ -161,7 +161,7 @@ export function CollectionDetailScreen({ actions, data, state }: CollectionDetai
                 ? renderListLoadingFooter("Loading more captures...")
                 : null}
               <View style={styles.collectionSettings}>
-                <Text style={styles.meta}>Collection settings</Text>
+                <Text style={styles.sectionTitle}>Collection settings</Text>
                 <TextInput
                   onChangeText={(value) => {
                     setCollectionDraftDirty(true);
@@ -170,7 +170,7 @@ export function CollectionDetailScreen({ actions, data, state }: CollectionDetai
                   onFocus={scrollCollectionSettingsIntoView}
                   placeholder="Title"
                   placeholderTextColor={colors.placeholder}
-                  style={styles.search}
+                  style={[styles.search, styles.collectionDetailTitleInput]}
                   testID="pc.collection.detail.title"
                   value={collectionTitle}
                 />

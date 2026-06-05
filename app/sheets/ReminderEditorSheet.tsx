@@ -211,7 +211,7 @@ export function ReminderEditorSheet({
           <View style={styles.reminderFieldGroup}>
             <View style={styles.reminderFieldSectionHeader}>
               <Calendar color={colors.muted} size={18} weight="regular" />
-              <Text style={styles.reminderFieldLabel}>Date</Text>
+              <Text style={styles.reminderFieldSectionTitle}>Date</Text>
             </View>
             <Pressable
               accessibilityRole="button"
@@ -239,7 +239,7 @@ export function ReminderEditorSheet({
           <View style={styles.reminderFieldGroup}>
             <View style={styles.reminderFieldSectionHeader}>
               <Clock color={colors.muted} size={18} weight="regular" />
-              <Text style={styles.reminderFieldLabel}>Time</Text>
+              <Text style={styles.reminderFieldSectionTitle}>Time</Text>
               {draft.startTime || draft.endTime ? (
                 <Pressable onPress={() => setTimeRange("", "")} hitSlop={8}>
                   <Text style={styles.reminderInlineAction}>Clear</Text>
@@ -297,7 +297,7 @@ export function ReminderEditorSheet({
             </View>
           ) : null}
           <View style={styles.reminderSummaryBlock}>
-            <Text style={styles.reminderFieldLabel}>Duration</Text>
+            <Text style={styles.reminderFieldSectionTitle}>Duration</Text>
             <Text style={styles.reminderSummaryText}>
               {invalidPartialTime
                 ? "Add a start time first"

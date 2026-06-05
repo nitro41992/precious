@@ -80,6 +80,26 @@ test("captureDisplayTitle never falls back to Saved from source domain", () => {
   assert.notEqual(title, "Saved from instagram.com");
 });
 
+test("capture image load keys change with refreshed signed URLs while cache keys stay stable", () => {
+  const {
+    captureImageCacheKey,
+    captureImageLoadKey
+  } = loadCapturePresentation();
+  const base = capture({
+    imageAssetUrl: "https://example.supabase.co/storage/v1/object/sign/a.png?token=old",
+    imageAssetCacheKey: "captures/user/a.png:thumb",
+    imageAssetMimeType: "image/png"
+  });
+  const refreshed = {
+    ...base,
+    imageAssetUrl: "https://example.supabase.co/storage/v1/object/sign/a.png?token=new"
+  };
+
+  assert.equal(captureImageCacheKey(base), "captures/user/a.png:thumb");
+  assert.equal(captureImageCacheKey(refreshed), "captures/user/a.png:thumb");
+  assert.notEqual(captureImageLoadKey(base), captureImageLoadKey(refreshed));
+});
+
 test("captureDisplayTitle uses non-source summary before generic fallback", () => {
   const { captureDisplayTitle } = loadCapturePresentation();
   assert.equal(

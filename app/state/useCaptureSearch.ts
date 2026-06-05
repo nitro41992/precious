@@ -70,7 +70,7 @@ export function useCaptureSearch({
     searchOpen &&
       searchTerm &&
       config?.apiUrl &&
-      session?.accessToken &&
+      session &&
       isEdgeCaptureApi(config.apiUrl)
   );
   const localSearchResults = useMemo(() => {
@@ -93,7 +93,7 @@ export function useCaptureSearch({
     : localSearchResults;
 
   useEffect(() => {
-    if (!remoteSearchActive || !config?.apiUrl || !session?.accessToken) {
+    if (!remoteSearchActive || !config?.apiUrl || !session) {
       searchRequestSeqRef.current += 1;
       setRemoteSearchLoading(false);
       setRemoteSearchEnhancing(false);
@@ -178,7 +178,7 @@ export function useCaptureSearch({
     currentSearchKey,
     remoteSearchActive,
     searchTerm,
-    session?.accessToken,
+    session?.userId,
     withFreshAccessToken
   ]);
 

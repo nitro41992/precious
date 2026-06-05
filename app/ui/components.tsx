@@ -21,6 +21,7 @@ import type {
 } from "../types";
 import { displayStatus, hostFromUrl } from "../captureLogic";
 import {
+  captureImageCacheKey,
   captureImageUrl,
   captureSourceHost,
   captureStatusLabel,
@@ -267,6 +268,7 @@ export function SourceMark({
   const extractedFavicon = typeof capture.urlEvidence?.favicon === "string" ? capture.urlEvidence.favicon.trim() : "";
   const faviconUri = host && !failedFavicons[host] ? sourceFaviconUrl(iconHost) || extractedFavicon : "";
   const imageUri = size === "row" && !imageUnavailable ? captureImageUrl(capture) : "";
+  const imageCacheKey = size === "row" && imageUri ? captureImageCacheKey(capture) : "";
   const Icon = sourceIconForCapture(capture);
   const itemStatus = displayStatus(capture);
   const metaScreenshotPill = size === "meta" && isScreenshotCapture(capture);
@@ -295,7 +297,7 @@ export function SourceMark({
           onLoad={() => {
             if (imageLoadKey) onImageLoadState?.(imageLoadKey, "loaded");
           }}
-          source={imageLoadKey ? { uri: imageUri, cacheKey: imageLoadKey } : { uri: imageUri }}
+          source={imageCacheKey ? { uri: imageUri, cacheKey: imageCacheKey } : { uri: imageUri }}
           style={styles.captureThumbnailImage}
         />
       </View>

@@ -56,9 +56,19 @@ function androidFont(family: string) {
   return Platform.OS === "android" ? { fontFamily: family } : {};
 }
 
+function androidExactFont(family: string) {
+  return Platform.OS === "android"
+    ? { fontFamily: family, fontWeight: "400" as const }
+    : {};
+}
+
 export const typefaces = {
   regular: androidFont("Satoshi-Regular"),
   medium: androidFont("Satoshi-Medium"),
   bold: androidFont("Satoshi-Bold"),
-  black: androidFont("Satoshi-Black")
+  black: androidFont("Satoshi-Black"),
+  displayRegular: androidExactFont("ClashDisplay-Regular"),
+  displayMedium: androidExactFont("ClashDisplay-Medium"),
+  displaySemibold: androidExactFont("ClashDisplay-Semibold"),
+  displayBold: androidExactFont("ClashDisplay-Bold")
 };
