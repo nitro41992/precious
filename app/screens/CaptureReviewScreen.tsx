@@ -122,6 +122,8 @@ type CaptureReviewScreenProps = {
 
 const MIN_IMAGE_SCALE = 1;
 const MAX_IMAGE_SCALE = 4;
+const REVIEW_MEDIA_EXPANDED_IMAGE_SCALE = 1.08;
+const REVIEW_MEDIA_COLLAPSED_IMAGE_SCALE = 1.02;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -436,7 +438,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   });
   const reviewMediaImageScale = reviewScrollY.interpolate({
     inputRange: [0, reviewAspectShiftDistance],
-    outputRange: [1, 0.96],
+    outputRange: [REVIEW_MEDIA_EXPANDED_IMAGE_SCALE, REVIEW_MEDIA_COLLAPSED_IMAGE_SCALE],
     extrapolate: "clamp"
   });
 
