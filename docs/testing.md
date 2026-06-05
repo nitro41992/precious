@@ -172,6 +172,15 @@ PRECIOUS_E2E_PASSWORD=...
 
 Keep Maestro coverage focused on user-critical flows: sign-in, manual capture, review/edit, collection creation, delete/undo, and Android share intake. Prefer visible text for stable user-facing assertions and `testID` only for controls whose labels or placement may change during design iteration.
 
+For Capture Review field-rationale smoke coverage on a phone, seed or pick a Capture with AI-selected Purpose, Collection, and Later values, then verify:
+
+- Purpose, Collection, and Later values appear in one flat editable sentence on Capture Review.
+- No inline rationale, `Looks good`, clear-suggestion action, or field-level review styling appears.
+- Tapping each inline field opens its focused bottom sheet editor.
+- The relevant AI rationale appears inside the bottom sheet while the field still matches the AI-selected value.
+- Editing a field hides stale AI rationale for that field.
+- No Review Insight checklist sheet appears for Purpose, Collection, or Later.
+
 ## Android phone dev loop
 
 For fast UI work on a physical phone, install the debug APK once, then run Metro. This is the phone equivalent of the emulator dev loop: JavaScript and TypeScript changes update through Metro without rebuilding a hosted APK.

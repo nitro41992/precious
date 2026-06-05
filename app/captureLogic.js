@@ -141,14 +141,8 @@ function normalizeReviewTargets(value) {
 function inferredReviewTargets(capture) {
   const targets = [];
   const focus = String(capture.reviewRationale?.focus || "").toLowerCase();
-  if (!capture.defaultIntent || confidenceRequiresReview(capture.confidenceLabel)) {
-    targets.push("intent");
-  }
-  if (/\b(collection|collections)\b/.test(focus)) {
-    targets.push("collections");
-  }
-  if (/\b(reminder|remind)\b/.test(focus)) {
-    targets.push("reminder");
+  if (/\b(link|analysis|source|context|details?)\b/.test(focus)) {
+    targets.push("analysis");
   }
   if ((capture.needsReview || capture.status === "needs_review") && !targets.length) {
     targets.push("analysis");
@@ -158,7 +152,7 @@ function inferredReviewTargets(capture) {
 
 function reviewTargetsForCapture(capture) {
   if (capture.reviewConfirmedAt || capture.status === "processing" || capture.status === "failed") return [];
-  if (Array.isArray(capture.reviewTargets)) return normalizeReviewTargets(capture.reviewTargets);
+  if (Array.isArray(capture.reviewTargets)) return normalizeReviewTargets(capture.reviewTargets).filter((target) => target === "analysis");
   return inferredReviewTargets(capture);
 }
 
@@ -191,6 +185,21 @@ function collectionSelectionActionState(capture, selectedCollectionIds, currentC
         : pendingReview
           ? "Confirm collections"
           : "Done"
+  };
+}
+
+function captureFieldState(input = {}) {
+  const kind = input.kind;
+  const value = String(input.value || "").trim();
+  const emptyLabel = String(input.emptyLabel || "");
+  const hasValue = Boolean(value);
+  return {
+    kind,
+    value,
+    displayValue: hasValue ? value : emptyLabel,
+    hasValue,
+    isEmpty: !hasValue,
+    canEdit: true
   };
 }
 
@@ -301,6 +310,7 @@ module.exports = {
   confidenceRequiresReview,
   hasExtractedData,
   hostFromUrl,
+  captureFieldState,
   isArchived,
   isDeleted,
   isRejected,

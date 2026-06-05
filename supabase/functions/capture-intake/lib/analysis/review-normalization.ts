@@ -4,10 +4,7 @@ import {
 } from "../config.ts";
 import { finiteNumber, jsonObject, stringValue } from "../common.ts";
 import type { AnalysisOutput } from "../types.ts";
-import {
-  reviewRationaleValidation,
-  sanitizeAnalysisRationales,
-} from "./rationales.ts";
+import { sanitizeAnalysisRationales } from "./rationales.ts";
 import { normalizeVisitTargetFields } from "./visit-targets.ts";
 import { normalizedLocationContext } from "./capture-roles.ts";
 
@@ -17,9 +14,6 @@ export function confidenceRequiresReview(value: unknown) {
 }
 
 export const reviewTargetKeys = [
-  "intent",
-  "collections",
-  "reminder",
   "analysis",
 ] as const;
 const reviewTargetSet = new Set<string>(reviewTargetKeys);
@@ -52,41 +46,15 @@ function analysisHasReviewTargets(analysis: Record<string, unknown>) {
   return Object.prototype.hasOwnProperty.call(analysis, "review_targets");
 }
 
-function reviewTargetsCompatibleWithAnalysis(
-  analysis: Record<string, unknown>,
-  targets: string[],
-) {
-  if (!targets.includes("reminder")) return targets;
-  const hasTimeReminder = normalizedTimeReminderSuggestions(
-    analysis.suggested_reminders,
-  ).length > 0;
-  return targets.filter((target) => target !== "reminder" || hasTimeReminder);
-}
-
 export function reviewTargetsForAnalysis(
   analysis: Record<string, unknown>,
   reviewConfirmedAt?: unknown,
 ) {
   if (reviewConfirmedAt) return [] as string[];
   if (analysisHasReviewTargets(analysis)) {
-    return reviewTargetsCompatibleWithAnalysis(
-      analysis,
-      normalizedReviewTargets(analysis.review_targets),
-    );
+    return normalizedReviewTargets(analysis.review_targets);
   }
-  const defaultIntent = jsonObject(analysis.default_intent);
-  const targets: string[] = [];
-  if (
-    !activeIntentCategory(defaultIntent.category) ||
-    confidenceRequiresReview(analysis.confidence_label)
-  ) {
-    targets.push("intent");
-  }
-  if (analysis.needs_review && !targets.length) targets.push("analysis");
-  return reviewTargetsCompatibleWithAnalysis(
-    analysis,
-    normalizedReviewTargets(targets),
-  );
+  return analysis.needs_review ? ["analysis"] : [];
 }
 
 export function resolveReviewTargets(
@@ -108,9 +76,6 @@ export function analysisRequiresReview(
   analysis: Record<string, unknown>,
   reviewConfirmedAt?: unknown,
 ) {
-  if (!reviewConfirmedAt && !reviewRationaleValidation(analysis).valid) {
-    return true;
-  }
   return reviewTargetsForAnalysis(analysis, reviewConfirmedAt).length > 0;
 }
 
@@ -317,27 +282,12 @@ export function normalizedReviewAnalysis(
       sanitized.suggested_reminders,
     ),
   };
-  const reviewRationale = reviewRationaleValidation(normalizedAnalysis);
-  const reviewTargets = normalizedReviewTargets([
-    ...reviewTargetsForAnalysis(
-      normalizedAnalysis,
-      reviewConfirmedAt,
-    ),
-    ...(!reviewConfirmedAt && !reviewRationale.valid ? ["analysis"] : []),
-  ]);
+  const reviewTargets = normalizedReviewTargets(
+    reviewTargetsForAnalysis(normalizedAnalysis, reviewConfirmedAt),
+  );
   return {
     ...normalizedAnalysis,
     ...normalizeVisitTargetFields(normalizedAnalysis),
-    review_rationale: reviewRationale.rationale,
-    review_rationale_status: reviewRationale.valid
-      ? "accepted"
-      : "neutral_fallback",
-    review_rationale_invalid_reason: reviewRationale.valid
-      ? null
-      : reviewRationale.reason,
-    review_rationale_invalid_field: reviewRationale.valid
-      ? null
-      : reviewRationale.field,
     review_targets: reviewTargets,
     needs_review: reviewTargets.length > 0,
   };

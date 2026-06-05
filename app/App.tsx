@@ -19,6 +19,7 @@ import {
 
 import { AppSheets } from "./sheets/AppSheets";
 import { CollectionComposerSheet } from "./sheets/CollectionComposerSheet";
+import { CollectionSelectorSheet } from "./sheets/CollectionSelectorSheet";
 import { useAppUiEffects } from "./state/useAppUiEffects";
 import { useAuthSession } from "./state/useAuthSession";
 import { useCaptureFeed } from "./state/useCaptureFeed";
@@ -48,7 +49,6 @@ import type {
   ReminderDraftAction,
   ReminderScheduleDraft,
   ReminderReviewDecision,
-  ReviewChecklistTask,
   ReviewTarget,
   ToastState,
 } from "./types";
@@ -94,7 +94,6 @@ import {
 import { AuthScreen } from "./screens/AuthScreen";
 import { CaptureReviewScreen } from "./screens/CaptureReviewScreen";
 import { CollectionDetailScreen } from "./screens/CollectionDetailScreen";
-import { CollectionSelectorScreen } from "./screens/CollectionSelectorScreen";
 import { CollectionsScreen } from "./screens/CollectionsScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { SearchScreen } from "./screens/SearchScreen";
@@ -1147,15 +1146,7 @@ export default function App() {
     ? collections.find((collection) => collection.id === selectedCollectionId) ?? null
     : null;
 
-  const {
-    openReviewInsight,
-    rationaleEditTarget,
-    rationaleSheet,
-    refreshRationaleSheet,
-    setRationaleEditTarget,
-    setRationaleSheet,
-    visitTargetMapCandidates
-  } = useCaptureReview({ selected });
+  const { visitTargetMapCandidates } = useCaptureReview({ selected });
 
   const {
     homeColdSkeletonVisible,
@@ -1229,7 +1220,6 @@ export default function App() {
     noteInputRef,
     noteSheetOpen,
     pickingCaptureImage,
-    rationaleSheet,
     reviewMotion,
     searchMotion,
     searchOpen,
@@ -1245,8 +1235,6 @@ export default function App() {
     setDraftNote,
     setDraftTitle,
     setKeyboardHeight,
-    setRationaleEditTarget,
-    setRationaleSheet,
     setSearchOpen,
     showCaptureComposer,
     showCollectionForm,
@@ -1707,8 +1695,6 @@ export default function App() {
         const updatedCapture = captureFromRemote(json.capture);
         applyUpdatedCapture(updatedCapture, selected.id);
         setDraftIntentDirty(false);
-        setRationaleEditTarget(null);
-        refreshRationaleSheet(updatedCapture);
         showToast("Review updated.", "success");
       } catch (error) {
         showErrorToast(error, "Could not update review.");
@@ -1744,74 +1730,11 @@ export default function App() {
     updatedCapture.reviewConfirmedAt = stillNeedsReview ? selected.reviewConfirmedAt : Date.now();
     applyUpdatedCapture(updatedCapture, selected.id);
     setDraftIntentDirty(false);
-    setRationaleEditTarget(null);
-    refreshRationaleSheet(updatedCapture);
     showToast("Review updated.", "success");
   }
 
-  function editReviewTask(task: ReviewChecklistTask) {
-    if (task.target === "intent") {
-      setRationaleEditTarget((current) => (current === "intent" ? null : "intent"));
-      return;
-    }
-    if (task.target === "collections") {
-      setRationaleSheet(null);
-      setRationaleEditTarget(null);
-      void openCollectionPicker();
-      return;
-    }
-    if (task.target === "reminder") {
-      setRationaleSheet(null);
-      setRationaleEditTarget(null);
-      setReminderSheetOpen(true);
-    }
-  }
-
-  function clearReviewTask(task: ReviewChecklistTask) {
-    if (task.target === "collections") {
-      setRationaleSheet(null);
-      setRationaleEditTarget(null);
-      if (selected && hasPendingCollectionDecision(selected)) {
-        void resolveReviewTargets(["collections"], { acceptCollectionSuggestions: false });
-        return;
-      }
-      const confirmedCollectionIds = selected
-        ? confirmedLinkedCollectionsForCapture(selected).map((collection) => collection.id)
-        : [];
-      const hasUnconfirmedAnalysisLinks = Boolean(
-        selected?.linkedCollections?.some((collection) => collection.createdBy === "analysis")
-      );
-      if (hasUnconfirmedAnalysisLinks) {
-        void updateCaptureCollections(confirmedCollectionIds, {
-          closePicker: false,
-          toastMessage: "Collection suggestion cleared."
-        });
-        return;
-      }
-      if (!confirmedCollectionIds.length) {
-        void resolveReviewTargets(["collections"], { acceptCollectionSuggestions: false });
-        return;
-      }
-      void updateCaptureCollections([], { closePicker: false, toastMessage: "Collections cleared." });
-      return;
-    }
-    if (task.target === "reminder") {
-      setRationaleSheet(null);
-      setRationaleEditTarget(null);
-      if (!selected?.suggestedReminders?.length) {
-        void resolveReviewTargets(["reminder"]);
-        return;
-      }
-      void dismissReminder(0);
-      return;
-    }
-    if (task.target === "intent") {
-      void resolveReviewTargets(["intent"], { currentSaveIntent: null });
-      return;
-    }
-    if (task.target === "analysis") {
-      void resolveReviewTargets(["analysis"]);
-    }
+  async function savePurposeIntent(intent: string | null) {
+    await resolveReviewTargets(["intent"], { currentSaveIntent: intent });
   }
 
   async function collectionRequest<T>(
@@ -2490,16 +2413,42 @@ export default function App() {
 
   function renderAppSheets() {
     return (
-      <AppSheets
-        accountSheetOpen={accountSheetOpen}
-        clearReviewTask={clearReviewTask}
-        onSignOut={() => void signOut()}
-        rationaleSheet={rationaleSheet}
-        resolveReviewTargets={resolveReviewTargets}
-        setAccountSheetOpen={setAccountSheetOpen}
-        setRationaleEditTarget={setRationaleEditTarget}
-        setRationaleSheet={setRationaleSheet}
-      />
+      <>
+        <AppSheets
+          accountSheetOpen={accountSheetOpen}
+          onSignOut={() => void signOut()}
+          setAccountSheetOpen={setAccountSheetOpen}
+        />
+        {selected ? (
+          <CollectionSelectorSheet
+            actions={{
+              closeCollectionPicker,
+              renderCollectionSkeletonRows,
+              saveCollectionSelection: () => void saveCollectionSelection(),
+              setCollectionPickerQuery,
+              setCollectionSelectionIds,
+              toggleCollectionSelection
+            }}
+            data={{
+              collectionListFade,
+              collections,
+              collectionsColdSkeletonVisible,
+              collectionsListPerfProps: COLLECTION_LIST_PERF_PROPS,
+              selected,
+              toast: null
+            }}
+            state={{
+              activeCollectionsLoadedOnce: collectionsLoadedOnce.active,
+              collectionChoiceSaving,
+              collectionPickerOpen,
+              collectionPickerQuery,
+              collectionSelectionIds,
+              collectionsLoadPhase,
+              collectionsLoading
+            }}
+          />
+        ) : null}
+      </>
     );
   }
 
@@ -2515,11 +2464,11 @@ export default function App() {
           openCollectionPicker: () => void openCollectionPicker(),
           openExternalUrl: (url) => void Linking.openURL(url),
           openNoteSheet,
-          openReviewInsight,
           openVisitTargetMaps: (candidate) => void openVisitTargetMaps(candidate),
           pasteExpandedUrl: () => void pasteExpandedUrl(),
           removeReminder: (reminderIndex) => void dismissReminder(reminderIndex),
           saveReminder: (draft, reminderIndex) => void saveReminder(draft, reminderIndex),
+          savePurposeIntent: (intent) => void savePurposeIntent(intent),
           saveReviewDecisions: () => void saveReviewDecisions(),
           selectCapture,
           selectCollection,
@@ -2691,37 +2640,6 @@ export default function App() {
           collectionsLoadPhase,
           collectionsLoading,
           showCollectionForm
-        }}
-      />
-    );
-  }
-
-  if (selected && collectionPickerOpen) {
-    return (
-      <CollectionSelectorScreen
-        actions={{
-          closeCollectionPicker,
-          renderCollectionSkeletonRows,
-          saveCollectionSelection: () => void saveCollectionSelection(),
-          setCollectionPickerQuery,
-          setCollectionSelectionIds,
-          toggleCollectionSelection
-        }}
-        data={{
-          collectionListFade,
-          collections,
-          collectionsColdSkeletonVisible,
-          collectionsListPerfProps: COLLECTION_LIST_PERF_PROPS,
-          selected,
-          toast: renderToast("footer")
-        }}
-        state={{
-          activeCollectionsLoadedOnce: collectionsLoadedOnce.active,
-          collectionChoiceSaving,
-          collectionPickerQuery,
-          collectionSelectionIds,
-          collectionsLoadPhase,
-          collectionsLoading
         }}
       />
     );

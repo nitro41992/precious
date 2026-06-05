@@ -240,7 +240,7 @@ export async function rejectContextlessLinkCapture(
     collection_decisions: [],
     search_phrases: [],
     confidence_label: "Couldn't tell",
-    review_targets: ["analysis", "intent"],
+    review_targets: ["analysis"],
     needs_review: true,
     content_evidence_profile: contentEvidenceProfile(capture, urlEvidence),
     url_evidence: normalizedUrlEvidenceForCapture(capture, urlEvidence),

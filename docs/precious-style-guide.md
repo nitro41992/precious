@@ -266,7 +266,7 @@ Use:
 - `Choose collection`
 - `Open link once`
 
-Capture Review should read like a polished saved-memory edit surface, not a form. Use one compact editable attribute rail for Purpose, Collection, and Later: Purpose can be the primary semantic handle, while Collection and Later read as quieter inline metadata. Save Intent is optional; when no concrete action is inferable, show `Add intent` and use the review cue to ask for a quick look instead of showing a broad fallback label or selectable empty-intent chip.
+Capture Review should read like a polished saved-memory edit surface, not a form. Use one compact editable sentence for Purpose, Collection, and Later, such as `Saved as [Purpose] in [Collection] for [Later]`: Purpose can be the primary semantic handle, while Collection and Later read as quieter inline metadata. Save Intent is optional; when no concrete action is inferable, show `Add intent` without creating review work.
 
 `Purpose: Visit | Collection: NYC restaurants | Later: next Saturday afternoon`
 
@@ -276,7 +276,7 @@ Each control can expand into a focused picker or editor. Keep concise rationale 
 
 `Because the post mentions a SoHo ramen shop.`
 
-Capture Review should use one `Review insight` surface for AI rationale across Save Intent, Collections, and Reminder idea. The row should show a very short review cue that names the exact thing to check, such as `Confirm intent: visit or menu reference`, then open a native-feeling sheet led by one friendly because-style insight at body scale. When review targets are unresolved, the sheet should show an icon-led checklist for the exact targets that need a decision and let the user confirm or change each target from that surface. Follow the checklist with unframed rationale rows for Save Intent, Collections, and Reminder idea. Reminder editing should open the same start/end date and optional start/end time editor as the main Reminder row. Do not use nested cards, hero-sized rationale text, generic field-level fallback blocks, hidden-only long presses, duplicate blurbs, or model traces. Keep the primary sheet action clear of Android gesture navigation.
+Capture Review should show Purpose, Collection, and Later as one compact editable sentence directly under the title/source area. Treat AI-selected values as current values, not suggestions waiting for approval. Use a flat Material 3 Expressive treatment: readable sentence structure, semantic color, underline-like editable affordances, and comfortable touch targets rather than pill cards or a boxed field module. Tapping a field opens a focused bottom sheet editor for that field; show concise AI rationale inside that sheet only while the current value still matches the AI-selected value. Do not use inline review rows, `Looks good`, clear-suggestion actions, a separate Review Insight checklist sheet, nested cards, hero-sized rationale text, hidden-only long presses, duplicate blurbs, or model traces. Keep sheet actions clear of Android gesture navigation.
 
 When reminders are not fully implemented, use `Later` for the main Capture Review control and `Reminder idea` only in rationale or detail surfaces for AI proposals. Do not use copy that implies notification delivery.
 
@@ -338,7 +338,7 @@ Collections are ongoing purpose groups, not folders.
 - Open `New collection` from the Collections floating `+` as a focused bottom sheet using the same sheet treatment as New Capture.
 - AI never creates or suggests new Collections. It may only attach high-confidence matches to existing active Collections.
 - A Capture may intentionally have no Collection, and may belong to multiple Collections.
-- Capture Review opens a focused full-screen selector for existing active Collections instead of an inline picker.
+- Capture Review opens a focused bottom sheet selector for existing active Collections instead of an inline picker.
 - The selector must include `No collection`, search, check states, and one sticky `Save collections` action.
 - If the user removes or changes an AI-applied Collection, do not reattach it automatically.
 - Do not show `Use suggestion`, inline Collection creation, or per-row `Manage` actions in Capture Review.
@@ -361,8 +361,8 @@ Search is a full-screen retrieval utility, not a chatbot default.
 
 - Confirmed reminders are user-approved resurfacing triggers and should be first-class data when implemented.
 - Suggested reminders are review items, not scheduled obligations.
-- Capture Review should always offer `Add reminder` when a capture can be edited, even when Capture Analysis found no Reminder idea.
-- Use review language until the user accepts: `Reminder idea`, `Add reminder`, `Choose date and time`.
+- Capture Review should always offer a Later field when a capture can be edited. Show an AI Reminder idea as the current Later value when available; show `Add reminder` only when no reminder exists.
+- Use review language only inside rationale or detail surfaces: `Reminder idea`, `Add reminder`, `Choose date and time`.
 - A capture-local Confirmed Reminder should store a structured interval: start date, end date, optional start time, optional end time, timezone, date precision, time precision, and derived duration. Date ranges cover days or weeks; time ranges cover minutes or hours; if only time duration is present, start date and end date are the same. Location, venue, and proximity evidence belongs in Visit Targets and Maps actions, not Reminders.
 - Do not imply notification delivery until notification delivery exists.
 - Agenda is deferred until Confirmed Reminders function.

@@ -26,7 +26,7 @@ The challenge is to add memory without making analysis noisy, expensive, privacy
 - Reuse existing Collections instead of generating new Collection names.
 - Treat prior signals as weak evidence, not as facts.
 - Keep Analyzer Context internally bounded and explainable.
-- Preserve the current structured analysis output schema for the first version.
+- Preserve existing field-level outputs where possible; schema changes should be versioned when product workflow decisions remove unused fields.
 
 ## Non-Goals
 
@@ -169,7 +169,7 @@ The user should still be able to correct intent or add a Context Note when the a
 
 - Add `AnalyzerUserContext` as an internal analyzer input.
 - Extend prompt construction to include Analyzer Context.
-- Keep output schema unchanged for v1.
+- Keep output schema changes versioned and compatible with legacy analysis payloads.
 - Store analysis metadata with prompt version and schema version.
 - Keep current model-router abstraction.
 - Keep context bounded by count/token budget.

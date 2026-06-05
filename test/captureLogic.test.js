@@ -7,6 +7,7 @@ const {
   capturesForListMode,
   capturesForSearchScope,
   capturesShareIdentity,
+  captureFieldState,
   collectionSelectionActionState,
   displayStatus,
   extractHttpUrl,
@@ -118,10 +119,10 @@ test("mapSearchCandidatesForVisitTarget prefers the visit target name over the l
   );
 });
 
-test("reviewReasons prioritizes unresolved review causes and confirmed reviews stay ready", () => {
+test("reviewReasons ignores field uncertainty and keeps confirmed reviews ready", () => {
   assert.deepEqual(
     reviewReasons(capture({ confidenceLabel: "Maybe", collectionDecisions: [{ title: "Ideas" }] })),
-    ["intent"]
+    []
   );
   assert.equal(
     reviewReasonSummary(["intent", "analysis"]),
@@ -133,14 +134,14 @@ test("reviewReasons prioritizes unresolved review causes and confirmed reviews s
   );
 });
 
-test("review targets drive needs-review state and clear independently", () => {
+test("only analysis review targets drive visible needs-review state", () => {
   assert.deepEqual(
     reviewTargetsForCapture(capture({ reviewTargets: ["collections", "intent", "collections"] })),
-    ["collections", "intent"]
+    []
   );
   assert.equal(
     displayStatus(capture({ status: "needs_review", reviewTargets: ["collections"] })),
-    "needs_review"
+    "ready"
   );
   assert.equal(
     displayStatus(capture({ status: "needs_review", reviewTargets: [] })),
@@ -148,11 +149,15 @@ test("review targets drive needs-review state and clear independently", () => {
   );
   assert.deepEqual(
     reviewReasons(capture({ status: "needs_review", reviewTargets: ["reminder"] })),
-    ["reminder"]
+    []
+  );
+  assert.deepEqual(
+    reviewReasons(capture({ status: "needs_review", reviewTargets: ["analysis"] })),
+    ["analysis"]
   );
 });
 
-test("collection selection action treats no collection as review confirmation", () => {
+test("collection selection action ignores field review targets", () => {
   const pendingNoCollection = capture({
     status: "needs_review",
     reviewTargets: ["collections"],
@@ -161,10 +166,10 @@ test("collection selection action treats no collection as review confirmation", 
   assert.deepEqual(
     collectionSelectionActionState(pendingNoCollection, []),
     {
-      pendingReview: true,
+      pendingReview: false,
       selectionChanged: false,
-      shouldSave: true,
-      label: "Confirm no collection"
+      shouldSave: false,
+      label: "Done"
     }
   );
 
@@ -176,16 +181,16 @@ test("collection selection action treats no collection as review confirmation", 
   assert.deepEqual(
     collectionSelectionActionState(pendingExistingCollection, ["collection-a"]),
     {
-      pendingReview: true,
+      pendingReview: false,
       selectionChanged: false,
-      shouldSave: true,
-      label: "Confirm collections"
+      shouldSave: false,
+      label: "Done"
     }
   );
   assert.deepEqual(
     collectionSelectionActionState(pendingExistingCollection, []),
     {
-      pendingReview: true,
+      pendingReview: false,
       selectionChanged: true,
       shouldSave: true,
       label: "Save collections"
@@ -202,7 +207,61 @@ test("collection selection action treats no collection as review confirmation", 
   );
 });
 
-test("displayStatus keeps extracted failed captures visible as ready but blocks pending review", () => {
+test("capture fields show selected values before add labels", () => {
+  assert.deepEqual(
+    captureFieldState({
+      kind: "purpose",
+      value: "Read",
+      emptyLabel: "Add intent"
+    }),
+    {
+      kind: "purpose",
+      value: "Read",
+      displayValue: "Read",
+      hasValue: true,
+      isEmpty: false,
+      canEdit: true
+    }
+  );
+
+  assert.equal(
+    captureFieldState({
+      kind: "collection",
+      value: "Restaurants",
+      emptyLabel: "Add collection"
+    }).displayValue,
+    "Restaurants"
+  );
+  assert.equal(
+    captureFieldState({
+      kind: "later",
+      value: "Tomorrow",
+      emptyLabel: "Add reminder"
+    }).hasValue,
+    true
+  );
+});
+
+test("capture fields fall back to add labels when empty", () => {
+  const intentField = captureFieldState({
+    kind: "purpose",
+    value: "",
+    emptyLabel: "Add intent"
+  });
+  assert.equal(intentField.displayValue, "Add intent");
+  assert.equal(intentField.hasValue, false);
+
+  assert.equal(
+    captureFieldState({ kind: "collection", emptyLabel: "Add collection" }).displayValue,
+    "Add collection"
+  );
+  assert.equal(
+    captureFieldState({ kind: "later", emptyLabel: "Add reminder" }).displayValue,
+    "Add reminder"
+  );
+});
+
+test("displayStatus keeps extracted failed captures visible as ready but blocks analysis review", () => {
   assert.equal(displayStatus(capture({ status: "failed", summary: "Recovered extraction" })), "ready");
   assert.equal(displayStatus(capture({ status: "needs_review", needsReview: true })), "needs_review");
   assert.equal(statusLabel("failed"), "Failed");

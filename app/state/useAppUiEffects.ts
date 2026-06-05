@@ -13,9 +13,7 @@ import { normalizeIntent } from "../capturePresentation";
 import type {
   Capture,
   CaptureComposerMode,
-  Collection,
-  RationaleSheet,
-  ReviewTarget
+  Collection
 } from "../types";
 
 export function useAppUiEffects({
@@ -42,7 +40,6 @@ export function useAppUiEffects({
   noteInputRef,
   noteSheetOpen,
   pickingCaptureImage,
-  rationaleSheet,
   reviewMotion,
   searchMotion,
   searchOpen,
@@ -58,8 +55,6 @@ export function useAppUiEffects({
   setDraftNote,
   setDraftTitle,
   setKeyboardHeight,
-  setRationaleEditTarget,
-  setRationaleSheet,
   setSearchOpen,
   showCaptureComposer,
   showCollectionForm,
@@ -89,7 +84,6 @@ export function useAppUiEffects({
   noteInputRef: RefObject<TextInput | null>;
   noteSheetOpen: boolean;
   pickingCaptureImage: boolean;
-  rationaleSheet: RationaleSheet | null;
   reviewMotion: Animated.Value;
   searchMotion: Animated.Value;
   searchOpen: boolean;
@@ -105,8 +99,6 @@ export function useAppUiEffects({
   setDraftNote: (value: string) => void;
   setDraftTitle: (value: string) => void;
   setKeyboardHeight: (value: number) => void;
-  setRationaleEditTarget: (value: ReviewTarget | null) => void;
-  setRationaleSheet: (value: RationaleSheet | null) => void;
   setSearchOpen: (value: boolean) => void;
   showCaptureComposer: boolean;
   showCollectionForm: boolean;
@@ -154,15 +146,9 @@ export function useAppUiEffects({
       !showCollectionForm &&
       !noteSheetOpen &&
       !collectionsOpen &&
-      !accountSheetOpen &&
-      !rationaleSheet
+      !accountSheetOpen
     ) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (rationaleSheet) {
-        setRationaleSheet(null);
-        setRationaleEditTarget(null);
-        return true;
-      }
       if (accountSheetOpen) {
         setAccountSheetOpen(false);
         return true;
@@ -209,7 +195,6 @@ export function useAppUiEffects({
     closeNoteSheet,
     collectionsOpen,
     noteSheetOpen,
-    rationaleSheet,
     searchOpen,
     selectCapture,
     selectCollection,
@@ -217,8 +202,6 @@ export function useAppUiEffects({
     selectedId,
     setAccountSheetOpen,
     setCollectionsOpen,
-    setRationaleEditTarget,
-    setRationaleSheet,
     setSearchOpen,
     showCaptureComposer,
     showCollectionForm

@@ -18,7 +18,7 @@ Capture Analysis is source-agnostic and content/context-specific. It should clas
 
 Source app, host, URL path, platform, and media format may be used as classification fallback only when content and context are limited, blocked, opaque, or generic.
 
-Review Insight should explain decisions using product language and enumerated values: active Intent Categories, existing Collection titles, `No intent`, `No collection`, and `Reminder idea`. When content evidence is available, rationale should not justify a Save Intent or Collection by saying the source was a reel, social post, host, or platform.
+Field rationales should explain decisions using product language and enumerated values: active Intent Categories, existing Collection titles, and Reminder idea. When content evidence is available, rationale should not justify a Save Intent or Collection by saying the source was a reel, social post, host, or platform.
 
 ## Consequences
 

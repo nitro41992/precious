@@ -38,8 +38,8 @@ export const STARTER_COLLECTIONS = [
   },
 ] as const;
 
-export const PROMPT_VERSION = "precious-capture-analysis-v12";
-export const SCHEMA_VERSION = "precious-capture-analysis-v10";
+export const PROMPT_VERSION = "precious-capture-analysis-v13";
+export const SCHEMA_VERSION = "precious-capture-analysis-v11";
 export const PREFLIGHT_PROMPT_VERSION = "precious-capture-preflight-v1";
 export const CAPTURE_GATE_PROMPT_VERSION = "precious-capture-gate-v1";
 export const CLIENT_EVENT_RETENTION_DAYS = 90;
@@ -145,8 +145,6 @@ export const analysisSchema = {
     "verified_place",
     "suggested_reminders",
     "collection_decisions",
-    "review_rationale",
-    "review_targets",
     "search_phrases",
     "confidence_label",
     "needs_review",
@@ -311,45 +309,6 @@ export const analysisSchema = {
           rationale: { type: "string" },
           confidence: { type: "number" },
         },
-      },
-    },
-    review_rationale: {
-      type: "object",
-      additionalProperties: false,
-      required: ["focus", "summary", "intent", "collections", "reminder"],
-      properties: {
-        focus: {
-          type: "string",
-          description:
-            "A user-facing Review Insight cue under 80 characters naming the exact decision to check, such as Confirm Save Intent: Visit or Check Collections: Food.",
-        },
-        summary: {
-          type: "string",
-          description:
-            "A friendly analyzer-authored because-style sentence under 140 characters explaining the overall suggestion without clipped text, model/debug language, or source-format-only rationale.",
-        },
-        intent: {
-          type: "string",
-          description:
-            "One concise user-facing sentence explaining the Save Intent or No intent decision with concrete capture evidence and active Save Intent language.",
-        },
-        collections: {
-          type: "string",
-          description:
-            "One concise user-facing sentence explaining the existing Collection match or why No collection was chosen, using exact retrieved Collection titles when selected.",
-        },
-        reminder: {
-          type: "string",
-          description:
-            "One concise user-facing sentence explaining the Reminder idea or why no future date, time, deadline, or time window supported one.",
-        },
-      },
-    },
-    review_targets: {
-      type: "array",
-      items: {
-        type: "string",
-        enum: ["intent", "collections", "reminder", "analysis"],
       },
     },
     search_phrases: { type: "array", items: { type: "string" } },

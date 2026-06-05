@@ -2,11 +2,11 @@
 
 ## Status
 
-Accepted
+Superseded by ADR 0015
 
 ## Context
 
-Review Insight explains why Capture Analysis chose a Save Intent, Collection
+Review Insight previously explained why Capture Analysis chose a Save Intent, Collection
 outcome, and Reminder idea. The backend previously repaired missing or rejected
 rationale by synthesizing friendly copy from extracted summaries, titles, and
 field values. That made the UI resilient, but it also let clipped or generic
@@ -14,11 +14,11 @@ analysis text look like intentional product language.
 
 ## Decision
 
-The analyzer owns Review Insight copy within the structured `review_rationale`
+The analyzer owned Review Insight copy within the structured `review_rationale`
 contract. Prompt instructions and JSON Schema field descriptions define the
 copy bounds.
 
-The backend still validates Review Insight as untrusted model output. It may
+The backend validated Review Insight as untrusted model output. It could
 reject missing, source-only, debug-like, generic, too-long, or malformed copy,
 but it must not compose explanatory rationale from summaries, titles, intents,
 Collection names, or Reminder fields. Invalid Review Insight degrades to
@@ -35,4 +35,4 @@ the rejected copy to users.
   rationale.
 - Neutral fallback copy is review scaffolding, not authored AI insight, so the
   UI should not present those neutral rows under an `AI insight` label.
-- Existing persisted Review Insight is not backfilled by this decision.
+- Existing persisted Review Insight is tolerated as legacy analysis data, but new primary analyzer output no longer requests `review_rationale`.

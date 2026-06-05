@@ -4,7 +4,7 @@ Date: 2026-05-29
 
 ## Status
 
-Accepted
+Accepted; amended by ADR 0015 for the Capture Review presentation container.
 
 ## Context
 
@@ -14,7 +14,7 @@ AI-generated Collection names also made organization feel unbounded. Collections
 
 ## Decision
 
-Captures may belong to zero or more Collections. Capture Review opens a focused full-screen selector that lists existing active Collections, supports search, includes `No collection`, and saves the selected set.
+Captures may belong to zero or more Collections. Capture Review opens a focused selector that lists existing active Collections, supports search, includes `No collection`, and saves the selected set. ADR 0015 moves that selector into a bottom sheet so Capture Review remains visually present while the user edits the Collection field.
 
 Capture Analysis may only match a Capture to existing active Collections retrieved for that user. High-confidence existing matches may be applied quietly because they are finite and reversible. AI must not create, name, or surface new Collections, and low-confidence Collection matches should not become Capture Review work.
 

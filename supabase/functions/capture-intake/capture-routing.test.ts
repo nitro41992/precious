@@ -215,7 +215,7 @@ Deno.test("capture gate review analysis does not invent URL evidence", () => {
   );
 });
 
-Deno.test("legacy broad intents normalize to blank intent and review", () => {
+Deno.test("legacy broad intents normalize to blank intent without field review", () => {
   const normalized = urlEvidence.normalizedReviewAnalysis({
     display_title: "Saved note",
     summary: "Useful but not clearly actionable.",
@@ -239,8 +239,8 @@ Deno.test("legacy broad intents normalize to blank intent and review", () => {
   );
   assertEqual(
     normalized.needs_review,
-    true,
-    "blank inferred intent should need review",
+    false,
+    "blank inferred intent should not need field review",
   );
 
   const reviewedBlank = urlEvidence.normalizedReviewAnalysis({
@@ -336,18 +336,13 @@ Deno.test("review rationale drops source-format explanations when source fallbac
   );
   assertEqual(
     normalized.review_rationale.collections,
-    "Review the Collection decision.",
-    "invalid analyzer rationale should use neutral product copy",
-  );
-  assertIncludes(
-    normalized.review_targets,
-    "analysis",
-    "invalid analyzer rationale should add an analysis review target",
+    "",
+    "source-format-only legacy rationale should be stripped without fallback copy",
   );
   assertEqual(
     normalized.needs_review,
-    true,
-    "invalid analyzer rationale should keep the capture reviewable",
+    false,
+    "legacy rationale validation should not create review state",
   );
 });
 
@@ -390,11 +385,7 @@ Deno.test("review rationale keeps content evidence when a source is mentioned", 
     JSON.stringify(reviewRationale),
     "source mentions with concrete content evidence should not be erased",
   );
-  assertEqual(
-    normalized.review_rationale_status,
-    "accepted",
-    "content-rich rationale should be accepted",
-  );
+  assertEqual(normalized.review_rationale_status, undefined, "legacy rationale status is no longer written");
 });
 
 Deno.test("valid analyzer review rationale is preserved exactly", () => {
@@ -433,16 +424,8 @@ Deno.test("valid analyzer review rationale is preserved exactly", () => {
     false,
     "valid analyzer rationale should not add review by itself",
   );
-  assertEqual(
-    normalized.review_rationale_status,
-    "accepted",
-    "valid analyzer rationale should be marked accepted",
-  );
-  assertEqual(
-    normalized.review_rationale_invalid_reason,
-    null,
-    "valid analyzer rationale should not record an invalid reason",
-  );
+  assertEqual(normalized.review_rationale_status, undefined, "legacy rationale status is no longer written");
+  assertEqual(normalized.review_rationale_invalid_reason, undefined, "legacy rationale validation metadata is no longer written");
 });
 
 Deno.test("invalid review rationale does not synthesize clipped fallback copy", () => {
@@ -471,46 +454,23 @@ Deno.test("invalid review rationale does not synthesize clipped fallback copy", 
   });
   const rationaleText = JSON.stringify(normalized.review_rationale);
   assert(
-    !rationaleText.includes("drink to t"),
-    "neutral fallback should not include clipped analyzer or summary fragments",
-  );
-  assert(
-    !rationaleText.includes("Looks like"),
-    "neutral fallback should not synthesize polished explanation copy",
+    rationaleText.includes("drink to t"),
+    "legacy malformed Review Insight copy may remain for compatibility",
   );
   assertEqual(
-    normalized.review_rationale.summary,
-    "Review the suggested details.",
-    "malformed rationale should use neutral summary copy",
-  );
-  assertIncludes(
-    normalized.review_targets,
-    "analysis",
-    "malformed rationale should add an analysis review target",
+    normalized.needs_review,
+    false,
+    "legacy malformed rationale should not create review state",
   );
   assertEqual(
     normalized.default_intent.category,
     "visit",
     "invalid rationale should not change Save Intent data",
   );
-  assertEqual(
-    normalized.review_rationale_status,
-    "neutral_fallback",
-    "malformed rationale should record neutral fallback status",
-  );
-  assertEqual(
-    normalized.review_rationale_invalid_field,
-    "summary",
-    "malformed rationale should record the first invalid field",
-  );
-  assertEqual(
-    normalized.review_rationale_invalid_reason,
-    "malformed",
-    "clipped Instagram rationale should record the validation reason",
-  );
+  assertEqual(normalized.review_rationale_status, undefined, "legacy rationale status is no longer written");
 });
 
-Deno.test("debug-like review rationale is neutral without changing extracted data", () => {
+Deno.test("debug-like legacy review rationale does not change extracted data or review state", () => {
   const normalized = urlEvidence.normalizedReviewAnalysis({
     display_title: "Weekend cafe popup",
     summary: "A weekend cafe popup with a listed date and address.",
@@ -558,13 +518,13 @@ Deno.test("debug-like review rationale is neutral without changing extracted dat
 
   assertEqual(
     normalized.review_rationale.summary,
-    "Review the suggested details.",
-    "debug-like rationale should use neutral summary copy",
+    "The model confidence score says this extraction is ready.",
+    "legacy debug-like rationale may remain but is no longer routed as Review Insight",
   );
-  assertIncludes(
-    normalized.review_targets,
-    "analysis",
-    "debug-like rationale should add an analysis review target",
+  assertEqual(
+    normalized.needs_review,
+    false,
+    "legacy debug-like rationale should not create review state",
   );
   assertEqual(
     normalized.default_intent.category,
@@ -586,21 +546,7 @@ Deno.test("debug-like review rationale is neutral without changing extracted dat
     "Weekend Cafe Popup",
     "invalid rationale should not change Visit Target data",
   );
-  assertEqual(
-    normalized.review_rationale_status,
-    "neutral_fallback",
-    "debug-like rationale should record neutral fallback status",
-  );
-  assertEqual(
-    normalized.review_rationale_invalid_field,
-    "summary",
-    "debug-like rationale should record the first invalid field",
-  );
-  assertEqual(
-    normalized.review_rationale_invalid_reason,
-    "debug_like",
-    "debug-like rationale should record the validation reason",
-  );
+  assertEqual(normalized.review_rationale_status, undefined, "legacy rationale status is no longer written");
 });
 
 Deno.test("review normalization drops location reminders and preserves Visit Targets", () => {
@@ -708,8 +654,8 @@ Deno.test("review normalization preserves structured time reminder intervals", (
   );
   assertEqual(
     normalized.review_targets.join("|"),
-    "reminder",
-    "valid reminder ideas can still require review",
+    "",
+    "legacy reminder review targets are ignored even when the Reminder idea is valid",
   );
 });
 
@@ -730,37 +676,30 @@ Deno.test("analysis prompt requires evidence-rich review rationale", () => {
     "Save Intent rationale should be analyzer-owned and evidence-specific",
   );
   assert(
-    prompt.includes("Review Insight copy is analyzer-authored"),
-    "prompt should make the analyzer own Review Insight copy",
+    !prompt.includes("Review Insight") &&
+      !prompt.includes("review_rationale") &&
+      !prompt.includes("review_targets"),
+    "prompt should not ask for a separate review workflow",
   );
   assert(
-    prompt.includes("review_rationale.intent explains the Save Intent"),
-    "review rationale prompt should govern intent explanation",
+    prompt.includes("default_intent.rationale") &&
+      prompt.includes("collection_decisions[].rationale") &&
+      prompt.includes("suggested_reminders[].rationale"),
+    "prompt should keep rationale attached to selected fields",
   );
   assert(
     prompt.includes(
-      "Never use generic wording that only says the action is supported",
+      "Rationales must not mention models, prompts, schemas, scores",
     ),
-    "prompt should reject generic intent rationale",
+    "prompt should reject debug-like rationale",
   );
   assert(
-    prompt.includes("Bad review_rationale examples") &&
-      prompt.includes("source-format-only") &&
-      prompt.includes("coffee drink to t") &&
-      prompt.includes("debug copy"),
-    "prompt should include concrete bad Review Insight examples",
-  );
-  assert(
-    prompt.includes("never return only 'No collection'"),
-    "prompt should require explanation for no Collection",
-  );
-  assert(
-    prompt.includes("never return only 'No reminder'"),
-    "prompt should require explanation for no Reminder idea",
+    prompt.includes("Do not set needs_review because Purpose, Collection, Reminder, or confidence_label is uncertain"),
+    "prompt should keep field uncertainty out of review state",
   );
 });
 
-Deno.test("review targets drive review state and allow reviewed blank intent", () => {
+Deno.test("field review targets do not drive review state and reviewed blank intent stays ready", () => {
   const collectionReview = urlEvidence.normalizedReviewAnalysis({
     display_title: "Kettlebell routine",
     summary: "A kettlebell and dumbbell workout routine.",
@@ -789,13 +728,13 @@ Deno.test("review targets drive review state and allow reviewed blank intent", (
   });
   assertEqual(
     collectionReview.needs_review,
-    true,
-    "explicit collection target should keep review state",
+    false,
+    "explicit collection target should not keep review state",
   );
   assertEqual(
     collectionReview.review_targets.join("|"),
-    "collections",
-    "explicit review target should be preserved",
+    "",
+    "field review target should be ignored",
   );
   assert(
     /kettlebell routine/i.test(collectionReview.review_rationale.summary) &&
@@ -836,7 +775,7 @@ Deno.test("review targets drive review state and allow reviewed blank intent", (
   );
 });
 
-Deno.test("review target resolution preserves unresolved checklist items", () => {
+Deno.test("review target resolution preserves only analysis-level review items", () => {
   const analysis = urlEvidence.normalizedReviewAnalysis({
     display_title: "Weekend market",
     summary: "A weekend market with hours and a location.",
@@ -852,7 +791,7 @@ Deno.test("review target resolution preserves unresolved checklist items", () =>
       collections: "No Collection matched strongly enough.",
       reminder: "The weekend hours support a Reminder idea.",
     },
-    review_targets: ["intent", "reminder"],
+    review_targets: ["intent", "analysis"],
     suggested_reminders: [
       {
         trigger_type: "time",
@@ -870,16 +809,16 @@ Deno.test("review target resolution preserves unresolved checklist items", () =>
   );
   assertEqual(
     intentResolved.review_targets.join("|"),
-    "reminder",
-    "resolving one checklist item should preserve the other target",
+    "analysis",
+    "field checklist items should be ignored while analysis remains",
   );
   assertEqual(
     urlEvidence.reviewTargetsForAnalysis(intentResolved).join("|"),
-    "reminder",
-    "remaining review target should still drive needs-review state",
+    "analysis",
+    "analysis review target should still drive needs-review state",
   );
   const fullyResolved = urlEvidence.normalizedReviewAnalysis(
-    urlEvidence.resolveReviewTargets(intentResolved, ["reminder"]),
+    urlEvidence.resolveReviewTargets(intentResolved, ["analysis"]),
     "2026-05-31T12:00:00.000Z",
   );
   assertEqual(

@@ -31,6 +31,21 @@ export type CollectionSelectionActionState = {
   label: string;
 };
 
+export type CaptureFieldStateInput = {
+  kind: "purpose" | "collection" | "later" | string;
+  value?: string | null;
+  emptyLabel: string;
+};
+
+export type CaptureFieldState = {
+  kind: string;
+  value: string;
+  displayValue: string;
+  hasValue: boolean;
+  isEmpty: boolean;
+  canEdit: boolean;
+};
+
 type StatusCapture = ReviewableCapture & {
   defaultIntent?: string;
   summary?: string;
@@ -72,6 +87,7 @@ export function displayStatus(capture: StatusCapture): CaptureStatus;
 export function extractHttpUrl(value?: string | null): string;
 export function hasExtractedData(capture: StatusCapture): boolean;
 export function hostFromUrl(value?: string | null): string;
+export function captureFieldState(input?: CaptureFieldStateInput): CaptureFieldState;
 export function isArchived(capture: { archivedAt?: number | null }): boolean;
 export function isDeleted(capture: { archivedAt?: number | null; deletedAt?: number | null }): boolean;
 export function isRejected(capture: { rejectedAt?: number | null; analysisMode?: string }): boolean;

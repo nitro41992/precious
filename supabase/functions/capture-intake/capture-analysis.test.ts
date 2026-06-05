@@ -954,13 +954,11 @@ Deno.test("reminder schema and prompt only allow time interval suggestions", () 
     "analysis schema should include structured location context",
   );
   assert(
-    schema.properties.review_rationale.properties.summary.description.includes(
-      "analyzer-authored",
-    ) &&
-      schema.properties.review_rationale.properties.intent.description.includes(
-        "concrete capture evidence",
-      ),
-    "review rationale schema fields should describe analyzer-owned copy bounds",
+    !schema.required.includes("review_rationale") &&
+      !schema.required.includes("review_targets") &&
+      !Object.prototype.hasOwnProperty.call(schema.properties, "review_rationale") &&
+      !Object.prototype.hasOwnProperty.call(schema.properties, "review_targets"),
+    "analysis schema should omit separate review workflow fields",
   );
 
   const prompt = urlEvidence.buildPrompt(
@@ -1127,13 +1125,8 @@ Deno.test("reminder validation drops stale extracted reminder ideas", () => {
     "validator should drop stale reminder ideas",
   );
   assert(
-    Array.isArray(analysis.review_targets) &&
-      analysis.review_targets.length === 0,
-    "validator should clear reminder review target when all reminders are dropped",
-  );
-  assert(
-    String(analysis.review_rationale?.reminder || "").includes("stale"),
-    "validator should explain why the reminder was dropped",
+    analysis.review_rationale?.reminder === "Reminder idea: sale ends February 16.",
+    "validator should not synthesize new Review Insight copy when a reminder is dropped",
   );
 });
 
@@ -1165,10 +1158,8 @@ Deno.test("reminder validation drops broad directories and generic cadence advic
     "broad event directories should not keep Reminder ideas",
   );
   assert(
-    String(broadDirectory.review_rationale?.reminder || "").includes(
-      "broad directory",
-    ),
-    "broad directory drop should be explained",
+    broadDirectory.review_rationale?.reminder === "Reminder idea: June events.",
+    "broad directory drop should not synthesize Review Insight copy",
   );
 
   const cadenceAdvice = urlEvidence.validateReminderIdeas(
@@ -1198,10 +1189,8 @@ Deno.test("reminder validation drops broad directories and generic cadence advic
     "generic cadence advice should not keep Reminder ideas",
   );
   assert(
-    String(cadenceAdvice.review_rationale?.reminder || "").includes(
-      "generic advice",
-    ),
-    "generic cadence drop should be explained",
+    cadenceAdvice.review_rationale?.reminder === "Reminder idea: review the watchlist monthly.",
+    "generic cadence drop should not synthesize Review Insight copy",
   );
 });
 

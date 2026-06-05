@@ -3,7 +3,7 @@ import { Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { DateTimePicker } from "@expo/ui/community/datetime-picker";
 import { Bell, CalendarDays, Clock, X } from "lucide-react-native";
 
-import type { ReminderDatePrecision, ReminderScheduleDraft, ReminderSuggestion, ReminderTimePrecision } from "../types";
+import type { CaptureFieldRationale, ReminderDatePrecision, ReminderScheduleDraft, ReminderSuggestion, ReminderTimePrecision } from "../types";
 import {
   dateFromReminderParts,
   dateStringFromDate,
@@ -52,6 +52,7 @@ export function ReminderEditorSheet({
   onClose,
   onRemove,
   onSave,
+  rationale,
   reminder,
   reminderIndex,
   visible
@@ -59,6 +60,7 @@ export function ReminderEditorSheet({
   onClose: () => void;
   onRemove?: (reminderIndex: number) => void;
   onSave: (draft: ReminderScheduleDraft, reminderIndex: number | null) => void;
+  rationale?: CaptureFieldRationale | null;
   reminder?: ReminderSuggestion;
   reminderIndex: number | null;
   visible: boolean;
@@ -102,6 +104,14 @@ export function ReminderEditorSheet({
     draft.endDate < draft.startDate ||
     invalidTimeRange ||
     invalidPartialTime;
+  const draftChanged = [
+    "startDate",
+    "endDate",
+    "startTime",
+    "endTime",
+    "timezone",
+    "triggerText"
+  ].some((key) => String(draft[key as keyof ReminderScheduleDraft] || "") !== String(initialDraft[key as keyof ReminderScheduleDraft] || ""));
   const pickerDate = pickerTarget === "endDate" || pickerTarget === "endTime"
     ? draft.endDate || draft.startDate
     : draft.startDate;
@@ -164,7 +174,7 @@ export function ReminderEditorSheet({
         duration: duration.duration,
         durationUnit: duration.durationUnit,
         timezone: draft.timezone || deviceTimeZone(),
-        source: reminder?.source === "manual" ? "manual" : reminder ? "ai_prefill" : "manual"
+        source: reminder && !draftChanged && reminder.source !== "manual" ? "ai_prefill" : "manual"
       },
       reminderIndex
     );
@@ -191,8 +201,14 @@ export function ReminderEditorSheet({
           contentContainerStyle={styles.reminderSheetScrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          style={styles.reviewInsightScroll}
+          style={styles.reminderSheetScroll}
         >
+          {rationale?.visible ? (
+            <View style={styles.fieldRationaleBox}>
+              <Text style={styles.fieldRationaleTitle}>{rationale.title}</Text>
+              <Text style={styles.fieldRationaleText}>{rationale.text}</Text>
+            </View>
+          ) : null}
           <View style={styles.reminderFieldGroup}>
             <View style={styles.reminderFieldSectionHeader}>
               <CalendarDays color={colors.muted} size={18} strokeWidth={2.3} />

@@ -74,8 +74,8 @@ _Avoid_: Bookmark list, folder, separate suggestions inbox
 The focused single-Capture surface opened from a Capture Completion Notification, Review Inbox, Search, or Library. It shows extracted intent, entities, Reminder suggestions, existing Collection attachments, human-readable Confidence States, concise rationale, and Quick Edit controls.
 _Avoid_: Analysis report, debug view, model score screen
 
-**Review Insight**:
-A concise, analyzer-authored user-facing explanation in Capture Review for why Capture Analysis chose the Save Intent, Collection outcome, and Reminder idea. Its visible cue should point to the exact review decision and should reference active Intent Categories, existing Collection names, No intent, No collection, or Reminder idea rather than loose analyzer labels. Backend validation may reject unsafe, debug-like, source-only, generic, or malformed Review Insight copy, but the fallback should be neutral review copy rather than synthesized rationale from titles or summaries. It is evidence/rationale, not hidden model reasoning.
+**Inline Field Rationale**:
+A concise, analyzer-authored user-facing explanation shown next to the specific Purpose, Collection, or Later suggestion in Capture Review. It should point to the exact field decision and reference active Intent Categories, existing Collection names, No intent, No collection, or Reminder idea rather than loose analyzer labels. Backend validation may reject unsafe, debug-like, source-only, generic, or malformed rationale; fallback copy should be neutral practical guidance rather than synthesized rationale from titles or summaries. It is evidence/rationale, not hidden model reasoning.
 _Avoid_: Chain-of-thought, audit report, model trace, confidence percentage
 
 **Retrieval Lens**:
@@ -127,7 +127,7 @@ Sharebook's trust posture for AI output: quietly persist low-risk, reversible de
 _Avoid_: Autopilot, always ask, confidence score UI
 
 **Confidence State**:
-A user-facing confidence label for an AI prediction, expressed as Looks right, Maybe, Not sure, or Couldn't tell rather than a numeric score. Confidence States should be paired with concise rationale when the user is asked to trust or correct a prediction.
+A stored confidence label for an AI prediction, expressed as Looks right, Maybe, Not sure, or Couldn't tell rather than a numeric score. Confidence States support future quality work and may inform internal analysis, but field uncertainty alone should not create user-visible review work.
 _Avoid_: Confidence percentage, model score, probability
 
 **Product Language Token**:

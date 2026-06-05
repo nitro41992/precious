@@ -23,28 +23,22 @@ export type ReviewRationale = {
 };
 export type ReviewRationaleStatus = "accepted" | "neutral_fallback";
 
-export type ReviewInsight = {
-  focus: string;
-  summary: string;
-  sections: Array<{ label: string; text: string }>;
-  isFallback?: boolean;
-};
+export type CaptureFieldKind = "purpose" | "collection" | "later";
 
-export type ReviewChecklistTask = {
-  target: ReviewTarget;
-  title: string;
+export type CaptureFieldState = {
+  kind: CaptureFieldKind;
+  label: string;
   value: string;
-  rationale: string;
-  confirmLabel: string;
-  editLabel?: string;
-  clearLabel?: string;
+  displayValue: string;
+  emptyLabel: string;
+  hasValue: boolean;
 };
 
-export type RationaleSheet = {
+export type CaptureFieldRationale = {
+  field: CaptureFieldKind;
   title: string;
-  text?: string;
-  sections?: Array<{ label: string; text: string }>;
-  tasks?: ReviewChecklistTask[];
+  text: string;
+  visible: boolean;
 };
 
 export type Capture = {
@@ -67,6 +61,7 @@ export type Capture = {
   analysisProvider?: string;
   analysisModel?: string;
   analysisError?: string;
+  aiDefaultIntent?: string;
   defaultIntent?: string;
   intentRationale?: string;
   reviewRationale?: ReviewRationale;

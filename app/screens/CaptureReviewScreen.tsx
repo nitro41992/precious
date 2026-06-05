@@ -19,10 +19,8 @@ import { Image } from "expo-image";
 import {
   ArrowLeft,
   Check,
-  ChevronRight,
   Copy,
   ExternalLink,
-  Info,
   MapPin,
   Pencil,
   StickyNote,
@@ -34,16 +32,18 @@ import type { MapSearchCandidate } from "../captureLogic";
 import { displayStatus, reviewReasons } from "../captureLogic";
 import type {
   Capture,
+  CaptureFieldKind,
   CaptureReviewDraft,
   NoteSaveState,
   ReminderDraftAction,
-  ReminderScheduleDraft,
-  ReviewInsight
+  ReminderScheduleDraft
 } from "../types";
 import {
   ADD_INTENT_LABEL,
   INTENT_OPTIONS,
   activeIntentLabel,
+  captureFieldRationale,
+  captureFieldStates,
   captureFullImageLoadKey,
   captureFullImageUrl,
   captureImageLoadKey,
@@ -53,14 +53,10 @@ import {
   captureSourceLabel,
   captureStatusLabel,
   formatDateTime,
-  linkedCollectionsLabel,
   normalizeIntent,
   isImageCapture,
   reminderDraftKey,
   reminderLabel,
-  reviewChecklistCta,
-  reviewChecklistTasksForCapture,
-  reviewInsightForCapture,
   reviewStatusCue,
   urlEvidenceMessage
 } from "../capturePresentation";
@@ -107,11 +103,11 @@ type CaptureReviewScreenProps = {
     openCollectionPicker: () => void;
     openExternalUrl: (url: string) => void;
     openNoteSheet: () => void;
-    openReviewInsight: (insight: ReviewInsight) => void;
     openVisitTargetMaps: (candidate: MapSearchCandidate) => void;
     pasteExpandedUrl: () => void;
     removeReminder: (reminderIndex: number) => void;
     saveReminder: (draft: ReminderScheduleDraft, reminderIndex: number | null) => void;
+    savePurposeIntent: (intent: string | null) => void;
     saveReviewDecisions: () => void;
     selectCapture: (captureId: string | null) => void;
     selectCollection: (collectionId: string | null) => void;
@@ -341,11 +337,11 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     openCollectionPicker,
     openExternalUrl,
     openNoteSheet,
-    openReviewInsight,
     openVisitTargetMaps,
     pasteExpandedUrl,
     removeReminder,
     saveReminder,
+    savePurposeIntent,
     saveReviewDecisions,
     selectCapture,
     selectCollection,
@@ -371,48 +367,29 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
   const [imageViewerSource, setImageViewerSource] = useState<{ cacheKey: string; url: string } | null>(null);
   const selectedReviewReasons = reviewReasons(selected);
-  const intentReviewPending = selectedReviewReasons.includes("intent");
-  const collectionReviewPending = selectedReviewReasons.includes("collections");
-  const reminderReviewPending = selectedReviewReasons.includes("reminder");
   const aiIntentValue = normalizeIntent(selected.defaultIntent);
-  const visibleIntentValue = intentReviewPending ? "" : aiIntentValue;
-  const quickIntentValue = draftIntentDirty ? draftIntent : visibleIntentValue;
-  const quickIntentLabel = activeIntentLabel(quickIntentValue) || ADD_INTENT_LABEL;
-  const reminderRows = reminderReviewPending ? [] : selected.suggestedReminders || [];
-  const collectionRows = collectionReviewPending
-    ? (selected.linkedCollections || []).filter((collection) => collection.createdBy !== "analysis")
-    : selected.linkedCollections || [];
-  const collectionRowLabel = linkedCollectionsLabel(collectionRows);
+  const quickIntentValue = draftIntentDirty ? draftIntent : aiIntentValue;
+  const reminderRows = selected.suggestedReminders || [];
   const primaryReminderIndex = reminderRows.findIndex((reminder, index) => {
     return reminderDrafts[reminderDraftKey(reminder, index)] !== "remove";
   });
   const primaryReminder = primaryReminderIndex >= 0 ? reminderRows[primaryReminderIndex] : undefined;
-  const reminderSentenceValue = primaryReminder
-    ? reminderLabel(primaryReminder)
-    : "Add reminder";
+  const meaningFields = captureFieldStates(selected);
+  const purposeField = meaningFields.find((field) => field.kind === "purpose");
+  const collectionField = meaningFields.find((field) => field.kind === "collection");
+  const laterField = meaningFields.find((field) => field.kind === "later");
+  const purposeRationale = captureFieldRationale(selected, "purpose");
+  const reminderRationale = captureFieldRationale(selected, "later");
   const collectionActionPending = collectionChoiceSaving === "set-collections";
   const urlEvidenceNotice = urlEvidenceMessage(selected.urlEvidence);
   const selectedVisitTarget = selected.visitTarget;
   const selectedVisitTargetMapCandidates = selectedVisitTarget ? visitTargetMapCandidates : [];
   const selectedSourceMeta = `${captureSourceLabel(selected)} · ${formatDateTime(selected.createdAt)}`;
-  const selectedReviewInsight = reviewInsightForCapture(selected);
-  const selectedReviewTasks = reviewChecklistTasksForCapture(selected);
   const selectedNeedsReview = displayStatus(selected) === "needs_review";
   const selectedReviewState = selectedNeedsReview
-    ? selectedReviewInsight.focus
+    ? "Needs a quick look"
     : reviewStatusCue(selected, selectedReviewReasons.length > 0);
   const showReviewStateText = selectedReviewState !== "Ready" && selectedReviewState !== captureStatusLabel(selected);
-  const hasAuthoredReviewInsight = Boolean(
-    !selectedReviewInsight.isFallback &&
-      (selectedReviewInsight.summary || selectedReviewInsight.sections.length)
-  );
-  const showReviewInsight = Boolean(
-    selectedNeedsReview ||
-      hasAuthoredReviewInsight ||
-      selected.intentRationale ||
-      selected.suggestedReminders?.length ||
-      selected.linkedCollections?.some((collection) => collection.rationale)
-  );
   const noteStatusLabel =
     noteSaveState === "saving"
       ? "Saving..."
@@ -427,15 +404,8 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const reviewHasPendingChanges = Boolean(
     state.draftTitleDirty ||
       draftNoteDirty ||
-      draftIntentDirty ||
       Object.keys(reminderDrafts).length
   );
-  const reviewChecklistLabel = reviewChecklistCta(selectedReviewTasks);
-  const reviewSupportText = draftIntentDirty
-    ? aiIntentValue
-      ? `Changed from ${activeIntentLabel(aiIntentValue)}`
-      : "Added intent"
-    : "";
   const showReviewFooter = reviewHasPendingChanges || collectionActionPending;
   const noteSheetKeyboardVisible = noteSheetOpen && keyboardHeight > 0;
   const noteWindowAlreadyKeyboardSized =
@@ -453,6 +423,21 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     setImageViewerOpen(false);
     setImageViewerSource(null);
   }, [selected.id]);
+
+  function openInlineField(kind: CaptureFieldKind) {
+    if (kind === "purpose") {
+      setQuickIntentOpen(true);
+      return;
+    }
+    if (kind === "collection") {
+      void openCollectionPicker();
+      return;
+    }
+    if (kind === "later") {
+      setReminderSheetOpen(true);
+      return;
+    }
+  }
 
   function closeImageViewer() {
     setImageViewerOpen(false);
@@ -616,185 +601,53 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
               ) : null}
             </View>
             <View style={styles.quickEditBlock}>
-              <View style={styles.reviewEditRail}>
-                <Pressable
-                  accessibilityHint="Opens Save Intent choices."
-                  accessibilityLabel={`Purpose: ${quickIntentLabel}`}
-                  accessibilityRole="button"
-                  android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
-                  onLongPress={() => openReviewInsight(selectedReviewInsight)}
-                  onPress={() => setQuickIntentOpen((current) => !current)}
-                  style={({ pressed }) => [
-                    styles.reviewEditRailIntent,
-                    quickIntentOpen && styles.reviewEditRailIntentActive,
-                    pressed && styles.reviewEditRailPressed
-                  ]}
-                  testID="pc.review.intent.open"
-                >
-                  <Text style={styles.reviewEditRailLabel}>Purpose</Text>
-                  <Text
-                    numberOfLines={1}
-                    style={[
-                      styles.reviewEditRailIntentValue,
-                      !quickIntentValue && styles.reviewEditRailPlaceholder
-                    ]}
-                  >
-                    {quickIntentLabel}
-                  </Text>
-                </Pressable>
-                <View style={styles.reviewEditRailDivider} />
-                <View style={styles.reviewEditRailDetails}>
-                  <Pressable
-                    accessibilityHint="Opens Collection selection."
-                    accessibilityLabel={`Collection: ${collectionRowLabel}`}
-                    accessibilityRole="button"
-                    android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
-                    onLongPress={() => openReviewInsight(selectedReviewInsight)}
-                    onPress={() => void openCollectionPicker()}
-                    style={({ pressed }) => [
-                      styles.reviewEditRailDetail,
-                      pressed && styles.reviewEditRailPressed
-                    ]}
-                    testID="pc.review.collections.open"
-                  >
-                    <Text style={styles.reviewEditRailDetailLabel}>Collection</Text>
-                    <Text
-                      numberOfLines={1}
-                      style={[
-                        styles.reviewEditRailDetailValue,
-                        !collectionRows.length && styles.reviewEditRailPlaceholder
-                      ]}
-                    >
-                      {collectionRowLabel}
+              <View style={styles.inlineMeaningBlock}>
+                <View style={styles.inlineMeaningSentence}>
+                  {purposeField ? (
+                    <Text style={styles.inlineMeaningLine}>
+                      <Text style={styles.inlineMeaningText}>Saved as </Text>
+                      <Text
+                        accessibilityLabel={`Purpose: ${purposeField.displayValue}`}
+                        accessibilityRole="button"
+                        onPress={() => openInlineField("purpose")}
+                        style={[styles.inlineMeaningChipText, !purposeField.hasValue && styles.inlineMeaningChipTextEmpty]}
+                        testID="pc.review.intent.open"
+                      >
+                        {purposeField.displayValue}
+                      </Text>
                     </Text>
-                  </Pressable>
-                  <View style={styles.reviewEditRailDetailDivider} />
-                  <Pressable
-                    accessibilityHint="Opens the reminder editor."
-                    accessibilityLabel={`Later: ${reminderSentenceValue}`}
-                    accessibilityRole="button"
-                    android_ripple={{ color: "rgba(31, 122, 91, 0.10)" }}
-                    onLongPress={() => openReviewInsight(selectedReviewInsight)}
-                    onPress={() => setReminderSheetOpen(true)}
-                    style={({ pressed }) => [
-                      styles.reviewEditRailDetail,
-                      pressed && styles.reviewEditRailPressed
-                    ]}
-                    testID="pc.review.reminder.open"
-                  >
-                    <Text style={styles.reviewEditRailDetailLabel}>Later</Text>
-                    <Text
-                      numberOfLines={1}
-                      style={[
-                        styles.reviewEditRailDetailValue,
-                        !primaryReminder && styles.reviewEditRailPlaceholder
-                      ]}
-                    >
-                      {reminderSentenceValue}
+                  ) : null}
+                  {collectionField ? (
+                    <Text style={styles.inlineMeaningLine}>
+                      <Text style={styles.inlineMeaningText}>in </Text>
+                      <Text
+                        accessibilityLabel={`Collection: ${collectionField.displayValue}`}
+                        accessibilityRole="button"
+                        onPress={() => openInlineField("collection")}
+                        style={[styles.inlineMeaningChipText, !collectionField.hasValue && styles.inlineMeaningChipTextEmpty]}
+                        testID="pc.review.collections.open"
+                      >
+                        {collectionField.displayValue}
+                      </Text>
                     </Text>
-                  </Pressable>
+                  ) : null}
+                  {laterField ? (
+                    <Text style={styles.inlineMeaningLine}>
+                      <Text style={styles.inlineMeaningText}>for </Text>
+                      <Text
+                        accessibilityLabel={`Later: ${laterField.displayValue}`}
+                        accessibilityRole="button"
+                        onPress={() => openInlineField("later")}
+                        style={[styles.inlineMeaningChipText, !laterField.hasValue && styles.inlineMeaningChipTextEmpty]}
+                        testID="pc.review.reminder.open"
+                      >
+                        {laterField.displayValue}
+                      </Text>
+                    </Text>
+                  ) : null}
                 </View>
               </View>
-              {reviewSupportText ? (
-                <Text style={styles.reviewSentenceSubtext}>{reviewSupportText}</Text>
-              ) : null}
-              {quickIntentOpen ? (
-                <View style={styles.quickOptions}>
-                  {INTENT_OPTIONS.map((intent) => {
-                    const selectedIntent = quickIntentValue === intent;
-                    return (
-                      <Pressable
-                        key={intent}
-                        onPress={() => {
-                          const intentDirty = intent !== visibleIntentValue || intentReviewPending;
-                          setDraftIntentDirty(intentDirty);
-                          setDraftIntent(intent);
-                          updateSelectedReviewDraft({ intent, intentDirty });
-                          setQuickIntentOpen(false);
-                        }}
-                        style={[styles.intentChip, selectedIntent && styles.intentChipSelected]}
-                      >
-                        <Text style={[styles.intentChipText, selectedIntent && styles.intentChipTextSelected]}>
-                          {activeIntentLabel(intent)}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                  <Pressable
-                    onPress={() => {
-                      const intentDirty = Boolean(visibleIntentValue) || intentReviewPending;
-                      setDraftIntentDirty(intentDirty);
-                      setDraftIntent("");
-                      updateSelectedReviewDraft({ intent: "", intentDirty });
-                      setQuickIntentOpen(false);
-                    }}
-                    style={[styles.intentChip, !quickIntentValue && styles.intentChipSelected]}
-                  >
-                    <Text style={[styles.intentChipText, !quickIntentValue && styles.intentChipTextSelected]}>
-                      No intent
-                    </Text>
-                  </Pressable>
-                </View>
-              ) : null}
-              {draftIntentDirty ? (
-                <View style={styles.changeLine}>
-                  <Text style={styles.changeText}>
-                    {intentReviewPending && aiIntentValue
-                      ? `Suggestion: ${activeIntentLabel(aiIntentValue)}`
-                      : visibleIntentValue
-                      ? `Original: ${activeIntentLabel(visibleIntentValue)}`
-                      : "Started without intent"}
-                  </Text>
-                  <Pressable
-                    onPress={() => {
-                      setDraftIntent(visibleIntentValue);
-                      setDraftIntentDirty(false);
-                      updateSelectedReviewDraft({ intent: visibleIntentValue, intentDirty: false });
-                    }}
-                    hitSlop={8}
-                  >
-                    <Text style={styles.suggestionAction}>Undo</Text>
-                  </Pressable>
-                </View>
-              ) : null}
             </View>
-            {showReviewInsight ? (
-              <Pressable
-                accessibilityHint="Shows why the suggested intent, collection, and reminder were chosen."
-                accessibilityLabel="Review insight"
-                accessibilityRole="button"
-                onPress={() => openReviewInsight(selectedReviewInsight)}
-                style={({ pressed }) => [
-                  styles.reviewInsightCard,
-                  selectedNeedsReview && styles.reviewInsightCardReview,
-                  pressed && styles.subtlePressed
-                ]}
-                testID="pc.review.insight"
-              >
-                <View style={[styles.reviewInsightIcon, selectedNeedsReview && styles.reviewInsightIconReview]}>
-                  <Info color={selectedNeedsReview ? colors.review : colors.accent} size={17} strokeWidth={2.4} />
-                </View>
-                <View style={styles.reviewInsightCopy}>
-                  <View style={styles.reviewInsightHeader}>
-                    <Text style={styles.reviewInsightTitle}>
-                      {selectedReviewTasks.length ? reviewChecklistLabel : "Review insight"}
-                    </Text>
-                    {selectedReviewTasks.length ? (
-                      <View style={styles.reviewInsightCountBadge}>
-                        <Text style={styles.reviewInsightCountText}>{selectedReviewTasks.length}</Text>
-                      </View>
-                    ) : null}
-                    <Text style={styles.reviewInsightAction}>
-                      {selectedReviewTasks.length ? "Open" : "Details"}
-                    </Text>
-                  </View>
-                  <Text numberOfLines={2} style={styles.reviewInsightSummary}>
-                    {selectedReviewTasks.length ? selectedReviewInsight.focus : selectedReviewInsight.summary}
-                  </Text>
-                </View>
-                <ChevronRight color={colors.muted} size={18} strokeWidth={2.4} />
-              </Pressable>
-            ) : null}
             {selectedVisitTarget && selectedVisitTargetMapCandidates.length ? (
               <View style={styles.sourceBlock}>
                 <Text style={styles.meta}>Open in Maps</Text>
@@ -979,6 +832,73 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
           </KeyboardAvoidingView>
         </View>
       ) : null}
+      {quickIntentOpen ? (
+        <View style={styles.modalLayer} pointerEvents="box-none">
+          <Pressable
+            accessibilityLabel="Close Purpose choices"
+            onPress={() => setQuickIntentOpen(false)}
+            style={styles.modalBackdrop}
+          />
+          <View style={[styles.actionSheet, styles.purposeSheet]}>
+            <View style={styles.sheetGrabber} />
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetHeaderCopy}>
+                <Text style={styles.sheetTitle}>Purpose</Text>
+                <Text style={styles.sheetSubtitle}>Choose what this capture should help you do later.</Text>
+              </View>
+              <IconButton Icon={X} label="Close Purpose choices" onPress={() => setQuickIntentOpen(false)} />
+            </View>
+            {purposeRationale.visible ? (
+              <View style={styles.fieldRationaleBox}>
+                <Text style={styles.fieldRationaleTitle}>{purposeRationale.title}</Text>
+                <Text style={styles.fieldRationaleText}>{purposeRationale.text}</Text>
+              </View>
+            ) : null}
+            <View style={styles.purposeOptionGrid}>
+              {INTENT_OPTIONS.map((intent) => {
+                const selectedIntent = quickIntentValue === intent;
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    key={intent}
+                    onPress={() => {
+                      setQuickIntentOpen(false);
+                      savePurposeIntent(intent);
+                    }}
+                    style={({ pressed }) => [
+                      styles.purposeOption,
+                      selectedIntent && styles.purposeOptionSelected,
+                      pressed && styles.subtlePressed
+                    ]}
+                    testID={`pc.intent.option.${intent}`}
+                  >
+                    <Text style={[styles.purposeOptionText, selectedIntent && styles.purposeOptionTextSelected]}>
+                      {activeIntentLabel(intent)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  setQuickIntentOpen(false);
+                  savePurposeIntent(null);
+                }}
+                style={({ pressed }) => [
+                  styles.purposeOption,
+                  !quickIntentValue && styles.purposeOptionSelected,
+                  pressed && styles.subtlePressed
+                ]}
+                testID="pc.intent.option.none"
+              >
+                <Text style={[styles.purposeOptionText, !quickIntentValue && styles.purposeOptionTextSelected]}>
+                  No intent
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      ) : null}
       <CaptureImageViewer
         cacheKey={imageViewerSource?.cacheKey || ""}
         imageUrl={imageViewerSource?.url || ""}
@@ -998,6 +918,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
         }}
         reminder={primaryReminder}
         reminderIndex={primaryReminder ? primaryReminderIndex : null}
+        rationale={reminderRationale.visible ? reminderRationale : null}
         visible={reminderSheetOpen}
       />
       {appSheets}

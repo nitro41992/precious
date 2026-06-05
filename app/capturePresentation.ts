@@ -15,6 +15,8 @@ import type {
   CaptureReviewDraft,
   Collection,
   CollectionDecision,
+  CaptureFieldRationale,
+  CaptureFieldState,
   HomeListRow,
   LinkedCollection,
   LucideIconComponent,
@@ -23,20 +25,16 @@ import type {
   ReminderScheduleDraft,
   ReminderSuggestion,
   ReminderTimePrecision,
-  ReviewChecklistTask,
-  ReviewInsight,
   ReviewRationale,
-  ReviewTarget,
   UrlEvidence
 } from "./types";
 import {
-  confidenceRequiresReview,
+  captureFieldState,
   displayStatus,
   extractHttpUrl,
   hostFromUrl,
   isDeleted,
   normalizeIntent as normalizeKnownIntent,
-  reviewTargetsForCapture,
   statusLabel,
   uniqueCapturesByIdentity
 } from "./captureLogic";
@@ -53,7 +51,7 @@ export const INTENT_OPTIONS = INTENT_CONFIG.map((intent) => intent.key);
 export const INTENT_LABELS = new Map(INTENT_CONFIG.map((intent) => [intent.key, intent.label]));
 export const ADD_INTENT_LABEL = "Add intent";
 const NEUTRAL_REVIEW_RATIONALE: Required<ReviewRationale> = {
-  focus: "Review insight",
+  focus: "Review details",
   summary: "Review the suggested details",
   intent: "Review the Save Intent suggestion",
   collections: "Review the Collection decision",
@@ -856,7 +854,7 @@ export function captureSupportLine(capture: Capture, visibleSummary: string) {
   const status = displayStatus(capture);
   if (status === "processing") return "Saved. Checking the source now.";
   if (status === "failed") return "Saved. Open it to review or try again.";
-  if (status === "needs_review") return reviewInsightForCapture(capture).focus;
+  if (status === "needs_review") return "Saved. Open it to add context.";
   const evidence = urlEvidenceMessage(capture.urlEvidence);
   if (evidence) return evidence;
   return "";
@@ -1070,6 +1068,81 @@ function collectionDecisionsLabel(decisions: CollectionDecision[]) {
   return `${titles[0]} +${titles.length - 1}`;
 }
 
+export function captureFieldStates(capture: Capture): CaptureFieldState[] {
+  const linkedCollectionLabel = linkedCollectionsLabel(capture.linkedCollections || []);
+  const collectionValue = linkedCollectionLabel === "Add collections" ? "" : linkedCollectionLabel;
+  const reminder = (capture.suggestedReminders || [])[0];
+  const intentValue = activeIntentLabel(capture.defaultIntent);
+  return [
+    {
+      ...captureFieldState({
+        kind: "purpose",
+        value: intentValue,
+        emptyLabel: ADD_INTENT_LABEL
+      }),
+      kind: "purpose" as const,
+      label: "Purpose",
+      emptyLabel: ADD_INTENT_LABEL
+    },
+    {
+      ...captureFieldState({
+        kind: "collection",
+        value: collectionValue,
+        emptyLabel: "Add collection"
+      }),
+      kind: "collection" as const,
+      label: "Collection",
+      emptyLabel: "Add collection"
+    },
+    {
+      ...captureFieldState({
+        kind: "later",
+        value: reminderLabel(reminder),
+        emptyLabel: "Add reminder"
+      }),
+      kind: "later" as const,
+      label: "Later",
+      emptyLabel: "Add reminder"
+    }
+  ];
+}
+
+export function captureFieldRationale(capture: Capture, field: CaptureFieldRationale["field"]): CaptureFieldRationale {
+  const base = {
+    field,
+    title: "Why AI picked this",
+    text: "",
+    visible: false
+  };
+  if (field === "purpose") {
+    const currentIntent = normalizeIntent(capture.defaultIntent);
+    const aiIntent = normalizeIntent(capture.aiDefaultIntent || capture.defaultIntent);
+    const text = rationaleLine(capture.intentRationale);
+    return {
+      ...base,
+      text,
+      visible: Boolean(text && currentIntent && aiIntent && currentIntent === aiIntent)
+    };
+  }
+  if (field === "collection") {
+    const rationaleText = (capture.linkedCollections || [])
+      .map((collection) => rationaleLine(collection.rationale))
+      .find(Boolean) || "";
+    return {
+      ...base,
+      text: rationaleText,
+      visible: Boolean(rationaleText)
+    };
+  }
+  const reminder = (capture.suggestedReminders || [])[0];
+  const reminderRationale = rationaleLine(reminder?.rationale);
+  return {
+    ...base,
+    text: reminderRationale,
+    visible: Boolean(reminderRationale && reminder?.source !== "manual")
+  };
+}
+
 export function reviewRationaleFromRemote(value: unknown): ReviewRationale | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const record = value as Record<string, unknown>;
@@ -1101,15 +1174,6 @@ function reviewRationaleFieldIsNeutral(
   return cleanSentence(value) === neutralReviewRationaleText(key);
 }
 
-function reviewRationaleIsNeutral(capture: Capture) {
-  if (capture.reviewRationaleStatus === "neutral_fallback") return true;
-  const rationale = capture.reviewRationale || {};
-  const keys = ["focus", "summary", "intent", "collections", "reminder"] as const;
-  const presentKeys = keys.filter((key) => Boolean(rationale[key]));
-  return Boolean(presentKeys.length) &&
-    presentKeys.every((key) => reviewRationaleFieldIsNeutral(capture, key, rationale[key]));
-}
-
 function authoredRationaleLine(
   capture: Capture,
   key: keyof ReviewRationale,
@@ -1118,161 +1182,6 @@ function authoredRationaleLine(
   const text = rationaleLine(value);
   if (!text || reviewRationaleFieldIsNeutral(capture, key, text)) return "";
   return text;
-}
-
-export function reviewFocusForCapture(capture: Capture, intentText: string) {
-  const rationale = capture.reviewRationale || {};
-  const providedFocus = authoredRationaleLine(capture, "focus", rationale.focus);
-  if (providedFocus) return conciseText(providedFocus, 88);
-  if (displayStatus(capture) === "failed") return "Review source details";
-  const reviewTargets = reviewTargetsForCapture(capture);
-  if (reviewTargets.includes("intent")) {
-    const intentLabel = activeIntentLabel(capture.defaultIntent);
-    return intentLabel ? `Confirm Save Intent: ${intentLabel}` : "Choose a Save Intent";
-  }
-  if (reviewTargets.includes("collections")) {
-    const collectionsLabel = linkedCollectionsLabel(capture.linkedCollections || []);
-    return collectionsLabel === "Add collections"
-      ? "Check Collections"
-      : `Check Collections: ${collectionsLabel}`;
-  }
-  if (reviewTargets.includes("reminder")) return "Confirm Reminder idea";
-  if (confidenceRequiresReview(capture.confidenceLabel)) {
-    const intentLabel = activeIntentLabel(capture.defaultIntent);
-    return intentLabel ? `Confirm Save Intent: ${intentLabel}` : "Choose a Save Intent";
-  }
-  if (capture.needsReview) return "Review the suggested fields";
-  return conciseText(intentText, 88) || "Review the suggested fields";
-}
-
-const REVIEW_CHECKLIST_ORDER: ReviewTarget[] = ["intent", "collections", "reminder", "analysis"];
-
-export function reviewChecklistCta(tasks: ReviewChecklistTask[]) {
-  if (!tasks.length) return "Review insight";
-  return tasks.length === 1 ? "Review 1 item" : `Review ${tasks.length} items`;
-}
-
-export function reviewChecklistTasksForCapture(capture: Capture): ReviewChecklistTask[] {
-  const targets = new Set(reviewTargetsForCapture(capture));
-  if (!targets.size) return [];
-  const rationale = capture.reviewRationale || {};
-  const primaryReminder = (capture.suggestedReminders || [])[0];
-  const collectionsLabel = linkedCollectionsLabel(capture.linkedCollections || []);
-  const pendingCollectionDecisions = pendingExistingCollectionDecisions(capture);
-  const pendingCollectionsLabel = collectionDecisionsLabel(pendingCollectionDecisions);
-  const collectionTaskValue = pendingCollectionsLabel
-    ? `Suggested: ${pendingCollectionsLabel}`
-    : collectionsLabel === "Add collections"
-      ? "No collection"
-      : collectionsLabel;
-  const intentValue = activeIntentLabel(capture.defaultIntent);
-  const intentTask: ReviewChecklistTask = {
-    target: "intent",
-    title: "Save Intent",
-    value: intentValue ? `Use ${intentValue}?` : "Leave without intent?",
-    rationale:
-      authoredRationaleLine(capture, "intent", rationale.intent) ||
-      rationaleLine(capture.intentRationale) ||
-      (intentValue
-        ? `Confirm ${intentValue} is the right action for this capture.`
-        : "Choose an action only if the saved content clearly supports one."),
-    confirmLabel: intentValue ? `Yes, use ${intentValue}` : "Yes, leave without intent",
-    editLabel: intentValue ? "Change Save Intent" : "Choose Save Intent",
-    clearLabel: intentValue ? "No, clear Save Intent" : "No, choose later from Purpose"
-  };
-  const collectionsTask: ReviewChecklistTask = {
-    target: "collections",
-    title: "Collections",
-    value: pendingCollectionsLabel
-      ? `Add to ${pendingCollectionsLabel}?`
-      : collectionTaskValue === "No collection"
-        ? "Leave ungrouped?"
-        : `Keep ${collectionTaskValue}?`,
-    rationale:
-      authoredRationaleLine(capture, "collections", rationale.collections) ||
-      (capture.linkedCollections || [])
-        .map((collection) => rationaleLine(collection.rationale))
-        .find(Boolean) ||
-      pendingCollectionDecisions
-        .map((decision) => rationaleLine(decision.rationale))
-        .find(Boolean) ||
-      "Keep it unfiled unless one of your existing Collections fits.",
-    confirmLabel: pendingCollectionsLabel
-      ? `Yes, add to ${pendingCollectionsLabel}`
-      : collectionsLabel === "Add collections"
-        ? "Yes, leave ungrouped"
-        : `Yes, keep ${collectionsLabel}`,
-    editLabel: "Change Collections",
-    clearLabel: pendingCollectionsLabel
-      ? "No, clear Collection suggestion"
-      : collectionsLabel === "Add collections"
-        ? "No, choose later from Collections"
-        : "No, clear Collections"
-  };
-  const reminderTask: ReviewChecklistTask = {
-    target: "reminder",
-    title: "Reminder",
-    value: primaryReminder ? `Keep ${reminderLabel(primaryReminder)}?` : "Leave without reminder?",
-    rationale:
-      authoredRationaleLine(capture, "reminder", rationale.reminder) ||
-      rationaleLine(primaryReminder?.rationale) ||
-      "Confirm this only if the idea should stay with the capture.",
-    confirmLabel: primaryReminder ? `Yes, keep ${reminderLabel(primaryReminder)}` : "Yes, leave without reminder",
-    editLabel: primaryReminder ? "Change Reminder" : "Add Reminder",
-    clearLabel: primaryReminder ? "No, remove reminder idea" : "No, choose later from Later"
-  };
-  const analysisTask: ReviewChecklistTask = {
-    target: "analysis",
-    title: "Analysis",
-    value: "Do these details look usable?",
-    rationale:
-      authoredRationaleLine(capture, "summary", rationale.summary) ||
-      "Confirm the extracted details look usable, or edit the title and note before saving.",
-    confirmLabel: "Yes, mark reviewed",
-    clearLabel: "No, dismiss this review question"
-  };
-  const byTarget: Record<ReviewTarget, ReviewChecklistTask> = {
-    intent: intentTask,
-    collections: collectionsTask,
-    reminder: reminderTask,
-    analysis: analysisTask
-  };
-  return REVIEW_CHECKLIST_ORDER
-    .filter((target) => targets.has(target))
-    .map((target) => byTarget[target]);
-}
-
-export function reviewInsightForCapture(capture: Capture): ReviewInsight {
-  const rationale = capture.reviewRationale || {};
-  const collectionRationale = (capture.linkedCollections || [])
-    .map((collection) => rationaleLine(collection.rationale))
-    .find(Boolean) || "";
-  const reminderRationale = (capture.suggestedReminders || [])
-    .map((reminder) => rationaleLine(reminder.rationale))
-    .find(Boolean) || "";
-  const intentText =
-    authoredRationaleLine(capture, "intent", rationale.intent) ||
-    rationaleLine(capture.intentRationale);
-  const collectionsText =
-    authoredRationaleLine(capture, "collections", rationale.collections) ||
-    collectionRationale;
-  const reminderText =
-    authoredRationaleLine(capture, "reminder", rationale.reminder) ||
-    reminderRationale;
-  const summary =
-    authoredRationaleLine(capture, "summary", rationale.summary) ||
-    conciseText([intentText, collectionsText, reminderText].filter(Boolean).join(" "), 140);
-  const focus = reviewFocusForCapture(capture, intentText);
-  return {
-    focus,
-    summary,
-    sections: [
-      { label: "Save Intent", text: intentText },
-      { label: "Collections", text: collectionsText },
-      { label: "Reminder idea", text: reminderText }
-    ].filter((section) => Boolean(section.text)),
-    isFallback: reviewRationaleIsNeutral(capture)
-  };
 }
 
 export function collectionCountLabel(count: number) {

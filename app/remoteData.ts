@@ -9,7 +9,6 @@ import type {
 } from "./types";
 import {
   LOCAL_PROCESSING_GRACE_MS,
-  confidenceRequiresReview,
   displayStatus,
   hostFromUrl,
   isDeleted,
@@ -55,7 +54,12 @@ export function captureFromRemote(row: Record<string, any>): Capture {
   const manualCollectionOverrides = Array.isArray(analysis.collection_choice_overrides)
     ? analysis.collection_choice_overrides.map(collectionChoiceOverrideFromRemote).filter(Boolean) as CollectionChoiceOverride[]
     : [];
-  const reviewTargets = normalizeReviewTargets(analysis.review_targets);
+  const reviewTargets = Array.isArray(analysis.review_targets)
+    ? normalizeReviewTargets(analysis.review_targets)
+    : analysis.needs_review || row.analysis_state === "needs_review"
+      ? ["analysis" as const]
+      : [];
+  const visibleNeedsReview = reviewTargets.includes("analysis");
   const remoteHasExtractedData = Boolean(
     row.default_intent ||
       row.analysis_provider ||
@@ -86,6 +90,7 @@ export function captureFromRemote(row: Record<string, any>): Capture {
     analysisProvider: nullableValue(row.analysis_provider),
     analysisModel: nullableValue(row.analysis_model),
     analysisError: row.analysis_error || undefined,
+    aiDefaultIntent: defaultIntent.category || undefined,
     defaultIntent: row.current_save_intent || row.default_intent || defaultIntent.category || undefined,
     intentRationale: row.intent_rationale || defaultIntent.rationale || undefined,
     reviewRationale: reviewRationaleFromRemote(analysis.review_rationale),
@@ -98,11 +103,7 @@ export function captureFromRemote(row: Record<string, any>): Capture {
     confidenceLabel: analysis.confidence_label || undefined,
     reviewTargets,
     needsReview: Boolean(
-      !reviewConfirmedAtValue &&
-        (analysis.needs_review ||
-          row.analysis_state === "needs_review" ||
-          reviewTargets.length > 0 ||
-          confidenceRequiresReview(analysis.confidence_label))
+      !reviewConfirmedAtValue && visibleNeedsReview
     ),
     entities: analysis.entities || [],
     visitTarget: visitTargetFromRemote(analysis),
@@ -158,7 +159,7 @@ export function captureFromRemote(row: Record<string, any>): Capture {
     status:
       row.analysis_state === "ready"
         ? "ready"
-        : row.analysis_state === "needs_review"
+        : row.analysis_state === "needs_review" && visibleNeedsReview
           ? "needs_review"
           : row.analysis_state === "failed" && !remoteHasExtractedData
             ? "failed"

@@ -377,6 +377,75 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingTop: 8
   },
+  purposeSheet: {
+    gap: 14,
+    paddingBottom: Platform.OS === "android" ? 34 : 42
+  },
+  fieldRationaleBox: {
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  fieldRationaleTitle: {
+    color: colors.secondary,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 16
+  },
+  fieldRationaleText: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 19
+  },
+  purposeOptionGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  purposeOption: {
+    alignItems: "center",
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.line,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexGrow: 1,
+    justifyContent: "center",
+    minHeight: 48,
+    minWidth: 96,
+    paddingHorizontal: 12
+  },
+  purposeOptionSelected: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent
+  },
+  purposeOptionText: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "800",
+    lineHeight: 18,
+    textAlign: "center"
+  },
+  purposeOptionTextSelected: {
+    color: colors.onAccent
+  },
+  collectionSelectorSheet: {
+    gap: 12,
+    maxHeight: "88%",
+    paddingBottom: Platform.OS === "android" ? 34 : 42
+  },
+  collectionSelectorSheetList: {
+    flexGrow: 0,
+    maxHeight: 430
+  },
+  collectionSelectorSheetListContent: {
+    paddingBottom: 8,
+    paddingRight: 2
+  },
   sheetBackdrop: {
     backgroundColor: colors.scrim,
     bottom: 0,
@@ -1642,79 +1711,37 @@ export const styles = StyleSheet.create({
     lineHeight: 20
   },
   quickEditBlock: {
-    gap: 10,
+    gap: 12,
     paddingHorizontal: 2
   },
-  reviewInsightCard: {
-    alignItems: "center",
-    borderRadius: 8,
-    flexDirection: "row",
+  inlineMeaningBlock: {
     gap: 10,
-    minHeight: 56,
     paddingHorizontal: 2,
-    paddingVertical: 8
+    paddingVertical: 6
   },
-  reviewInsightCardReview: {
-    backgroundColor: colors.reviewSoft,
-    minHeight: 68,
-    paddingHorizontal: 12,
-    paddingVertical: 12
+  inlineMeaningSentence: {
+    gap: 3
   },
-  reviewInsightIcon: {
-    alignItems: "center",
-    backgroundColor: "transparent",
-    borderRadius: 8,
-    height: 32,
-    justifyContent: "center",
-    width: 32
+  inlineMeaningLine: {
+    color: colors.secondary,
+    fontSize: 26,
+    fontWeight: "900",
+    lineHeight: 35
   },
-  reviewInsightIconReview: {
-    backgroundColor: colors.surfaceContainerHigh
+  inlineMeaningText: {
+    color: colors.secondary,
+    fontSize: 26,
+    fontWeight: "900",
+    lineHeight: 35
   },
-  reviewInsightCopy: {
-    flex: 1,
-    gap: 4,
-    minWidth: 0
-  },
-  reviewInsightHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "space-between"
-  },
-  reviewInsightTitle: {
-    color: colors.ink,
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "800",
-    lineHeight: 19
-  },
-  reviewInsightAction: {
+  inlineMeaningChipText: {
     color: colors.accent,
-    fontSize: 12,
-    fontWeight: "800",
-    lineHeight: 16
+    fontSize: 26,
+    fontWeight: "900",
+    lineHeight: 35
   },
-  reviewInsightCountBadge: {
-    alignItems: "center",
-    backgroundColor: colors.surfaceContainerHigh,
-    borderRadius: 8,
-    justifyContent: "center",
-    minHeight: 24,
-    minWidth: 24,
-    paddingHorizontal: 7
-  },
-  reviewInsightCountText: {
-    color: colors.review,
-    fontSize: 12,
-    fontWeight: "800",
-    lineHeight: 16
-  },
-  reviewInsightSummary: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: "600",
-    lineHeight: 19
+  inlineMeaningChipTextEmpty: {
+    color: colors.accent
   },
   reviewPrimaryBlock: {
     gap: 8,
@@ -1978,12 +2005,6 @@ export const styles = StyleSheet.create({
     gap: 8,
     paddingTop: 12
   },
-  reviewInsightSheet: {
-    gap: 15,
-    maxHeight: "90%",
-    paddingBottom: Platform.OS === "android" ? 36 : 44,
-    paddingTop: 8
-  },
   reminderSheet: {
     gap: 14,
     maxHeight: "92%",
@@ -1992,6 +2013,9 @@ export const styles = StyleSheet.create({
   },
   reminderSheetHeaderIcon: {
     backgroundColor: colors.accentSoft
+  },
+  reminderSheetScroll: {
+    flexShrink: 1
   },
   reminderSheetScrollContent: {
     gap: 14,
@@ -2127,156 +2151,6 @@ export const styles = StyleSheet.create({
   reminderUnitTextSelected: {
     color: colors.accent
   },
-  reviewInsightScroll: {
-    flexGrow: 0
-  },
-  reviewInsightScrollContent: {
-    gap: 18,
-    paddingBottom: 20
-  },
-  reviewChecklist: {
-    gap: 0,
-    paddingTop: 2
-  },
-  reviewChecklistHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    minHeight: 32,
-    paddingBottom: 4
-  },
-  reviewChecklistLabel: {
-    color: colors.review,
-    fontSize: 13,
-    fontWeight: "800",
-    lineHeight: 17
-  },
-  reviewChecklistCount: {
-    alignItems: "center",
-    backgroundColor: colors.reviewSoft,
-    borderRadius: 8,
-    justifyContent: "center",
-    minHeight: 24,
-    minWidth: 24,
-    paddingHorizontal: 7
-  },
-  reviewChecklistCountText: {
-    color: colors.review,
-    fontSize: 12,
-    fontWeight: "800",
-    lineHeight: 16
-  },
-  reviewChecklistTask: {
-    alignItems: "flex-start",
-    borderTopColor: colors.line,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    gap: 8,
-    minHeight: 88,
-    paddingVertical: 14
-  },
-  reviewChecklistCopy: {
-    flex: 1,
-    gap: 6,
-    minWidth: 0
-  },
-  reviewChecklistTaskTop: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "space-between"
-  },
-  reviewChecklistTaskText: {
-    flex: 1,
-    gap: 3,
-    minWidth: 0
-  },
-  reviewChecklistValue: {
-    color: colors.ink,
-    fontSize: 16,
-    fontWeight: "800",
-    lineHeight: 21
-  },
-  reviewChecklistActions: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 2
-  },
-  reviewChecklistDecisionRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8,
-    paddingTop: 4
-  },
-  reviewDecisionButton: {
-    alignItems: "center",
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    justifyContent: "center",
-    minHeight: 44,
-    minWidth: 54
-  },
-  reviewDecisionButtonYes: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent
-  },
-  reviewDecisionButtonText: {
-    color: colors.secondary,
-    fontSize: 15,
-    fontWeight: "800",
-    lineHeight: 19
-  },
-  reviewDecisionButtonYesText: {
-    color: colors.onAccent,
-    fontSize: 15,
-    fontWeight: "900",
-    lineHeight: 19
-  },
-  reviewTaskAction: {
-    alignItems: "center",
-    borderRadius: 8,
-    justifyContent: "center",
-    minHeight: 44,
-    minWidth: 38
-  },
-  reviewTaskActionPrimary: {
-    backgroundColor: "transparent"
-  },
-  reviewTaskActionDanger: {
-    backgroundColor: "transparent"
-  },
-  rationaleIntentOptions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    paddingTop: 8
-  },
-  rationaleIntentOption: {
-    alignItems: "center",
-    backgroundColor: "transparent",
-    borderColor: colors.line,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
-    justifyContent: "center",
-    minHeight: 42,
-    paddingHorizontal: 15,
-    paddingVertical: 8
-  },
-  rationaleIntentOptionSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent
-  },
-  rationaleIntentOptionText: {
-    color: colors.ink,
-    fontSize: 15,
-    fontWeight: "800",
-    lineHeight: 19,
-    textAlign: "center"
-  },
-  rationaleIntentOptionTextSelected: {
-    color: colors.onAccent
-  },
   rationaleSheetHeader: {
     alignItems: "center",
     flexDirection: "row",
@@ -2290,9 +2164,6 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     width: 52
   },
-  rationaleSheetHeaderIconReview: {
-    backgroundColor: colors.reviewSoft
-  },
   rationaleSheetHeaderCopy: {
     flex: 1,
     gap: 3,
@@ -2303,74 +2174,6 @@ export const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     lineHeight: 18
-  },
-  rationaleSheetLead: {
-    color: colors.ink,
-    fontSize: 16,
-    fontWeight: "700",
-    lineHeight: 23,
-    paddingHorizontal: 2,
-    paddingTop: 2
-  },
-  rationaleSheetSections: {
-    borderTopColor: colors.line,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 0,
-    marginTop: 0
-  },
-  rationaleSheetSectionHeader: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: "800",
-    lineHeight: 17,
-    paddingTop: 12,
-    paddingBottom: 2
-  },
-  rationaleSheetSection: {
-    alignItems: "flex-start",
-    borderBottomColor: colors.line,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    gap: 5,
-    minHeight: 72,
-    paddingVertical: 14
-  },
-  rationaleSheetSectionIcon: {
-    alignItems: "center",
-    borderRadius: 14,
-    height: 42,
-    justifyContent: "center",
-    marginRight: 8,
-    width: 42
-  },
-  rationaleSheetSectionIconIntent: {
-    backgroundColor: colors.accentSoft
-  },
-  rationaleSheetSectionIconCollection: {
-    backgroundColor: colors.processingSoft
-  },
-  rationaleSheetSectionIconReminder: {
-    backgroundColor: colors.reviewSoft
-  },
-  rationaleSheetSectionIconAnalysis: {
-    backgroundColor: colors.surfaceContainerHigh
-  },
-  rationaleSheetSectionCopy: {
-    flex: 1,
-    gap: 5,
-    minWidth: 0
-  },
-  rationaleSheetLabel: {
-    color: colors.accent,
-    fontSize: 13,
-    fontWeight: "800",
-    lineHeight: 17
-  },
-  rationaleSheetText: {
-    color: colors.secondary,
-    fontSize: 15,
-    fontWeight: "600",
-    lineHeight: 21
   },
   currentChoiceRow: {
     alignItems: "center",

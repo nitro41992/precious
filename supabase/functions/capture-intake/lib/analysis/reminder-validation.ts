@@ -46,12 +46,17 @@ function reminderText(reminder: Record<string, unknown>) {
 
 function analysisText(analysis: AnalysisOutput) {
   const rationale = jsonObject(analysis.review_rationale);
+  const defaultIntent = jsonObject(analysis.default_intent);
   return [
     analysis.display_title,
     analysis.summary,
     Array.isArray(analysis.search_phrases)
       ? analysis.search_phrases.join(" ")
       : "",
+    defaultIntent.rationale,
+    ...(Array.isArray(analysis.collection_decisions)
+      ? analysis.collection_decisions.map((decision) => jsonObject(decision).rationale)
+      : []),
     rationale.intent,
     rationale.collections,
     rationale.reminder,
@@ -85,14 +90,6 @@ function isBroadDirectoryReminder(
     .test(text);
 }
 
-function noReminderRationale(reviewRationale: unknown, reason: string) {
-  const rationale = jsonObject(reviewRationale);
-  return {
-    ...rationale,
-    reminder: `No Reminder idea was saved because ${reason}.`,
-  };
-}
-
 export function validateReminderIdeas(
   analysis: AnalysisOutput,
   capturedAt: string | null | undefined,
@@ -103,23 +100,18 @@ export function validateReminderIdeas(
   if (!reminders.length) return analysis;
 
   const kept = [];
-  const dropReasons = [];
   for (const reminder of reminders) {
     const normalized = normalizedTimeReminderSuggestion(reminder);
     if (!normalized) {
-      dropReasons.push("the extracted timing was inconsistent");
       continue;
     }
     if (isStaleReminder(normalized, capturedAt)) {
-      dropReasons.push("the extracted timing was stale");
       continue;
     }
     if (isBroadDirectoryReminder(normalized, analysis)) {
-      dropReasons.push("the capture is a broad directory with unrelated dates");
       continue;
     }
     if (isGenericCadenceAdvice(normalized)) {
-      dropReasons.push("the timing was generic advice rather than a concrete future action");
       continue;
     }
     kept.push(normalized);
@@ -127,15 +119,8 @@ export function validateReminderIdeas(
   if (kept.length === reminders.length) {
     return { ...analysis, suggested_reminders: kept };
   }
-  const reason = dropReasons[0] || "the extracted timing was stale or inconsistent";
   return {
     ...analysis,
     suggested_reminders: kept,
-    review_rationale: kept.length
-      ? analysis.review_rationale
-      : noReminderRationale(analysis.review_rationale, reason),
-    review_targets: Array.isArray(analysis.review_targets)
-      ? analysis.review_targets.filter((target) => target !== "reminder")
-      : analysis.review_targets,
   };
 }
