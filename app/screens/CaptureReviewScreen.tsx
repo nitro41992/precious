@@ -22,7 +22,6 @@ import {
   Copy,
   MapPin,
   Note as StickyNote,
-  PencilSimple as Pencil,
   Trash as Trash2,
   X
 } from "phosphor-react-native";
@@ -662,27 +661,30 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
               </View>
             </View>
             {selectedVisitTarget && selectedVisitTargetMapCandidates.length ? (
-              <View style={styles.sourceBlock}>
+              <View style={styles.reviewActionBlock}>
                 <Text style={styles.meta}>Open in Maps</Text>
-                <View style={styles.mapTargetRow}>
-                  <MapPin color={colors.muted} size={18} weight="regular" />
-                  <View style={styles.mapTargetCopy}>
-                    <Text numberOfLines={1} style={styles.compactActionText}>{selectedVisitTarget.name}</Text>
-                    <Text numberOfLines={2} style={styles.supportingText}>
-                      {selectedVisitTarget.query}
-                    </Text>
+                <View style={styles.reviewActionGroup}>
+                  <View style={styles.mapTargetRow}>
+                    <MapPin color={colors.accent} size={19} weight="regular" />
+                    <View style={styles.mapTargetCopy}>
+                      <Text numberOfLines={1} style={styles.compactActionText}>{selectedVisitTarget.name}</Text>
+                      <Text numberOfLines={2} style={styles.supportingText}>
+                        {selectedVisitTarget.query}
+                      </Text>
+                    </View>
                   </View>
-                </View>
-                <View style={styles.mapActionRow}>
-                  {selectedVisitTargetMapCandidates.map((candidate) => (
-                    <Pressable
-                      key={`${candidate.provider}:${candidate.url}`}
-                      onPress={() => void openVisitTargetMaps(candidate)}
-                      style={({ pressed }) => [styles.mapActionButton, pressed && styles.subtlePressed]}
-                    >
-                      <Text style={styles.inlineAction}>{candidate.label}</Text>
-                    </Pressable>
-                  ))}
+                  <View style={styles.mapActionRow}>
+                    {selectedVisitTargetMapCandidates.map((candidate) => (
+                      <Pressable
+                        accessibilityRole="button"
+                        key={`${candidate.provider}:${candidate.url}`}
+                        onPress={() => void openVisitTargetMaps(candidate)}
+                        style={({ pressed }) => [styles.mapActionButton, pressed && styles.subtlePressed]}
+                      >
+                        <Text style={styles.inlineAction}>{candidate.label}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
                 </View>
               </View>
             ) : null}
@@ -702,40 +704,47 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                 ) : null}
               </View>
             ) : null}
-            <View style={styles.sourceBlock}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={openNoteSheet}
-                style={({ pressed }) => [styles.compactActionRow, pressed && styles.subtlePressed]}
-                testID="pc.review.note.open"
-              >
-                <StickyNote color={colors.muted} size={18} weight="regular" />
-                <View style={styles.noteActionCopy}>
-                  <View style={styles.noteActionHeader}>
-                    <Text style={styles.compactActionText}>
-                      {noteHasText ? "Note" : "Add note"}
-                    </Text>
-                    {noteStatusLabel ? (
-                      <Text style={[styles.noteSaveState, noteSaveState === "error" && styles.noteSaveStateError]}>
-                        {noteStatusLabel}
+            <View style={styles.reviewActionBlock}>
+              <Text style={styles.meta}>Capture actions</Text>
+              <View style={styles.reviewActionGroup}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={openNoteSheet}
+                  style={({ pressed }) => [styles.reviewActionRow, pressed && styles.subtlePressed]}
+                  testID="pc.review.note.open"
+                >
+                  <StickyNote color={colors.muted} size={19} weight="regular" />
+                  <View style={styles.noteActionCopy}>
+                    <View style={styles.noteActionHeader}>
+                      <Text style={styles.compactActionText}>
+                        {noteHasText ? "Note" : "Add note"}
                       </Text>
+                      {noteStatusLabel ? (
+                        <Text style={[styles.noteSaveState, noteSaveState === "error" && styles.noteSaveStateError]}>
+                          {noteStatusLabel}
+                        </Text>
+                      ) : null}
+                    </View>
+                    {noteHasText ? (
+                      <Text numberOfLines={2} style={styles.noteActionPreview}>{draftNote}</Text>
                     ) : null}
                   </View>
-                  {noteHasText ? (
-                    <Text numberOfLines={2} style={styles.noteActionPreview}>{draftNote}</Text>
-                  ) : null}
-                </View>
-                <Pencil color={colors.muted} size={16} weight="regular" />
-              </Pressable>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={deleteCapture}
+                  style={({ pressed }) => [
+                    styles.reviewActionRow,
+                    styles.reviewActionRowDivided,
+                    pressed && styles.subtlePressed
+                  ]}
+                  testID="pc.capture.delete"
+                >
+                  <Trash2 color={colors.danger} size={19} weight="regular" />
+                  <Text style={styles.dangerButtonText}>Delete capture</Text>
+                </Pressable>
+              </View>
             </View>
-            <Pressable
-              onPress={deleteCapture}
-              style={({ pressed }) => [styles.destructiveRow, pressed && styles.subtlePressed]}
-              testID="pc.capture.delete"
-            >
-              <Trash2 color={colors.danger} size={18} weight="regular" />
-              <Text style={styles.dangerButtonText}>Delete capture</Text>
-            </Pressable>
           </ScrollView>
           {showReviewFooter ? (
             <View style={styles.reviewFooter}>

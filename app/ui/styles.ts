@@ -2343,12 +2343,34 @@ export const styles = StyleSheet.create({
     gap: 8,
     paddingTop: 16
   },
+  reviewActionBlock: {
+    gap: 6,
+    paddingTop: 2
+  },
+  reviewActionGroup: {
+    backgroundColor: "transparent",
+    borderColor: colors.line,
+    borderRadius: 0,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    overflow: "visible"
+  },
+  reviewActionRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 14,
+    minHeight: 54,
+    paddingVertical: 12
+  },
+  reviewActionRowDivided: {
+    borderTopColor: colors.line,
+    borderTopWidth: StyleSheet.hairlineWidth
+  },
   mapTargetRow: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 10,
-    minHeight: 46,
-    paddingVertical: 2
+    gap: 14,
+    minHeight: 58,
+    paddingVertical: 12
   },
   mapTargetCopy: {
     flex: 1,
@@ -2356,16 +2378,20 @@ export const styles = StyleSheet.create({
     minWidth: 0
   },
   mapActionRow: {
+    borderTopColor: colors.line,
+    borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8
+    gap: 8,
+    paddingVertical: 10
   },
   mapActionButton: {
     alignSelf: "flex-start",
+    backgroundColor: "transparent",
     borderRadius: 8,
     justifyContent: "center",
     minHeight: 44,
-    paddingHorizontal: 2
+    paddingHorizontal: 0
   },
   compactActionRow: {
     alignItems: "center",
@@ -2403,15 +2429,6 @@ export const styles = StyleSheet.create({
     lineHeight: 22,
     maxHeight: 260,
     minHeight: 170
-  },
-  destructiveRow: {
-    alignItems: "center",
-    borderTopColor: colors.line,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    gap: 10,
-    minHeight: 52,
-    paddingTop: 12
   },
   sectionHeader: {
     alignItems: "center",
