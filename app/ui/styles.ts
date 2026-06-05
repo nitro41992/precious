@@ -8,6 +8,10 @@ export const styles = StyleSheet.create({
     flex: 1,
     paddingTop: Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0
   },
+  reviewSafe: {
+    backgroundColor: colors.surfaceContainerHigh,
+    flex: 1
+  },
   screenStack: {
     backgroundColor: colors.paper,
     flex: 1
@@ -1786,19 +1790,47 @@ export const styles = StyleSheet.create({
   reviewShell: {
     flex: 1
   },
-  reviewDetail: {
+  reviewScrollLayout: {
+    backgroundColor: colors.surfaceContainer,
+    flex: 1,
+    minHeight: 0
+  },
+  reviewMediaStage: {
+    backgroundColor: colors.surfaceContainerHigh,
+    marginHorizontal: 0,
+    marginTop: 0,
+    minHeight: 286,
+    overflow: "hidden",
+    position: "relative",
+    zIndex: 3
+  },
+  reviewDetailScroller: {
+    flex: 1,
+    minHeight: 0,
+    zIndex: 2
+  },
+  reviewDetailPlane: {
+    backgroundColor: colors.surfaceContainer,
+    gap: 16,
+    minHeight: 520,
+    paddingHorizontal: 22,
+    paddingTop: 20
+  },
+  reviewDetailContent: {
+    backgroundColor: colors.surfaceContainer,
     paddingBottom: 118
   },
-  reviewDetailNoFooter: {
+  reviewDetailContentNoFooter: {
     paddingBottom: 44
   },
   reviewFooter: {
-    backgroundColor: colors.paper,
+    backgroundColor: colors.surfaceContainer,
     borderTopColor: colors.line,
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingBottom: Platform.OS === "android" ? 16 : 22,
     paddingHorizontal: 22,
-    paddingTop: 10
+    paddingTop: 10,
+    zIndex: 2
   },
   detailHeader: {
     alignItems: "center",
@@ -1824,28 +1856,71 @@ export const styles = StyleSheet.create({
     paddingVertical: 6
   },
   reviewMediaHeader: {
-    backgroundColor: colors.surfaceContainer,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: "hidden"
+    bottom: 0,
+    left: 0,
+    overflow: "hidden",
+    position: "absolute",
+    right: 0,
+    top: 0
   },
   reviewMediaHeaderImage: {
-    aspectRatio: 1.72
+    backgroundColor: colors.surfaceContainerHigh
   },
   reviewMediaHeaderFallback: {
-    minHeight: 94,
-    padding: 16
+    alignItems: "center",
+    backgroundColor: colors.surfaceContainerHigh,
+    justifyContent: "center",
+    paddingHorizontal: 28,
+    paddingVertical: 24
   },
   reviewMediaImage: {
     height: "100%",
     width: "100%"
   },
+  reviewMediaImageFrame: {
+    height: "100%",
+    width: "100%"
+  },
   reviewMediaOverlay: {
-    bottom: 10,
-    left: 10,
+    bottom: 34,
+    left: 22,
     position: "absolute",
-    right: 10
+    right: 22
+  },
+  reviewMediaTopControls: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    left: 12,
+    position: "absolute",
+    right: 12,
+    top: Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) + 12 : 18,
+    zIndex: 4
+  },
+  reviewMediaIconButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(16, 20, 17, 0.72)",
+    borderColor: "rgba(238, 245, 239, 0.18)",
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 48,
+    justifyContent: "center",
+    width: 48
+  },
+  reviewMediaStatusPill: {
+    backgroundColor: "rgba(16, 20, 17, 0.72)",
+    borderColor: "rgba(238, 245, 239, 0.18)",
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    color: colors.ink,
+    ...typefaces.bold,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 16,
+    minHeight: 34,
+    overflow: "hidden",
+    paddingHorizontal: 10,
+    paddingVertical: 8
   },
   reviewMediaSourcePill: {
     alignSelf: "flex-start",
@@ -1922,25 +1997,28 @@ export const styles = StyleSheet.create({
   },
   reviewMediaFallbackContent: {
     alignItems: "center",
-    flexDirection: "row",
-    gap: 12
+    gap: 14,
+    justifyContent: "center"
   },
   reviewMediaFallbackCopy: {
-    flex: 1,
+    alignItems: "center",
     gap: 4,
     minWidth: 0
   },
   reviewMediaFallbackTitle: {
     color: colors.ink,
     ...typefaces.bold,
-    fontSize: 17,
-    fontWeight: "800"
+    fontSize: 20,
+    fontWeight: "800",
+    lineHeight: 25,
+    textAlign: "center"
   },
   reviewMediaFallbackText: {
     color: colors.muted,
     ...typefaces.regular,
-    fontSize: 14,
-    lineHeight: 20
+    fontSize: 15,
+    lineHeight: 21,
+    textAlign: "center"
   },
   quickEditBlock: {
     gap: 12,

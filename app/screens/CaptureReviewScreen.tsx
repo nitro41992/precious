@@ -8,7 +8,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   StatusBar,
   Text,
   TextInput,
@@ -427,6 +426,21 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     : Math.min(500, Math.max(340, windowHeight * 0.64));
   const noteSheetBottomInset = noteWindowAlreadyKeyboardSized ? 0 : captureKeyboardInset;
   const showStatus = displayStatus(selected) !== "ready";
+  const reviewScrollY = useRef(new Animated.Value(0)).current;
+  const reviewWindowWidth = Dimensions.get("window").width;
+  const reviewExpandedMediaHeight = Math.min(520, Math.max(360, reviewWindowWidth * 1.18));
+  const reviewSquareMediaHeight = Math.min(reviewExpandedMediaHeight, reviewWindowWidth);
+  const reviewAspectShiftDistance = Math.max(96, reviewExpandedMediaHeight - reviewSquareMediaHeight + 96);
+  const reviewMediaHeight = reviewScrollY.interpolate({
+    inputRange: [0, reviewAspectShiftDistance],
+    outputRange: [reviewExpandedMediaHeight, reviewSquareMediaHeight],
+    extrapolate: "clamp"
+  });
+  const reviewMediaImageScale = reviewScrollY.interpolate({
+    inputRange: [0, reviewAspectShiftDistance],
+    outputRange: [1, 0.96],
+    extrapolate: "clamp"
+  });
 
   useEffect(() => {
     setImageViewerOpen(false);
@@ -453,8 +467,8 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   }
 
   return (
-    <View style={styles.safe}>
-      <StatusBar barStyle="light-content" />
+    <View style={styles.reviewSafe}>
+      <StatusBar backgroundColor="transparent" barStyle="light-content" translucent />
       <Animated.View
         style={[
           styles.reviewShell,
@@ -475,308 +489,330 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.reviewShell}
         >
-          <ScrollView
-            contentContainerStyle={[
-              styles.detail,
-              styles.reviewDetail,
-              !showReviewFooter && styles.reviewDetailNoFooter
-            ]}
-            keyboardShouldPersistTaps="handled"
-            showsHorizontalScrollIndicator={false}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.detailHeader}>
-              <IconButton
-                Icon={ArrowLeft}
-                label="Back"
-                onPress={() => {
-                  if (captureReturnCollectionId) {
-                    const collectionId = captureReturnCollectionId;
-                    selectCapture(null);
-                    selectCollection(collectionId);
-                  } else {
-                    selectCapture(null);
-                  }
-                }}
-              />
-              {showStatus ? (
-                <Text
-                  style={[
-                    styles.status,
-                    displayStatus(selected) === "processing" && styles.statusProcessing,
-                    displayStatus(selected) === "needs_review" && styles.statusReview,
-                    displayStatus(selected) === "failed" && styles.statusFailed
-                  ]}
-                >
-                  {captureStatusLabel(selected)}
-                </Text>
-              ) : null}
-            </View>
-            <View style={styles.reviewPrimaryBlock}>
-              <TextInput
-                multiline
-                onChangeText={(value) => {
-                  setDraftTitleDirty(true);
-                  setDraftTitle(value);
-                  updateSelectedReviewDraft({ title: value, titleDirty: true });
-                }}
-                placeholder="Title"
-                placeholderTextColor={colors.muted}
-                style={styles.reviewTitleInput}
-                testID="pc.review.title"
-                value={draftTitle}
-              />
-              <View style={styles.reviewMetaRow}>
-                <View style={styles.reviewSourceCluster}>
-                  {selectedSourceIsSharedImage ? (
-                    <View style={styles.reviewSourceImageIconPill}>
-                      <Camera color={colors.accent} size={17} weight="regular" />
-                    </View>
-                  ) : (
-                    <SourceMark
-                      capture={selected}
-                      failedFavicons={faviconFailures}
-                      onFaviconFailure={markFaviconFailed}
-                      size="inline"
-                    />
-                  )}
-                  <Text numberOfLines={1} style={styles.reviewSourceName}>
-                    {selectedSourceLabel}
-                    <Text style={styles.reviewSourceTime}> · {selectedCapturedTime}</Text>
-                  </Text>
-                  {sourceValue ? (
-                    <Pressable
-                      accessibilityLabel="Copy source"
-                      accessibilityRole="button"
-                      hitSlop={8}
-                      onPress={() => void copySource()}
-                      style={({ pressed }) => [styles.reviewSourceCopyButton, pressed && styles.subtlePressed]}
-                    >
-                      <Copy color={colors.secondary} size={18} weight="regular" />
-                    </Pressable>
-                  ) : null}
-                </View>
-              </View>
-              {showReviewStateText ? (
-                <Text style={styles.reviewSentenceSubtext}>{selectedReviewState}</Text>
-              ) : null}
-            </View>
-            <Pressable
-              accessibilityHint={
-                selectedMediaOpensImage
-                  ? "Opens the full image viewer"
-                  : selectedOpenUrl
-                    ? "Opens the saved source"
-                    : undefined
-              }
-              accessibilityLabel={
-                selectedMediaOpensImage
-                  ? "Open full image"
-                  : selectedOpenUrl
-                    ? "Open saved source"
-                    : undefined
-              }
-              accessibilityRole={selectedMediaPressEnabled ? "button" : undefined}
-              disabled={!selectedMediaPressEnabled}
-              onPress={() => {
-                if (selectedMediaOpensImage) {
-                  setImageViewerSource({
-                    cacheKey: selectedFullImageUrl ? selectedFullImageLoadKey : selectedImageLoadKey,
-                    url: selectedFullImageUrl || selectedImageUrl
-                  });
-                  setImageViewerOpen(true);
-                  return;
-                }
-                if (selectedOpenUrl) void openCaptureUrl(selectedOpenUrl);
-              }}
-              style={({ pressed }) => [
-                styles.reviewMediaHeader,
-                selectedImageUrl ? styles.reviewMediaHeaderImage : styles.reviewMediaHeaderFallback,
-                pressed && selectedMediaPressEnabled && styles.subtlePressed
+          <View style={styles.reviewScrollLayout}>
+            <Animated.ScrollView
+              style={styles.reviewDetailScroller}
+              contentContainerStyle={[
+                styles.reviewDetailContent,
+                !showReviewFooter && styles.reviewDetailContentNoFooter
               ]}
-              testID="pc.review.media"
-            >
-              {selectedImageUrl ? (
-                <>
-                  <Image
-                    cachePolicy="memory-disk"
-                    contentFit="cover"
-                    source={selectedImageLoadKey ? { uri: selectedImageUrl, cacheKey: selectedImageLoadKey } : { uri: selectedImageUrl }}
-                    style={styles.reviewMediaImage}
-                  />
-                  <View style={styles.reviewMediaOverlay}>
-                    <View style={styles.reviewMediaSourcePill}>
-                      <Text numberOfLines={1} style={styles.reviewMediaSourceText}>
-                        {captureSourceLabel(selected)}
-                      </Text>
-                    </View>
-                  </View>
-                </>
-              ) : (
-                <View style={styles.reviewMediaFallbackContent}>
-                  <SourceMark
-                    capture={selected}
-                    failedFavicons={faviconFailures}
-                    onFaviconFailure={markFaviconFailed}
-                    size="detail"
-                  />
-                  <View style={styles.reviewMediaFallbackCopy}>
-                    <Text numberOfLines={1} style={styles.reviewMediaFallbackTitle}>
-                      {captureSourceLabel(selected)}
-                    </Text>
-                    <Text numberOfLines={2} style={styles.reviewMediaFallbackText}>
-                      {captureIntentLabel(selected) || captureStatusLabel(selected)}
-                    </Text>
-                  </View>
-                </View>
+              keyboardShouldPersistTaps="handled"
+              onScroll={Animated.event(
+                [{ nativeEvent: { contentOffset: { y: reviewScrollY } } }],
+                { useNativeDriver: false }
               )}
-            </Pressable>
-            <View style={styles.quickEditBlock}>
-              <View style={styles.inlineMeaningBlock}>
-                <View style={styles.inlineMeaningSentence}>
-                  {purposeField ? (
-                    <Text style={styles.inlineMeaningLine}>
-                      <Text style={styles.inlineMeaningText}>Saved as </Text>
-                      <Text
-                        accessibilityLabel={`Purpose: ${purposeField.displayValue}`}
-                        accessibilityRole="button"
-                        onPress={() => openInlineField("purpose")}
+              scrollEventThrottle={16}
+              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
+            >
+              <Animated.View style={[styles.reviewMediaStage, { height: reviewMediaHeight }]}>
+                <Pressable
+                  accessibilityHint={
+                    selectedMediaOpensImage
+                      ? "Opens the full image viewer"
+                      : selectedOpenUrl
+                        ? "Opens the saved source"
+                        : undefined
+                  }
+                  accessibilityLabel={
+                    selectedMediaOpensImage
+                      ? "Open full image"
+                      : selectedOpenUrl
+                        ? "Open saved source"
+                        : undefined
+                  }
+                  accessibilityRole={selectedMediaPressEnabled ? "button" : undefined}
+                  disabled={!selectedMediaPressEnabled}
+                  onPress={() => {
+                    if (selectedMediaOpensImage) {
+                      setImageViewerSource({
+                        cacheKey: selectedFullImageUrl ? selectedFullImageLoadKey : selectedImageLoadKey,
+                        url: selectedFullImageUrl || selectedImageUrl
+                      });
+                      setImageViewerOpen(true);
+                      return;
+                    }
+                    if (selectedOpenUrl) void openCaptureUrl(selectedOpenUrl);
+                  }}
+                  style={({ pressed }) => [
+                    styles.reviewMediaHeader,
+                    selectedImageUrl ? styles.reviewMediaHeaderImage : styles.reviewMediaHeaderFallback,
+                    pressed && selectedMediaPressEnabled && styles.subtlePressed
+                  ]}
+                  testID="pc.review.media"
+                >
+                  {selectedImageUrl ? (
+                    <>
+                      <Animated.View
                         style={[
-                          styles.inlineMeaningChipText,
-                          !purposeField.hasValue && styles.inlineMeaningChipTextPending
+                          styles.reviewMediaImageFrame,
+                          { transform: [{ scale: reviewMediaImageScale }] }
                         ]}
-                        testID="pc.review.intent.open"
                       >
-                        {purposeField.displayValue}
-                      </Text>
-                    </Text>
-                  ) : null}
-                  {collectionField ? (
-                    <Text style={styles.inlineMeaningLine}>
-                      <Text style={styles.inlineMeaningText}>in </Text>
-                      <Text
-                        accessibilityLabel={`Collection: ${collectionField.displayValue}`}
-                        accessibilityRole="button"
-                        onPress={() => openInlineField("collection")}
-                        style={[
-                          styles.inlineMeaningChipText,
-                          !collectionField.hasValue && styles.inlineMeaningChipTextPending
-                        ]}
-                        testID="pc.review.collections.open"
-                      >
-                        {collectionField.displayValue}
-                      </Text>
-                    </Text>
-                  ) : null}
-                  {laterField ? (
-                    <Text style={styles.inlineMeaningLine}>
-                      <Text style={styles.inlineMeaningText}>for </Text>
-                      <Text
-                        accessibilityLabel={`Later: ${laterField.displayValue}`}
-                        accessibilityRole="button"
-                        onPress={() => openInlineField("later")}
-                        style={[
-                          styles.inlineMeaningChipText,
-                          !laterField.hasValue && styles.inlineMeaningChipTextPending
-                        ]}
-                        testID="pc.review.reminder.open"
-                      >
-                        {laterField.displayValue}
-                      </Text>
-                    </Text>
-                  ) : null}
-                  {showLocationInline ? (
-                    <Text style={styles.inlineMeaningLine}>
-                      <Text style={styles.inlineMeaningText}>at </Text>
-                      <Text
-                        accessibilityLabel={resolvedPlace ? `Open ${locationInlineValue} in Maps` : `Search Maps for ${locationInlineValue}`}
-                        accessibilityRole={primaryMapCandidate ? "button" : undefined}
-                        onPress={primaryMapCandidate ? () => void openVisitTargetMaps(primaryMapCandidate) : undefined}
-                        style={styles.inlineMeaningChipText}
-                      >
-                        {locationInlineValue}
-                      </Text>
+                        <Image
+                          cachePolicy="memory-disk"
+                          contentFit="cover"
+                          source={selectedImageLoadKey ? { uri: selectedImageUrl, cacheKey: selectedImageLoadKey } : { uri: selectedImageUrl }}
+                          style={styles.reviewMediaImage}
+                        />
+                      </Animated.View>
+                      <View style={styles.reviewMediaOverlay}>
+                        <View style={styles.reviewMediaSourcePill}>
+                          <Text numberOfLines={1} style={styles.reviewMediaSourceText}>
+                            {captureSourceLabel(selected)}
+                          </Text>
+                        </View>
+                      </View>
+                    </>
+                  ) : (
+                    <View style={styles.reviewMediaFallbackContent}>
+                      <SourceMark
+                        capture={selected}
+                        failedFavicons={faviconFailures}
+                        onFaviconFailure={markFaviconFailed}
+                        size="detail"
+                      />
+                      <View style={styles.reviewMediaFallbackCopy}>
+                        <Text numberOfLines={1} style={styles.reviewMediaFallbackTitle}>
+                          {captureSourceLabel(selected)}
+                        </Text>
+                        <Text numberOfLines={2} style={styles.reviewMediaFallbackText}>
+                          {captureIntentLabel(selected) || captureStatusLabel(selected)}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+                </Pressable>
+                <View pointerEvents="box-none" style={styles.reviewMediaTopControls}>
+                  <Pressable
+                    accessibilityLabel="Back"
+                    accessibilityRole="button"
+                    hitSlop={8}
+                    onPress={() => {
+                      if (captureReturnCollectionId) {
+                        const collectionId = captureReturnCollectionId;
+                        selectCapture(null);
+                        selectCollection(collectionId);
+                      } else {
+                        selectCapture(null);
+                      }
+                    }}
+                    style={({ pressed }) => [styles.reviewMediaIconButton, pressed && styles.subtlePressed]}
+                  >
+                    <ArrowLeft color={colors.ink} size={22} weight="regular" />
+                  </Pressable>
+                  {showStatus ? (
+                    <Text
+                      style={[
+                        styles.reviewMediaStatusPill,
+                        displayStatus(selected) === "processing" && styles.statusProcessing,
+                        displayStatus(selected) === "needs_review" && styles.statusReview,
+                        displayStatus(selected) === "failed" && styles.statusFailed
+                      ]}
+                    >
+                      {captureStatusLabel(selected)}
                     </Text>
                   ) : null}
                 </View>
-              </View>
-            </View>
-            {urlEvidenceNotice ? (
-              <View style={styles.sourceBlock}>
-                <Text style={styles.meta}>Link evidence</Text>
-                <Text style={styles.supportingText}>{urlEvidenceNotice}</Text>
-                {selected.urlEvidence?.status === "needs_client_resolution" && selected.sourceUrl ? (
-                  <>
-                    <Pressable onPress={() => void openExternalUrl(selected.sourceUrl || "")} style={styles.secondaryButton}>
-                      <Text style={styles.secondaryButtonText}>Open link</Text>
-                    </Pressable>
-                    <Pressable onPress={() => void pasteExpandedUrl()} style={styles.secondaryButton}>
-                      <Text style={styles.secondaryButtonText}>Paste expanded URL</Text>
-                    </Pressable>
-                  </>
-                ) : null}
-              </View>
-            ) : null}
-            <View style={styles.reviewActionBlock}>
-              <Text style={styles.meta}>Capture actions</Text>
-              <View style={styles.reviewActionGroup}>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={openNoteSheet}
-                  style={({ pressed }) => [styles.reviewActionRow, pressed && styles.subtlePressed]}
-                  testID="pc.review.note.open"
-                >
-                  <StickyNote color={colors.muted} size={19} weight="regular" />
-                  <View style={styles.noteActionCopy}>
-                    <View style={styles.noteActionHeader}>
-                      <Text style={styles.compactActionText}>
-                        {noteHasText ? "Note" : "Add note"}
-                      </Text>
-                      {noteStatusLabel ? (
-                        <Text style={[styles.noteSaveState, noteSaveState === "error" && styles.noteSaveStateError]}>
-                          {noteStatusLabel}
+              </Animated.View>
+                <View style={styles.reviewDetailPlane}>
+                  <View style={styles.reviewPrimaryBlock}>
+                    <TextInput
+                      multiline
+                      onChangeText={(value) => {
+                        setDraftTitleDirty(true);
+                        setDraftTitle(value);
+                        updateSelectedReviewDraft({ title: value, titleDirty: true });
+                      }}
+                      placeholder="Title"
+                      placeholderTextColor={colors.muted}
+                      style={styles.reviewTitleInput}
+                      testID="pc.review.title"
+                      value={draftTitle}
+                    />
+                    <View style={styles.reviewMetaRow}>
+                      <View style={styles.reviewSourceCluster}>
+                        {selectedSourceIsSharedImage ? (
+                          <View style={styles.reviewSourceImageIconPill}>
+                            <Camera color={colors.accent} size={17} weight="regular" />
+                          </View>
+                        ) : (
+                          <SourceMark
+                            capture={selected}
+                            failedFavicons={faviconFailures}
+                            onFaviconFailure={markFaviconFailed}
+                            size="inline"
+                          />
+                        )}
+                        <Text numberOfLines={1} style={styles.reviewSourceName}>
+                          {selectedSourceLabel}
+                          <Text style={styles.reviewSourceTime}> · {selectedCapturedTime}</Text>
                         </Text>
-                      ) : null}
+                        {sourceValue ? (
+                          <Pressable
+                            accessibilityLabel="Copy source"
+                            accessibilityRole="button"
+                            hitSlop={8}
+                            onPress={() => void copySource()}
+                            style={({ pressed }) => [styles.reviewSourceCopyButton, pressed && styles.subtlePressed]}
+                          >
+                            <Copy color={colors.secondary} size={18} weight="regular" />
+                          </Pressable>
+                        ) : null}
+                      </View>
                     </View>
-                    {noteHasText ? (
-                      <Text numberOfLines={2} style={styles.noteActionPreview}>{draftNote}</Text>
+                    {showReviewStateText ? (
+                      <Text style={styles.reviewSentenceSubtext}>{selectedReviewState}</Text>
                     ) : null}
                   </View>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={deleteCapture}
-                  style={({ pressed }) => [
-                    styles.reviewActionRow,
-                    styles.reviewActionRowDivided,
-                    pressed && styles.subtlePressed
-                  ]}
-                  testID="pc.capture.delete"
-                >
-                  <Trash2 color={colors.danger} size={19} weight="regular" />
-                  <Text style={styles.dangerButtonText}>Delete capture</Text>
-                </Pressable>
-              </View>
-            </View>
-          </ScrollView>
-          {showReviewFooter ? (
-            <View style={styles.reviewFooter}>
-              <Pressable
-                disabled={collectionActionPending}
-                onPress={saveReviewDecisions}
-                style={({ pressed }) => [
-                  styles.primaryButton,
-                  pressed && !collectionActionPending && styles.primaryButtonPressed,
-                  collectionActionPending && styles.disabledButton
-                ]}
-                testID="pc.review.save"
-              >
-                <Text style={styles.primaryButtonText}>
-                  {collectionActionPending ? "Updating collection..." : "Save review"}
-                </Text>
-              </Pressable>
-            </View>
-          ) : null}
+                  <View style={styles.quickEditBlock}>
+                    <View style={styles.inlineMeaningBlock}>
+                      <View style={styles.inlineMeaningSentence}>
+                        {purposeField ? (
+                          <Text style={styles.inlineMeaningLine}>
+                            <Text style={styles.inlineMeaningText}>Saved as </Text>
+                            <Text
+                              accessibilityLabel={`Purpose: ${purposeField.displayValue}`}
+                              accessibilityRole="button"
+                              onPress={() => openInlineField("purpose")}
+                              style={[
+                                styles.inlineMeaningChipText,
+                                !purposeField.hasValue && styles.inlineMeaningChipTextPending
+                              ]}
+                              testID="pc.review.intent.open"
+                            >
+                              {purposeField.displayValue}
+                            </Text>
+                          </Text>
+                        ) : null}
+                        {collectionField ? (
+                          <Text style={styles.inlineMeaningLine}>
+                            <Text style={styles.inlineMeaningText}>in </Text>
+                            <Text
+                              accessibilityLabel={`Collection: ${collectionField.displayValue}`}
+                              accessibilityRole="button"
+                              onPress={() => openInlineField("collection")}
+                              style={[
+                                styles.inlineMeaningChipText,
+                                !collectionField.hasValue && styles.inlineMeaningChipTextPending
+                              ]}
+                              testID="pc.review.collections.open"
+                            >
+                              {collectionField.displayValue}
+                            </Text>
+                          </Text>
+                        ) : null}
+                        {laterField ? (
+                          <Text style={styles.inlineMeaningLine}>
+                            <Text style={styles.inlineMeaningText}>for </Text>
+                            <Text
+                              accessibilityLabel={`Later: ${laterField.displayValue}`}
+                              accessibilityRole="button"
+                              onPress={() => openInlineField("later")}
+                              style={[
+                                styles.inlineMeaningChipText,
+                                !laterField.hasValue && styles.inlineMeaningChipTextPending
+                              ]}
+                              testID="pc.review.reminder.open"
+                            >
+                              {laterField.displayValue}
+                            </Text>
+                          </Text>
+                        ) : null}
+                        {showLocationInline ? (
+                          <Text style={styles.inlineMeaningLine}>
+                            <Text style={styles.inlineMeaningText}>at </Text>
+                            <Text
+                              accessibilityLabel={resolvedPlace ? `Open ${locationInlineValue} in Maps` : `Search Maps for ${locationInlineValue}`}
+                              accessibilityRole={primaryMapCandidate ? "button" : undefined}
+                              onPress={primaryMapCandidate ? () => void openVisitTargetMaps(primaryMapCandidate) : undefined}
+                              style={styles.inlineMeaningChipText}
+                            >
+                              {locationInlineValue}
+                            </Text>
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+                  </View>
+                  {urlEvidenceNotice ? (
+                    <View style={styles.sourceBlock}>
+                      <Text style={styles.meta}>Link evidence</Text>
+                      <Text style={styles.supportingText}>{urlEvidenceNotice}</Text>
+                      {selected.urlEvidence?.status === "needs_client_resolution" && selected.sourceUrl ? (
+                        <>
+                          <Pressable onPress={() => void openExternalUrl(selected.sourceUrl || "")} style={styles.secondaryButton}>
+                            <Text style={styles.secondaryButtonText}>Open link</Text>
+                          </Pressable>
+                          <Pressable onPress={() => void pasteExpandedUrl()} style={styles.secondaryButton}>
+                            <Text style={styles.secondaryButtonText}>Paste expanded URL</Text>
+                          </Pressable>
+                        </>
+                      ) : null}
+                    </View>
+                  ) : null}
+                  <View style={styles.reviewActionBlock}>
+                    <Text style={styles.meta}>Capture actions</Text>
+                    <View style={styles.reviewActionGroup}>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={openNoteSheet}
+                        style={({ pressed }) => [styles.reviewActionRow, pressed && styles.subtlePressed]}
+                        testID="pc.review.note.open"
+                      >
+                        <StickyNote color={colors.muted} size={19} weight="regular" />
+                        <View style={styles.noteActionCopy}>
+                          <View style={styles.noteActionHeader}>
+                            <Text style={styles.compactActionText}>
+                              {noteHasText ? "Note" : "Add note"}
+                            </Text>
+                            {noteStatusLabel ? (
+                              <Text style={[styles.noteSaveState, noteSaveState === "error" && styles.noteSaveStateError]}>
+                                {noteStatusLabel}
+                              </Text>
+                            ) : null}
+                          </View>
+                          {noteHasText ? (
+                            <Text numberOfLines={2} style={styles.noteActionPreview}>{draftNote}</Text>
+                          ) : null}
+                        </View>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={deleteCapture}
+                        style={({ pressed }) => [
+                          styles.reviewActionRow,
+                          styles.reviewActionRowDivided,
+                          pressed && styles.subtlePressed
+                        ]}
+                        testID="pc.capture.delete"
+                      >
+                        <Trash2 color={colors.danger} size={19} weight="regular" />
+                        <Text style={styles.dangerButtonText}>Delete capture</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                </View>
+              </Animated.ScrollView>
+              {showReviewFooter ? (
+                <View style={styles.reviewFooter}>
+                  <Pressable
+                    disabled={collectionActionPending}
+                    onPress={saveReviewDecisions}
+                    style={({ pressed }) => [
+                      styles.primaryButton,
+                      pressed && !collectionActionPending && styles.primaryButtonPressed,
+                      collectionActionPending && styles.disabledButton
+                    ]}
+                    testID="pc.review.save"
+                  >
+                    <Text style={styles.primaryButtonText}>
+                      {collectionActionPending ? "Updating collection..." : "Save review"}
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : null}
+          </View>
         </KeyboardAvoidingView>
       </Animated.View>
       {noteSheetOpen ? (
