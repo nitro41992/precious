@@ -1931,7 +1931,14 @@ export const styles = StyleSheet.create({
     top: 0
   },
   reviewMediaHeaderImage: {
-    backgroundColor: colors.surfaceContainerHigh
+    backgroundColor: colors.surfaceContainerHigh,
+    borderColor: colors.mediaFrameLine,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    bottom: 8,
+    left: 8,
+    right: 8,
+    top: Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) + 8 : 8
   },
   reviewMediaHeaderFallback: {
     alignItems: "center",
@@ -1958,10 +1965,10 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    left: 12,
+    left: 24,
     position: "absolute",
-    right: 12,
-    top: Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) + 12 : 18,
+    right: 24,
+    top: Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) + 18 : 24,
     zIndex: 4
   },
   reviewMediaRightControls: {

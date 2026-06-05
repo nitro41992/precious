@@ -428,8 +428,11 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const showStatus = displayStatus(selected) !== "ready";
   const reviewScrollY = useRef(new Animated.Value(0)).current;
   const reviewWindowWidth = Dimensions.get("window").width;
-  const reviewExpandedMediaHeight = Math.min(520, Math.max(360, reviewWindowWidth * 1.18));
-  const reviewSquareMediaHeight = Math.min(reviewExpandedMediaHeight, reviewWindowWidth);
+  const reviewMediaStatusInset = Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0;
+  const reviewBaseExpandedMediaHeight = Math.min(520, Math.max(360, reviewWindowWidth * 1.18));
+  const reviewBaseSquareMediaHeight = Math.min(reviewBaseExpandedMediaHeight, reviewWindowWidth);
+  const reviewExpandedMediaHeight = reviewBaseExpandedMediaHeight + reviewMediaStatusInset;
+  const reviewSquareMediaHeight = reviewBaseSquareMediaHeight + reviewMediaStatusInset;
   const reviewAspectShiftDistance = Math.max(96, reviewExpandedMediaHeight - reviewSquareMediaHeight + 96);
   const reviewMediaHeight = reviewScrollY.interpolate({
     inputRange: [0, reviewAspectShiftDistance],
@@ -468,7 +471,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
 
   return (
     <View style={styles.reviewSafe}>
-      <StatusBar backgroundColor={colors.transparent} barStyle={appTheme.mediaStatusBarStyle} translucent />
+      <StatusBar backgroundColor={colors.transparent} barStyle={appTheme.statusBarStyle} translucent />
       <Animated.View
         style={[
           styles.reviewShell,

@@ -76,22 +76,35 @@ Use the warm light palette as the default app base and add state colors sparingl
 
 | Role | Token | Use |
 | --- | --- | --- |
-| Paper | `#f6f1e8` | App background and sticky footers |
-| Surface | `#fffefa` | Bounded review blocks or grouped surfaces only |
-| Surface Container | `#fff9f0` | Search bars, sheets, rows with emphasis |
-| Surface Container High | `#fbf0e0` | Pressed states, dense inputs, secondary panels |
-| Review Card | `#fffdf8` | Capture Review source and action cards |
-| Review Card Well | `#fff7ec` | Icon wells inside Capture Review action cards |
-| Ink | `#25221c` | Primary text and high-emphasis actions |
-| Muted | `#675f54` | Metadata, helper text, secondary labels |
-| Line | `#cdbca5` | Rare subtle borders when tonal separation is not enough |
-| Accent | `#236f4d` | Primary action, ready, selected positive state |
-| Accent Soft | `#dcefe5` | Selected chip or successful quiet state |
-| Processing | `#2f6f98` | Analyzing, syncing, queued |
-| Review | `#946a1d` | Needs review, maybe, action needed |
-| Review Soft | `#f4e7ca` | Review callouts and changed suggestions |
-| Danger | `#b64234` | Failed, destructive, could not save |
-| Deleted | `#b64234` | Destructive delete actions and pending-delete undo |
+| Paper | `#f7f8f5` | App background and sticky footers |
+| Surface | `#ffffff` | Bounded review blocks or grouped surfaces only |
+| Surface Container | `#f2f4ef` | Search bars, sheets, rows with emphasis |
+| Surface Container High | `#e9ede6` | Pressed states, dense inputs, secondary panels |
+| Surface Container Highest | `#dde4da` | Highest tonal emphasis for selected controls or bottom app bar wells |
+| Review Card | `#ffffff` | Capture Review source and action cards |
+| Review Card Well | `#f6f8f3` | Icon wells inside Capture Review action cards |
+| Ink | `#17211b` | Primary text and high-emphasis actions |
+| Muted | `#5d675f` | Metadata, helper text, secondary labels |
+| Placeholder | `#78827a` | Input placeholder text |
+| Line | `#d6ddd4` | Rare subtle borders when tonal separation is not enough |
+| Line Strong | `#bbc7bd` | Higher-emphasis borders for grouped surfaces |
+| Accent | `#2f6f50` | Primary action, ready, selected positive state |
+| Accent Soft | `#e5f2eb` | Selected chip or successful quiet state |
+| Accent Line | `#a6cdb8` | Borders for selected or primary-accent surfaces |
+| Accent Pressed | `#25583f` | Pressed primary actions |
+| Collection Accent | `#8a641d` | Collection navigation and secondary emphasis |
+| Collection Accent Soft | `#f4ead2` | Quiet collection emphasis |
+| Collection Accent Pressed | `#6f5017` | Pressed collection actions |
+| Secondary | `#4f5f55` | Secondary text and action color |
+| Processing | `#3f7190` | Analyzing, syncing, queued |
+| Processing Soft | `#e6f1f6` | Quiet processing state surfaces |
+| Processing Line | `#a9cbdc` | Processing state borders |
+| Review | `#9a6b1f` | Needs review, maybe, action needed |
+| Review Soft | `#f5ead2` | Review callouts and changed suggestions |
+| Danger | `#b4473a` | Failed, destructive, could not save |
+| Danger Soft | `#fbe6e2` | Quiet destructive state surfaces |
+| Danger Line | `#e4a59c` | Destructive state borders |
+| Deleted | `#b4473a` | Destructive delete actions and pending-delete undo |
 
 Rules:
 
