@@ -252,13 +252,13 @@ export function useAppUiEffects({
 
   useEffect(() => {
     if (!searchOpen && !collectionSearchOpen) return;
+    searchMotion.stopAnimation();
     searchMotion.setValue(0);
-    Animated.spring(searchMotion, {
-      damping: 22,
-      mass: 0.9,
-      stiffness: 260,
+    Animated.timing(searchMotion, {
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
       toValue: 1,
-      useNativeDriver: false
+      useNativeDriver: true
     }).start();
   }, [collectionSearchOpen, searchMotion, searchOpen]);
 
@@ -297,7 +297,7 @@ export function useAppUiEffects({
       duration: 220,
       easing: Easing.out(Easing.cubic),
       toValue: 1,
-      useNativeDriver: false
+      useNativeDriver: true
     }).start();
   }, [
     captureComposerClosing,

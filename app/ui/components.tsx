@@ -1,10 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import type { StyleProp, ViewStyle } from "react-native";
+import type { PressableProps, PressableStateCallbackType, StyleProp, ViewStyle } from "react-native";
 import { Animated, Dimensions, Easing, Pressable, View } from "react-native";
 import { Image } from "expo-image";
 import { Check, ClockClockwise, Folder, Folders, Gear, HouseSimple, Info, Plus, Sparkle, Warning, X } from "phosphor-react-native";
-import Reanimated from "react-native-reanimated";
+import Reanimated, {
+  cancelAnimation,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming
+} from "react-native-reanimated";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 import type {
@@ -33,8 +39,87 @@ import {
 } from "../capturePresentation";
 import { colors } from "./theme";
 import { styles } from "./styles";
-import { statusEntering, statusExiting, statusLayout, toastEntering, toastExiting, toastLayout } from "./motion";
+import {
+  motionDuration,
+  motionEasing,
+  motionPressScale,
+  motionPressSpring,
+  motionReduceMotion,
+  statusEntering,
+  statusExiting,
+  statusLayout,
+  toastEntering,
+  toastExiting,
+  toastLayout
+} from "./motion";
 import { Text } from "./typography";
+
+const AnimatedPressable = Reanimated.createAnimatedComponent(Pressable);
+
+type MotionPressableProps = Omit<PressableProps, "style"> & {
+  pressScale?: number;
+  style?: PressableProps["style"];
+};
+
+export const MotionPressable = forwardRef<View, MotionPressableProps>(function MotionPressable({
+  disabled = false,
+  onPressIn,
+  onPressOut,
+  pressScale = motionPressScale.standard,
+  style,
+  ...props
+}: MotionPressableProps, ref) {
+  const scale = useSharedValue(1);
+  const [pressed, setPressed] = useState(false);
+
+  useEffect(() => {
+    if (!disabled) return;
+    cancelAnimation(scale);
+    scale.value = 1;
+    setPressed(false);
+  }, [disabled, scale]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }]
+  }));
+
+  const pressableState: PressableStateCallbackType = { pressed };
+  const pressableStyle = [
+    typeof style === "function" ? style(pressableState) : style,
+    animatedStyle
+  ];
+
+  const handlePressIn: PressableProps["onPressIn"] = (event) => {
+    onPressIn?.(event);
+    if (disabled) return;
+    setPressed(true);
+    cancelAnimation(scale);
+    scale.value = withTiming(pressScale, {
+      duration: motionDuration.instant,
+      easing: motionEasing.press,
+      reduceMotion: motionReduceMotion
+    });
+  };
+
+  const handlePressOut: PressableProps["onPressOut"] = (event) => {
+    onPressOut?.(event);
+    if (disabled) return;
+    setPressed(false);
+    cancelAnimation(scale);
+    scale.value = withSpring(1, motionPressSpring);
+  };
+
+  return (
+    <AnimatedPressable
+      {...props}
+      disabled={disabled}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      ref={ref}
+      style={pressableStyle}
+    />
+  );
+});
 
 export function AnimatedBottomSheet({
   children,
@@ -147,12 +232,13 @@ export function IconButton({
         ? colors.accentText
         : colors.ink;
   return (
-    <Pressable
+    <MotionPressable
       accessibilityLabel={label}
       accessibilityRole="button"
       disabled={disabled}
       hitSlop={8}
       onPress={onPress}
+      pressScale={motionPressScale.icon}
       style={({ pressed }) => [
         styles.iconButton,
         selected && styles.iconButtonSelected,
@@ -162,7 +248,7 @@ export function IconButton({
       testID={testID}
     >
       <Icon color={iconColor} size={20} weight={tone === "primary" || selected ? "bold" : "regular"} />
-    </Pressable>
+    </MotionPressable>
   );
 }
 
@@ -566,7 +652,7 @@ export function ToastHost({
       </View>
       <Text style={styles.toastText}>{visibleToast.text}</Text>
       {visibleToast.action && visibleToast.actionLabel ? (
-        <Pressable
+        <MotionPressable
           accessibilityRole="button"
           hitSlop={8}
           onPress={visibleToast.action}
@@ -575,7 +661,7 @@ export function ToastHost({
           <Text style={[styles.toastAction, tone === "destructive" && styles.toastActionDestructive]}>
             {visibleToast.actionLabel}
           </Text>
-        </Pressable>
+        </MotionPressable>
       ) : null}
     </Reanimated.View>
   );
@@ -705,12 +791,13 @@ export function BottomAppBar({
           {navItems.map(({ key, label, Icon, selected, onPress, testID }) => {
             const selectedColor = key === "collections" ? colors.collectionAccentText : colors.accentText;
             return (
-              <Pressable
+              <MotionPressable
                 accessibilityLabel={label}
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
                 key={key}
                 onPress={onPress}
+                pressScale={motionPressScale.icon}
                 style={({ pressed }) => [
                   styles.bottomNavItem,
                   pressed && styles.bottomNavItemPressed
@@ -729,15 +816,16 @@ export function BottomAppBar({
                     size={26}
                   />
                 </View>
-              </Pressable>
+              </MotionPressable>
             );
           })}
         </View>
         <View style={[styles.bottomNavFabShadow, collectionAction && styles.bottomNavFabShadowCollection]}>
-          <Pressable
+          <MotionPressable
             accessibilityLabel={collectionAction ? "New collection" : "New capture"}
             accessibilityRole="button"
             onPress={onFabPress}
+            pressScale={motionPressScale.icon}
             style={({ pressed }) => [
               styles.bottomNavFab,
               collectionAction && styles.bottomNavFabCollection,
@@ -747,7 +835,7 @@ export function BottomAppBar({
             testID={collectionAction ? "pc.nav.collection-create" : "pc.nav.capture"}
           >
             <Plus color={collectionAction ? colors.onCollectionAccent : colors.onAccent} size={28} weight="thin" />
-          </Pressable>
+          </MotionPressable>
         </View>
       </View>
     </View>

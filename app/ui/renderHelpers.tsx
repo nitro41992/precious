@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { Animated, Pressable, View } from "react-native";
+import { Animated, View } from "react-native";
 import { FolderMinus } from "phosphor-react-native";
 import Reanimated from "react-native-reanimated";
 
@@ -15,6 +15,7 @@ import type {
 } from "../types";
 import {
   BottomAppBar,
+  MotionPressable,
   ToastHost
 } from "./components";
 import {
@@ -167,9 +168,9 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     );
   }
 
-  function renderCollectionCapture({ item }: { item: Capture }) {
+  function renderCollectionCapture({ item, index = 0 }: { item: Capture; index?: number }) {
     const removeAction = (
-      <Pressable
+      <MotionPressable
         accessibilityLabel="Remove from collection"
         accessibilityRole="button"
         hitSlop={8}
@@ -179,12 +180,12 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
         style={({ pressed }) => [styles.collectionRemoveIconButton, pressed && styles.collectionRemoveIconButtonPressed]}
       >
         <FolderMinus color={colors.danger} size={22} weight="regular" />
-      </Pressable>
+      </MotionPressable>
     );
 
     return (
       <Reanimated.View
-        entering={input.collectionCaptureMotionEnabled ? rowEntering : undefined}
+        entering={input.collectionCaptureMotionEnabled ? rowEntering(index) : undefined}
         exiting={input.collectionCaptureMotionEnabled ? rowExiting : undefined}
         layout={input.collectionCaptureMotionEnabled ? rowLayout : undefined}
         style={styles.collectionCaptureRow}
@@ -203,12 +204,13 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     );
   }
 
-  function renderCollection({ item }: { item: Collection }) {
+  function renderCollection({ item, index = 0 }: { item: Collection; index?: number }) {
     return (
       <CollectionCard
         collectionListFade={input.collectionListFade}
         item={item}
         motionEnabled={input.collectionItemMotionEnabled}
+        motionIndex={index}
         onPress={() => {
           input.onCollectionPress(item.id);
           input.onCollectionTitleChange(item.title);
@@ -218,7 +220,7 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     );
   }
 
-  function renderHomeRow({ item }: { item: HomeListRow }) {
+  function renderHomeRow({ item, index = 0 }: { item: HomeListRow; index?: number }) {
     if (item.type === "section") {
       return (
         <Animated.Text style={[styles.groupHeader, { opacity: input.homeFeedRevealPending ? 0 : input.homeRowsFade }]}>
@@ -228,7 +230,7 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     }
     return (
       <Reanimated.View
-        entering={input.screenHandoffActive ? undefined : rowEntering}
+        entering={input.screenHandoffActive ? undefined : rowEntering(index)}
         exiting={input.screenHandoffActive ? undefined : rowExiting}
         layout={input.screenHandoffActive ? undefined : rowLayout}
       >

@@ -1,7 +1,7 @@
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
 import { SignOut as LogOut } from "phosphor-react-native";
 
-import { AnimatedBottomSheet, SheetHeader } from "../ui/components";
+import { AnimatedBottomSheet, MotionPressable, SheetHeader } from "../ui/components";
 import { styles } from "../ui/styles";
 import { colors } from "../ui/theme";
 import { Text } from "../ui/typography";
@@ -29,7 +29,7 @@ export function AppSheets({
             subtitle="Manage this device session."
             title="Settings"
           />
-          <Pressable
+          <MotionPressable
             onPress={() => {
               setAccountSheetOpen(false);
               onSignOut();
@@ -41,7 +41,7 @@ export function AppSheets({
               <Text style={[styles.sheetActionTitle, styles.sheetActionDanger]}>Sign out</Text>
               <Text style={styles.sheetActionText}>Remove this session from the phone.</Text>
             </View>
-          </Pressable>
+          </MotionPressable>
     </AnimatedBottomSheet>
   );
 }

@@ -15,6 +15,7 @@ import type {
 
 const RECENT_FEED_REVEAL_COUNT = 8;
 const INITIAL_SKELETON_DELAY_MS = 180;
+const REVEAL_DELAY_MS = 40;
 
 export function useCollectionsState({
   activeCollectionsCacheLength,
@@ -154,7 +155,7 @@ export function useCollectionsState({
     ].map(captureRowRevealKey))
       .filter((key) => !captureRowRevealStatesRef.current[key]);
     if (!revealKeys.length) return;
-    const timer = setTimeout(() => markCaptureRowsRevealed(revealKeys), 120);
+    const timer = setTimeout(() => markCaptureRowsRevealed(revealKeys), REVEAL_DELAY_MS);
     return () => clearTimeout(timer);
   }, [
     captureRowRevealStatesRef,
@@ -171,11 +172,10 @@ export function useCollectionsState({
     if (collectionFeedReadyKey) return;
     if (collectionCapturesLoading && collectionCapturesLoadPhase !== "append") return;
     const revealKeys = uniqueStrings(collectionRevealCaptures.map(captureRowRevealKey));
-    const delay = 100;
     const timer = setTimeout(() => {
       markCaptureRowsRevealed(revealKeys);
       setCollectionFeedReadyKey(collectionFeedRevealKey);
-    }, delay);
+    }, REVEAL_DELAY_MS);
     return () => clearTimeout(timer);
   }, [
     collectionCapturesLoadPhase,

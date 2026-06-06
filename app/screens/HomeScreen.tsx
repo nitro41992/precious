@@ -23,7 +23,7 @@ import type { CaptureComposerMode, HomeListRow } from "../types";
 import { normalizeCaptureLink } from "../captureLogic";
 import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
-import { HeaderContentGradient, IconButton, SheetHeader } from "../ui/components";
+import { HeaderContentGradient, IconButton, MotionPressable, SheetHeader } from "../ui/components";
 import { Text, TextInput } from "../ui/typography";
 
 type HomeScreenProps = {
@@ -239,14 +239,14 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                     Use the share sheet from a browser, message, notes app, or photos.
                   </Text>
                 </View>
-                <Pressable
+                <MotionPressable
                   onPress={openCaptureComposer}
                   style={({ pressed }) => [styles.homeEmptyPrimary, pressed && styles.homeEmptyPrimaryPressed]}
                   testID="pc.capture.empty.open"
                 >
                   <Plus color={colors.onAccent} size={20} weight="bold" />
                   <Text style={styles.homeEmptyPrimaryText}>Add link or image</Text>
-                </Pressable>
+                </MotionPressable>
                 <View style={styles.homeEmptyCue}>
                   <Check color={colors.accentText} size={16} weight="bold" />
                   <Text style={[styles.emptyCue, styles.homeEmptyCueText]}>
@@ -311,7 +311,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                 ] as const).map(({ mode, label, Icon }) => {
                   const selectedMode = captureMode === mode;
                   return (
-                    <Pressable
+                    <MotionPressable
                       accessibilityRole="button"
                       key={mode}
                       onPress={() => chooseCaptureMode(mode)}
@@ -332,7 +332,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                       >
                         {label}
                       </Text>
-                    </Pressable>
+                    </MotionPressable>
                   );
                 })}
               </View>
@@ -364,7 +364,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                   </>
                 ) : (
                   <View style={styles.captureImagePanel}>
-                    <Pressable
+                    <MotionPressable
                       accessibilityRole="button"
                       disabled={pickingCaptureImage}
                       onPress={takeCapturePhoto}
@@ -379,8 +379,8 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                         <Camera color={colors.accentTextStrong} size={21} weight="bold" />
                       </View>
                       <Text style={styles.captureImageButtonText}>Take photo</Text>
-                    </Pressable>
-                    <Pressable
+                    </MotionPressable>
+                    <MotionPressable
                       accessibilityRole="button"
                       disabled={pickingCaptureImage}
                       onPress={pickCaptureImage}
@@ -395,7 +395,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                         <ImageIcon color={colors.accentTextStrong} size={21} weight="bold" />
                       </View>
                       <Text style={styles.captureImageButtonText}>Choose from photos</Text>
-                    </Pressable>
+                    </MotionPressable>
                   </View>
                 )}
               </View>

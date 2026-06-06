@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
-import { Animated, FlatList, Platform, Pressable, StatusBar, View } from "react-native";
+import { Animated, FlatList, Platform, StatusBar, View } from "react-native";
 import type { FlatListProps } from "react-native";
 import { ArrowLeft, Check, Folder, MagnifyingGlass as Search, X } from "phosphor-react-native";
 
@@ -8,7 +8,7 @@ import { collectionSelectionActionState } from "../captureLogic";
 import { collectionCountLabel } from "../capturePresentation";
 import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
-import { IconButton } from "../ui/components";
+import { IconButton, MotionPressable } from "../ui/components";
 import { Text, TextInput } from "../ui/typography";
 
 type CollectionSelectorScreenProps = {
@@ -119,7 +119,7 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
             const selectedRow = selectedCollectionIds.has(item.id);
             return (
               <Animated.View style={{ opacity: collectionListFade }}>
-                <Pressable
+                <MotionPressable
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: selectedRow }}
                   onPress={() => toggleCollectionSelection(item.id)}
@@ -147,13 +147,13 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
                   <View style={[styles.collectionSelectionControl, selectedRow && styles.collectionSelectionControlSelected]}>
                     {selectedRow ? <Check color={colors.onAccent} size={15} weight="bold" /> : null}
                   </View>
-                </Pressable>
+                </MotionPressable>
               </Animated.View>
             );
           }}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListHeaderComponent={
-            <Pressable
+            <MotionPressable
               accessibilityRole="checkbox"
               accessibilityState={{ checked: collectionSelectionIds.length === 0 }}
               onPress={() => setCollectionSelectionIds([])}
@@ -190,7 +190,7 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
               >
                 {collectionSelectionIds.length === 0 ? <Check color={colors.onAccent} size={15} weight="bold" /> : null}
               </View>
-            </Pressable>
+            </MotionPressable>
           }
           ListEmptyComponent={
             collectionSelectorColdLoading && collectionsColdSkeletonVisible ? (
@@ -211,7 +211,7 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
         />
       </View>
       <View style={styles.collectionSelectionFooter}>
-        <Pressable
+        <MotionPressable
           disabled={selectionSaving}
           onPress={() => {
             if (selectionAction.shouldSave) saveCollectionSelection();
@@ -232,7 +232,7 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
               {selectionSaving ? "Saving..." : selectionAction.label}
             </Text>
           </View>
-        </Pressable>
+        </MotionPressable>
       </View>
       {toast}
     </View>

@@ -22,6 +22,7 @@ import Reanimated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withDelay,
   withTiming
 } from "react-native-reanimated";
 
@@ -123,7 +124,8 @@ const DELETE_UNDO_MS = 8000;
 const REVIEW_HERO_EXPANDED_IMAGE_SCALE = 1.08;
 const REVIEW_HANDOFF_OPEN_MS = 220;
 const REVIEW_HANDOFF_CLOSE_MS = 180;
-const REVIEW_HANDOFF_RELEASE_MS = 140;
+const REVIEW_HANDOFF_RELEASE_DELAY_MS = 48;
+const REVIEW_HANDOFF_RELEASE_MS = 96;
 
 type ReviewHandoffRect = {
   x: number;
@@ -208,15 +210,18 @@ function ReviewHandoffOverlay({
       return;
     }
     releaseProgress.value = 0;
-    releaseProgress.value = withTiming(
-      1,
-      {
-        duration: REVIEW_HANDOFF_RELEASE_MS,
-        easing: ReanimatedEasing.out(ReanimatedEasing.cubic)
-      },
-      (finished) => {
-        if (finished) runOnJS(onDone)(handoff.key);
-      }
+    releaseProgress.value = withDelay(
+      REVIEW_HANDOFF_RELEASE_DELAY_MS,
+      withTiming(
+        1,
+        {
+          duration: REVIEW_HANDOFF_RELEASE_MS,
+          easing: ReanimatedEasing.out(ReanimatedEasing.cubic)
+        },
+        (finished) => {
+          if (finished) runOnJS(onDone)(handoff.key);
+        }
+      )
     );
   }, [handoff.key, handoff.releasing, onDone, releaseProgress]);
 
@@ -272,6 +277,81 @@ function ReviewHandoffOverlay({
           style={styles.reviewHandoffImage}
         />
       </Reanimated.View>
+    </Reanimated.View>
+  );
+}
+
+function ScreenOverlayFrame({
+  children,
+  handoff
+}: {
+  children: ReactNode;
+  handoff: ReviewHandoffState | null;
+}) {
+  const progress = useSharedValue(handoff?.direction === "opening" ? 0 : 1);
+
+  useEffect(() => {
+    if (!handoff) {
+      progress.value = 1;
+      return;
+    }
+    if (handoff.direction === "opening") {
+      if (!handoff.to) {
+        progress.value = 0;
+        return;
+      }
+      if (handoff.releasing) {
+        progress.value = 1;
+        return;
+      }
+      progress.value = 0;
+      progress.value = withTiming(1, {
+        duration: REVIEW_HANDOFF_OPEN_MS,
+        easing: ReanimatedEasing.bezier(0.2, 0, 0, 1)
+      });
+      return;
+    }
+    if (!handoff.to) {
+      progress.value = 1;
+      return;
+    }
+    if (handoff.releasing) {
+      progress.value = 0;
+      return;
+    }
+    progress.value = withTiming(0, {
+      duration: REVIEW_HANDOFF_CLOSE_MS,
+      easing: ReanimatedEasing.bezier(0.2, 0, 0, 1)
+    });
+  }, [
+    handoff?.direction,
+    handoff?.key,
+    handoff?.releasing,
+    handoff?.to?.height,
+    handoff?.to?.width,
+    handoff?.to?.x,
+    handoff?.to?.y,
+    progress
+  ]);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    const translateFrom = handoff?.direction === "closing" ? -8 : 8;
+    return {
+      opacity: progress.value,
+      transform: [
+        {
+          translateY: interpolate(progress.value, [0, 1], [translateFrom, 0])
+        }
+      ]
+    };
+  });
+
+  return (
+    <Reanimated.View
+      pointerEvents={handoff ? "none" : "auto"}
+      style={[styles.screenOverlay, animatedStyle]}
+    >
+      {children}
     </Reanimated.View>
   );
 }
@@ -492,6 +572,7 @@ export default function App() {
   const [collectionFeedReadyKey, setCollectionFeedReadyKey] = useState("");
   const [collectionDetailCaptureMotionEnabled, setCollectionDetailCaptureMotionEnabled] = useState(true);
   const [reviewHandoff, setReviewHandoff] = useState<ReviewHandoffState | null>(null);
+  const [closingReviewCapture, setClosingReviewCapture] = useState<Capture | null>(null);
   const latestNoteRef = useRef("");
   const capturesRef = useRef<Capture[]>([]);
   const archivedCapturesRef = useRef<Capture[]>([]);
@@ -602,12 +683,14 @@ export default function App() {
   const measureClosingHandoffTarget = useCallback((handoff: ReviewHandoffState) => {
     const thumbnailNode = captureThumbnailRefs.current[handoff.captureId];
     if (!thumbnailNode) {
+      setClosingReviewCapture(null);
       reviewHandoffRef.current = null;
       setReviewHandoff(null);
       return;
     }
     thumbnailNode.measureInWindow((x, y, width, height) => {
       if (!width || !height) {
+        setClosingReviewCapture(null);
         reviewHandoffRef.current = null;
         setReviewHandoff(null);
         return;
@@ -1354,6 +1437,7 @@ export default function App() {
     reviewHandoffRef.current = null;
     setReviewHandoff(null);
     if (current.direction === "closing") {
+      setClosingReviewCapture(null);
       if (current.returnCollectionId) {
         returnToCollectionDetail(current.returnCollectionId);
         return;
@@ -1430,6 +1514,7 @@ export default function App() {
       };
       reviewHandoffRef.current = nextHandoff;
       setReviewHandoff(nextHandoff);
+      setClosingReviewCapture(capture);
       selectCapture(null);
     };
     if (fromRect) {
@@ -1517,14 +1602,14 @@ export default function App() {
             duration: closeDuration,
             easing: Easing.in(Easing.cubic),
             toValue: 0,
-            useNativeDriver: false
+            useNativeDriver: true
           })
         ])
       : Animated.timing(captureComposerMotion, {
           duration: closeDuration,
           easing: Easing.in(Easing.cubic),
           toValue: 0,
-          useNativeDriver: false
+          useNativeDriver: true
         });
     closeAnimation.start(() => {
       onClosed();
@@ -3123,9 +3208,9 @@ export default function App() {
 
   function renderCaptureReviewScreen(capture: Capture) {
     const activeReviewHandoff = reviewHandoff?.captureId === capture.id ? reviewHandoff : null;
-    const reviewOpeningHandoffPreparing = Boolean(
+    const reviewHeroHiddenForHandoff = Boolean(
       activeReviewHandoff &&
-        activeReviewHandoff.direction === "opening" &&
+        (activeReviewHandoff.direction === "opening" || activeReviewHandoff.direction === "closing") &&
         !activeReviewHandoff.releasing
     );
     return (
@@ -3165,7 +3250,7 @@ export default function App() {
           keyboardHeight,
           noteInputRef,
           reviewMotion,
-          hideReviewHeroForHandoff: reviewOpeningHandoffPreparing,
+          hideReviewHeroForHandoff: reviewHeroHiddenForHandoff,
           reviewHandoffKey: activeReviewHandoff?.key ?? null,
           selected: capture,
           toast: renderToast("footer"),
@@ -3272,10 +3357,12 @@ export default function App() {
 
   function renderTopLevelStack({
     active = "recent",
-    overlay = null
+    overlay = null,
+    overlayHandoff = null
   }: {
     active?: "recent" | "collections";
     overlay?: ReactNode;
+    overlayHandoff?: ReviewHandoffState | null;
   } = {}) {
     const overlayVisible = Boolean(overlay);
     return (
@@ -3287,9 +3374,9 @@ export default function App() {
           {renderCollectionsScreen({ includeChrome: active === "collections" && !overlayVisible })}
         </TopLevelPane>
         {overlay ? (
-          <View style={styles.screenOverlay}>
+          <ScreenOverlayFrame handoff={overlayHandoff}>
             {overlay}
-          </View>
+          </ScreenOverlayFrame>
         ) : null}
         {reviewHandoff ? (
           <ReviewHandoffOverlay
@@ -3388,12 +3475,24 @@ export default function App() {
 
   if (selected) {
     if (captureReviewOrigin === "recent") {
-      return renderTopLevelStack({ active: "recent", overlay: renderCaptureReviewScreen(selected) });
+      return renderTopLevelStack({
+        active: "recent",
+        overlay: renderCaptureReviewScreen(selected),
+        overlayHandoff: reviewHandoff?.captureId === selected.id ? reviewHandoff : null
+      });
     }
     if (captureReviewOrigin === "collection") {
       return renderTopLevelStack({ active: "collections", overlay: renderCaptureReviewScreen(selected) });
     }
     return renderCaptureReviewScreen(selected);
+  }
+
+  if (closingReviewCapture && reviewHandoff?.direction === "closing") {
+    return renderTopLevelStack({
+      active: "recent",
+      overlay: renderCaptureReviewScreen(closingReviewCapture),
+      overlayHandoff: reviewHandoff
+    });
   }
 
   if (authReady && config?.apiUrl && !session) {

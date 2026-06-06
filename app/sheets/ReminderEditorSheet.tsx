@@ -16,7 +16,7 @@ import {
   reminderTimeLabel,
   timeStringFromDate
 } from "../capturePresentation";
-import { AiFieldInsight, AnimatedBottomSheet, SheetHeader } from "../ui/components";
+import { AiFieldInsight, AnimatedBottomSheet, MotionPressable, SheetHeader } from "../ui/components";
 import { styles } from "../ui/styles";
 import { Text } from "../ui/typography";
 import { appTheme, colors } from "../ui/theme";
@@ -211,7 +211,7 @@ export function ReminderEditorSheet({
               <Calendar color={colors.muted} size={18} weight="regular" />
               <Text style={styles.reminderFieldSectionTitle}>Date</Text>
             </View>
-            <Pressable
+            <MotionPressable
               accessibilityRole="button"
               onPress={() => setPickerTarget((current) => (current === "startDate" ? null : "startDate"))}
               style={({ pressed }) => [styles.reminderFieldRow, pressed && styles.subtlePressed]}
@@ -221,8 +221,8 @@ export function ReminderEditorSheet({
                 <Text style={styles.reminderFieldLabel}>Starts</Text>
                 <Text style={styles.reminderFieldValue}>{startDateLabel || "Choose start date"}</Text>
               </View>
-            </Pressable>
-            <Pressable
+            </MotionPressable>
+            <MotionPressable
               accessibilityRole="button"
               onPress={() => setPickerTarget((current) => (current === "endDate" ? null : "endDate"))}
               style={({ pressed }) => [styles.reminderFieldRow, pressed && styles.subtlePressed]}
@@ -232,7 +232,7 @@ export function ReminderEditorSheet({
                 <Text style={styles.reminderFieldLabel}>Ends</Text>
                 <Text style={styles.reminderFieldValue}>{endDateLabel || startDateLabel || "Choose end date"}</Text>
               </View>
-            </Pressable>
+            </MotionPressable>
           </View>
           <View style={styles.reminderFieldGroup}>
             <View style={styles.reminderFieldSectionHeader}>
@@ -244,7 +244,7 @@ export function ReminderEditorSheet({
                 </Pressable>
               ) : null}
             </View>
-            <Pressable
+            <MotionPressable
               accessibilityRole="button"
               onPress={() => setPickerTarget((current) => (current === "startTime" ? null : "startTime"))}
               style={({ pressed }) => [styles.reminderFieldRow, pressed && styles.subtlePressed]}
@@ -256,8 +256,8 @@ export function ReminderEditorSheet({
                   {startTimeLabel || "Add start time"}
                 </Text>
               </View>
-            </Pressable>
-            <Pressable
+            </MotionPressable>
+            <MotionPressable
               accessibilityRole="button"
               onPress={() => setPickerTarget((current) => (current === "endTime" ? null : "endTime"))}
               style={({ pressed }) => [styles.reminderFieldRow, pressed && styles.subtlePressed]}
@@ -269,7 +269,7 @@ export function ReminderEditorSheet({
                   {endTimeLabel || "Add end time"}
                 </Text>
               </View>
-            </Pressable>
+            </MotionPressable>
           </View>
           {pickerMode ? (
             <View style={styles.reminderNativePickerWrap}>
@@ -306,7 +306,7 @@ export function ReminderEditorSheet({
           </View>
         </ScrollView>
         {typeof reminderIndex === "number" && onRemove ? (
-          <Pressable
+          <MotionPressable
             accessibilityRole="button"
             onPress={() => onRemove(reminderIndex)}
             style={({ pressed }) => [styles.sheetActionRow, pressed && styles.subtlePressed]}
@@ -314,7 +314,7 @@ export function ReminderEditorSheet({
           >
             <Trash color={colors.danger} size={20} weight="regular" />
             <Text style={styles.dangerButtonText}>Remove reminder</Text>
-          </Pressable>
+          </MotionPressable>
         ) : null}
     </AnimatedBottomSheet>
   );

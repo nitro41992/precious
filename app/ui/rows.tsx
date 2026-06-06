@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo, useState, type ReactElement } from "react";
-import { Animated, Pressable, View } from "react-native";
+import { Animated, View } from "react-native";
 import { Image } from "expo-image";
 import { CalendarBlank, Folder, ImageSquare, Lightbulb } from "phosphor-react-native";
 import Reanimated from "react-native-reanimated";
@@ -18,7 +18,7 @@ import {
 } from "../capturePresentation";
 import { colors } from "./theme";
 import { styles } from "./styles";
-import { CollectionMeaningToken, MeaningToken, SkeletonRevealFrame, SourceMark, StatusGlyph } from "./components";
+import { CollectionMeaningToken, MeaningToken, MotionPressable, SkeletonRevealFrame, SourceMark, StatusGlyph } from "./components";
 import { cardEntering, cardExiting, cardLayout } from "./motion";
 import { Text } from "./typography";
 
@@ -102,7 +102,7 @@ export function CaptureRow({
     />
   );
   const row = (
-    <Pressable
+    <MotionPressable
       onPress={onPress}
       style={({ pressed }) => [
         styles.captureRow,
@@ -166,7 +166,7 @@ export function CaptureRow({
           </View>
         ) : null}
       </View>
-    </Pressable>
+    </MotionPressable>
   );
   if (!deferMediaUntilLoaded) return row;
   return (
@@ -312,7 +312,7 @@ export function CollectionRow({
 }) {
   return (
     <Animated.View style={{ opacity: collectionListFade }}>
-      <Pressable
+      <MotionPressable
         onPress={onPress}
         style={({ pressed }) => [styles.collectionRow, pressed && styles.captureRowPressed]}
         testID={`pc.collection.row.${item.id}`}
@@ -333,7 +333,7 @@ export function CollectionRow({
         <Text numberOfLines={2} style={styles.summaryPreview}>
           {item.description}
         </Text>
-      </Pressable>
+      </MotionPressable>
     </Animated.View>
   );
 }
@@ -507,21 +507,23 @@ export const CollectionCollage = memo(function CollectionCollage({ collection }:
 export function CollectionCard({
   item,
   motionEnabled,
+  motionIndex = 0,
   onPress
 }: {
   collectionListFade: Animated.Value;
   item: Collection;
   motionEnabled: boolean;
+  motionIndex?: number;
   onPress: () => void;
 }) {
   return (
     <Reanimated.View
-      entering={motionEnabled ? cardEntering : undefined}
+      entering={motionEnabled ? cardEntering(motionIndex) : undefined}
       exiting={motionEnabled ? cardExiting : undefined}
       layout={motionEnabled ? cardLayout : undefined}
       style={styles.collectionCardWrap}
     >
-      <Pressable
+      <MotionPressable
         onPress={onPress}
         style={({ pressed }) => [styles.collectionCard, pressed && styles.collectionCardPressed]}
         testID={`pc.collection.card.${item.id}`}
@@ -535,7 +537,7 @@ export function CollectionCard({
             {item.captureCount} {item.captureCount === 1 ? "capture" : "captures"}
           </Text>
         </View>
-      </Pressable>
+      </MotionPressable>
     </Reanimated.View>
   );
 }

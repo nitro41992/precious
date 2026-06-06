@@ -1,12 +1,12 @@
 import type { ReactElement, ReactNode } from "react";
-import { Animated, FlatList, Platform, Pressable, View } from "react-native";
+import { Animated, FlatList, Platform, View } from "react-native";
 import type { FlatListProps } from "react-native";
 import { Check, Folder, MagnifyingGlass as Search, X } from "phosphor-react-native";
 
 import type { Capture, Collection, LoadPhase } from "../types";
 import { collectionSelectionActionState } from "../captureLogic";
 import { captureFieldRationale, collectionCountLabel } from "../capturePresentation";
-import { AiFieldInsight, AnimatedBottomSheet, SheetHeader } from "../ui/components";
+import { AiFieldInsight, AnimatedBottomSheet, MotionPressable, SheetHeader } from "../ui/components";
 import { styles } from "../ui/styles";
 import { colors } from "../ui/theme";
 import { Text, TextInput } from "../ui/typography";
@@ -135,7 +135,7 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
             const selectedRow = selectedCollectionIds.has(item.id);
             return (
               <Animated.View style={{ opacity: collectionListFade }}>
-                <Pressable
+                <MotionPressable
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: selectedRow }}
                   onPress={() => toggleCollectionSelection(item.id)}
@@ -167,13 +167,13 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
                   <View style={[styles.collectionSelectionControl, selectedRow && styles.collectionSelectionControlSelected]}>
                     {selectedRow ? <Check color={colors.onAccent} size={15} weight="bold" /> : null}
                   </View>
-                </Pressable>
+                </MotionPressable>
               </Animated.View>
             );
           }}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListHeaderComponent={
-            <Pressable
+            <MotionPressable
               accessibilityRole="checkbox"
               accessibilityState={{ checked: collectionSelectionIds.length === 0 }}
               onPress={() => setCollectionSelectionIds([])}
@@ -212,7 +212,7 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
               >
                 {collectionSelectionIds.length === 0 ? <Check color={colors.onAccent} size={15} weight="bold" /> : null}
               </View>
-            </Pressable>
+            </MotionPressable>
           }
           ListEmptyComponent={
             collectionSelectorColdLoading && collectionsColdSkeletonVisible ? (

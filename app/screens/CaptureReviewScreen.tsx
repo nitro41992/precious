@@ -59,7 +59,7 @@ import {
 import { ReminderEditorSheet } from "../sheets/ReminderEditorSheet";
 import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
-import { AiFieldInsight, AnimatedBottomSheet, ProcessingStatusPill, SheetHeader, SourceMark } from "../ui/components";
+import { AiFieldInsight, AnimatedBottomSheet, MotionPressable, ProcessingStatusPill, SheetHeader, SourceMark } from "../ui/components";
 import { Text, TextInput } from "../ui/typography";
 
 type ReviewHandoffRect = {
@@ -297,7 +297,7 @@ function CaptureImageViewer({
             ) : null}
           </Animated.View>
         </View>
-        <Pressable
+        <MotionPressable
           accessibilityLabel="Close image"
           accessibilityRole="button"
           hitSlop={10}
@@ -305,7 +305,7 @@ function CaptureImageViewer({
           style={({ pressed }) => [styles.imageViewerClose, pressed && styles.subtlePressed]}
         >
           <X color={colors.onMediaControl} size={22} weight="bold" />
-        </Pressable>
+        </MotionPressable>
         <View pointerEvents="none" style={styles.imageViewerCaption}>
           <Text numberOfLines={1} style={styles.imageViewerCaptionText}>{title}</Text>
         </View>
@@ -618,7 +618,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
               showsVerticalScrollIndicator={false}
             >
               <Animated.View style={[styles.reviewMediaStage, { height: reviewMediaHeight }]}>
-                <Pressable
+                <MotionPressable
                   collapsable={false}
                   ref={reviewHeroFrameRef}
                   accessibilityHint={
@@ -703,9 +703,9 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                       </View>
                     </View>
                   )}
-                </Pressable>
+                </MotionPressable>
                 <View pointerEvents="box-none" style={styles.reviewMediaTopControls}>
-                  <Pressable
+                  <MotionPressable
                     accessibilityLabel="Back"
                     accessibilityRole="button"
                     hitSlop={8}
@@ -713,7 +713,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                     style={({ pressed }) => [styles.reviewMediaIconButton, pressed && styles.subtlePressed]}
                   >
                     <ArrowLeft color={colors.onMediaControlStrong} size={22} weight="regular" />
-                  </Pressable>
+                  </MotionPressable>
                   <View style={styles.reviewMediaRightControls}>
                     {showStatus ? (
                       selectedStatus === "processing" ? (
@@ -730,7 +730,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                         </Text>
                       )
                     ) : null}
-                    <Pressable
+                    <MotionPressable
                       accessibilityLabel="Delete capture"
                       accessibilityRole="button"
                       hitSlop={8}
@@ -743,7 +743,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                       testID="pc.capture.delete"
                     >
                       <Trash2 color={colors.danger} size={21} weight="regular" />
-                    </Pressable>
+                    </MotionPressable>
                   </View>
                 </View>
               </Animated.View>
@@ -781,7 +781,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                           <Text style={styles.reviewSourceTime}> · {selectedCapturedTime}</Text>
                         </Text>
                         {sourceValue ? (
-                          <Pressable
+                          <MotionPressable
                             accessibilityLabel="Copy source"
                             accessibilityRole="button"
                             hitSlop={8}
@@ -789,7 +789,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                             style={({ pressed }) => [styles.reviewSourceCopyButton, pressed && styles.subtlePressed]}
                           >
                             <Copy color={colors.muted} size={18} weight="regular" />
-                          </Pressable>
+                          </MotionPressable>
                         ) : null}
                       </View>
                     </View>
@@ -803,7 +803,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                         {purposeField ? (
                           <View style={styles.inlineMeaningLine}>
                             <Text style={styles.inlineMeaningText}>Saved as </Text>
-                            <Pressable
+                            <MotionPressable
                               accessibilityLabel={`Purpose: ${purposeField.displayValue}`}
                               accessibilityRole="button"
                               onPress={() => openInlineField("purpose")}
@@ -818,13 +818,13 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                               >
                                 {purposeField.displayValue}
                               </Text>
-                            </Pressable>
+                            </MotionPressable>
                           </View>
                         ) : null}
                         {collectionField ? (
                           <View style={styles.inlineMeaningLine}>
                             <Text style={styles.inlineMeaningText}>in </Text>
-                            <Pressable
+                            <MotionPressable
                               accessibilityLabel={`Collection: ${collectionField.displayValue}`}
                               accessibilityRole="button"
                               onPress={() => openInlineField("collection")}
@@ -839,13 +839,13 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                               >
                                 {collectionField.displayValue}
                               </Text>
-                            </Pressable>
+                            </MotionPressable>
                           </View>
                         ) : null}
                         {laterField ? (
                           <View style={styles.inlineMeaningLine}>
                             <Text style={styles.inlineMeaningText}>for </Text>
-                            <Pressable
+                            <MotionPressable
                               accessibilityLabel={`Later: ${laterField.displayValue}`}
                               accessibilityRole="button"
                               onPress={() => openInlineField("later")}
@@ -860,13 +860,13 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                               >
                                 {laterField.displayValue}
                               </Text>
-                            </Pressable>
+                            </MotionPressable>
                           </View>
                         ) : null}
                         {showLocationInline ? (
                           <View style={styles.inlineMeaningLine}>
                             <Text style={styles.inlineMeaningText}>at </Text>
-                            <Pressable
+                            <MotionPressable
                               accessibilityLabel={resolvedPlace ? `Open ${locationInlineValue} in Maps` : `Search Maps for ${locationInlineValue}`}
                               accessibilityRole={primaryMapCandidate ? "button" : undefined}
                               onPress={primaryMapCandidate ? () => void openVisitTargetMaps(primaryMapCandidate) : undefined}
@@ -875,7 +875,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                               <Text style={styles.inlineMeaningPillText}>
                                 {locationInlineValue}
                               </Text>
-                            </Pressable>
+                            </MotionPressable>
                           </View>
                         ) : null}
                       </View>
@@ -899,7 +899,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                   ) : null}
                   <View style={styles.reviewActionBlock}>
                     <Text style={styles.reviewActionLabel}>Capture actions</Text>
-                    <Pressable
+                    <MotionPressable
                       accessibilityRole="button"
                       onPress={openNoteSheet}
                       style={({ pressed }) => [styles.noteActionCard, pressed && styles.subtlePressed]}
@@ -924,7 +924,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                         </Text>
                       </View>
                       <CaretRight color={colors.muted} size={18} weight="bold" />
-                    </Pressable>
+                    </MotionPressable>
                   </View>
                 </View>
               </Animated.ScrollView>
@@ -1016,7 +1016,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
               {INTENT_OPTIONS.map((intent) => {
                 const selectedIntent = quickIntentValue === intent;
                 return (
-                  <Pressable
+                  <MotionPressable
                     accessibilityRole="button"
                     key={intent}
                     onPress={() => {
@@ -1033,10 +1033,10 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                     <Text style={[styles.purposeOptionText, selectedIntent && styles.purposeOptionTextSelected]}>
                       {activeIntentLabel(intent)}
                     </Text>
-                  </Pressable>
+                  </MotionPressable>
                 );
               })}
-              <Pressable
+              <MotionPressable
                 accessibilityRole="button"
                 onPress={() => {
                   setQuickIntentOpen(false);
@@ -1053,7 +1053,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                 <Text style={[styles.purposeOptionText, !quickIntentValue && styles.purposeOptionTextSelected]}>
                   No intent
                 </Text>
-              </Pressable>
+              </MotionPressable>
             </View>
       </AnimatedBottomSheet>
       <CaptureImageViewer

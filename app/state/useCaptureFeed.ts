@@ -18,6 +18,7 @@ import type {
 
 const PROCESSING_REFRESH_MS = 3000;
 const RECENT_FEED_REVEAL_COUNT = 8;
+const REVEAL_DELAY_MS = 40;
 
 export function useCaptureFeed({
   activeCapturesLoadedOnce,
@@ -116,7 +117,7 @@ export function useCaptureFeed({
     const revealKeys = uniqueStrings(visibleHomeCapturesForReveal.map(captureRowRevealKey))
       .filter((key) => !captureRowRevealStatesRef.current[key]);
     if (!revealKeys.length) return;
-    const timer = setTimeout(() => markCaptureRowsRevealed(revealKeys), 120);
+    const timer = setTimeout(() => markCaptureRowsRevealed(revealKeys), REVEAL_DELAY_MS);
     return () => clearTimeout(timer);
   }, [captureRowRevealStatesRef, markCaptureRowsRevealed, visibleHomeCapturesForReveal]);
 
@@ -128,11 +129,10 @@ export function useCaptureFeed({
     if (homeFeedReadyKey) return;
     if (!activeCapturesLoadedOnce || capturesLoading) return;
     const revealKeys = uniqueStrings(homeRevealCaptures.map(captureRowRevealKey));
-    const delay = 100;
     const timer = setTimeout(() => {
       markCaptureRowsRevealed(revealKeys);
       setHomeFeedReadyKey(homeFeedRevealKey);
-    }, delay);
+    }, REVEAL_DELAY_MS);
     return () => clearTimeout(timer);
   }, [
     activeCapturesLoadedOnce,
