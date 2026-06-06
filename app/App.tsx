@@ -22,9 +22,9 @@ import Reanimated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
-  withDelay,
   withTiming
 } from "react-native-reanimated";
+import type { SharedValue } from "react-native-reanimated";
 
 import { AppSheets } from "./sheets/AppSheets";
 import { CollectionComposerSheet } from "./sheets/CollectionComposerSheet";
@@ -36,6 +36,7 @@ import { useCaptureReview } from "./state/useCaptureReview";
 import { useCaptureSearch } from "./state/useCaptureSearch";
 import { useCollectionsState } from "./state/useCollections";
 import { createAppRenderHelpers } from "./ui/renderHelpers";
+import { motionDuration, motionReduceMotion } from "./ui/motion";
 import { styles } from "./ui/styles";
 import { appTheme } from "./ui/theme";
 
@@ -124,8 +125,6 @@ const DELETE_UNDO_MS = 8000;
 const REVIEW_HERO_EXPANDED_IMAGE_SCALE = 1.08;
 const REVIEW_HANDOFF_OPEN_MS = 220;
 const REVIEW_HANDOFF_CLOSE_MS = 180;
-const REVIEW_HANDOFF_RELEASE_DELAY_MS = 48;
-const REVIEW_HANDOFF_RELEASE_MS = 96;
 
 type ReviewHandoffRect = {
   x: number;
@@ -144,7 +143,6 @@ type ReviewHandoffState = {
   imageUrl: string;
   key: number;
   ready: boolean;
-  releasing: boolean;
   returnCollectionId: string | null;
   to: ReviewHandoffRect | null;
 };
@@ -164,66 +162,60 @@ function reviewHeroTargetRect(windowWidth: number): ReviewHandoffRect {
 function ReviewHandoffOverlay({
   handoff,
   onArrived,
-  onDone
+  onDone,
+  progress
 }: {
   handoff: ReviewHandoffState;
   onArrived: (key: number) => void;
   onDone: (key: number) => void;
+  progress: SharedValue<number>;
 }) {
-  const progress = useSharedValue(0);
-  const releaseProgress = useSharedValue(handoff.releasing ? 1 : 0);
+  const fade = useSharedValue(1);
+  const hasHandoffTarget = Boolean(handoff.to);
 
+  // Start the morph once per handoff; a refined target rect retargets the
+  // in-flight interpolation instead of restarting the timing (no flash).
   useEffect(() => {
-    if (!handoff.to) return;
+    fade.value = 1;
+    if (!hasHandoffTarget) return;
     progress.value = 0;
     progress.value = withTiming(
       1,
       {
         duration: handoff.direction === "closing" ? REVIEW_HANDOFF_CLOSE_MS : REVIEW_HANDOFF_OPEN_MS,
-        easing: ReanimatedEasing.bezier(0.2, 0, 0, 1)
+        easing: ReanimatedEasing.bezier(0.2, 0, 0, 1),
+        reduceMotion: motionReduceMotion
       },
       (finished) => {
         if (finished) runOnJS(onArrived)(handoff.key);
       }
     );
-  }, [
-    handoff.direction,
-    handoff.key,
-    handoff.to?.height,
-    handoff.to?.width,
-    handoff.to?.x,
-    handoff.to?.y,
-    onArrived,
-    progress
-  ]);
+  }, [fade, handoff.direction, handoff.key, hasHandoffTarget, onArrived, progress]);
 
   useEffect(() => {
     if (!handoff.arrived) return;
-    if (handoff.releasing) return;
-    if (handoff.direction === "opening" && !handoff.ready) return;
-    runOnJS(onDone)(handoff.key);
-  }, [handoff.arrived, handoff.direction, handoff.key, handoff.ready, handoff.releasing, onDone]);
-
-  useEffect(() => {
-    if (!handoff.releasing) {
-      releaseProgress.value = 0;
-      return;
+    if (handoff.direction === "closing") {
+      const frame = requestAnimationFrame(() => {
+        onDone(handoff.key);
+      });
+      return () => cancelAnimationFrame(frame);
     }
-    releaseProgress.value = 0;
-    releaseProgress.value = withDelay(
-      REVIEW_HANDOFF_RELEASE_DELAY_MS,
-      withTiming(
-        1,
-        {
-          duration: REVIEW_HANDOFF_RELEASE_MS,
-          easing: ReanimatedEasing.out(ReanimatedEasing.cubic)
-        },
-        (finished) => {
-          if (finished) runOnJS(onDone)(handoff.key);
-        }
-      )
+    if (!handoff.ready) return;
+    // Crossfade out over the now-revealed hero instead of a hard cut, so the
+    // swap can never flash; the chrome reveals beneath this fade in parallel.
+    fade.value = 1;
+    fade.value = withTiming(
+      0,
+      {
+        duration: motionDuration.exit,
+        easing: ReanimatedEasing.in(ReanimatedEasing.cubic),
+        reduceMotion: motionReduceMotion
+      },
+      (finished) => {
+        if (finished) runOnJS(onDone)(handoff.key);
+      }
     );
-  }, [handoff.key, handoff.releasing, onDone, releaseProgress]);
+  }, [fade, handoff.arrived, handoff.direction, handoff.key, handoff.ready, onDone]);
 
   const animatedStyle = useAnimatedStyle(() => {
     const value = progress.value;
@@ -232,7 +224,7 @@ function ReviewHandoffOverlay({
       borderRadius: interpolate(value, [0, 1], [handoff.from.radius, target.radius]),
       height: interpolate(value, [0, 1], [handoff.from.height, target.height]),
       left: interpolate(value, [0, 1], [handoff.from.x, target.x]),
-      opacity: interpolate(releaseProgress.value, [0, 1], [1, 0]),
+      opacity: fade.value,
       top: interpolate(value, [0, 1], [handoff.from.y, target.y]),
       width: interpolate(value, [0, 1], [handoff.from.width, target.width])
     };
@@ -283,66 +275,25 @@ function ReviewHandoffOverlay({
 
 function ScreenOverlayFrame({
   children,
-  handoff
+  handoff,
+  progress
 }: {
   children: ReactNode;
   handoff: ReviewHandoffState | null;
+  progress: SharedValue<number>;
 }) {
-  const progress = useSharedValue(handoff?.direction === "opening" ? 0 : 1);
+  const handoffDirection = handoff?.direction ?? null;
 
-  useEffect(() => {
-    if (!handoff) {
-      progress.value = 1;
-      return;
-    }
-    if (handoff.direction === "opening") {
-      if (!handoff.to) {
-        progress.value = 0;
-        return;
-      }
-      if (handoff.releasing) {
-        progress.value = 1;
-        return;
-      }
-      progress.value = 0;
-      progress.value = withTiming(1, {
-        duration: REVIEW_HANDOFF_OPEN_MS,
-        easing: ReanimatedEasing.bezier(0.2, 0, 0, 1)
-      });
-      return;
-    }
-    if (!handoff.to) {
-      progress.value = 1;
-      return;
-    }
-    if (handoff.releasing) {
-      progress.value = 0;
-      return;
-    }
-    progress.value = withTiming(0, {
-      duration: REVIEW_HANDOFF_CLOSE_MS,
-      easing: ReanimatedEasing.bezier(0.2, 0, 0, 1)
-    });
-  }, [
-    handoff?.direction,
-    handoff?.key,
-    handoff?.releasing,
-    handoff?.to?.height,
-    handoff?.to?.width,
-    handoff?.to?.x,
-    handoff?.to?.y,
-    progress
-  ]);
-
+  // The frame reads the same progress value that drives the hero morph, so
+  // the screen fade stays locked in parallel with the image handoff. Fade
+  // only — translating the frame would shift the hero away from the rect the
+  // morph measured, making the image land off-target.
   const animatedStyle = useAnimatedStyle(() => {
-    const translateFrom = handoff?.direction === "closing" ? -8 : 8;
+    if (!handoffDirection) {
+      return { opacity: 1 };
+    }
     return {
-      opacity: progress.value,
-      transform: [
-        {
-          translateY: interpolate(progress.value, [0, 1], [translateFrom, 0])
-        }
-      ]
+      opacity: handoffDirection === "opening" ? progress.value : 1 - progress.value
     };
   });
 
@@ -369,8 +320,9 @@ function TopLevelPane({
 
   useEffect(() => {
     progress.value = withTiming(active ? 1 : 0, {
-      duration: 260,
-      easing: ReanimatedEasing.bezier(0.2, 0, 0, 1)
+      duration: motionDuration.settle,
+      easing: ReanimatedEasing.bezier(0.2, 0, 0, 1),
+      reduceMotion: motionReduceMotion
     });
   }, [active, progress]);
 
@@ -607,6 +559,9 @@ export default function App() {
   const captureImagePickerActiveRef = useRef(false);
   const searchMotion = useRef(new Animated.Value(0)).current;
   const reviewMotion = useRef(new Animated.Value(1)).current;
+  // Single clock for the hero morph and the review screen fade — both read
+  // this value so the image handoff and the view transition run in parallel.
+  const reviewHandoffProgress = useSharedValue(1);
   const captureComposerMotion = useRef(new Animated.Value(0)).current;
   const captureKeyboardInset = useRef(new Animated.Value(0)).current;
   const skeletonPulse = useRef(new Animated.Value(0)).current;
@@ -672,7 +627,18 @@ export default function App() {
       reviewHeroRectRef.current = normalized;
       if (!key) return;
       setReviewHandoff((current) => {
-        if (!current || current.key !== key || current.to) return current;
+        if (!current || current.key !== key) return current;
+        if (current.direction !== "opening" && current.to) return current;
+        if (
+          current.to &&
+          current.to.x === normalized.x &&
+          current.to.y === normalized.y &&
+          current.to.width === normalized.width &&
+          current.to.height === normalized.height &&
+          current.to.radius === normalized.radius
+        ) {
+          return current;
+        }
         const next = { ...current, to: normalized };
         reviewHandoffRef.current = next;
         return next;
@@ -747,10 +713,12 @@ export default function App() {
           imageUrl,
           key,
           ready: false,
-          releasing: false,
           returnCollectionId: null,
+          // The morph starts only once the review screen has mounted and
+          // measured its hero, so image and view transition together.
           to: null
         };
+        reviewHandoffProgress.value = 0;
         reviewHandoffRef.current = nextHandoff;
         setReviewHandoff(nextHandoff);
         open();
@@ -1428,12 +1396,6 @@ export default function App() {
   const finishReviewHandoff = useCallback((key: number) => {
     const current = reviewHandoffRef.current;
     if (!current || current.key !== key) return;
-    if (!current.releasing) {
-      const releasing = { ...current, releasing: true };
-      reviewHandoffRef.current = releasing;
-      setReviewHandoff(releasing);
-      return;
-    }
     reviewHandoffRef.current = null;
     setReviewHandoff(null);
     if (current.direction === "closing") {
@@ -1462,10 +1424,10 @@ export default function App() {
         selectCapture(captureId);
         return;
       }
-      selectCapture(capture.id);
       setDraftTitle(capture.title);
       setDraftNote(capture.note);
       setDraftIntent(normalizeIntent(capture.defaultIntent));
+      selectCapture(capture.id);
     },
     [archivedCaptures, captures, remoteSearchResults, selectCapture]
   );
@@ -1487,10 +1449,10 @@ export default function App() {
     setSelectedCollectionId(null);
     setCaptureReturnCollectionId(collectionId);
     setCaptureReviewOrigin("collection");
-    selectCapture(capture.id);
     setDraftTitle(capture.title);
     setDraftNote(capture.note);
     setDraftIntent(normalizeIntent(capture.defaultIntent));
+    selectCapture(capture.id);
   }, [selectCapture]);
 
   const startReviewCloseHandoff = useCallback((capture: Capture, fromRect?: ReviewHandoffRect | null) => {
@@ -1508,10 +1470,10 @@ export default function App() {
         imageUrl,
         key,
         ready: true,
-        releasing: false,
         returnCollectionId: null,
         to: null
       };
+      reviewHandoffProgress.value = 0;
       reviewHandoffRef.current = nextHandoff;
       setReviewHandoff(nextHandoff);
       setClosingReviewCapture(capture);
@@ -2049,16 +2011,21 @@ export default function App() {
 
   const selectedDraftKey = selected ? captureDraftKey(selected) : "";
 
-  useEffect(() => {
-    if (!selected) return;
-    void loadCaptureDetail(selected);
-  }, [loadCaptureDetail, selected?.id, selected?.remoteId]);
+  // Hydrate detail only once the handoff transition has settled: the fetch
+  // response re-renders the whole tree, which mid-transition reads as flicker.
+  const reviewHandoffInFlight = Boolean(reviewHandoff);
 
   useEffect(() => {
-    if (!selected) return;
+    if (!selected || reviewHandoffInFlight) return;
+    void loadCaptureDetail(selected);
+  }, [loadCaptureDetail, reviewHandoffInFlight, selected?.id, selected?.remoteId]);
+
+  useEffect(() => {
+    if (!selected || reviewHandoffInFlight) return;
     void resolveCapturePlace(selected);
   }, [
     resolveCapturePlace,
+    reviewHandoffInFlight,
     selected?.id,
     selected?.remoteId,
     selected?.visitTarget?.name,
@@ -3111,7 +3078,7 @@ export default function App() {
     collectionListFade,
     collectionRowsFade,
     failedFavicons: faviconFailures,
-    handoffHiddenCaptureId: reviewHandoff && !reviewHandoff.releasing ? reviewHandoff.captureId : null,
+    handoffHiddenCaptureId: reviewHandoff ? reviewHandoff.captureId : null,
     homeFeedRevealPending,
     homeRowsFade,
     onAccountActionsPress: openAccountActions,
@@ -3208,10 +3175,16 @@ export default function App() {
 
   function renderCaptureReviewScreen(capture: Capture) {
     const activeReviewHandoff = reviewHandoff?.captureId === capture.id ? reviewHandoff : null;
-    const reviewHeroHiddenForHandoff = Boolean(
-      activeReviewHandoff &&
-        (activeReviewHandoff.direction === "opening" || activeReviewHandoff.direction === "closing") &&
-        !activeReviewHandoff.releasing
+    // Once the morph has arrived and the hero is ready, the overlay crossfades
+    // out — reveal the hero and chrome beneath it during that fade.
+    const reviewHandoffRevealing = Boolean(
+      activeReviewHandoff?.direction === "opening" &&
+        activeReviewHandoff.arrived &&
+        activeReviewHandoff.ready
+    );
+    const reviewHeroHiddenForHandoff = Boolean(activeReviewHandoff) && !reviewHandoffRevealing;
+    const animateReviewChromeForHandoff = Boolean(
+      activeReviewHandoff?.direction === "opening" && !reviewHandoffRevealing
     );
     return (
       <CaptureReviewScreen
@@ -3250,6 +3223,7 @@ export default function App() {
           keyboardHeight,
           noteInputRef,
           reviewMotion,
+          animateReviewChromeForHandoff,
           hideReviewHeroForHandoff: reviewHeroHiddenForHandoff,
           reviewHandoffKey: activeReviewHandoff?.key ?? null,
           selected: capture,
@@ -3374,7 +3348,7 @@ export default function App() {
           {renderCollectionsScreen({ includeChrome: active === "collections" && !overlayVisible })}
         </TopLevelPane>
         {overlay ? (
-          <ScreenOverlayFrame handoff={overlayHandoff}>
+          <ScreenOverlayFrame handoff={overlayHandoff} progress={reviewHandoffProgress}>
             {overlay}
           </ScreenOverlayFrame>
         ) : null}
@@ -3383,6 +3357,7 @@ export default function App() {
             handoff={reviewHandoff}
             onArrived={markReviewHandoffArrived}
             onDone={finishReviewHandoff}
+            progress={reviewHandoffProgress}
           />
         ) : null}
       </View>

@@ -370,7 +370,7 @@ const CollectionCollageTile = memo(function CollectionCollageTile({
     [cacheKey, imageUri]
   );
   if (imageUri) {
-    const imageRenderKey = cacheKey ? `${cacheKey}:${imageUri}` : imageUri;
+    const imageRenderKey = cacheKey || imageUri;
     return (
       <View style={[styles.collectionCollageTile, style]}>
         <Image

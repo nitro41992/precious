@@ -403,7 +403,7 @@ export function SourceMark({
   const faviconUri = host && !failedFavicons[host] ? sourceFaviconUrl(iconHost) || extractedFavicon : "";
   const imageUri = size === "row" && !imageUnavailable ? captureImageUrl(capture) : "";
   const imageCacheKey = size === "row" && imageUri ? captureImageCacheKey(capture) : "";
-  const imageRenderKey = imageLoadKey || (imageCacheKey ? `${imageCacheKey}:${imageUri}` : imageUri);
+  const imageRenderKey = imageLoadKey || imageCacheKey || imageUri;
   const imageSource = useMemo(
     () => imageCacheKey ? { uri: imageUri, cacheKey: imageCacheKey } : { uri: imageUri },
     [imageCacheKey, imageUri]

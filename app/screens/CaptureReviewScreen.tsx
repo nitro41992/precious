@@ -13,6 +13,15 @@ import {
   View
 } from "react-native";
 import { Image } from "expo-image";
+import Reanimated, {
+  Extrapolation,
+  cancelAnimation,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming
+} from "react-native-reanimated";
 import {
   ArrowLeft,
   Camera,
@@ -57,6 +66,7 @@ import {
   urlEvidenceMessage
 } from "../capturePresentation";
 import { ReminderEditorSheet } from "../sheets/ReminderEditorSheet";
+import { motionDuration, motionEasing, motionReduceMotion } from "../ui/motion";
 import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
 import { AiFieldInsight, AnimatedBottomSheet, MotionPressable, ProcessingStatusPill, SheetHeader, SourceMark } from "../ui/components";
@@ -79,6 +89,7 @@ type CaptureReviewScreenProps = {
     keyboardHeight: number;
     noteInputRef: RefObject<NativeTextInput | null>;
     reviewMotion: Animated.Value;
+    animateReviewChromeForHandoff: boolean;
     hideReviewHeroForHandoff: boolean;
     reviewHandoffKey: number | null;
     selected: Capture;
@@ -166,7 +177,7 @@ function CaptureImageViewer({
     translateX: 0,
     translateY: 0
   });
-  const imageRenderKey = cacheKey ? `${cacheKey}:${imageUrl}` : imageUrl;
+  const imageRenderKey = cacheKey || imageUrl;
   const imageSource = useMemo(
     () => cacheKey ? { uri: imageUrl, cacheKey } : { uri: imageUrl },
     [cacheKey, imageUrl]
@@ -323,6 +334,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     keyboardHeight,
     noteInputRef,
     reviewMotion,
+    animateReviewChromeForHandoff,
     hideReviewHeroForHandoff,
     reviewHandoffKey,
     selected,
@@ -389,9 +401,9 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       : selectedHeroImageUrl === selectedFullImageUrl
         ? selectedFullImageCacheKey
         : "";
-  const selectedHeroImageRenderKey = selectedHeroImageCacheKey
-    ? `${selectedHeroImageCacheKey}:${selectedHeroImageUrl}`
-    : selectedHeroImageUrl;
+  // Keyed by cache key only: refreshed signed URLs keep the same cache key, so
+  // the rendered image must not reset (and flash) when capture data reloads.
+  const selectedHeroImageRenderKey = selectedHeroImageCacheKey || selectedHeroImageUrl;
   const selectedHeroImageSource = useMemo(
     () => selectedHeroImageCacheKey
       ? { uri: selectedHeroImageUrl, cacheKey: selectedHeroImageCacheKey }
@@ -464,7 +476,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       ? Animated.add(captureKeyboardInset, noteKeyboardGap)
       : captureKeyboardInset;
   const showStatus = selectedStatus !== "ready";
-  const reviewScrollY = useRef(new Animated.Value(0)).current;
+  const reviewScrollY = useSharedValue(0);
   const reviewHeroFrameRef = useRef<View | null>(null);
   const reviewWindowWidth = Dimensions.get("window").width;
   const reviewMediaStatusInset = Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0;
@@ -473,17 +485,82 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const reviewExpandedMediaHeight = reviewBaseExpandedMediaHeight + reviewMediaStatusInset;
   const reviewSquareMediaHeight = reviewBaseSquareMediaHeight + reviewMediaStatusInset;
   const reviewAspectShiftDistance = Math.max(96, reviewExpandedMediaHeight - reviewSquareMediaHeight + 96);
-  const reviewMediaHeight = reviewScrollY.interpolate({
-    inputRange: [0, reviewAspectShiftDistance],
-    outputRange: [reviewExpandedMediaHeight, reviewSquareMediaHeight],
-    extrapolate: "clamp"
+  const reviewScrollHandler = useAnimatedScrollHandler((event) => {
+    reviewScrollY.value = event.contentOffset.y;
   });
-  const reviewMediaImageScale = reviewScrollY.interpolate({
-    inputRange: [0, reviewAspectShiftDistance],
-    outputRange: [REVIEW_MEDIA_EXPANDED_IMAGE_SCALE, REVIEW_MEDIA_COLLAPSED_IMAGE_SCALE],
-    extrapolate: "clamp"
-  });
+  const reviewMediaStageStyle = useAnimatedStyle(() => ({
+    height: interpolate(
+      reviewScrollY.value,
+      [0, reviewAspectShiftDistance],
+      [reviewExpandedMediaHeight, reviewSquareMediaHeight],
+      Extrapolation.CLAMP
+    )
+  }));
+  const reviewMediaImageStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        scale: interpolate(
+          reviewScrollY.value,
+          [0, reviewAspectShiftDistance],
+          [REVIEW_MEDIA_EXPANDED_IMAGE_SCALE, REVIEW_MEDIA_COLLAPSED_IMAGE_SCALE],
+          Extrapolation.CLAMP
+        )
+      }
+    ]
+  }));
   const hideHeroImageForHandoff = hideReviewHeroForHandoff;
+  const reviewDetailMotion = useSharedValue(animateReviewChromeForHandoff ? 0 : 1);
+  const reviewMediaChromeMotion = useSharedValue(animateReviewChromeForHandoff ? 0 : 1);
+  const reviewMediaChromeStyle = useAnimatedStyle(() => ({
+    opacity: reviewMediaChromeMotion.value,
+    transform: [
+      {
+        translateY: (1 - reviewMediaChromeMotion.value) * 3
+      }
+    ]
+  }));
+  const reviewDetailStyle = useAnimatedStyle(() => ({
+    opacity: reviewDetailMotion.value,
+    transform: [
+      {
+        translateY: (1 - reviewDetailMotion.value) * 8
+      }
+    ]
+  }));
+
+  const reviewHandoffWasActiveRef = useRef(animateReviewChromeForHandoff);
+
+  useEffect(() => {
+    const handoffWasActive = reviewHandoffWasActiveRef.current;
+    reviewHandoffWasActiveRef.current = animateReviewChromeForHandoff;
+    cancelAnimation(reviewDetailMotion);
+    cancelAnimation(reviewMediaChromeMotion);
+    if (animateReviewChromeForHandoff) {
+      // Handoff in flight: the detail plane rises alongside the hero morph,
+      // while the media chrome stays hidden (it sits under the morph overlay).
+      reviewMediaChromeMotion.value = 0;
+      reviewDetailMotion.value = 0;
+      reviewDetailMotion.value = withTiming(1, {
+        duration: motionDuration.enter,
+        easing: motionEasing.standard,
+        reduceMotion: motionReduceMotion
+      });
+      return;
+    }
+    reviewDetailMotion.value = 1;
+    if (handoffWasActive) {
+      // Handoff just finished: the overlay is gone, reveal the chrome on top
+      // of the now-live hero.
+      reviewMediaChromeMotion.value = 0;
+      reviewMediaChromeMotion.value = withTiming(1, {
+        duration: motionDuration.quick,
+        easing: motionEasing.standard,
+        reduceMotion: motionReduceMotion
+      });
+      return;
+    }
+    reviewMediaChromeMotion.value = 1;
+  }, [animateReviewChromeForHandoff, reviewDetailMotion, reviewMediaChromeMotion, selected.id]);
 
   function measureReviewHeroFrame(onMeasured: (rect: ReviewHandoffRect | null) => void) {
     const node = reviewHeroFrameRef.current;
@@ -528,7 +605,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   function markReviewImageLoaded(imageUri: string) {
     const trimmedUri = imageUri.trim();
     if (!trimmedUri) return;
-    if (trimmedUri === selectedHeroImageUrl) markReviewHandoffReady(reviewHandoffKey);
     setLoadedReviewImageUris((current) => {
       if (current.has(trimmedUri)) return current;
       const next = new Set(current);
@@ -602,22 +678,19 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       >
         <View style={styles.reviewShell}>
           <View style={styles.reviewScrollLayout}>
-            <Animated.ScrollView
+            <Reanimated.ScrollView
               style={styles.reviewDetailScroller}
               contentContainerStyle={[
                 styles.reviewDetailContent,
                 styles.reviewDetailContentNoFooter
               ]}
               keyboardShouldPersistTaps="handled"
-              onScroll={Animated.event(
-                [{ nativeEvent: { contentOffset: { y: reviewScrollY } } }],
-                { useNativeDriver: false }
-              )}
+              onScroll={reviewScrollHandler}
               scrollEventThrottle={16}
               showsHorizontalScrollIndicator={false}
               showsVerticalScrollIndicator={false}
             >
-              <Animated.View style={[styles.reviewMediaStage, { height: reviewMediaHeight }]}>
+              <Reanimated.View style={[styles.reviewMediaStage, reviewMediaStageStyle]}>
                 <MotionPressable
                   collapsable={false}
                   ref={reviewHeroFrameRef}
@@ -657,13 +730,11 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                 >
                   {selectedHeroImageUrl ? (
                     <>
-                      <Animated.View
+                      <Reanimated.View
                         style={[
                           styles.reviewMediaImageFrame,
-                          {
-                            opacity: hideHeroImageForHandoff ? 0 : 1,
-                            transform: [{ scale: reviewMediaImageScale }]
-                          }
+                          { opacity: hideHeroImageForHandoff ? 0 : 1 },
+                          reviewMediaImageStyle
                         ]}
                       >
                         <Image
@@ -676,14 +747,14 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                           source={selectedHeroImageSource}
                           style={styles.reviewMediaImage}
                         />
-                      </Animated.View>
-                      <View style={styles.reviewMediaOverlay}>
+                      </Reanimated.View>
+                      <Reanimated.View style={[styles.reviewMediaOverlay, reviewMediaChromeStyle]}>
                         <View style={styles.reviewMediaSourcePill}>
                           <Text numberOfLines={1} style={styles.reviewMediaSourceText}>
                             {captureSourceLabel(selected)}
                           </Text>
                         </View>
-                      </View>
+                      </Reanimated.View>
                     </>
                   ) : (
                     <View style={styles.reviewMediaFallbackContent}>
@@ -704,7 +775,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                     </View>
                   )}
                 </MotionPressable>
-                <View pointerEvents="box-none" style={styles.reviewMediaTopControls}>
+                <Reanimated.View pointerEvents="box-none" style={[styles.reviewMediaTopControls, reviewMediaChromeStyle]}>
                   <MotionPressable
                     accessibilityLabel="Back"
                     accessibilityRole="button"
@@ -745,9 +816,9 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                       <Trash2 color={colors.danger} size={21} weight="regular" />
                     </MotionPressable>
                   </View>
-                </View>
-              </Animated.View>
-                <View style={styles.reviewDetailPlane}>
+                </Reanimated.View>
+              </Reanimated.View>
+                <Reanimated.View style={[styles.reviewDetailPlane, reviewDetailStyle]}>
                   <View style={styles.reviewPrimaryBlock}>
                     <TextInput
                       multiline
@@ -926,8 +997,8 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                       <CaretRight color={colors.muted} size={18} weight="bold" />
                     </MotionPressable>
                   </View>
-                </View>
-              </Animated.ScrollView>
+                </Reanimated.View>
+              </Reanimated.ScrollView>
           </View>
         </View>
       </Animated.View>
