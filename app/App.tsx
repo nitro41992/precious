@@ -217,11 +217,6 @@ function ReviewHandoffOverlay({
     (resolve, wasResolving) => {
       if (!resolve || wasResolving) return;
       if (direction === "closing") {
-        // The morph landed on the identical, visible thumbnail — hide the
-        // copy right here on the UI thread. The React teardown commit can
-        // lag behind JS work without leaving a stale image floating over
-        // the list (it would stay fixed while the user scrolls).
-        fade.value = 0;
         runOnJS(onDone)(handoffKey);
         return;
       }
@@ -377,11 +372,15 @@ function TopLevelPane({
 const CAPTURE_LIST_PERF_PROPS = {
   initialNumToRender: 8,
   maxToRenderPerBatch: 8,
-  removeClippedSubviews: Platform.OS === "android",
+  // Clipping detaches/reattaches row views during scroll on Android, which
+  // blanks images mid-scroll and breaks thumbnail measurement for taps that
+  // land while the list settles. Rows are memoized; keeping them attached is
+  // cheaper than the churn.
+  removeClippedSubviews: false,
   showsHorizontalScrollIndicator: false,
   showsVerticalScrollIndicator: false,
   updateCellsBatchingPeriod: 40,
-  windowSize: 7
+  windowSize: 9
 };
 const COLLECTION_LIST_PERF_PROPS = {
   initialNumToRender: 12,
@@ -707,6 +706,7 @@ export default function App() {
       }
       setClosingReviewCapture(null);
       reviewHandoffRef.current = null;
+      captureThumbnailRefs.current[handoff.captureId]?.setNativeProps({ opacity: 1 });
       setReviewHandoff(null);
       selectCaptureRef.current(null);
     };
@@ -752,7 +752,10 @@ export default function App() {
       open();
       return;
     }
-    thumbnailNode.measureInWindow((x, y, width, height) => {
+    // Wait one frame before measuring: a tap that lands while the list is
+    // still settling would otherwise capture a rect the row has already
+    // scrolled away from, popping the morph copy in at the wrong spot.
+    requestAnimationFrame(() => thumbnailNode.measureInWindow((x, y, width, height) => {
       if (!width || !height) {
         open();
         return;
@@ -783,10 +786,11 @@ export default function App() {
         setReviewHandoff(nextHandoff);
         open();
       });
-    });
+    }));
   }, [
     normalizeHandoffWindowRect,
     reviewHandoffArrived,
+    reviewHandoffCancelled,
     reviewHandoffFade,
     reviewHandoffHeroReady,
     reviewHandoffProgress,
@@ -1485,6 +1489,9 @@ export default function App() {
     const current = reviewHandoffRef.current;
     if (!current || current.key !== key) return;
     reviewHandoffRef.current = null;
+    // Restore the destination thumbnail in the same task that unmounts the
+    // overlay: the morph copy is replaced by identical pixels, no double.
+    captureThumbnailRefs.current[current.captureId]?.setNativeProps({ opacity: 1 });
     setReviewHandoff(null);
     if (current.direction === "closing") {
       setClosingReviewCapture(null);
@@ -1575,6 +1582,10 @@ export default function App() {
       reviewHandoffTarget.value =
         origin && origin.captureId === capture.id ? origin.rect : null;
       reviewHandoffRef.current = nextHandoff;
+      // Hide the destination thumbnail for the flight so the returning image
+      // is the only copy on screen; finishReviewHandoff restores it the
+      // moment the morph lands on it.
+      captureThumbnailRefs.current[capture.id]?.setNativeProps({ opacity: 0 });
       // Keep the capture selected (drafts and all) while the return morph
       // runs — clearing it here visibly blanked the still-fading screen.
       // finishReviewHandoff deselects once the morph lands.
