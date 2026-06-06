@@ -119,11 +119,13 @@ import {
   mergeRemoteCaptures,
   normalizeCaptureLink,
   parseCaptureUrl,
+  preserveCaptureRowIdentities,
   reviewTargetsForCapture,
   sortCaptures
 } from "./captureLogic";
 
 const DELETE_UNDO_MS = 8000;
+const CAPTURES_FRESH_MS = 30_000;
 const REVIEW_HERO_EXPANDED_IMAGE_SCALE = 1.08;
 const REVIEW_HANDOFF_OPEN_MS = 220;
 const REVIEW_HANDOFF_CLOSE_MS = 180;
@@ -542,6 +544,7 @@ export default function App() {
   const [closingReviewCapture, setClosingReviewCapture] = useState<Capture | null>(null);
   const latestNoteRef = useRef("");
   const capturesRef = useRef<Capture[]>([]);
+  const activeCapturesFetchedAtRef = useRef(0);
   const archivedCapturesRef = useRef<Capture[]>([]);
   const activeCapturesLoadedOnceRef = useRef(false);
   const archivedCapturesLoadedRef = useRef(false);
@@ -769,19 +772,36 @@ export default function App() {
     setCaptureRowRevealStates(next);
   }, []);
 
+  // Re-signed asset URLs must not replace row identity: unchanged rows keep
+  // their objects (no image reloads, no re-renders), and a fully unchanged
+  // list keeps its array so poll/refresh cycles are render no-ops. Rows whose
+  // image previously failed do take the fresh URLs.
+  function captureNeedsFreshRow(capture: Capture) {
+    const loadKey = captureImageLoadKey(capture);
+    return Boolean(loadKey && captureImageLoadStatesRef.current[loadKey] === "failed");
+  }
+
   function commitCaptureRows(
     mode: CaptureListMode,
     updater: (current: Capture[]) => Capture[]
   ) {
     if (mode === "archived") {
       const current = capturesForListMode(archivedCapturesRef.current, "archived");
-      const next = capturesForListMode(updater(current), "archived");
+      const next = preserveCaptureRowIdentities(
+        current,
+        capturesForListMode(updater(current), "archived"),
+        captureNeedsFreshRow
+      );
       archivedCapturesRef.current = next;
       setArchivedCaptures(next);
       return next;
     }
     const current = capturesForListMode(capturesRef.current, "active");
-    const next = capturesForListMode(updater(current), "active");
+    const next = preserveCaptureRowIdentities(
+      current,
+      capturesForListMode(updater(current), "active"),
+      captureNeedsFreshRow
+    );
     capturesRef.current = next;
     setCaptures(next);
     return next;
@@ -1043,6 +1063,7 @@ export default function App() {
       } finally {
         loadingSetter(false);
         if (succeeded) phaseSetter("ready");
+        if (succeeded && mode === "active") activeCapturesFetchedAtRef.current = Date.now();
         if (mode === "active" && !options.append) setActiveCapturesLoadedOnce(true);
       }
       return;
@@ -1077,6 +1098,7 @@ export default function App() {
     } finally {
       loadingSetter(false);
       if (succeeded) phaseSetter("ready");
+      if (succeeded && mode === "active") activeCapturesFetchedAtRef.current = Date.now();
       if (mode === "active" && !options.append) setActiveCapturesLoadedOnce(true);
     }
   }, [authReady, config, session, withFreshAccessToken]);
@@ -2063,6 +2085,9 @@ export default function App() {
   useEffect(() => {
     const appSubscription = AppState.addEventListener("change", (state) => {
       if (state === "active") {
+        // Refetch on foreground only when the list is actually stale; a quick
+        // app switch should not repaint the feed.
+        if (Date.now() - activeCapturesFetchedAtRef.current < CAPTURES_FRESH_MS) return;
         void loadCaptures();
       } else if (nativeStore?.setReviewDrafts) {
         void nativeStore.setReviewDrafts(JSON.stringify(reviewDraftsByCapture));
@@ -2253,17 +2278,20 @@ export default function App() {
       urlEvidence: updatedCapture.urlEvidence || item.urlEvidence
     });
     for (const [collectionId, rows] of Object.entries(collectionCapturesCacheRef.current)) {
+      if (!rows.some(matchesCapture)) continue;
       collectionCapturesCacheRef.current[collectionId] = capturesForListMode(
         rows.map((item) => matchesCapture(item) ? preserveKnownImageFields(item) : item),
         "active"
       );
     }
-    setCaptures((current) =>
-      capturesForListMode(current.map((item) => (matchesCapture(item) ? preserveKnownImageFields(item) : item)), "active")
-    );
-    setArchivedCaptures((current) =>
-      capturesForListMode(current.map((item) => (matchesCapture(item) ? preserveKnownImageFields(item) : item)), "archived")
-    );
+    setCaptures((current) => {
+      if (!current.some(matchesCapture)) return current;
+      return capturesForListMode(current.map((item) => (matchesCapture(item) ? preserveKnownImageFields(item) : item)), "active");
+    });
+    setArchivedCaptures((current) => {
+      if (!current.some(matchesCapture)) return current;
+      return capturesForListMode(current.map((item) => (matchesCapture(item) ? preserveKnownImageFields(item) : item)), "archived");
+    });
     setCollectionCaptures((current) =>
       capturesForListMode(current.map((item) => (matchesCapture(item) ? preserveKnownImageFields(item) : item)), "active")
     );

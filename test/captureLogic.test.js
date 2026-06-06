@@ -787,3 +787,92 @@ test("normalizeIntent only accepts configured intent keys", () => {
   assert.equal(normalizeIntent("Remember", ["remember", "compare"]), "");
   assert.equal(normalizeIntent(undefined, ["remember"]), "");
 });
+
+test("preserveCaptureRowIdentities keeps object identity when only signed URLs rotate", () => {
+  const { preserveCaptureRowIdentities } = require("../app/captureLogic");
+  const previous = [
+    {
+      id: "c1",
+      title: "First",
+      imageAssetUrl: "https://cdn.example.com/img/c1.jpg?token=abc&exp=111",
+      imageAssetCacheKey: "asset-c1"
+    },
+    {
+      id: "c2",
+      title: "Second",
+      imageAssetUrl: "https://cdn.example.com/img/c2.jpg?token=def&exp=111",
+      imageAssetCacheKey: "asset-c2"
+    }
+  ];
+  const next = [
+    {
+      id: "c1",
+      title: "First",
+      imageAssetUrl: "https://cdn.example.com/img/c1.jpg?token=zzz&exp=999",
+      imageAssetCacheKey: "asset-c1"
+    },
+    {
+      id: "c2",
+      title: "Second",
+      imageAssetUrl: "https://cdn.example.com/img/c2.jpg?token=yyy&exp=999",
+      imageAssetCacheKey: "asset-c2"
+    }
+  ];
+  const merged = preserveCaptureRowIdentities(previous, next);
+  assert.equal(merged, previous);
+});
+
+test("preserveCaptureRowIdentities replaces only rows with real changes", () => {
+  const { preserveCaptureRowIdentities } = require("../app/captureLogic");
+  const previous = [
+    { id: "c1", title: "First", imageAssetUrl: "https://cdn.example.com/c1.jpg?sig=a" },
+    { id: "c2", title: "Second", imageAssetUrl: "https://cdn.example.com/c2.jpg?sig=a" }
+  ];
+  const next = [
+    { id: "c1", title: "First renamed", imageAssetUrl: "https://cdn.example.com/c1.jpg?sig=b" },
+    { id: "c2", title: "Second", imageAssetUrl: "https://cdn.example.com/c2.jpg?sig=b" }
+  ];
+  const merged = preserveCaptureRowIdentities(previous, next);
+  assert.notEqual(merged, previous);
+  assert.equal(merged[0], next[0]);
+  assert.equal(merged[1], previous[1]);
+});
+
+test("preserveCaptureRowIdentities treats different image paths as real changes", () => {
+  const { preserveCaptureRowIdentities } = require("../app/captureLogic");
+  const previous = [
+    { id: "c1", title: "First", imageAssetUrl: "https://cdn.example.com/v1/c1.jpg?sig=a" }
+  ];
+  const next = [
+    { id: "c1", title: "First", imageAssetUrl: "https://cdn.example.com/v2/c1.jpg?sig=a" }
+  ];
+  const merged = preserveCaptureRowIdentities(previous, next);
+  assert.equal(merged[0], next[0]);
+});
+
+test("preserveCaptureRowIdentities prefers fresh rows when asked (failed images)", () => {
+  const { preserveCaptureRowIdentities } = require("../app/captureLogic");
+  const previous = [
+    { id: "c1", title: "First", imageAssetUrl: "https://cdn.example.com/c1.jpg?sig=stale" }
+  ];
+  const next = [
+    { id: "c1", title: "First", imageAssetUrl: "https://cdn.example.com/c1.jpg?sig=fresh" }
+  ];
+  const merged = preserveCaptureRowIdentities(previous, next, () => true);
+  assert.equal(merged[0], next[0]);
+});
+
+test("preserveCaptureRowIdentities handles reordering and nested data", () => {
+  const { preserveCaptureRowIdentities } = require("../app/captureLogic");
+  const c1 = { id: "c1", reminders: [{ at: 1, note: "x" }], visitTarget: { name: "Cafe" } };
+  const c2 = { id: "c2", reminders: [], visitTarget: null };
+  const previous = [c1, c2];
+  const next = [
+    { id: "c2", reminders: [], visitTarget: null },
+    { id: "c1", reminders: [{ at: 1, note: "x" }], visitTarget: { name: "Cafe" } }
+  ];
+  const merged = preserveCaptureRowIdentities(previous, next);
+  assert.notEqual(merged, previous);
+  assert.equal(merged[0], c2);
+  assert.equal(merged[1], c1);
+});

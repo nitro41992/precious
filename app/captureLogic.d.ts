@@ -186,6 +186,11 @@ export function normalizeIntent(value: string | undefined, allowedIntents?: stri
 export function normalizeReviewTargets(value?: unknown): ReviewReason[];
 export function normalizeSearchQuery(value?: string | null): string;
 export function parseCaptureUrl(url?: string | null): string | null;
+export function preserveCaptureRowIdentities<T extends { id?: string }>(
+  previousCaptures: T[],
+  nextCaptures: T[],
+  shouldPreferNext?: (previous: T) => boolean
+): T[];
 export function reviewReasonLabel(reason: ReviewReason): string;
 export function reviewReasonSummary(reasons: ReviewReason[]): string;
 export function reviewReasons(capture: ReviewableCapture): ReviewReason[];

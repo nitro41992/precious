@@ -475,6 +475,58 @@ function mergeRemoteCaptures(remoteCaptures, currentCaptures, listMode, now = Da
   return sortCaptures(uniqueCapturesByIdentity([...remoteRows, ...freshLocalProcessing]));
 }
 
+function normalizedComparableValue(value) {
+  if (typeof value === "string" && /^https?:\/\//i.test(value)) {
+    // Signed asset URLs rotate their query string on every fetch; only the
+    // origin + path identify the underlying resource.
+    const queryStart = value.search(/[?#]/);
+    return queryStart === -1 ? value : value.slice(0, queryStart);
+  }
+  return value;
+}
+
+function capturesEquivalent(left, right) {
+  if (left === right) return true;
+  const normalizedLeft = normalizedComparableValue(left);
+  const normalizedRight = normalizedComparableValue(right);
+  if (normalizedLeft === normalizedRight) return true;
+  if (
+    typeof normalizedLeft !== "object" || normalizedLeft === null ||
+    typeof normalizedRight !== "object" || normalizedRight === null
+  ) {
+    return false;
+  }
+  if (Array.isArray(normalizedLeft) !== Array.isArray(normalizedRight)) return false;
+  const leftKeys = Object.keys(normalizedLeft);
+  const rightKeys = Object.keys(normalizedRight);
+  if (leftKeys.length !== rightKeys.length) return false;
+  return leftKeys.every((key) =>
+    Object.prototype.hasOwnProperty.call(normalizedRight, key) &&
+    capturesEquivalent(normalizedLeft[key], normalizedRight[key])
+  );
+}
+
+function preserveCaptureRowIdentities(previousCaptures, nextCaptures, shouldPreferNext) {
+  const previousById = new Map();
+  for (const capture of previousCaptures || []) {
+    if (capture?.id) previousById.set(capture.id, capture);
+  }
+  let allSamePosition = previousCaptures.length === nextCaptures.length;
+  const merged = nextCaptures.map((capture, index) => {
+    const previous = capture?.id ? previousById.get(capture.id) : undefined;
+    const keepPrevious =
+      previous &&
+      !(shouldPreferNext && shouldPreferNext(previous)) &&
+      capturesEquivalent(previous, capture);
+    const row = keepPrevious ? previous : capture;
+    if (allSamePosition && row !== previousCaptures[index]) allSamePosition = false;
+    return row;
+  });
+  // When nothing actually changed, hand back the previous array so React
+  // state updates bail out entirely (poll cycles become render no-ops).
+  return allSamePosition ? previousCaptures : merged;
+}
+
 function normalizeSearchQuery(value) {
   return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
 }
@@ -527,6 +579,7 @@ module.exports = {
   normalizeSearchQuery,
   normalizeReviewTargets,
   parseCaptureUrl,
+  preserveCaptureRowIdentities,
   reviewReasonLabel,
   reviewReasonSummary,
   reviewReasons,
