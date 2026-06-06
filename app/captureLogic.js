@@ -276,6 +276,8 @@ function collectionCollageSlots(previewCaptures, limit = 4) {
     const imageUri = String(
       capture.imageAssetUrl ||
         capture.image_asset_url ||
+        capture.sourcePreviewAssetUrl ||
+        capture.source_preview_asset_url ||
         capture.thumbnailUrl ||
         capture.thumbnail_url ||
         capture.urlEvidenceImageUrl ||

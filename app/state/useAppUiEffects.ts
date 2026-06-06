@@ -30,6 +30,7 @@ export function useAppUiEffects({
   closeCollectionComposer,
   closeCollectionPicker,
   closeNoteSheet,
+  collectionSearchOpen,
   collectionPickerOpen,
   collectionDraftDirty,
   collectionTitleInputRef,
@@ -53,6 +54,7 @@ export function useAppUiEffects({
   selectedId,
   setAccountSheetOpen,
   setCollectionDescription,
+  setCollectionSearchOpen,
   setCollectionTitle,
   setCollectionsOpen,
   setDraftIntent,
@@ -80,6 +82,7 @@ export function useAppUiEffects({
   closeCollectionComposer: (options?: { keyboardHidden?: boolean }) => void;
   closeCollectionPicker: () => void;
   closeNoteSheet: (options?: { keyboardHidden?: boolean }) => void;
+  collectionSearchOpen: boolean;
   collectionPickerOpen: boolean;
   collectionDraftDirty: boolean;
   collectionTitleInputRef: RefObject<TextInput | null>;
@@ -103,6 +106,7 @@ export function useAppUiEffects({
   selectedId: string | null;
   setAccountSheetOpen: (value: boolean) => void;
   setCollectionDescription: (value: string) => void;
+  setCollectionSearchOpen: (value: boolean) => void;
   setCollectionTitle: (value: string) => void;
   setCollectionsOpen: (value: boolean) => void;
   setDraftIntent: (value: string) => void;
@@ -154,6 +158,7 @@ export function useAppUiEffects({
       !selectedId &&
       !selectedCollectionId &&
       !searchOpen &&
+      !collectionSearchOpen &&
       !showCaptureComposer &&
       !showCollectionForm &&
       !noteSheetOpen &&
@@ -196,6 +201,10 @@ export function useAppUiEffects({
         setSearchOpen(false);
         return true;
       }
+      if (collectionSearchOpen) {
+        setCollectionSearchOpen(false);
+        return true;
+      }
       if (selectedId && captureReturnCollectionId) {
         selectCapture(null);
         selectCollection(captureReturnCollectionId);
@@ -221,6 +230,7 @@ export function useAppUiEffects({
     closeCollectionComposer,
     closeCollectionPicker,
     closeNoteSheet,
+    collectionSearchOpen,
     collectionPickerOpen,
     collectionsOpen,
     noteSheetOpen,
@@ -232,6 +242,7 @@ export function useAppUiEffects({
     selectedCollectionId,
     selectedId,
     setAccountSheetOpen,
+    setCollectionSearchOpen,
     setCollectionsOpen,
     setQuickIntentOpen,
     setReminderSheetOpen,
@@ -241,7 +252,7 @@ export function useAppUiEffects({
   ]);
 
   useEffect(() => {
-    if (!searchOpen) return;
+    if (!searchOpen && !collectionSearchOpen) return;
     searchMotion.setValue(0);
     Animated.spring(searchMotion, {
       damping: 22,
@@ -250,7 +261,7 @@ export function useAppUiEffects({
       toValue: 1,
       useNativeDriver: false
     }).start();
-  }, [searchMotion, searchOpen]);
+  }, [collectionSearchOpen, searchMotion, searchOpen]);
 
   useEffect(() => {
     if (!selectedId) return;

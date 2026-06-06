@@ -143,6 +143,8 @@ export function collectionCollageSlots<T extends {
   remoteId?: string;
   imageAssetUrl?: string;
   image_asset_url?: string;
+  sourcePreviewAssetUrl?: string;
+  source_preview_asset_url?: string;
   thumbnailUrl?: string;
   thumbnail_url?: string;
   urlEvidenceImageUrl?: string;

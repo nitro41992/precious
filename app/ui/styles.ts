@@ -741,6 +741,11 @@ export const styles = StyleSheet.create({
     paddingTop: 4,
     paddingHorizontal: 22
   },
+  collectionSearchResultsContent: {
+    paddingBottom: 180,
+    paddingHorizontal: 14,
+    paddingTop: 4
+  },
   searchEmptyContent: {
     flexGrow: 1,
     paddingHorizontal: 22,

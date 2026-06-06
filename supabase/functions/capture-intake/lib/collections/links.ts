@@ -1,5 +1,6 @@
 import { adminClient } from "../supabase.ts";
 import { CAPTURE_LIST_SELECT } from "../config.ts";
+import { SOURCE_PREVIEW_ROLE } from "../source-previews.ts";
 import {
   analysisRequiresReview,
   normalizedReviewAnalysis,
@@ -8,6 +9,7 @@ import {
 import { scheduleCaptureEmbeddingRefresh } from "./embeddings.ts";
 
 const COLLECTION_PREVIEW_CAPTURE_LIMIT = 4;
+const CAPTURE_MEDIA_ROLE = "capture_media";
 
 export {
   applyCollectionChoice,
@@ -110,6 +112,24 @@ function schemaCacheMissingPreviewColumn(error: unknown) {
     .test(message);
 }
 
+function imageAssetWithRole(
+  assets: unknown[],
+  role: typeof CAPTURE_MEDIA_ROLE | typeof SOURCE_PREVIEW_ROLE,
+) {
+  return assets.find((asset) => {
+    if (!asset || typeof asset !== "object") return false;
+    const record = asset as Record<string, unknown>;
+    const mimeType = String(record.mime_type || record.mimeType || "");
+    const storagePath = record.storage_path || record.storagePath;
+    const publicUrl = record.public_url || record.publicUrl;
+    const assetRole = String(record.asset_role || record.assetRole || CAPTURE_MEDIA_ROLE);
+    return assetRole === role &&
+      mimeType.startsWith("image/") &&
+      (typeof storagePath === "string" && storagePath.trim() ||
+        typeof publicUrl === "string" && publicUrl.trim());
+  }) as Record<string, unknown> | undefined;
+}
+
 function previewSnapshotItemFromCapture(
   row: Record<string, unknown>,
   linkedAt: unknown,
@@ -121,16 +141,13 @@ function previewSnapshotItemFromCapture(
     ? analysis.url_evidence as Record<string, unknown>
     : {};
   const assets = Array.isArray(row.capture_assets) ? row.capture_assets : [];
-  const imageAsset = assets.find((asset) => {
-    if (!asset || typeof asset !== "object") return false;
-    const record = asset as Record<string, unknown>;
-    const mimeType = String(record.mime_type || record.mimeType || "");
-    const storagePath = record.storage_path || record.storagePath;
-    const publicUrl = record.public_url || record.publicUrl;
-    return mimeType.startsWith("image/") &&
-      (typeof storagePath === "string" && storagePath.trim() ||
-        typeof publicUrl === "string" && publicUrl.trim());
-  }) as Record<string, unknown> | undefined;
+  const imageAsset = imageAssetWithRole(assets, CAPTURE_MEDIA_ROLE);
+  const sourcePreviewAsset = imageAssetWithRole(assets, SOURCE_PREVIEW_ROLE);
+  const urlEvidenceImageUrl = typeof urlEvidence.image_url === "string"
+    ? urlEvidence.image_url
+    : typeof urlEvidence.image === "string"
+      ? urlEvidence.image
+      : null;
   return {
     id: String(row.client_capture_key || row.id || ""),
     remote_id: String(row.id || row.client_capture_key || ""),
@@ -143,12 +160,13 @@ function previewSnapshotItemFromCapture(
     ),
     source_url: typeof row.source_url === "string" ? row.source_url : null,
     thumbnail_url: row.thumbnail_url || analysis.thumbnail_url ||
-      urlEvidence.image_url ||
       (analysis.resolved_place &&
           typeof analysis.resolved_place === "object"
         ? (analysis.resolved_place as Record<string, unknown>).thumbnail_url
         : null) ||
+      urlEvidenceImageUrl ||
       null,
+    url_evidence_image_url: urlEvidenceImageUrl,
     image_asset_storage_path: imageAsset
       ? imageAsset.storage_path || imageAsset.storagePath || null
       : null,
@@ -157,6 +175,15 @@ function previewSnapshotItemFromCapture(
       : null,
     image_asset_mime_type: imageAsset
       ? imageAsset.mime_type || imageAsset.mimeType || null
+      : null,
+    source_preview_asset_storage_path: sourcePreviewAsset
+      ? sourcePreviewAsset.storage_path || sourcePreviewAsset.storagePath || null
+      : null,
+    source_preview_asset_public_url: sourcePreviewAsset
+      ? sourcePreviewAsset.public_url || sourcePreviewAsset.publicUrl || null
+      : null,
+    source_preview_asset_mime_type: sourcePreviewAsset
+      ? sourcePreviewAsset.mime_type || sourcePreviewAsset.mimeType || null
       : null,
     linked_at: linkedAt || null,
   };
@@ -176,6 +203,12 @@ function previewSnapshotItemHasImage(item: Record<string, unknown>) {
     item.imageAssetPublicUrl,
     item.image_asset_url,
     item.imageAssetUrl,
+    item.source_preview_asset_storage_path,
+    item.sourcePreviewAssetStoragePath,
+    item.source_preview_asset_public_url,
+    item.sourcePreviewAssetPublicUrl,
+    item.source_preview_asset_url,
+    item.sourcePreviewAssetUrl,
   ].some((value) => typeof value === "string" && value.trim());
 }
 
@@ -309,6 +342,45 @@ async function collectionPreviewFromActiveLinks(
   return preview;
 }
 
+export async function refreshCollectionPreviewFromActiveLinks(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  collectionId: string,
+) {
+  const collection = await supabase
+    .from("collections")
+    .select("collection_preview_captures")
+    .eq("user_id", userId)
+    .eq("id", collectionId)
+    .maybeSingle();
+  if (collection.error) {
+    if (schemaCacheMissingPreviewColumn(collection.error)) return;
+    throw collection.error;
+  }
+
+  const existing = Array.isArray(collection.data?.collection_preview_captures)
+    ? collection.data.collection_preview_captures as Array<Record<string, unknown>>
+    : [];
+  const nextPreview = await collectionPreviewFromActiveLinks(
+    supabase,
+    userId,
+    collectionId,
+  );
+  if (JSON.stringify(existing) === JSON.stringify(nextPreview)) return;
+
+  const updated = await supabase
+    .from("collections")
+    .update({
+      collection_preview_captures: nextPreview,
+      collection_preview_updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId)
+    .eq("id", collectionId);
+  if (updated.error && !schemaCacheMissingPreviewColumn(updated.error)) {
+    throw updated.error;
+  }
+}
+
 export async function refreshCollectionPreviewAfterCaptureRemoval(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
@@ -338,22 +410,7 @@ export async function refreshCollectionPreviewAfterCaptureRemoval(
     return;
   }
 
-  const nextPreview = await collectionPreviewFromActiveLinks(
-    supabase,
-    userId,
-    collectionId,
-  );
-  const updated = await supabase
-    .from("collections")
-    .update({
-      collection_preview_captures: nextPreview,
-      collection_preview_updated_at: new Date().toISOString(),
-    })
-    .eq("user_id", userId)
-    .eq("id", collectionId);
-  if (updated.error && !schemaCacheMissingPreviewColumn(updated.error)) {
-    throw updated.error;
-  }
+  await refreshCollectionPreviewFromActiveLinks(supabase, userId, collectionId);
 }
 
 export async function linkCaptureToCollection(

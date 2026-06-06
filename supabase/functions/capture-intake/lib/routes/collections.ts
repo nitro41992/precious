@@ -1,8 +1,9 @@
 import { adminClient } from "../supabase.ts";
 import { COLLECTION_LIST_SELECT } from "../config.ts";
-import { boundedLimit } from "../common.ts";
+import { boundedLimit, isUuid } from "../common.ts";
 import { json } from "../http.ts";
 import { signedCaptureAssetUrl } from "../capture-records.ts";
+import { SOURCE_PREVIEW_ROLE } from "../source-previews.ts";
 import { activeCollectionCounts, collectionFromRow, linkCaptureToCollection } from "../collections/links.ts";
 import { scheduleCaptureEmbeddingRefresh, scheduleCollectionCaptureEmbeddingsRefresh, upsertCollectionEmbedding } from "../collections/embeddings.ts";
 import { markCollectionDecisionAccepted } from "../collections/review-decisions.ts";
@@ -15,12 +16,36 @@ async function signedCollectionPreviewCaptures(
   value: unknown,
 ) {
   if (!Array.isArray(value)) return [];
+  const previewItems = value
+    .filter((item): item is Record<string, unknown> =>
+      Boolean(item && typeof item === "object" && !Array.isArray(item))
+    )
+    .slice(0, 4);
+  const captureIds = previewItems
+    .map((item) => String(item.remote_id || item.remoteId || ""))
+    .filter((id) => isUuid(id));
+  const sourcePreviewByCaptureId = new Map<string, Record<string, unknown>>();
+  if (captureIds.length) {
+    const sourcePreviewAssets = await supabase
+      .from("capture_assets")
+      .select("capture_id,storage_path,public_url,mime_type")
+      .eq("user_id", userId)
+      .eq("asset_role", SOURCE_PREVIEW_ROLE)
+      .in("capture_id", captureIds);
+    if (sourcePreviewAssets.error) throw sourcePreviewAssets.error;
+    for (const asset of sourcePreviewAssets.data ?? []) {
+      const record = asset as Record<string, unknown>;
+      const captureId = String(record.capture_id || "");
+      const mimeType = String(record.mime_type || "");
+      const storagePath = String(record.storage_path || "");
+      const publicUrl = String(record.public_url || "");
+      if (captureId && mimeType.startsWith("image/") && (storagePath || publicUrl)) {
+        sourcePreviewByCaptureId.set(captureId, record);
+      }
+    }
+  }
   const items = await Promise.all(
-    value
-      .filter((item): item is Record<string, unknown> =>
-        Boolean(item && typeof item === "object" && !Array.isArray(item))
-      )
-      .slice(0, 4)
+    previewItems
       .map(async (item) => {
         const storagePath = typeof item.image_asset_storage_path === "string"
           ? item.image_asset_storage_path
@@ -34,17 +59,47 @@ async function signedCollectionPreviewCaptures(
         const signedUrl = storagePath && mimeType.startsWith("image/")
           ? await signedCaptureAssetUrl(supabase, storagePath, "thumb")
           : null;
+        const remoteId = String(item.remote_id || item.remoteId || "");
+        const sourcePreviewAsset = sourcePreviewByCaptureId.get(remoteId);
+        const sourcePreviewStoragePath = typeof item.source_preview_asset_storage_path === "string"
+          ? item.source_preview_asset_storage_path
+          : typeof sourcePreviewAsset?.storage_path === "string"
+            ? sourcePreviewAsset.storage_path
+            : "";
+        const sourcePreviewPublicUrl = typeof item.source_preview_asset_public_url === "string"
+          ? item.source_preview_asset_public_url
+          : typeof sourcePreviewAsset?.public_url === "string"
+            ? sourcePreviewAsset.public_url
+            : "";
+        const sourcePreviewMimeType = typeof item.source_preview_asset_mime_type === "string"
+          ? item.source_preview_asset_mime_type
+          : typeof sourcePreviewAsset?.mime_type === "string"
+            ? sourcePreviewAsset.mime_type
+            : "";
+        const signedSourcePreviewUrl = sourcePreviewStoragePath && sourcePreviewMimeType.startsWith("image/")
+          ? await signedCaptureAssetUrl(supabase, sourcePreviewStoragePath, "thumb")
+          : null;
+        const primaryImageUrl = signedUrl || publicUrl || signedSourcePreviewUrl || sourcePreviewPublicUrl || null;
+        const primaryCacheKey = storagePath
+          ? `${storagePath}:thumb`
+          : sourcePreviewStoragePath
+            ? `${sourcePreviewStoragePath}:thumb`
+            : null;
         return {
-          id: String(item.id || item.remote_id || ""),
-          remote_id: String(item.remote_id || item.id || ""),
+          id: String(item.id || remoteId || ""),
+          remote_id: String(remoteId || item.id || ""),
           title: String(item.title || item.source_url || "Untitled capture"),
           source_url: typeof item.source_url === "string"
             ? item.source_url
             : null,
           thumbnail_url: item.thumbnail_url || null,
-          image_asset_url: signedUrl || publicUrl || null,
-          image_asset_cache_key: storagePath ? `${storagePath}:thumb` : null,
+          url_evidence_image_url: item.url_evidence_image_url || null,
+          image_asset_url: primaryImageUrl,
+          image_asset_cache_key: primaryCacheKey,
           image_asset_mime_type: item.image_asset_mime_type || null,
+          source_preview_asset_url: signedSourcePreviewUrl || sourcePreviewPublicUrl || null,
+          source_preview_asset_cache_key: sourcePreviewStoragePath ? `${sourcePreviewStoragePath}:thumb` : null,
+          source_preview_asset_mime_type: sourcePreviewMimeType || null,
           linked_at: item.linked_at || null,
         };
       }),

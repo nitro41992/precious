@@ -2,12 +2,12 @@ import type { ReactElement, ReactNode } from "react";
 import { Pressable, StatusBar, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import type { FlashListProps, ListRenderItemInfo } from "@shopify/flash-list";
-import { Folder, Plus } from "phosphor-react-native";
+import { Folder, MagnifyingGlass as Search, Plus } from "phosphor-react-native";
 
 import type { Collection, LoadPhase } from "../types";
 import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
-import { HeaderContentGradient } from "../ui/components";
+import { HeaderContentGradient, IconButton } from "../ui/components";
 import { Text } from "../ui/typography";
 
 type CollectionsScreenProps = {
@@ -29,6 +29,7 @@ type CollectionsScreenProps = {
   actions: {
     loadMoreCollections: () => void;
     openCollectionComposer: () => void;
+    openCollectionSearch: () => void;
     renderCollection: (input: ListRenderItemInfo<Collection>) => ReactElement | null;
     renderCollectionSkeletonRows: (
       count?: number,
@@ -54,6 +55,7 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
   const {
     loadMoreCollections,
     openCollectionComposer,
+    openCollectionSearch,
     renderCollection,
     renderCollectionSkeletonRows,
     renderListLoadingFooter
@@ -74,6 +76,12 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
                 <Text style={styles.title}>Collections</Text>
               </View>
             </View>
+            <IconButton
+              Icon={Search}
+              label="Search collections"
+              onPress={openCollectionSearch}
+              testID="pc.collections.search"
+            />
           </View>
         </View>
         {collectionsError ? <Text style={styles.errorText}>{collectionsError}</Text> : null}

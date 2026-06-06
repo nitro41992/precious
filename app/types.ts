@@ -222,6 +222,9 @@ export type CollectionPreviewCapture = {
   imageAssetUrl?: string;
   imageAssetCacheKey?: string;
   imageAssetMimeType?: string;
+  sourcePreviewAssetUrl?: string;
+  sourcePreviewAssetCacheKey?: string;
+  sourcePreviewAssetMimeType?: string;
   linkedAt?: number | null;
 };
 

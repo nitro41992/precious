@@ -331,7 +331,7 @@ export function CollectionRow({
 }
 
 function collectionPreviewImageUrl(item: Collection["previewCaptures"][number]) {
-  return String(item.imageAssetUrl || item.thumbnailUrl || "").trim();
+  return String(item.imageAssetUrl || item.sourcePreviewAssetUrl || item.thumbnailUrl || "").trim();
 }
 
 function CollectionCollageTile({
@@ -344,7 +344,7 @@ function CollectionCollageTile({
   style?: any;
 }) {
   const imageUri = item ? collectionPreviewImageUrl(item) : "";
-  const cacheKey = item?.imageAssetCacheKey || imageUri;
+  const cacheKey = item?.imageAssetCacheKey || item?.sourcePreviewAssetCacheKey || imageUri;
   const host = hostFromUrl(item?.sourceUrl || "");
   if (imageUri) {
     const imageRenderKey = cacheKey ? `${cacheKey}:${imageUri}` : imageUri;
@@ -485,7 +485,14 @@ export function CollectionCard({
   onPress: () => void;
 }) {
   const collageKey = `${item.id}:${(item.previewCaptures || [])
-    .map((capture) => capture.imageAssetCacheKey || capture.imageAssetUrl || capture.thumbnailUrl || capture.id)
+    .map((capture) =>
+      capture.imageAssetCacheKey ||
+        capture.sourcePreviewAssetCacheKey ||
+        capture.imageAssetUrl ||
+        capture.sourcePreviewAssetUrl ||
+        capture.thumbnailUrl ||
+        capture.id
+    )
     .join("|")}`;
   return (
     <Animated.View style={[styles.collectionCardWrap, { opacity: collectionListFade }]}>

@@ -483,6 +483,9 @@ export function collectionPreviewCapturesFromRemote(value: unknown): CollectionP
       imageAssetUrl: nullableValue(item.image_asset_url || item.imageAssetUrl),
       imageAssetCacheKey: nullableValue(item.image_asset_cache_key || item.imageAssetCacheKey),
       imageAssetMimeType: nullableValue(item.image_asset_mime_type || item.imageAssetMimeType),
+      sourcePreviewAssetUrl: nullableValue(item.source_preview_asset_url || item.sourcePreviewAssetUrl),
+      sourcePreviewAssetCacheKey: nullableValue(item.source_preview_asset_cache_key || item.sourcePreviewAssetCacheKey),
+      sourcePreviewAssetMimeType: nullableValue(item.source_preview_asset_mime_type || item.sourcePreviewAssetMimeType),
       linkedAt: nullableTimestamp(item.linked_at || item.linkedAt)
     }))
     .filter((item) => item.id);

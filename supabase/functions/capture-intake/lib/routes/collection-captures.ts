@@ -2,6 +2,10 @@ import { adminClient } from "../supabase.ts";
 import { CAPTURE_LIST_SELECT } from "../config.ts";
 import { json } from "../http.ts";
 import { archivedFilter, withCaptureStates, withSignedCaptureAssetRows } from "../capture-records.ts";
+import { withLazySourcePreviewAssets } from "../source-previews.ts";
+import { refreshCollectionPreviewFromActiveLinks } from "../collections/links.ts";
+
+const COLLECTION_SOURCE_PREVIEW_MIRROR_LIMIT = 8;
 
 export async function handleCollectionCapturesResource(
   request: Request,
@@ -66,10 +70,17 @@ export async function handleCollectionCapturesResource(
       };
     })
     .filter(Boolean) as Array<Record<string, unknown>>;
-  const signedRows = await withSignedCaptureAssetRows(
+  const previewRows = await withLazySourcePreviewAssets(
     supabase,
     userId,
     captureRows,
+    COLLECTION_SOURCE_PREVIEW_MIRROR_LIMIT,
+  );
+  await refreshCollectionPreviewFromActiveLinks(supabase, userId, collectionId);
+  const signedRows = await withSignedCaptureAssetRows(
+    supabase,
+    userId,
+    previewRows,
   );
   return json({
     captures: withCaptureStates(signedRows).filter((row) =>

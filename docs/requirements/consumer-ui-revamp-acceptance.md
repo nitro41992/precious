@@ -111,6 +111,7 @@ Collection management must:
 - Be available from the bottom app bar as the top-level `Collections` destination, while remaining secondary to Recent Captures and Search.
 - Provide an independent `Collections` screen for creating, renaming, and managing Collections.
 - Open new Collection creation from the Collections floating `+` as a bottom sheet, not as an inline card.
+- Let the Collections top action open a focused full-screen Collection Search surface that returns Collections using the same redesigned Collection card grid.
 - Show existing Collections as a consumer-facing two-column grid of large cards, with useful metadata such as capture count or recent use when available.
 - Show each Collection card with a large thumbnail area: empty Collections and Collections with no usable thumbnail media use a quiet blank tonal thumbnail, while non-empty Collections show a collage of up to four recently linked Capture thumbnails when available. Captures without usable thumbnail media must not reserve collage slots or appear as source-domain/no-image placeholder tiles.
 - Load Collection card collage previews from persisted Collection metadata rather than fetching each Collection detail page or re-deriving recent links just to paint thumbnails.

@@ -1,7 +1,7 @@
 import "react-native-url-polyfill/auto";
 
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   AppState,
@@ -91,6 +91,7 @@ import {
 import { AuthScreen } from "./screens/AuthScreen";
 import { CaptureReviewScreen } from "./screens/CaptureReviewScreen";
 import { CollectionDetailScreen } from "./screens/CollectionDetailScreen";
+import { CollectionSearchScreen } from "./screens/CollectionSearchScreen";
 import { CollectionsScreen } from "./screens/CollectionsScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { SearchScreen } from "./screens/SearchScreen";
@@ -189,6 +190,14 @@ function hasPendingCollectionDecision(capture: Capture) {
   return pendingDecisionLinkedCollections(capture).length > 0;
 }
 
+function searchableCollectionText(collection: Collection) {
+  return [collection.title, collection.description]
+    .filter(Boolean)
+    .map(String)
+    .join(" ")
+    .toLowerCase();
+}
+
 function confirmedLinkedCollectionsForCapture(capture: Capture): LinkedCollection[] {
   if (!reviewTargetsForCapture(capture).includes("collections")) {
     return capture.linkedCollections || [];
@@ -217,6 +226,8 @@ export default function App() {
   const [capturesNextCursor, setCapturesNextCursor] = useState<string | null>(null);
   const [archivedCapturesNextCursor, setArchivedCapturesNextCursor] = useState<string | null>(null);
   const [collectionsOpen, setCollectionsOpen] = useState(false);
+  const [collectionSearchOpen, setCollectionSearchOpen] = useState(false);
+  const [collectionSearchQuery, setCollectionSearchQuery] = useState("");
   const [collectionsMode, setCollectionsMode] = useState<CollectionListMode>("active");
   const [collectionsLoading, setCollectionsLoading] = useState(false);
   const [collectionsLoadPhase, setCollectionsLoadPhase] = useState<LoadPhase>("idle");
@@ -501,6 +512,8 @@ export default function App() {
     setCaptureReturnCollectionId(null);
     setCaptureReviewOrigin(null);
     setCollectionsOpen(false);
+    setCollectionSearchOpen(false);
+    setCollectionSearchQuery("");
     setSearchOpen(false);
     setSearchQuery("");
     setSelectedId(null);
@@ -953,6 +966,7 @@ export default function App() {
     (captureId: string | null) => {
       if (!captureId) return;
       setSearchOpen(false);
+      setCollectionSearchOpen(false);
       setCollectionsOpen(false);
       setCaptureReturnCollectionId(null);
       setCaptureReviewOrigin("other");
@@ -982,6 +996,7 @@ export default function App() {
 
   const openCaptureFromCollection = useCallback((capture: Capture, collectionId: string) => {
     setSearchOpen(false);
+    setCollectionSearchOpen(false);
     setCollectionsOpen(false);
     setSelectedCollectionId(null);
     setCaptureReturnCollectionId(collectionId);
@@ -1005,6 +1020,7 @@ export default function App() {
     selectCapture(null);
     selectCollection(null);
     setCollectionsOpen(false);
+    setCollectionSearchOpen(false);
     setMessage("");
     setSearchOpen(true);
   }
@@ -1013,6 +1029,7 @@ export default function App() {
     selectCapture(null);
     selectCollection(null);
     setSearchOpen(false);
+    setCollectionSearchOpen(false);
     setCollectionsOpen(false);
     setAccountSheetOpen(false);
     setMessage("");
@@ -1109,6 +1126,7 @@ export default function App() {
     selectCapture(null);
     selectCollection(null);
     setSearchOpen(false);
+    setCollectionSearchOpen(false);
     setCollectionsOpen(true);
     setAccountSheetOpen(false);
     setMessage("");
@@ -1178,6 +1196,7 @@ export default function App() {
   async function openCollectionsScreen(mode: CollectionListMode = collectionsMode) {
     selectCapture(null);
     setSearchOpen(false);
+    setCollectionSearchOpen(false);
     setAccountSheetOpen(false);
     setCollectionsMode(mode);
     setCollectionsOpen(true);
@@ -1192,6 +1211,20 @@ export default function App() {
       const text = friendlyError(error, "Could not load collections.");
       setCollectionsError(text);
     }
+  }
+
+  function openCollectionSearch() {
+    selectCapture(null);
+    selectCollection(null);
+    setSearchOpen(false);
+    setAccountSheetOpen(false);
+    setCollectionSearchQuery("");
+    setCollectionSearchOpen(true);
+  }
+
+  function closeCollectionSearch() {
+    setCollectionSearchOpen(false);
+    setCollectionSearchQuery("");
   }
 
   function markFaviconFailed(host: string) {
@@ -1350,11 +1383,19 @@ export default function App() {
   const selectedCollection = selectedCollectionId
     ? collections.find((collection) => collection.id === selectedCollectionId) ?? null
     : null;
+  const collectionSearchResults = useMemo(() => {
+    const term = collectionSearchQuery.trim().toLowerCase();
+    const activeCollections = collections.filter((collection) => collection.status === "active");
+    if (!term) return [];
+    return activeCollections.filter((collection) => searchableCollectionText(collection).includes(term));
+  }, [collectionSearchQuery, collections]);
 
   useEffect(() => {
     prefetchImageUrls(
       collections.flatMap((collection) =>
-        (collection.previewCaptures || []).map((capture) => capture.imageAssetUrl || capture.thumbnailUrl || "")
+        (collection.previewCaptures || []).map((capture) =>
+          capture.imageAssetUrl || capture.sourcePreviewAssetUrl || capture.thumbnailUrl || ""
+        )
       )
     );
   }, [collections]);
@@ -1427,6 +1468,7 @@ export default function App() {
     closeCollectionComposer,
     closeCollectionPicker,
     closeNoteSheet,
+    collectionSearchOpen,
     collectionPickerOpen,
     collectionDraftDirty,
     collectionTitleInputRef,
@@ -1448,6 +1490,7 @@ export default function App() {
     selectedId,
     setAccountSheetOpen,
     setCollectionDescription,
+    setCollectionSearchOpen,
     setCollectionTitle,
     setCollectionsOpen,
     setDraftIntent,
@@ -1673,20 +1716,33 @@ export default function App() {
       item.remoteId === previousId ||
       item.id === updatedCapture.id ||
       Boolean(updatedCapture.remoteId && item.remoteId === updatedCapture.remoteId);
+    const preserveKnownImageFields = (item: Capture): Capture => ({
+      ...updatedCapture,
+      thumbnailUrl: updatedCapture.thumbnailUrl || item.thumbnailUrl,
+      imageAssetUrl: updatedCapture.imageAssetUrl || item.imageAssetUrl,
+      imageAssetCacheKey: updatedCapture.imageAssetCacheKey || item.imageAssetCacheKey,
+      imageAssetFullUrl: updatedCapture.imageAssetFullUrl || item.imageAssetFullUrl,
+      imageAssetFullCacheKey: updatedCapture.imageAssetFullCacheKey || item.imageAssetFullCacheKey,
+      imageAssetMimeType: updatedCapture.imageAssetMimeType || item.imageAssetMimeType,
+      sourcePreviewAssetUrl: updatedCapture.sourcePreviewAssetUrl || item.sourcePreviewAssetUrl,
+      sourcePreviewAssetCacheKey: updatedCapture.sourcePreviewAssetCacheKey || item.sourcePreviewAssetCacheKey,
+      sourcePreviewAssetMimeType: updatedCapture.sourcePreviewAssetMimeType || item.sourcePreviewAssetMimeType,
+      urlEvidence: updatedCapture.urlEvidence || item.urlEvidence
+    });
     for (const [collectionId, rows] of Object.entries(collectionCapturesCacheRef.current)) {
       collectionCapturesCacheRef.current[collectionId] = capturesForListMode(
-        rows.map((item) => matchesCapture(item) ? updatedCapture : item),
+        rows.map((item) => matchesCapture(item) ? preserveKnownImageFields(item) : item),
         "active"
       );
     }
     setCaptures((current) =>
-      capturesForListMode(current.map((item) => (matchesCapture(item) ? updatedCapture : item)), "active")
+      capturesForListMode(current.map((item) => (matchesCapture(item) ? preserveKnownImageFields(item) : item)), "active")
     );
     setArchivedCaptures((current) =>
-      capturesForListMode(current.map((item) => (matchesCapture(item) ? updatedCapture : item)), "archived")
+      capturesForListMode(current.map((item) => (matchesCapture(item) ? preserveKnownImageFields(item) : item)), "archived")
     );
     setCollectionCaptures((current) =>
-      capturesForListMode(current.map((item) => (matchesCapture(item) ? updatedCapture : item)), "active")
+      capturesForListMode(current.map((item) => (matchesCapture(item) ? preserveKnownImageFields(item) : item)), "active")
     );
   }
 
@@ -2511,7 +2567,10 @@ export default function App() {
     onCaptureImageLoadState: markCaptureImageLoadState,
     onCollectionComposerOpen: openCollectionComposer,
     onCollectionDescriptionChange: setCollectionDescription,
-    onCollectionPress: selectCollection,
+    onCollectionPress: (collectionId) => {
+      setCollectionSearchOpen(false);
+      selectCollection(collectionId);
+    },
     onCollectionTitleChange: setCollectionTitle,
     onCollectionsScreenOpen: (mode) => void openCollectionsScreen(mode),
     onFaviconFailure: markFaviconFailed,
@@ -2770,12 +2829,35 @@ export default function App() {
     );
   }
 
+  if (collectionSearchOpen) {
+    return (
+      <CollectionSearchScreen
+        actions={{
+          closeCollectionSearch,
+          renderCollection,
+          setCollectionSearchQuery
+        }}
+        data={{
+          appSheets: renderAppSheets(),
+          collectionSearchMotion: searchMotion,
+          collectionSearchResults,
+          listPerfProps: COLLECTION_LIST_PERF_PROPS,
+          toast: renderToast()
+        }}
+        state={{
+          collectionSearchQuery
+        }}
+      />
+    );
+  }
+
   if (collectionsOpen) {
     return (
       <CollectionsScreen
         actions={{
           loadMoreCollections,
           openCollectionComposer,
+          openCollectionSearch,
           renderCollection,
           renderCollectionSkeletonRows,
           renderListLoadingFooter
