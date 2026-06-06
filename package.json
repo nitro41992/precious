@@ -10,6 +10,7 @@
     "test:url-evidence": "deno test --config supabase/functions/capture-intake/deno.json --allow-env supabase/functions/capture-intake/*.test.ts",
     "test:e2e:maestro": "node scripts/run-maestro-smoke.mjs",
     "test:e2e:android-share": "node scripts/run-android-share-smoke.mjs",
+    "test:e2e:animations": "node scripts/run-android-animation-validation.mjs",
     "test:e2e:hosted": "npm run hosted:verify -- --allow-no-reminder && npm run hosted:verify:review",
     "start": "react-native start",
     "android:build": "node scripts/with-android-dev-env.mjs --cwd android ./gradlew :app:assembleDebug",
@@ -60,13 +61,19 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "^0.85.3",
+    "react-native-reanimated": "^4.4.1",
     "react-native-svg": "15.15.5",
-    "react-native-url-polyfill": "^3.0.0"
+    "react-native-url-polyfill": "^3.0.0",
+    "react-native-worklets": "^0.9.1"
   },
   "devDependencies": {
     "@react-native-community/cli": "^20.1.3",
     "@react-native/metro-config": "^0.85.3",
     "@types/react": "^19.2.15",
     "typescript": "^5.8.3"
+  },
+  "overrides": {
+    "postcss": "^8.5.10",
+    "uuid": "^11.1.1"
   }
 }

@@ -4,6 +4,10 @@ import { resolve } from "node:path";
 export function loadEnvFiles(paths = [
   ".env",
   ".env.local",
+  "../.env",
+  "../.env.local",
+  "../precious-captures/.env",
+  "../precious-captures/.env.local",
   "../apps/mobile/.env",
   "../apps/mobile/.env.local",
   "../apps/web/.env",

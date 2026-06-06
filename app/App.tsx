@@ -16,6 +16,14 @@ import {
 } from "react-native";
 import type { FlatList, TextInput } from "react-native";
 import { Image } from "expo-image";
+import Reanimated, {
+  Easing as ReanimatedEasing,
+  interpolate,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming
+} from "react-native-reanimated";
 
 import { AppSheets } from "./sheets/AppSheets";
 import { CollectionComposerSheet } from "./sheets/CollectionComposerSheet";
@@ -60,6 +68,7 @@ import {
 import {
   authCallbackPayload,
   captureDraftKey,
+  captureImageCacheKey,
   captureImageLoadKey,
   captureImageUrl,
   cleanedReviewDraft,
@@ -111,6 +120,204 @@ import {
 } from "./captureLogic";
 
 const DELETE_UNDO_MS = 8000;
+const REVIEW_HERO_EXPANDED_IMAGE_SCALE = 1.08;
+const REVIEW_HANDOFF_OPEN_MS = 220;
+const REVIEW_HANDOFF_CLOSE_MS = 180;
+const REVIEW_HANDOFF_RELEASE_MS = 140;
+
+type ReviewHandoffRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  radius: number;
+};
+
+type ReviewHandoffState = {
+  arrived: boolean;
+  cacheKey: string;
+  captureId: string;
+  direction: "opening" | "closing";
+  from: ReviewHandoffRect;
+  imageUrl: string;
+  key: number;
+  ready: boolean;
+  releasing: boolean;
+  returnCollectionId: string | null;
+  to: ReviewHandoffRect | null;
+};
+
+function reviewHeroTargetRect(windowWidth: number): ReviewHandoffRect {
+  const statusInset = Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0;
+  const baseHeight = Math.min(520, Math.max(360, windowWidth * 1.18));
+  return {
+    x: 8,
+    y: statusInset + 8,
+    width: Math.max(1, windowWidth - 16),
+    height: Math.max(220, baseHeight - 16),
+    radius: 18
+  };
+}
+
+function ReviewHandoffOverlay({
+  handoff,
+  onArrived,
+  onDone
+}: {
+  handoff: ReviewHandoffState;
+  onArrived: (key: number) => void;
+  onDone: (key: number) => void;
+}) {
+  const progress = useSharedValue(0);
+  const releaseProgress = useSharedValue(handoff.releasing ? 1 : 0);
+
+  useEffect(() => {
+    if (!handoff.to) return;
+    progress.value = 0;
+    progress.value = withTiming(
+      1,
+      {
+        duration: handoff.direction === "closing" ? REVIEW_HANDOFF_CLOSE_MS : REVIEW_HANDOFF_OPEN_MS,
+        easing: ReanimatedEasing.bezier(0.2, 0, 0, 1)
+      },
+      (finished) => {
+        if (finished) runOnJS(onArrived)(handoff.key);
+      }
+    );
+  }, [
+    handoff.direction,
+    handoff.key,
+    handoff.to?.height,
+    handoff.to?.width,
+    handoff.to?.x,
+    handoff.to?.y,
+    onArrived,
+    progress
+  ]);
+
+  useEffect(() => {
+    if (!handoff.arrived) return;
+    if (handoff.releasing) return;
+    if (handoff.direction === "opening" && !handoff.ready) return;
+    runOnJS(onDone)(handoff.key);
+  }, [handoff.arrived, handoff.direction, handoff.key, handoff.ready, handoff.releasing, onDone]);
+
+  useEffect(() => {
+    if (!handoff.releasing) {
+      releaseProgress.value = 0;
+      return;
+    }
+    releaseProgress.value = 0;
+    releaseProgress.value = withTiming(
+      1,
+      {
+        duration: REVIEW_HANDOFF_RELEASE_MS,
+        easing: ReanimatedEasing.out(ReanimatedEasing.cubic)
+      },
+      (finished) => {
+        if (finished) runOnJS(onDone)(handoff.key);
+      }
+    );
+  }, [handoff.key, handoff.releasing, onDone, releaseProgress]);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    const value = progress.value;
+    const target = handoff.to || handoff.from;
+    return {
+      borderRadius: interpolate(value, [0, 1], [handoff.from.radius, target.radius]),
+      height: interpolate(value, [0, 1], [handoff.from.height, target.height]),
+      left: interpolate(value, [0, 1], [handoff.from.x, target.x]),
+      opacity: interpolate(releaseProgress.value, [0, 1], [1, 0]),
+      top: interpolate(value, [0, 1], [handoff.from.y, target.y]),
+      width: interpolate(value, [0, 1], [handoff.from.width, target.width])
+    };
+  });
+
+  const imageAnimatedStyle = useAnimatedStyle(() => {
+    const fromScale = handoff.direction === "closing" ? REVIEW_HERO_EXPANDED_IMAGE_SCALE : 1;
+    const toScale = handoff.direction === "closing" ? 1 : REVIEW_HERO_EXPANDED_IMAGE_SCALE;
+    return {
+      transform: [
+        {
+          scale: interpolate(progress.value, [0, 1], [fromScale, toScale])
+        }
+      ]
+    };
+  });
+
+  const source = handoff.cacheKey
+    ? { uri: handoff.imageUrl, cacheKey: handoff.cacheKey }
+    : { uri: handoff.imageUrl };
+
+  return (
+    <Reanimated.View
+      pointerEvents="none"
+      style={[
+        styles.reviewHandoffOverlay,
+        {
+          height: handoff.from.height,
+          left: handoff.from.x,
+          top: handoff.from.y,
+          width: handoff.from.width
+        },
+        animatedStyle
+      ]}
+    >
+      <Reanimated.View style={[styles.reviewHandoffImage, imageAnimatedStyle]}>
+        <Image
+          cachePolicy="memory-disk"
+          contentFit="cover"
+          recyclingKey={`${handoff.captureId}:${handoff.cacheKey || handoff.imageUrl}`}
+          source={source}
+          style={styles.reviewHandoffImage}
+        />
+      </Reanimated.View>
+    </Reanimated.View>
+  );
+}
+
+function TopLevelPane({
+  active,
+  children,
+  direction
+}: {
+  active: boolean;
+  children: ReactNode;
+  direction: -1 | 1;
+}) {
+  const progress = useSharedValue(active ? 1 : 0);
+
+  useEffect(() => {
+    progress.value = withTiming(active ? 1 : 0, {
+      duration: 260,
+      easing: ReanimatedEasing.bezier(0.2, 0, 0, 1)
+    });
+  }, [active, progress]);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    const value = progress.value;
+    return {
+      opacity: interpolate(value, [0, 1], [0, 1]),
+      transform: [
+        { translateX: interpolate(value, [0, 1], [direction * 18, 0]) },
+        { scale: interpolate(value, [0, 1], [0.992, 1]) }
+      ]
+    };
+  });
+
+  return (
+    <Reanimated.View
+      pointerEvents={active ? "auto" : "none"}
+      style={[
+        styles.topLevelPane,
+        active ? styles.topLevelPaneActive : styles.topLevelPaneHidden,
+        animatedStyle
+      ]}
+    >
+      {children}
+    </Reanimated.View>
+  );
+}
 
 const CAPTURE_LIST_PERF_PROPS = {
   initialNumToRender: 8,
@@ -124,7 +331,7 @@ const CAPTURE_LIST_PERF_PROPS = {
 const COLLECTION_LIST_PERF_PROPS = {
   initialNumToRender: 12,
   maxToRenderPerBatch: 12,
-  removeClippedSubviews: Platform.OS === "android",
+  removeClippedSubviews: false,
   showsHorizontalScrollIndicator: false,
   showsVerticalScrollIndicator: false,
   updateCellsBatchingPeriod: 40,
@@ -283,6 +490,8 @@ export default function App() {
   const [captureRowRevealStates, setCaptureRowRevealStates] = useState<Record<string, boolean>>({});
   const [homeFeedReadyKey, setHomeFeedReadyKey] = useState("");
   const [collectionFeedReadyKey, setCollectionFeedReadyKey] = useState("");
+  const [collectionDetailCaptureMotionEnabled, setCollectionDetailCaptureMotionEnabled] = useState(true);
+  const [reviewHandoff, setReviewHandoff] = useState<ReviewHandoffState | null>(null);
   const latestNoteRef = useRef("");
   const capturesRef = useRef<Capture[]>([]);
   const archivedCapturesRef = useRef<Capture[]>([]);
@@ -307,17 +516,164 @@ export default function App() {
   const noteInputRef = useRef<TextInput>(null);
   const collectionTitleInputRef = useRef<TextInput>(null);
   const collectionDetailListRef = useRef<FlatList<Capture>>(null);
+  const captureThumbnailRefs = useRef<Record<string, View | null>>({});
+  const handoffRootRef = useRef<View | null>(null);
+  const reviewHeroRectRef = useRef<ReviewHandoffRect | null>(null);
+  const reviewHandoffRef = useRef<ReviewHandoffState | null>(null);
+  const reviewHandoffKeyRef = useRef(0);
   const lastKeyboardHeightRef = useRef(0);
   const captureComposerClosingRef = useRef(false);
   const captureImagePickerActiveRef = useRef(false);
   const searchMotion = useRef(new Animated.Value(0)).current;
-  const reviewMotion = useRef(new Animated.Value(0)).current;
+  const reviewMotion = useRef(new Animated.Value(1)).current;
   const captureComposerMotion = useRef(new Animated.Value(0)).current;
   const captureKeyboardInset = useRef(new Animated.Value(0)).current;
   const skeletonPulse = useRef(new Animated.Value(0)).current;
   const homeRowsFade = useRef(new Animated.Value(0)).current;
   const collectionRowsFade = useRef(new Animated.Value(0)).current;
   const collectionListFade = useRef(new Animated.Value(0)).current;
+
+  const registerCaptureThumbnailRef = useCallback((captureId: string, node: View | null) => {
+    if (node) {
+      captureThumbnailRefs.current[captureId] = node;
+      return;
+    }
+    delete captureThumbnailRefs.current[captureId];
+  }, []);
+
+  useEffect(() => {
+    reviewHandoffRef.current = reviewHandoff;
+  }, [reviewHandoff]);
+
+  const markReviewHandoffArrived = useCallback((key: number) => {
+    setReviewHandoff((current) => {
+      if (!current || current.key !== key || current.arrived) return current;
+      const next = { ...current, arrived: true };
+      reviewHandoffRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const markReviewHandoffReady = useCallback((key: number | null) => {
+    if (!key) return;
+    setReviewHandoff((current) => {
+      if (!current || current.key !== key || current.ready) return current;
+      const next = { ...current, ready: true };
+      reviewHandoffRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const normalizeHandoffWindowRect = useCallback((
+    rect: ReviewHandoffRect,
+    onMeasured: (normalized: ReviewHandoffRect) => void
+  ) => {
+    const root = handoffRootRef.current;
+    if (!root) {
+      onMeasured(rect);
+      return;
+    }
+    root.measureInWindow((rootX, rootY, rootWidth, rootHeight) => {
+      if (!rootWidth || !rootHeight) {
+        onMeasured(rect);
+        return;
+      }
+      onMeasured({
+        ...rect,
+        x: rect.x - rootX,
+        y: rect.y - rootY
+      });
+    });
+  }, []);
+
+  const markReviewHandoffTarget = useCallback((key: number | null, rect: ReviewHandoffRect) => {
+    normalizeHandoffWindowRect(rect, (normalized) => {
+      reviewHeroRectRef.current = normalized;
+      if (!key) return;
+      setReviewHandoff((current) => {
+        if (!current || current.key !== key || current.to) return current;
+        const next = { ...current, to: normalized };
+        reviewHandoffRef.current = next;
+        return next;
+      });
+    });
+  }, [normalizeHandoffWindowRect]);
+
+  const measureClosingHandoffTarget = useCallback((handoff: ReviewHandoffState) => {
+    const thumbnailNode = captureThumbnailRefs.current[handoff.captureId];
+    if (!thumbnailNode) {
+      reviewHandoffRef.current = null;
+      setReviewHandoff(null);
+      return;
+    }
+    thumbnailNode.measureInWindow((x, y, width, height) => {
+      if (!width || !height) {
+        reviewHandoffRef.current = null;
+        setReviewHandoff(null);
+        return;
+      }
+      normalizeHandoffWindowRect({ x, y, width, height, radius: 14 }, (normalized) => {
+        setReviewHandoff((current) => {
+          if (!current || current.key !== handoff.key || current.direction !== "closing" || current.to) return current;
+          const next = {
+            ...current,
+            to: normalized
+          };
+          reviewHandoffRef.current = next;
+          return next;
+        });
+      });
+    });
+  }, [normalizeHandoffWindowRect]);
+
+  useEffect(() => {
+    if (!reviewHandoff || reviewHandoff.direction !== "closing" || reviewHandoff.to || selectedId) return;
+    let innerFrame: number | null = null;
+    const frame = requestAnimationFrame(() => {
+      innerFrame = requestAnimationFrame(() => {
+        measureClosingHandoffTarget(reviewHandoff);
+      });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      if (innerFrame !== null) cancelAnimationFrame(innerFrame);
+    };
+  }, [measureClosingHandoffTarget, reviewHandoff, selectedId]);
+
+  const startReviewHandoff = useCallback((capture: Capture, open: () => void) => {
+    const imageUrl = captureImageUrl(capture);
+    const thumbnailNode = captureThumbnailRefs.current[capture.id];
+    if (!imageUrl || !thumbnailNode) {
+      open();
+      return;
+    }
+    thumbnailNode.measureInWindow((x, y, width, height) => {
+      if (!width || !height) {
+        open();
+        return;
+      }
+      normalizeHandoffWindowRect({ x, y, width, height, radius: 14 }, (from) => {
+        const key = reviewHandoffKeyRef.current + 1;
+        reviewHandoffKeyRef.current = key;
+        const nextHandoff: ReviewHandoffState = {
+          arrived: false,
+          cacheKey: captureImageCacheKey(capture),
+          captureId: capture.id,
+          direction: "opening",
+          from,
+          imageUrl,
+          key,
+          ready: false,
+          releasing: false,
+          returnCollectionId: null,
+          to: null
+        };
+        reviewHandoffRef.current = nextHandoff;
+        setReviewHandoff(nextHandoff);
+        open();
+      });
+    });
+  }, [normalizeHandoffWindowRect]);
 
   const markCaptureImageLoadState = useCallback((key: string, state: CaptureImageLoadState) => {
     const currentState = captureImageLoadStatesRef.current[key];
@@ -501,6 +857,7 @@ export default function App() {
     setCaptureRowRevealStates({});
     setHomeFeedReadyKey("");
     setCollectionFeedReadyKey("");
+    setCollectionDetailCaptureMotionEnabled(true);
     setCollectionCaptures([]);
     setCollectionCapturesForId(null);
     setCollectionCapturesNextCursor(null);
@@ -945,6 +1302,7 @@ export default function App() {
   const selectCollection = useCallback((collectionId: string | null) => {
     setCollectionFeedReadyKey("");
     if (collectionId) {
+      setCollectionDetailCaptureMotionEnabled(true);
       const collection = [...collectionsCacheRef.current.active, ...collectionsCacheRef.current.archived]
         .find((item) => item.id === collectionId);
       const hasNoCaptures = collection?.captureCount === 0;
@@ -961,6 +1319,48 @@ export default function App() {
     setCollectionDraftDirty(false);
     setShowCollectionForm(false);
   }, []);
+
+  const closeCollectionDetail = useCallback(() => {
+    setCollectionDetailCaptureMotionEnabled(false);
+    requestAnimationFrame(() => {
+      selectCollection(null);
+    });
+  }, [selectCollection]);
+
+  const resetCollectionDetailScroll = useCallback(() => {
+    requestAnimationFrame(() => {
+      collectionDetailListRef.current?.scrollToOffset({ animated: false, offset: 0 });
+    });
+    setTimeout(() => {
+      collectionDetailListRef.current?.scrollToOffset({ animated: false, offset: 0 });
+    }, 80);
+  }, []);
+
+  const returnToCollectionDetail = useCallback((collectionId: string) => {
+    selectCapture(null);
+    selectCollection(collectionId);
+    resetCollectionDetailScroll();
+  }, [resetCollectionDetailScroll, selectCapture, selectCollection]);
+
+  const finishReviewHandoff = useCallback((key: number) => {
+    const current = reviewHandoffRef.current;
+    if (!current || current.key !== key) return;
+    if (!current.releasing) {
+      const releasing = { ...current, releasing: true };
+      reviewHandoffRef.current = releasing;
+      setReviewHandoff(releasing);
+      return;
+    }
+    reviewHandoffRef.current = null;
+    setReviewHandoff(null);
+    if (current.direction === "closing") {
+      if (current.returnCollectionId) {
+        returnToCollectionDetail(current.returnCollectionId);
+        return;
+      }
+      selectCapture(null);
+    }
+  }, [returnToCollectionDetail, selectCapture]);
 
   const openCapture = useCallback(
     (captureId: string | null) => {
@@ -987,11 +1387,13 @@ export default function App() {
   );
 
   const openRecentCapture = useCallback(
-    (captureId: string) => {
-      openCapture(captureId);
-      setCaptureReviewOrigin("recent");
+    (capture: Capture) => {
+      startReviewHandoff(capture, () => {
+        openCapture(capture.id);
+        setCaptureReviewOrigin("recent");
+      });
     },
-    [openCapture]
+    [openCapture, startReviewHandoff]
   );
 
   const openCaptureFromCollection = useCallback((capture: Capture, collectionId: string) => {
@@ -1006,6 +1408,37 @@ export default function App() {
     setDraftNote(capture.note);
     setDraftIntent(normalizeIntent(capture.defaultIntent));
   }, [selectCapture]);
+
+  const startReviewCloseHandoff = useCallback((capture: Capture, fromRect?: ReviewHandoffRect | null) => {
+    const imageUrl = captureImageUrl(capture);
+    if (!imageUrl) return false;
+    const start = (from: ReviewHandoffRect) => {
+      const key = reviewHandoffKeyRef.current + 1;
+      reviewHandoffKeyRef.current = key;
+      const nextHandoff: ReviewHandoffState = {
+        arrived: false,
+        cacheKey: captureImageCacheKey(capture),
+        captureId: capture.id,
+        direction: "closing",
+        from,
+        imageUrl,
+        key,
+        ready: true,
+        releasing: false,
+        returnCollectionId: null,
+        to: null
+      };
+      reviewHandoffRef.current = nextHandoff;
+      setReviewHandoff(nextHandoff);
+      selectCapture(null);
+    };
+    if (fromRect) {
+      normalizeHandoffWindowRect(fromRect, start);
+    } else {
+      start(reviewHeroRectRef.current || reviewHeroTargetRect(Dimensions.get("window").width));
+    }
+    return true;
+  }, [normalizeHandoffWindowRect, selectCapture]);
 
   async function openCaptureUrl(url: string) {
     if (!url) return;
@@ -1205,6 +1638,7 @@ export default function App() {
     if (cached.length || collectionsLoadedOnceRef.current[mode]) setCollections(cached);
     else setCollections([]);
     setCollectionsError("");
+    if (cached.length || collectionsLoadedOnceRef.current[mode]) return;
     try {
       await loadCollections(mode);
     } catch (error) {
@@ -1383,6 +1817,26 @@ export default function App() {
   const selectedCollection = selectedCollectionId
     ? collections.find((collection) => collection.id === selectedCollectionId) ?? null
     : null;
+
+  const closeSelectedCapture = useCallback((fromRect?: ReviewHandoffRect | null) => {
+    if (!selected) return;
+    if (reviewHandoff) return;
+    if (captureReturnCollectionId) {
+      returnToCollectionDetail(captureReturnCollectionId);
+      return;
+    }
+    if (captureReviewOrigin === "recent" && startReviewCloseHandoff(selected, fromRect)) return;
+    selectCapture(null);
+  }, [
+    captureReturnCollectionId,
+    captureReviewOrigin,
+    returnToCollectionDetail,
+    reviewHandoff,
+    selectCapture,
+    selected,
+    startReviewCloseHandoff
+  ]);
+
   const collectionSearchResults = useMemo(() => {
     const term = collectionSearchQuery.trim().toLowerCase();
     const activeCollections = collections.filter((collection) => collection.status === "active");
@@ -1462,12 +1916,12 @@ export default function App() {
     captureImagePickerActiveRef,
     captureKeyboardInset,
     captureMode,
-    captureReturnCollectionId,
     captures,
     closeCaptureComposer,
     closeCollectionComposer,
     closeCollectionPicker,
     closeNoteSheet,
+    closeSelectedCapture,
     collectionSearchOpen,
     collectionPickerOpen,
     collectionDraftDirty,
@@ -2084,7 +2538,13 @@ export default function App() {
       active: collectionsCacheRef.current.active,
       archived: collectionsCacheRef.current.archived
     };
-    selectCollection(null);
+    setCollectionDetailCaptureMotionEnabled(false);
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        selectCollection(null);
+        requestAnimationFrame(() => resolve());
+      });
+    });
     collectionsCacheRef.current.active = collectionsCacheRef.current.active.filter((item) => item.id !== collection.id);
     collectionsCacheRef.current.archived = collectionsCacheRef.current.archived.filter((item) => item.id !== collection.id);
     setCollections((current) => current.filter((item) => item.id !== collection.id));
@@ -2430,8 +2890,11 @@ export default function App() {
       }
     };
     removeCaptureFromVisibleLists(capture);
-    selectCapture(null);
-    if (returnCollectionId) selectCollection(returnCollectionId);
+    if (returnCollectionId) {
+      returnToCollectionDetail(returnCollectionId);
+    } else {
+      selectCapture(null);
+    }
     setToast(null);
     showToast({
       text: "Capture deleted.",
@@ -2557,10 +3020,13 @@ export default function App() {
     captureImageLoadStates,
     captureRowRevealStates,
     capturesLoading,
+    collectionCaptureMotionEnabled: Boolean(selectedCollectionId && collectionDetailCaptureMotionEnabled && !reviewHandoff),
     collectionFeedRevealPending,
+    collectionItemMotionEnabled: Boolean(collectionsOpen && !selected && !selectedCollection && !collectionSearchOpen && !reviewHandoff),
     collectionListFade,
     collectionRowsFade,
     failedFavicons: faviconFailures,
+    handoffHiddenCaptureId: reviewHandoff && !reviewHandoff.releasing ? reviewHandoff.captureId : null,
     homeFeedRevealPending,
     homeRowsFade,
     onAccountActionsPress: openAccountActions,
@@ -2572,6 +3038,7 @@ export default function App() {
       selectCollection(collectionId);
     },
     onCollectionTitleChange: setCollectionTitle,
+    onCaptureThumbnailRef: registerCaptureThumbnailRef,
     onCollectionsScreenOpen: (mode) => void openCollectionsScreen(mode),
     onFaviconFailure: markFaviconFailed,
     onOpenCapture: openCapture,
@@ -2582,6 +3049,7 @@ export default function App() {
     onUnlinkCaptureFromCollection: (collectionId, capture) => void unlinkCaptureFromCollection(collectionId, capture),
     searchQuery,
     selectedCollection,
+    screenHandoffActive: Boolean(reviewHandoff),
     skeletonPulse,
     toast
   });
@@ -2654,12 +3122,21 @@ export default function App() {
   }
 
   function renderCaptureReviewScreen(capture: Capture) {
+    const activeReviewHandoff = reviewHandoff?.captureId === capture.id ? reviewHandoff : null;
+    const reviewOpeningHandoffPreparing = Boolean(
+      activeReviewHandoff &&
+        activeReviewHandoff.direction === "opening" &&
+        !activeReviewHandoff.releasing
+    );
     return (
       <CaptureReviewScreen
         actions={{
+          closeReview: closeSelectedCapture,
           closeNoteSheet,
           copySource,
           deleteCapture: () => void deleteSelectedCapture(),
+          markReviewHandoffReady,
+          markReviewHandoffTarget,
           markFaviconFailed,
           openCaptureUrl,
           openCollectionPicker: () => void openCollectionPicker(),
@@ -2670,8 +3147,6 @@ export default function App() {
           removeReminder: (reminderIndex) => void dismissReminder(reminderIndex),
           saveReminder: (draft, reminderIndex) => void saveReminder(draft, reminderIndex),
           savePurposeIntent: (intent) => void savePurposeIntent(intent),
-          selectCapture,
-          selectCollection,
           setDraftIntent,
           setDraftIntentDirty,
           setDraftNote,
@@ -2686,11 +3161,12 @@ export default function App() {
           appSheets: renderAppSheets(),
           captureComposerMotion,
           captureKeyboardInset,
-          captureReturnCollectionId,
           faviconFailures,
           keyboardHeight,
           noteInputRef,
           reviewMotion,
+          hideReviewHeroForHandoff: reviewOpeningHandoffPreparing,
+          reviewHandoffKey: activeReviewHandoff?.key ?? null,
           selected: capture,
           toast: renderToast("footer"),
           visitTargetMapCandidates,
@@ -2764,14 +3240,63 @@ export default function App() {
     );
   }
 
-  function renderRecentStack(overlay?: ReactNode) {
+  function renderCollectionsScreen({ includeChrome = true }: { includeChrome?: boolean } = {}) {
     return (
-      <View style={styles.screenStack}>
-        {renderHomeScreen({ includeChrome: !overlay })}
+      <CollectionsScreen
+        actions={{
+          loadMoreCollections,
+          openCollectionComposer,
+          openCollectionSearch,
+          renderCollection,
+          renderCollectionSkeletonRows,
+          renderListLoadingFooter
+        }}
+        data={{
+          appSheets: includeChrome ? renderAppSheets() : null,
+          bottomAppBar: includeChrome && !showCollectionForm ? renderBottomAppBar("collections") : null,
+          collectionComposerSheet: includeChrome ? renderCollectionComposerSheet() : null,
+          collections,
+          collectionsColdSkeletonVisible,
+          collectionsError,
+          collectionsListPerfProps: COLLECTION_LIST_PERF_PROPS,
+          toast: includeChrome ? renderToast(showCollectionForm ? "footer" : "bottomNav") : null
+        }}
+        state={{
+          collectionsLoadPhase,
+          collectionsLoading,
+          showCollectionForm
+        }}
+      />
+    );
+  }
+
+  function renderTopLevelStack({
+    active = "recent",
+    overlay = null
+  }: {
+    active?: "recent" | "collections";
+    overlay?: ReactNode;
+  } = {}) {
+    const overlayVisible = Boolean(overlay);
+    return (
+      <View collapsable={false} ref={handoffRootRef} style={styles.screenStack}>
+        <TopLevelPane active={active === "recent"} direction={-1}>
+          {renderHomeScreen({ includeChrome: active === "recent" && !overlayVisible })}
+        </TopLevelPane>
+        <TopLevelPane active={active === "collections"} direction={1}>
+          {renderCollectionsScreen({ includeChrome: active === "collections" && !overlayVisible })}
+        </TopLevelPane>
         {overlay ? (
           <View style={styles.screenOverlay}>
             {overlay}
           </View>
+        ) : null}
+        {reviewHandoff ? (
+          <ReviewHandoffOverlay
+            handoff={reviewHandoff}
+            onArrived={markReviewHandoffArrived}
+            onDone={finishReviewHandoff}
+          />
         ) : null}
       </View>
     );
@@ -2791,99 +3316,82 @@ export default function App() {
 
 
   if (selectedCollection) {
-    return (
-      <CollectionDetailScreen
-        actions={{
-          deleteCollection: (collection) => void deleteCollection(collection),
-          loadMoreCollectionCaptures,
-          renderCollectionCapture,
-          renderCollectionCaptureSkeletonRows,
-          renderListLoadingFooter,
-          retryLoadCollectionCaptures,
-          saveCollection: () => void saveCollection(),
-          scrollCollectionSettingsIntoView,
-          selectCollection,
-          setCollectionDescription,
-          setCollectionDraftDirty,
-          setCollectionTitle
-        }}
-        data={{
-          appSheets: renderAppSheets(),
-          collectionCaptures,
-          collectionCapturesColdSkeletonVisible,
-          collectionCapturesError,
-          collectionCapturesForId,
-          collectionCapturesLoadPhase,
-          collectionCapturesLoading,
-          collectionDetailListRef,
-          keyboardHeight,
-          listPerfProps: COLLECTION_CAPTURE_LIST_PERF_PROPS,
-          selectedCollection,
-          toast: renderToast("footer")
-        }}
-        state={{
-          collectionDescription,
-          collectionTitle
-        }}
-      />
-    );
+    return renderTopLevelStack({
+      active: "collections",
+      overlay: (
+        <CollectionDetailScreen
+          actions={{
+            closeCollectionDetail,
+            deleteCollection: (collection) => void deleteCollection(collection),
+            loadMoreCollectionCaptures,
+            renderCollectionCapture,
+            renderCollectionCaptureSkeletonRows,
+            renderListLoadingFooter,
+            retryLoadCollectionCaptures,
+            saveCollection: () => void saveCollection(),
+            scrollCollectionSettingsIntoView,
+            setCollectionDescription,
+            setCollectionDraftDirty,
+            setCollectionTitle
+          }}
+          data={{
+            appSheets: renderAppSheets(),
+            collectionCaptures,
+            collectionCapturesColdSkeletonVisible,
+            collectionCapturesError,
+            collectionCapturesForId,
+            collectionCapturesLoadPhase,
+            collectionCapturesLoading,
+            collectionDetailListRef,
+            keyboardHeight,
+            listPerfProps: COLLECTION_CAPTURE_LIST_PERF_PROPS,
+            selectedCollection,
+            toast: renderToast("footer")
+          }}
+          state={{
+            collectionDescription,
+            collectionTitle
+          }}
+        />
+      )
+    });
   }
 
   if (collectionSearchOpen) {
-    return (
-      <CollectionSearchScreen
-        actions={{
-          closeCollectionSearch,
-          renderCollection,
-          setCollectionSearchQuery
-        }}
-        data={{
-          appSheets: renderAppSheets(),
-          collectionSearchMotion: searchMotion,
-          collectionSearchResults,
-          listPerfProps: COLLECTION_LIST_PERF_PROPS,
-          toast: renderToast()
-        }}
-        state={{
-          collectionSearchQuery
-        }}
-      />
-    );
+    return renderTopLevelStack({
+      active: "collections",
+      overlay: (
+        <CollectionSearchScreen
+          actions={{
+            closeCollectionSearch,
+            renderCollection,
+            setCollectionSearchQuery
+          }}
+          data={{
+            appSheets: renderAppSheets(),
+            collectionSearchMotion: searchMotion,
+            collectionSearchResults,
+            listPerfProps: COLLECTION_LIST_PERF_PROPS,
+            toast: renderToast()
+          }}
+          state={{
+            collectionSearchQuery
+          }}
+        />
+      )
+    });
   }
 
   if (collectionsOpen) {
-    return (
-      <CollectionsScreen
-        actions={{
-          loadMoreCollections,
-          openCollectionComposer,
-          openCollectionSearch,
-          renderCollection,
-          renderCollectionSkeletonRows,
-          renderListLoadingFooter
-        }}
-        data={{
-          appSheets: renderAppSheets(),
-          bottomAppBar: !showCollectionForm ? renderBottomAppBar("collections") : null,
-          collectionComposerSheet: renderCollectionComposerSheet(),
-          collections,
-          collectionsColdSkeletonVisible,
-          collectionsError,
-          collectionsListPerfProps: COLLECTION_LIST_PERF_PROPS,
-          toast: renderToast(showCollectionForm ? "footer" : "bottomNav")
-        }}
-        state={{
-          collectionsLoadPhase,
-          collectionsLoading,
-          showCollectionForm
-        }}
-      />
-    );
+    return renderTopLevelStack({ active: "collections" });
   }
 
   if (selected) {
     if (captureReviewOrigin === "recent") {
-      return renderRecentStack(renderCaptureReviewScreen(selected));
+      return renderTopLevelStack({ active: "recent", overlay: renderCaptureReviewScreen(selected) });
+    }
+    if (captureReviewOrigin === "collection") {
+      return renderTopLevelStack({ active: "collections", overlay: renderCaptureReviewScreen(selected) });
     }
     return renderCaptureReviewScreen(selected);
   }
@@ -2924,33 +3432,36 @@ export default function App() {
     const emptyText = searchQuery.trim()
       ? "Try a place, product, source, collection, note, date, or why you saved it."
       : "Search looks across titles, notes, sources, collections, reminders, and saved details.";
-    return (
-      <SearchScreen
-        actions={{
-          closeSearch: () => setSearchOpen(false),
-          renderSearchProgress,
-          renderSearchResult,
-          setSearchQuery
-        }}
-        data={{
-          appSheets: renderAppSheets(),
-          emptyText,
-          emptyTitle,
-          listPerfProps: CAPTURE_LIST_PERF_PROPS,
-          searchIsLoading,
-          searchMotion,
-          searchProgressLabel,
-          searchResults,
-          toast: renderToast()
-        }}
-        state={{
-          remoteSearchActive,
-          searchQuery
-        }}
-      />
-    );
+    return renderTopLevelStack({
+      active: "recent",
+      overlay: (
+        <SearchScreen
+          actions={{
+            closeSearch: () => setSearchOpen(false),
+            renderSearchProgress,
+            renderSearchResult,
+            setSearchQuery
+          }}
+          data={{
+            appSheets: renderAppSheets(),
+            emptyText,
+            emptyTitle,
+            listPerfProps: CAPTURE_LIST_PERF_PROPS,
+            searchIsLoading,
+            searchMotion,
+            searchProgressLabel,
+            searchResults,
+            toast: renderToast()
+          }}
+          state={{
+            remoteSearchActive,
+            searchQuery
+          }}
+        />
+      )
+    });
   }
 
-  return renderRecentStack();
+  return renderTopLevelStack({ active: "recent" });
 
 }

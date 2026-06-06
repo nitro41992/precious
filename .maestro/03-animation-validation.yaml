@@ -1,0 +1,28 @@
+appId: com.preciouscaptures
+name: 03 animation validation
+---
+- assertVisible:
+    id: "pc.home.captures"
+- assertVisible:
+    text: "review-e2e-.*choice"
+- tapOn:
+    text: "review-e2e-.*choice"
+- assertVisible:
+    text: "review-e2e-.*choice"
+- tapOn: "Back"
+- assertVisible:
+    id: "pc.home.captures"
+- tapOn:
+    id: "pc.nav.collections"
+- assertVisible:
+    text: "review-e2e-.*Suggested"
+- tapOn:
+    text: "review-e2e-.*Suggested"
+- assertVisible:
+    id: "pc.collection.detail.title"
+- tapOn: "Back"
+- assertVisible: "Collections"
+- tapOn:
+    id: "pc.nav.recent"
+- assertVisible:
+    id: "pc.home.captures"

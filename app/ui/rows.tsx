@@ -1,7 +1,8 @@
-import { useMemo, useState, type ReactElement } from "react";
+import { memo, useCallback, useMemo, useState, type ReactElement } from "react";
 import { Animated, Pressable, View } from "react-native";
 import { Image } from "expo-image";
 import { CalendarBlank, Folder, ImageSquare, Lightbulb } from "phosphor-react-native";
+import Reanimated from "react-native-reanimated";
 
 import { collectionCollageSlots, hostFromUrl } from "../captureLogic";
 import type { Capture, CaptureImageLoadState, Collection } from "../types";
@@ -18,6 +19,7 @@ import {
 import { colors } from "./theme";
 import { styles } from "./styles";
 import { CollectionMeaningToken, MeaningToken, SkeletonRevealFrame, SourceMark, StatusGlyph } from "./components";
+import { cardEntering, cardExiting, cardLayout } from "./motion";
 import { Text } from "./typography";
 
 type SkeletonBlockRenderer = ({ style }: { style?: any }) => ReactElement;
@@ -29,6 +31,7 @@ type CaptureRowProps = {
   deferMediaUntilLoaded?: boolean;
   failedFavicons: Record<string, boolean>;
   forceSkeleton?: boolean;
+  hideThumbnail?: boolean;
   item: Capture;
   matchReason?: string;
   onFaviconFailure: (host: string) => void;
@@ -40,6 +43,7 @@ type CaptureRowProps = {
   SkeletonBlock: SkeletonBlockRenderer;
   surface?: "plain" | "card";
   testID?: string;
+  thumbnailRef?: (node: View | null) => void;
   trailingAction?: ReactElement | null;
 };
 
@@ -50,6 +54,7 @@ export function CaptureRow({
   deferMediaUntilLoaded = false,
   failedFavicons,
   forceSkeleton = false,
+  hideThumbnail = false,
   item,
   matchReason,
   onFaviconFailure,
@@ -61,6 +66,7 @@ export function CaptureRow({
   SkeletonBlock,
   surface = "plain",
   testID,
+  thumbnailRef,
   trailingAction = null
 }: CaptureRowProps) {
   const carded = surface === "card";
@@ -105,11 +111,13 @@ export function CaptureRow({
       ]}
       testID={testID}
     >
-      {ghostSourceMark ? (
-        <SkeletonBlock style={styles.loadingThumbnailMark} />
-      ) : (
-        sourceMark
-      )}
+      <View collapsable={false} ref={thumbnailRef} style={hideThumbnail && styles.handoffHiddenThumbnail}>
+        {ghostSourceMark ? (
+          <SkeletonBlock style={styles.loadingThumbnailMark} />
+        ) : (
+          sourceMark
+        )}
+      </View>
       <View style={styles.rowContent}>
         <View style={styles.rowTitleLine}>
           <Text numberOfLines={2} style={[styles.captureTitle, carded && styles.captureCardTitle]}>
@@ -334,7 +342,18 @@ function collectionPreviewImageUrl(item: Collection["previewCaptures"][number]) 
   return String(item.imageAssetUrl || item.sourcePreviewAssetUrl || item.thumbnailUrl || "").trim();
 }
 
-function CollectionCollageTile({
+function collectionPreviewSignature(collection: Collection) {
+  return (collection.previewCaptures || []).map((item) => [
+    item.id,
+    collectionPreviewImageUrl(item),
+    item.imageAssetCacheKey || "",
+    item.sourcePreviewAssetCacheKey || "",
+    item.title || "",
+    item.sourceUrl || ""
+  ].join("|")).join(";");
+}
+
+const CollectionCollageTile = memo(function CollectionCollageTile({
   item,
   onImageError,
   style
@@ -346,19 +365,22 @@ function CollectionCollageTile({
   const imageUri = item ? collectionPreviewImageUrl(item) : "";
   const cacheKey = item?.imageAssetCacheKey || item?.sourcePreviewAssetCacheKey || imageUri;
   const host = hostFromUrl(item?.sourceUrl || "");
+  const imageSource = useMemo(
+    () => cacheKey ? { uri: imageUri, cacheKey } : { uri: imageUri },
+    [cacheKey, imageUri]
+  );
   if (imageUri) {
     const imageRenderKey = cacheKey ? `${cacheKey}:${imageUri}` : imageUri;
     return (
       <View style={[styles.collectionCollageTile, style]}>
         <Image
-          key={imageRenderKey}
           accessibilityLabel={item?.title ? `Preview: ${item.title}` : "Collection preview"}
           cachePolicy="memory-disk"
           contentFit="cover"
           onError={() => onImageError?.(imageUri)}
-          source={cacheKey ? { uri: imageUri, cacheKey } : { uri: imageUri }}
+          recyclingKey={imageRenderKey}
+          source={imageSource}
           style={styles.collectionCollageImage}
-          transition={140}
         />
       </View>
     );
@@ -377,16 +399,19 @@ function CollectionCollageTile({
       ) : null}
     </View>
   );
-}
+});
 
-export function CollectionCollage({ collection }: { collection: Collection }) {
+export const CollectionCollage = memo(function CollectionCollage({ collection }: { collection: Collection }) {
   const [failedImageUris, setFailedImageUris] = useState<Set<string>>(() => new Set());
-  const allSlots = collectionCollageSlots(collection.previewCaptures || [], 4);
+  const allSlots = useMemo(
+    () => collectionCollageSlots(collection.previewCaptures || [], 4),
+    [collection.previewCaptures]
+  );
   const slots = useMemo(
     () => allSlots.filter((slot) => !failedImageUris.has(collectionPreviewImageUrl(slot))),
     [allSlots, failedImageUris]
   );
-  const handleImageError = (imageUri: string) => {
+  const handleImageError = useCallback((imageUri: string) => {
     const trimmedUri = imageUri.trim();
     if (!trimmedUri) return;
     setFailedImageUris((current) => {
@@ -395,7 +420,7 @@ export function CollectionCollage({ collection }: { collection: Collection }) {
       next.add(trimmedUri);
       return next;
     });
-  };
+  }, []);
   if (!slots.length) {
     return (
       <View
@@ -473,35 +498,35 @@ export function CollectionCollage({ collection }: { collection: Collection }) {
       </View>
     </View>
   );
-}
+}, (previous, next) => (
+  previous.collection.id === next.collection.id &&
+  previous.collection.captureCount === next.collection.captureCount &&
+  collectionPreviewSignature(previous.collection) === collectionPreviewSignature(next.collection)
+));
 
 export function CollectionCard({
-  collectionListFade,
   item,
+  motionEnabled,
   onPress
 }: {
   collectionListFade: Animated.Value;
   item: Collection;
+  motionEnabled: boolean;
   onPress: () => void;
 }) {
-  const collageKey = `${item.id}:${(item.previewCaptures || [])
-    .map((capture) =>
-      capture.imageAssetCacheKey ||
-        capture.sourcePreviewAssetCacheKey ||
-        capture.imageAssetUrl ||
-        capture.sourcePreviewAssetUrl ||
-        capture.thumbnailUrl ||
-        capture.id
-    )
-    .join("|")}`;
   return (
-    <Animated.View style={[styles.collectionCardWrap, { opacity: collectionListFade }]}>
+    <Reanimated.View
+      entering={motionEnabled ? cardEntering : undefined}
+      exiting={motionEnabled ? cardExiting : undefined}
+      layout={motionEnabled ? cardLayout : undefined}
+      style={styles.collectionCardWrap}
+    >
       <Pressable
         onPress={onPress}
         style={({ pressed }) => [styles.collectionCard, pressed && styles.collectionCardPressed]}
         testID={`pc.collection.card.${item.id}`}
       >
-        <CollectionCollage key={collageKey} collection={item} />
+        <CollectionCollage collection={item} />
         <View style={styles.collectionCardCopy}>
           <Text numberOfLines={2} style={styles.collectionCardTitle}>
             {item.title}
@@ -511,6 +536,6 @@ export function CollectionCard({
           </Text>
         </View>
       </Pressable>
-    </Animated.View>
+    </Reanimated.View>
   );
 }

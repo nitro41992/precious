@@ -48,6 +48,21 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.paper,
     flex: 1
   },
+  topLevelPane: {
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0
+  },
+  topLevelPaneActive: {
+    opacity: 1,
+    zIndex: 1
+  },
+  topLevelPaneHidden: {
+    opacity: 0,
+    zIndex: 0
+  },
   bootBlank: {
     backgroundColor: colors.paper,
     flex: 1
@@ -60,6 +75,16 @@ export const styles = StyleSheet.create({
     right: 0,
     top: 0,
     zIndex: 40
+  },
+  reviewHandoffOverlay: {
+    backgroundColor: colors.paper,
+    overflow: "hidden",
+    position: "absolute",
+    zIndex: 64
+  },
+  reviewHandoffImage: {
+    height: "100%",
+    width: "100%"
   },
   container: {
     flex: 1,
@@ -872,6 +897,9 @@ export const styles = StyleSheet.create({
   captureThumbnailImage: {
     height: "100%",
     width: "100%"
+  },
+  handoffHiddenThumbnail: {
+    opacity: 0
   },
   thumbnailRevealSlot: {
     height: 96,
@@ -3180,23 +3208,23 @@ export const styles = StyleSheet.create({
   },
   toast: {
     alignItems: "center",
-    backgroundColor: colors.surfaceContainerHighest,
-    borderRadius: 12,
+    backgroundColor: colors.reviewCard,
+    borderRadius: 16,
     bottom: Platform.OS === "android" ? 16 : 22,
-    elevation: 10,
+    elevation: 14,
     flexDirection: "row",
     gap: 10,
     justifyContent: "space-between",
     left: 22,
-    minHeight: 58,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
+    minHeight: 62,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     position: "absolute",
     right: 22,
     shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.28,
-    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.22,
+    shadowRadius: 22,
     zIndex: 32
   },
   toastAboveBottomNav: {
@@ -3207,10 +3235,10 @@ export const styles = StyleSheet.create({
   },
   toastIconWell: {
     alignItems: "center",
-    borderRadius: 8,
-    height: 34,
+    borderRadius: 10,
+    height: 36,
     justifyContent: "center",
-    width: 34
+    width: 36
   },
   toastIconWellNeutral: {
     backgroundColor: colors.surfaceContainerHigh
@@ -3233,13 +3261,14 @@ export const styles = StyleSheet.create({
   },
   toastActionButton: {
     alignItems: "center",
-    borderRadius: 8,
+    backgroundColor: colors.accentSoft,
+    borderRadius: 10,
     justifyContent: "center",
     minHeight: 36,
-    paddingHorizontal: 8
+    paddingHorizontal: 12
   },
   toastAction: {
-    color: colors.accentText,
+    color: colors.accentTextStrong,
     fontSize: 14,
     fontWeight: "800"
   },

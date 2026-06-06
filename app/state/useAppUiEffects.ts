@@ -24,12 +24,12 @@ export function useAppUiEffects({
   captureImagePickerActiveRef,
   captureKeyboardInset,
   captureMode,
-  captureReturnCollectionId,
   captures,
   closeCaptureComposer,
   closeCollectionComposer,
   closeCollectionPicker,
   closeNoteSheet,
+  closeSelectedCapture,
   collectionSearchOpen,
   collectionPickerOpen,
   collectionDraftDirty,
@@ -76,12 +76,12 @@ export function useAppUiEffects({
   captureImagePickerActiveRef: MutableRefObject<boolean>;
   captureKeyboardInset: Animated.Value;
   captureMode: CaptureComposerMode;
-  captureReturnCollectionId: string | null;
   captures: Capture[];
   closeCaptureComposer: (options?: { keyboardHidden?: boolean }) => void;
   closeCollectionComposer: (options?: { keyboardHidden?: boolean }) => void;
   closeCollectionPicker: () => void;
   closeNoteSheet: (options?: { keyboardHidden?: boolean }) => void;
+  closeSelectedCapture: () => void;
   collectionSearchOpen: boolean;
   collectionPickerOpen: boolean;
   collectionDraftDirty: boolean;
@@ -205,9 +205,8 @@ export function useAppUiEffects({
         setCollectionSearchOpen(false);
         return true;
       }
-      if (selectedId && captureReturnCollectionId) {
-        selectCapture(null);
-        selectCollection(captureReturnCollectionId);
+      if (selectedId) {
+        closeSelectedCapture();
         return true;
       }
       if (selectedCollectionId) {
@@ -225,11 +224,11 @@ export function useAppUiEffects({
     return () => subscription.remove();
   }, [
     accountSheetOpen,
-    captureReturnCollectionId,
     closeCaptureComposer,
     closeCollectionComposer,
     closeCollectionPicker,
     closeNoteSheet,
+    closeSelectedCapture,
     collectionSearchOpen,
     collectionPickerOpen,
     collectionsOpen,
@@ -265,14 +264,8 @@ export function useAppUiEffects({
 
   useEffect(() => {
     if (!selectedId) return;
-    reviewMotion.setValue(0);
-    Animated.spring(reviewMotion, {
-      damping: 22,
-      mass: 0.9,
-      stiffness: 260,
-      toValue: 1,
-      useNativeDriver: false
-    }).start();
+    reviewMotion.stopAnimation();
+    reviewMotion.setValue(1);
   }, [reviewMotion, selectedId]);
 
   useEffect(() => {

@@ -1219,7 +1219,7 @@ Deno.test("capture gate request uses supported low reasoning effort", () => {
       asset_mime_type: "image/jpeg",
       source_text: "Screenshot (Jun 5, 2026 3:20:59 AM)",
     }),
-    "gpt-5.4-mini",
+    "gpt-5-mini",
   ) as Record<string, any>;
   const userContent = request.input?.[1]?.content || [];
 

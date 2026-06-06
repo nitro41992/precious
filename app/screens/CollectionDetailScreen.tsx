@@ -37,6 +37,7 @@ type CollectionDetailScreenProps = {
     collectionTitle: string;
   };
   actions: {
+    closeCollectionDetail: () => void;
     deleteCollection: (collection: Collection) => void;
     loadMoreCollectionCaptures: () => void;
     renderCollectionCapture: (input: ListRenderItemInfo<Capture>) => ReactElement | null;
@@ -45,7 +46,6 @@ type CollectionDetailScreenProps = {
     retryLoadCollectionCaptures: () => void;
     saveCollection: () => void;
     scrollCollectionSettingsIntoView: () => void;
-    selectCollection: (id: string | null) => void;
     setCollectionDescription: (value: string) => void;
     setCollectionDraftDirty: (value: boolean) => void;
     setCollectionTitle: (value: string) => void;
@@ -69,6 +69,7 @@ export function CollectionDetailScreen({ actions, data, state }: CollectionDetai
   } = data;
   const { collectionDescription, collectionTitle } = state;
   const {
+    closeCollectionDetail,
     deleteCollection,
     loadMoreCollectionCaptures,
     renderCollectionCapture,
@@ -77,7 +78,6 @@ export function CollectionDetailScreen({ actions, data, state }: CollectionDetai
     retryLoadCollectionCaptures,
     saveCollection,
     scrollCollectionSettingsIntoView,
-    selectCollection,
     setCollectionDescription,
     setCollectionDraftDirty,
     setCollectionTitle
@@ -124,7 +124,7 @@ export function CollectionDetailScreen({ actions, data, state }: CollectionDetai
           ListHeaderComponent={
             <View style={styles.collectionDetailTop}>
               <View style={styles.detailHeader}>
-                <IconButton Icon={ArrowLeft} label="Back" onPress={() => selectCollection(null)} />
+                <IconButton Icon={ArrowLeft} label="Back" onPress={closeCollectionDetail} />
                 <Text style={styles.status}>{selectedCollection.captureCount} captures</Text>
               </View>
               <Text style={styles.kicker}>Collection</Text>

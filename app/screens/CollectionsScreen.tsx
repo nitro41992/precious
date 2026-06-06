@@ -61,8 +61,8 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
     renderListLoadingFooter
   } = actions;
 
-  const collectionsBlockingLoading = collectionsLoadPhase === "cold" && collectionsLoading && !collectionsError;
-  const visibleManagedCollections = collectionsBlockingLoading ? [] : collections;
+  const collectionsBlockingLoading = collectionsLoadPhase === "cold" && collectionsLoading && !collectionsError && !collections.length;
+  const visibleManagedCollections = collections;
 
   return (
     <View style={styles.edgeToEdgeSafe}>

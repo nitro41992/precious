@@ -104,15 +104,21 @@ Immediate next steps:
 - Keep prompt changes minimal. Add tests around repeated boundaries first, and
   only promote a compact rule when review confirms Precious should change.
 
-## GPT-5.4 Model Comparison, 2026-06-05
+## GPT-5 Mini Analyzer Default, 2026-06-06
+
+The current analyzer default is `gpt-5-mini`. Hosted `OPENAI_MODEL` settings
+should also be set to `gpt-5-mini`. Do not use a 5.4 model family for the main
+analyzer unless a new eval and product decision explicitly replace this
+default.
+
+## Superseded Model Comparison, 2026-06-05
 
 The combined 100-row `gold-v4` eval was rerun against the same manifest and
-reviewed labels to compare `gpt-5.4-mini` and `gpt-5.4-nano` with the current
+reviewed labels to compare an older mini model and nano model with the current
 pipeline. Both runs used runtime Exa evidence and the hosted Supabase Edge
-Function path. The hosted `OPENAI_MODEL` secret was restored to
-`gpt-5.4-mini` after the nano run.
+Function path.
 
-- `gpt-5.4-mini`:
+- Older mini:
   - Terminal outcome: 96.0%.
   - Save Intent: 87.5%.
   - Visit Target: 87.0%.
@@ -121,7 +127,7 @@ Function path. The hosted `OPENAI_MODEL` secret was restored to
   - Collection recall: 76.4%.
   - Collection exact: 63.0%.
   - Terminal states: 98 ready, 1 rejected, 1 failed.
-- `gpt-5.4-nano`:
+- Older nano:
   - Terminal outcome: 96.0%.
   - Save Intent: 77.1%.
   - Visit Target: 85.0%.
@@ -141,11 +147,11 @@ Function path. The hosted `OPENAI_MODEL` secret was restored to
 
 Interpretation:
 
-- `gpt-5.4-mini` is the best current default candidate for the main analyzer.
-  It improves Save Intent, Reminder, terminal outcome, Collection exact, and
-  especially Collection recall against the prior repaired run, while only
-  slightly trailing on Visit Target and Collection precision.
-- `gpt-5.4-nano` is not strong enough for the main extraction path on this
+- The older mini run is no longer the current analyzer default. It improved
+  Save Intent, Reminder, terminal outcome, Collection exact, and especially
+  Collection recall against the prior repaired run, while only slightly
+  trailing on Visit Target and Collection precision.
+- The older nano run is not strong enough for the main extraction path on this
   corpus. It matches mini on terminal outcome, but loses materially on Save
   Intent, Reminder, Visit Target, Collection exact, and Collection recall.
 - Nano may still be worth considering for cheaper bounded gates or preflight

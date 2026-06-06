@@ -7,7 +7,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.io.File
 
 class ShareProcessWorker(
   appContext: Context,
@@ -44,9 +43,6 @@ class ShareProcessWorker(
         pendingCapture?.optString("sourceUrl")
       )
     }
-    if (!assetPath.isNullOrBlank()) {
-      runCatching { File(assetPath).delete() }
-    }
     if (enrichment.optString("analysisMode") == "contextless_rejected") {
       PreciousCaptureStore.remove(applicationContext, captureId)
       CaptureNotifications.showNotSaved(
@@ -56,6 +52,7 @@ class ShareProcessWorker(
           "The link did not provide enough context. Add a screenshot or note and try again."
         }
       )
+      cleanupSharedAsset(assetPath, ShareAssetProcessingOutcome.TERMINAL)
       return Result.success()
     }
     val capture = PreciousCaptureStore.complete(applicationContext, captureId, enrichment)
@@ -77,6 +74,7 @@ class ShareProcessWorker(
         capture?.optString("analysisError")?.ifBlank { title } ?: title
       )
     }
+    cleanupSharedAsset(assetPath, ShareAssetProcessingOutcome.TERMINAL)
     return Result.success()
   }
 

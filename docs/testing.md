@@ -215,6 +215,45 @@ PRECIOUS_SHARE_SMOKE_URL_CORPUS=/path/to/urls.txt npm run test:e2e:android-share
 PRECIOUS_SHARE_SMOKE_SEED=regression-2026-05-28 npm run test:e2e:android-share
 ```
 
+## Android animation checks
+
+For motion polish, green tests are necessary but not sufficient. Validate
+Capture and Collection transitions on a physical phone or emulator with a short
+screen recording plus Android frame stats:
+
+```sh
+npm run android:build:hosted
+npm run android:install
+npm run test:e2e:animations
+```
+
+The animation runner creates or updates the E2E user, seeds review/collection
+fixtures, deep-link signs in through the app auth callback, drives Recents ->
+Capture Review -> Back and Collections -> Collection Detail -> Back with
+Maestro, and writes:
+
+- `/tmp/precious-motion.mp4`
+- `/tmp/precious-motion-framestats.txt`
+
+If `PRECIOUS_E2E_PASSWORD` is empty, the runner generates a temporary password
+in-process and does not write it back to `.env`.
+
+For a manual pass:
+
+```sh
+adb shell dumpsys gfxinfo com.preciouscaptures reset
+adb shell screenrecord --time-limit 20 /sdcard/precious-motion.mp4
+# Drive the flow manually or with Maestro: Recents -> Capture Review -> Back,
+# Collections -> Collection Detail -> Back, create/delete capture or collection.
+adb shell dumpsys gfxinfo com.preciouscaptures framestats > /tmp/precious-motion-framestats.txt
+adb pull /sdcard/precious-motion.mp4 /tmp/precious-motion.mp4
+```
+
+Inspect the MP4 for end-frame flashes, duplicate thumbnails, target-card
+jitter, and delayed returns. Use `framestats` to catch dropped-frame clusters,
+but treat the recording as the source of truth for whether the motion feels
+snappy and native.
+
 ## Phone handoff
 
 For normal phone handoff, do not install the debug APK. Use:

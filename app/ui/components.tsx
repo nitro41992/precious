@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import { Animated, Dimensions, Easing, Pressable, View } from "react-native";
 import { Image } from "expo-image";
 import { Check, ClockClockwise, Folder, Folders, Gear, HouseSimple, Info, Plus, Sparkle, Warning, X } from "phosphor-react-native";
+import Reanimated from "react-native-reanimated";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 import type {
@@ -32,6 +33,7 @@ import {
 } from "../capturePresentation";
 import { colors } from "./theme";
 import { styles } from "./styles";
+import { statusEntering, statusExiting, statusLayout, toastEntering, toastExiting, toastLayout } from "./motion";
 import { Text } from "./typography";
 
 export function AnimatedBottomSheet({
@@ -316,6 +318,10 @@ export function SourceMark({
   const imageUri = size === "row" && !imageUnavailable ? captureImageUrl(capture) : "";
   const imageCacheKey = size === "row" && imageUri ? captureImageCacheKey(capture) : "";
   const imageRenderKey = imageLoadKey || (imageCacheKey ? `${imageCacheKey}:${imageUri}` : imageUri);
+  const imageSource = useMemo(
+    () => imageCacheKey ? { uri: imageUri, cacheKey: imageCacheKey } : { uri: imageUri },
+    [imageCacheKey, imageUri]
+  );
   const Icon = sourceIconForCapture(capture);
   const itemStatus = displayStatus(capture);
   const metaScreenshotPill = size === "meta" && isScreenshotCapture(capture);
@@ -340,7 +346,6 @@ export function SourceMark({
         style={styles.captureThumbnailFrame}
       >
         <Image
-          key={imageRenderKey}
           cachePolicy="memory-disk"
           contentFit="cover"
           onError={() => {
@@ -349,7 +354,8 @@ export function SourceMark({
           onLoad={() => {
             if (imageLoadKey) onImageLoadState?.(imageLoadKey, "loaded");
           }}
-          source={imageCacheKey ? { uri: imageUri, cacheKey: imageCacheKey } : { uri: imageUri }}
+          recyclingKey={imageRenderKey}
+          source={imageSource}
           style={styles.captureThumbnailImage}
         />
       </View>
@@ -399,20 +405,31 @@ export function StatusGlyph({ capture }: { capture: Capture }) {
   const status = displayStatus(capture);
   if (status === "ready" || status === "needs_review") return null;
   if (status === "processing") {
-    return <ProcessingStatusPill label={captureStatusLabel(capture)} variant="row" />;
+    return (
+      <Reanimated.View
+        entering={statusEntering}
+        exiting={statusExiting}
+        layout={statusLayout}
+      >
+        <ProcessingStatusPill label={captureStatusLabel(capture)} variant="row" />
+      </Reanimated.View>
+    );
   }
   const label = captureStatusLabel(capture);
   return (
-    <View
+    <Reanimated.View
       accessibilityLabel={label}
       accessible
+      entering={statusEntering}
+      exiting={statusExiting}
+      layout={statusLayout}
       style={[
         styles.statusGlyph,
         status === "failed" && styles.statusGlyphFailed
       ]}
     >
       <Warning color={colors.danger} size={15} weight="fill" />
-    </View>
+    </Reanimated.View>
   );
 }
 
@@ -511,51 +528,37 @@ export function ToastHost({
   toast: ToastState | null;
   placement?: ToastPlacement;
 }) {
-  const animation = useRef(new Animated.Value(toast ? 1 : 0)).current;
   const [visibleToast, setVisibleToast] = useState<ToastState | null>(toast);
 
   useEffect(() => {
     if (toast) {
       setVisibleToast(toast);
-      animation.setValue(0);
-      Animated.timing(animation, {
-        duration: 190,
-        easing: Easing.out(Easing.cubic),
-        toValue: 1,
-        useNativeDriver: true
-      }).start();
       return;
     }
-    Animated.timing(animation, {
-      duration: 130,
-      easing: Easing.in(Easing.cubic),
-      toValue: 0,
-      useNativeDriver: true
-    }).start(({ finished }) => {
-      if (finished) setVisibleToast(null);
-    });
-  }, [animation, toast]);
+    setVisibleToast(null);
+  }, [toast]);
 
   if (!visibleToast) return null;
   const tone = visibleToast.tone || "neutral";
   const Icon = toastIconForTone(tone);
   const iconColor = toastColorForTone(tone);
-  const translateY = animation.interpolate({
-    inputRange: [0, 1],
-    outputRange: [18, 0]
-  });
+  const toastKey = [
+    visibleToast.text,
+    visibleToast.tone || "neutral",
+    visibleToast.actionLabel || ""
+  ].join(":");
   return (
-    <Animated.View
+    <Reanimated.View
       accessibilityLiveRegion="polite"
       accessibilityRole={tone === "error" || tone === "destructive" ? "alert" : "text"}
+      entering={toastEntering}
+      exiting={toastExiting}
+      key={toastKey}
+      layout={toastLayout}
       style={[
         styles.toast,
         placement === "bottomNav" && styles.toastAboveBottomNav,
-        placement === "footer" && styles.toastAboveFooter,
-        {
-          opacity: animation,
-          transform: [{ translateY }]
-        }
+        placement === "footer" && styles.toastAboveFooter
       ]}
     >
       <View style={[styles.toastIconWell, toastIconWellStyle(tone)]}>
@@ -574,7 +577,7 @@ export function ToastHost({
           </Text>
         </Pressable>
       ) : null}
-    </Animated.View>
+    </Reanimated.View>
   );
 }
 

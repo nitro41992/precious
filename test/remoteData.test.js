@@ -61,14 +61,14 @@ test("captureFromRemote keeps failed OpenAI rows failed even when provider is pr
     analysis_state: "failed",
     analysis_mode: "llm_failed",
     analysis_provider: "openai",
-    analysis_model: "gpt-5.4-mini",
+    analysis_model: "gpt-5-mini",
     analysis_error:
-      "Unsupported value: 'minimal' is not supported with the 'gpt-5.4-mini' model.",
+      "Unsupported value: 'minimal' is not supported with the 'gpt-5-mini' model.",
     analysis: null
   });
 
   assert.equal(capture.status, "failed");
-  assert.equal(capture.analysisError, "Unsupported value: 'minimal' is not supported with the 'gpt-5.4-mini' model.");
+  assert.equal(capture.analysisError, "Unsupported value: 'minimal' is not supported with the 'gpt-5-mini' model.");
   assert.equal(capture.analysisProvider, "openai");
 });
 
@@ -86,7 +86,7 @@ test("captureFromRemote still maps successful OpenAI rows to ready", () => {
     analysis_state: "ready",
     analysis_mode: "llm",
     analysis_provider: "openai",
-    analysis_model: "gpt-5.4-mini",
+    analysis_model: "gpt-5-mini",
     analysis: {
       summary: "A useful saved guide.",
       default_intent: {

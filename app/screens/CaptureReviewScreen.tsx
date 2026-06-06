@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, ReactNode, RefObject, SetStateAction } from "react";
 import type { GestureResponderEvent } from "react-native";
 import type { TextInput as NativeTextInput } from "react-native";
@@ -62,16 +62,25 @@ import { styles } from "../ui/styles";
 import { AiFieldInsight, AnimatedBottomSheet, ProcessingStatusPill, SheetHeader, SourceMark } from "../ui/components";
 import { Text, TextInput } from "../ui/typography";
 
+type ReviewHandoffRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  radius: number;
+};
+
 type CaptureReviewScreenProps = {
   data: {
     appSheets: ReactNode;
     captureComposerMotion: Animated.Value;
     captureKeyboardInset: Animated.Value;
-    captureReturnCollectionId: string | null;
     faviconFailures: Record<string, boolean>;
     keyboardHeight: number;
     noteInputRef: RefObject<NativeTextInput | null>;
     reviewMotion: Animated.Value;
+    hideReviewHeroForHandoff: boolean;
+    reviewHandoffKey: number | null;
     selected: Capture;
     toast: ReactNode;
     visitTargetMapCandidates: MapSearchCandidate[];
@@ -92,10 +101,13 @@ type CaptureReviewScreenProps = {
     reminderSheetOpen: boolean;
   };
   actions: {
+    closeReview: (fromRect?: ReviewHandoffRect | null) => void;
     closeNoteSheet: (options?: { keyboardHidden?: boolean }) => void;
     deleteCapture: () => void;
     copySource: () => void;
     markFaviconFailed: (host: string) => void;
+    markReviewHandoffReady: (key: number | null) => void;
+    markReviewHandoffTarget: (key: number | null, rect: ReviewHandoffRect) => void;
     openCaptureUrl: (url: string) => void;
     openCollectionPicker: () => void;
     openExternalUrl: (url: string) => void;
@@ -105,8 +117,6 @@ type CaptureReviewScreenProps = {
     removeReminder: (reminderIndex: number) => void;
     saveReminder: (draft: ReminderScheduleDraft, reminderIndex: number | null) => void;
     savePurposeIntent: (intent: string | null) => void;
-    selectCapture: (captureId: string | null) => void;
-    selectCollection: (collectionId: string | null) => void;
     setDraftIntent: (value: string) => void;
     setDraftIntentDirty: (value: boolean) => void;
     setDraftNote: (value: string) => void;
@@ -156,6 +166,11 @@ function CaptureImageViewer({
     translateX: 0,
     translateY: 0
   });
+  const imageRenderKey = cacheKey ? `${cacheKey}:${imageUrl}` : imageUrl;
+  const imageSource = useMemo(
+    () => cacheKey ? { uri: imageUrl, cacheKey } : { uri: imageUrl },
+    [cacheKey, imageUrl]
+  );
   const gestureRef = useRef({
     startDistance: 0,
     startScale: MIN_IMAGE_SCALE,
@@ -273,10 +288,10 @@ function CaptureImageViewer({
           >
             {imageUrl ? (
               <Image
-                key={cacheKey ? `${cacheKey}:${imageUrl}` : imageUrl}
                 cachePolicy="memory-disk"
                 contentFit="contain"
-                source={cacheKey ? { uri: imageUrl, cacheKey } : { uri: imageUrl }}
+                recyclingKey={imageRenderKey}
+                source={imageSource}
                 style={styles.imageViewerImage}
               />
             ) : null}
@@ -304,11 +319,12 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     appSheets,
     captureComposerMotion,
     captureKeyboardInset,
-    captureReturnCollectionId,
     faviconFailures,
     keyboardHeight,
     noteInputRef,
     reviewMotion,
+    hideReviewHeroForHandoff,
+    reviewHandoffKey,
     selected,
     toast,
     visitTargetMapCandidates,
@@ -328,10 +344,13 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     reminderSheetOpen
   } = state;
   const {
+    closeReview,
     closeNoteSheet,
     deleteCapture,
     copySource,
     markFaviconFailed,
+    markReviewHandoffReady,
+    markReviewHandoffTarget,
     openCaptureUrl,
     openCollectionPicker,
     openExternalUrl,
@@ -341,8 +360,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     removeReminder,
     saveReminder,
     savePurposeIntent,
-    selectCapture,
-    selectCollection,
     setDraftIntent,
     setDraftIntentDirty,
     setDraftNote,
@@ -363,15 +380,24 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const selectedFullImageUrl = captureFullImageUrl(selected);
   const selectedFullImageCacheKey = captureFullImageCacheKey(selected);
   const [failedReviewImageUris, setFailedReviewImageUris] = useState<Set<string>>(() => new Set());
-  const selectedHeroImageUrl = [selectedFullImageUrl, selectedImageUrl]
+  const selectedHeroImageUrl = [selectedImageUrl, selectedFullImageUrl]
     .filter((url, index, urls) => Boolean(url) && urls.indexOf(url) === index)
     .find((url) => !failedReviewImageUris.has(url)) || "";
   const selectedHeroImageCacheKey =
-    selectedHeroImageUrl === selectedFullImageUrl
-      ? selectedFullImageCacheKey
-      : selectedHeroImageUrl === selectedImageUrl
-        ? selectedImageCacheKey
+    selectedHeroImageUrl === selectedImageUrl
+      ? selectedImageCacheKey
+      : selectedHeroImageUrl === selectedFullImageUrl
+        ? selectedFullImageCacheKey
         : "";
+  const selectedHeroImageRenderKey = selectedHeroImageCacheKey
+    ? `${selectedHeroImageCacheKey}:${selectedHeroImageUrl}`
+    : selectedHeroImageUrl;
+  const selectedHeroImageSource = useMemo(
+    () => selectedHeroImageCacheKey
+      ? { uri: selectedHeroImageUrl, cacheKey: selectedHeroImageCacheKey }
+      : { uri: selectedHeroImageUrl },
+    [selectedHeroImageCacheKey, selectedHeroImageUrl]
+  );
   const [loadedReviewImageUris, setLoadedReviewImageUris] = useState<Set<string>>(() => new Set());
   const selectedMediaOpensImage = Boolean(selectedImageUrl && isImageCapture(selected));
   const selectedMediaPressEnabled = selectedMediaOpensImage || Boolean(selectedOpenUrl);
@@ -439,6 +465,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       : captureKeyboardInset;
   const showStatus = selectedStatus !== "ready";
   const reviewScrollY = useRef(new Animated.Value(0)).current;
+  const reviewHeroFrameRef = useRef<View | null>(null);
   const reviewWindowWidth = Dimensions.get("window").width;
   const reviewMediaStatusInset = Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0;
   const reviewBaseExpandedMediaHeight = Math.min(520, Math.max(360, reviewWindowWidth * 1.18));
@@ -456,6 +483,32 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     outputRange: [REVIEW_MEDIA_EXPANDED_IMAGE_SCALE, REVIEW_MEDIA_COLLAPSED_IMAGE_SCALE],
     extrapolate: "clamp"
   });
+  const hideHeroImageForHandoff = hideReviewHeroForHandoff;
+
+  function measureReviewHeroFrame(onMeasured: (rect: ReviewHandoffRect | null) => void) {
+    const node = reviewHeroFrameRef.current;
+    if (!node) {
+      onMeasured(null);
+      return;
+    }
+    node.measureInWindow((x, y, width, height) => {
+      if (!width || !height) {
+        onMeasured(null);
+        return;
+      }
+      onMeasured({ x, y, width, height, radius: 18 });
+    });
+  }
+
+  useLayoutEffect(() => {
+    if (!reviewHandoffKey || !selectedHeroImageUrl) return;
+    const frame = requestAnimationFrame(() => {
+      measureReviewHeroFrame((rect) => {
+        if (rect) markReviewHandoffTarget(reviewHandoffKey, rect);
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [reviewHandoffKey, selectedHeroImageUrl, reviewWindowWidth]);
 
   useEffect(() => {
     setImageViewerOpen(false);
@@ -464,9 +517,18 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     setLoadedReviewImageUris(new Set());
   }, [selected.id]);
 
+  useEffect(() => {
+    const imageUrls = Array.from(new Set([selectedImageUrl, selectedFullImageUrl].filter(Boolean)));
+    if (!imageUrls.length) return;
+    void Image.prefetch(imageUrls, "memory-disk").catch(() => {
+      // Display rendering still handles image failures; this only warms review media.
+    });
+  }, [selectedFullImageUrl, selectedImageUrl]);
+
   function markReviewImageLoaded(imageUri: string) {
     const trimmedUri = imageUri.trim();
     if (!trimmedUri) return;
+    if (trimmedUri === selectedHeroImageUrl) markReviewHandoffReady(reviewHandoffKey);
     setLoadedReviewImageUris((current) => {
       if (current.has(trimmedUri)) return current;
       const next = new Set(current);
@@ -475,9 +537,15 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     });
   }
 
+  function markReviewImageDisplayed(imageUri: string) {
+    const trimmedUri = imageUri.trim();
+    if (trimmedUri === selectedHeroImageUrl) markReviewHandoffReady(reviewHandoffKey);
+  }
+
   function markReviewImageFailed(imageUri: string) {
     const trimmedUri = imageUri.trim();
     if (!trimmedUri || loadedReviewImageUris.has(trimmedUri)) return;
+    if (trimmedUri === selectedHeroImageUrl) markReviewHandoffReady(reviewHandoffKey);
     setFailedReviewImageUris((current) => {
       if (current.has(trimmedUri)) return current;
       const next = new Set(current);
@@ -503,6 +571,14 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
 
   function closeImageViewer() {
     setImageViewerOpen(false);
+  }
+
+  function closeReviewFromHero() {
+    if (!selectedHeroImageUrl) {
+      closeReview();
+      return;
+    }
+    measureReviewHeroFrame((rect) => closeReview(rect));
   }
 
   return (
@@ -543,6 +619,8 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
             >
               <Animated.View style={[styles.reviewMediaStage, { height: reviewMediaHeight }]}>
                 <Pressable
+                  collapsable={false}
+                  ref={reviewHeroFrameRef}
                   accessibilityHint={
                     selectedMediaOpensImage
                       ? "Opens the full image viewer"
@@ -582,16 +660,20 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                       <Animated.View
                         style={[
                           styles.reviewMediaImageFrame,
-                          { transform: [{ scale: reviewMediaImageScale }] }
+                          {
+                            opacity: hideHeroImageForHandoff ? 0 : 1,
+                            transform: [{ scale: reviewMediaImageScale }]
+                          }
                         ]}
                       >
                         <Image
-                          key={selectedHeroImageCacheKey ? `${selectedHeroImageCacheKey}:${selectedHeroImageUrl}` : selectedHeroImageUrl}
                           cachePolicy="memory-disk"
                           contentFit="cover"
+                          onDisplay={() => markReviewImageDisplayed(selectedHeroImageUrl)}
                           onError={() => markReviewImageFailed(selectedHeroImageUrl)}
                           onLoad={() => markReviewImageLoaded(selectedHeroImageUrl)}
-                          source={selectedHeroImageCacheKey ? { uri: selectedHeroImageUrl, cacheKey: selectedHeroImageCacheKey } : { uri: selectedHeroImageUrl }}
+                          recyclingKey={selectedHeroImageRenderKey}
+                          source={selectedHeroImageSource}
                           style={styles.reviewMediaImage}
                         />
                       </Animated.View>
@@ -627,15 +709,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                     accessibilityLabel="Back"
                     accessibilityRole="button"
                     hitSlop={8}
-                    onPress={() => {
-                      if (captureReturnCollectionId) {
-                        const collectionId = captureReturnCollectionId;
-                        selectCapture(null);
-                        selectCollection(collectionId);
-                      } else {
-                        selectCapture(null);
-                      }
-                    }}
+                    onPress={closeReviewFromHero}
                     style={({ pressed }) => [styles.reviewMediaIconButton, pressed && styles.subtlePressed]}
                   >
                     <ArrowLeft color={colors.onMediaControlStrong} size={22} weight="regular" />

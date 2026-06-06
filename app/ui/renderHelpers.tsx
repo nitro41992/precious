@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import { Animated, Pressable, View } from "react-native";
 import { FolderMinus } from "phosphor-react-native";
+import Reanimated from "react-native-reanimated";
 
 import { matchReasonForCapture } from "../capturePresentation";
 import type {
@@ -25,6 +26,7 @@ import {
 } from "./rows";
 import { styles } from "./styles";
 import { colors } from "./theme";
+import { rowEntering, rowExiting, rowLayout } from "./motion";
 import { Text } from "./typography";
 
 export type AppRenderHelpersInput = {
@@ -32,10 +34,13 @@ export type AppRenderHelpersInput = {
   captureImageLoadStates: Record<string, CaptureImageLoadState>;
   captureRowRevealStates: Record<string, boolean>;
   capturesLoading: boolean;
+  collectionCaptureMotionEnabled: boolean;
   collectionFeedRevealPending: boolean;
+  collectionItemMotionEnabled: boolean;
   collectionListFade: Animated.Value;
   collectionRowsFade: Animated.Value;
   failedFavicons: Record<string, boolean>;
+  handoffHiddenCaptureId: string | null;
   homeFeedRevealPending: boolean;
   homeRowsFade: Animated.Value;
   onAccountActionsPress: () => void;
@@ -45,15 +50,17 @@ export type AppRenderHelpersInput = {
   onCollectionDescriptionChange: (value: string) => void;
   onCollectionPress: (collectionId: string) => void;
   onCollectionTitleChange: (value: string) => void;
+  onCaptureThumbnailRef: (captureId: string, node: View | null) => void;
   onFaviconFailure: (host: string) => void;
   onOpenCapture: (captureId: string) => void;
   onOpenCaptureFromCollection: (capture: Capture, collectionId: string) => void;
-  onOpenRecentCapture: (captureId: string) => void;
+  onOpenRecentCapture: (capture: Capture) => void;
   onRecentHomePress: () => void;
   onRecentComposerOpen: () => void;
   onUnlinkCaptureFromCollection: (collectionId: string, capture: Capture) => void;
   searchQuery: string;
   selectedCollection: Collection | null;
+  screenHandoffActive: boolean;
   skeletonPulse: Animated.Value;
   toast: ToastState | null;
 };
@@ -142,6 +149,8 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     deferFallbackIcon?: boolean;
     deferMediaUntilLoaded?: boolean;
     forceSkeleton?: boolean;
+    hideThumbnail?: boolean;
+    thumbnailRef?: (node: View | null) => void;
     trailingAction?: ReactElement | null;
   }) {
     return (
@@ -174,16 +183,23 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     );
 
     return (
-      <Animated.View style={[styles.collectionCaptureRow, { opacity: input.collectionRowsFade }]}>
-        {renderCaptureRow({
-          showCollectionToken: false,
-          item,
-          onPress: () => {
-            if (input.selectedCollection) input.onOpenCaptureFromCollection(item, input.selectedCollection.id);
-          },
-          trailingAction: removeAction
-        })}
-      </Animated.View>
+      <Reanimated.View
+        entering={input.collectionCaptureMotionEnabled ? rowEntering : undefined}
+        exiting={input.collectionCaptureMotionEnabled ? rowExiting : undefined}
+        layout={input.collectionCaptureMotionEnabled ? rowLayout : undefined}
+        style={styles.collectionCaptureRow}
+      >
+        <Animated.View style={{ opacity: input.collectionRowsFade }}>
+          {renderCaptureRow({
+            showCollectionToken: false,
+            item,
+            onPress: () => {
+              if (input.selectedCollection) input.onOpenCaptureFromCollection(item, input.selectedCollection.id);
+            },
+            trailingAction: removeAction
+          })}
+        </Animated.View>
+      </Reanimated.View>
     );
   }
 
@@ -192,6 +208,7 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
       <CollectionCard
         collectionListFade={input.collectionListFade}
         item={item}
+        motionEnabled={input.collectionItemMotionEnabled}
         onPress={() => {
           input.onCollectionPress(item.id);
           input.onCollectionTitleChange(item.title);
@@ -210,17 +227,25 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
       );
     }
     return (
-      <Animated.View style={{ opacity: input.homeRowsFade }}>
-        {renderCaptureRow({
-          item: item.capture,
-          deferFallbackIcon: input.capturesLoading && !input.activeCapturesLoadedOnce,
-          forceSkeleton: input.homeFeedRevealPending,
-          onPress: () => input.onOpenRecentCapture(item.capture.id),
-          showInlineSourceIcon: true,
-          surface: "card",
-          testID: `pc.capture.row.${item.capture.id}`
-        })}
-      </Animated.View>
+      <Reanimated.View
+        entering={input.screenHandoffActive ? undefined : rowEntering}
+        exiting={input.screenHandoffActive ? undefined : rowExiting}
+        layout={input.screenHandoffActive ? undefined : rowLayout}
+      >
+        <Animated.View style={{ opacity: input.homeRowsFade }}>
+          {renderCaptureRow({
+            item: item.capture,
+            deferFallbackIcon: input.capturesLoading && !input.activeCapturesLoadedOnce,
+            forceSkeleton: input.homeFeedRevealPending,
+            hideThumbnail: input.handoffHiddenCaptureId === item.capture.id,
+            onPress: () => input.onOpenRecentCapture(item.capture),
+            showInlineSourceIcon: true,
+            surface: "card",
+            testID: `pc.capture.row.${item.capture.id}`,
+            thumbnailRef: (node: View | null) => input.onCaptureThumbnailRef(item.capture.id, node)
+          })}
+        </Animated.View>
+      </Reanimated.View>
     );
   }
 
