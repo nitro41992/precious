@@ -272,6 +272,10 @@ export function SourceMark({
   const Icon = sourceIconForCapture(capture);
   const itemStatus = displayStatus(capture);
   const metaScreenshotPill = size === "meta" && isScreenshotCapture(capture);
+  const iconColor =
+    itemStatus === "ready" && isScreenshotCapture(capture)
+      ? colors.accentTextStrong
+      : sourceIconColor(itemStatus);
   const markStyle =
     size === "meta"
       ? styles.sourceMarkMeta
@@ -331,7 +335,7 @@ export function SourceMark({
           }
         />
       ) : (
-        <Icon color={sourceIconColor(itemStatus)} size={iconSize} weight={itemStatus === "ready" ? "regular" : "bold"} />
+        <Icon color={iconColor} size={iconSize} weight={itemStatus === "ready" ? "regular" : "bold"} />
       )}
     </View>
   );

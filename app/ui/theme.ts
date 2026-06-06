@@ -34,10 +34,11 @@ export const colors = {
 
   /**
    * Primary accent
-   * Lime stays bright across primary accent fills, icons, and labels.
+   * Lime stays bright for fills and small accents; longer inline text uses a darker green.
    */
   accent: "#C5D86D",
   accentText: "#C5D86D",
+  accentTextStrong: "#556600",
   accentSoft: "#EEF7C6",
   accentLine: "#C5D86D",
   accentPressed: "#9FB348",

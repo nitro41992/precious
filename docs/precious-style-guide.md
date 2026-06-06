@@ -89,7 +89,8 @@ Use the warm light palette as the default app base and add state colors sparingl
 | Line | `#E6D8BB` | Legacy subtle line token; avoid visible hairline borders and dividers |
 | Line Strong | `#D0BE95` | Legacy stronger line token; use only when tonal separation is insufficient |
 | Accent | `#C5D86D` | Lime primary fill for primary actions, ready states, and selected positive controls |
-| Accent Text | `#C5D86D` | Bright lime text and icon tint for primary emphasis |
+| Accent Text | `#C5D86D` | Bright lime icon tint and very small primary emphasis |
+| Accent Text Strong | `#556600` | Darker green for readable inline values on warm paper |
 | Accent Soft | `#EEF7C6` | Selected chip or successful quiet state |
 | Accent Line | `#C5D86D` | Bright lime borders or small primary accent lines |
 | Accent Pressed | `#9FB348` | Darker lime pressed fill for Recent Capture row/card feedback and primary actions |
@@ -296,15 +297,17 @@ Use:
 
 Capture Review should read like a polished saved-memory edit surface, not a form. Use one compact editable sentence for Purpose, Collection, and Later, such as `Saved as [Purpose] in [Collection] for [Later]`: Purpose can be the primary semantic handle, while Collection and Later read as quieter inline metadata. Save Intent is optional; when no concrete action is inferable, show `Add intent` without creating review work.
 
+Source host, timestamp, and source-copy affordances should read as neutral context, not Collection or reminder-colored emphasis.
+
 `Purpose: Visit | Collection: NYC restaurants | Later: next Saturday afternoon`
 
-The rail should feel embedded in the memory surface: use spacing, tonal separation, hierarchy, and pressed states rather than equal-weight stat cards, chunky pills, prose sentences, or boxed form rows.
+The rail should feel embedded in the memory surface: use spacing, tonal separation, hierarchy, and pressed states rather than equal-weight stat cards, stark-white oversized pills, prose sentences, or boxed form rows.
 
 Each control can expand into a focused picker or editor. Keep concise rationale visible only when it builds trust:
 
 `Because the post mentions a SoHo ramen shop.`
 
-Capture Review should show Purpose, Collection, and Later as one compact editable sentence directly under the title/source area. Treat AI-selected values as current values, not suggestions waiting for approval. Use a flat Material 3 Expressive treatment: readable sentence structure, semantic color, underline-like editable affordances, and comfortable touch targets rather than pill cards or a boxed field module. Tapping a field opens a focused bottom sheet editor for that field; show concise AI rationale inside that sheet only while the current value still matches the AI-selected value. Do not use inline review rows, `Looks good`, clear-suggestion actions, a separate Review Insight checklist sheet, nested cards, hero-sized rationale text, hidden-only long presses, duplicate blurbs, or model traces. Keep sheet actions clear of Android gesture navigation.
+Capture Review should show Purpose, Collection, and Later as one compact editable sentence directly under the title/source area. Treat AI-selected values as current values, not suggestions waiting for approval. Use a flat Material 3 Expressive treatment: black connective labels, darker green inline values, dark orange missing-value actions, warm tonal pill affordances, and comfortable touch targets rather than stark white pill cards, underlined text links, or a boxed field module. Tapping a field opens a focused bottom sheet editor for that field; show concise AI rationale inside that sheet only while the current value still matches the AI-selected value. Do not use inline review rows, `Looks good`, clear-suggestion actions, a separate Review Insight checklist sheet, nested cards, hero-sized rationale text, hidden-only long presses, duplicate blurbs, or model traces. Keep sheet actions clear of Android gesture navigation.
 
 When reminders are not fully implemented, use `Later` for the main Capture Review control and `Reminder idea` only in rationale or detail surfaces for AI proposals. Do not use copy that implies notification delivery.
 

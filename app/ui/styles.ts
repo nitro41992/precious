@@ -2142,7 +2142,7 @@ export const styles = StyleSheet.create({
     minHeight: 38
   },
   inlineMeaningText: {
-    color: colors.secondary,
+    color: colors.ink,
     ...typefaces.medium,
     fontSize: 24,
     fontWeight: "600",
@@ -2150,17 +2150,18 @@ export const styles = StyleSheet.create({
   },
   inlineMeaningPill: {
     alignSelf: "flex-start",
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceContainer,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 0,
+    justifyContent: "center",
     maxWidth: "100%",
-    minHeight: 38,
-    paddingHorizontal: 10,
-    paddingVertical: 3
+    minHeight: 44,
+    paddingHorizontal: 12,
+    paddingVertical: 4
   },
   inlineMeaningPillText: {
-    color: colors.accentText,
+    color: colors.accentTextStrong,
     ...typefaces.medium,
     fontSize: 24,
     fontWeight: "500",
@@ -2191,7 +2192,7 @@ export const styles = StyleSheet.create({
   reviewSourceCluster: {
     alignItems: "center",
     alignSelf: "flex-start",
-    backgroundColor: colors.reviewCard,
+    backgroundColor: colors.surfaceContainer,
     borderColor: colors.lineStrong,
     borderRadius: 8,
     borderWidth: 0,
@@ -2205,7 +2206,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 4
   },
   reviewSourceName: {
-    color: colors.secondary,
+    color: colors.ink,
     ...typefaces.bold,
     flexShrink: 1,
     fontSize: 13.5,
@@ -2797,7 +2798,7 @@ export const styles = StyleSheet.create({
     paddingLeft: 1
   },
   reviewActionGroup: {
-    backgroundColor: colors.reviewCard,
+    backgroundColor: colors.surfaceContainer,
     borderColor: colors.lineStrong,
     borderRadius: 8,
     borderWidth: 0,
@@ -2817,7 +2818,7 @@ export const styles = StyleSheet.create({
   },
   reviewActionIconWell: {
     alignItems: "center",
-    backgroundColor: colors.reviewCardWell,
+    backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
     borderWidth: 0,
     borderRadius: 8,
@@ -2830,7 +2831,7 @@ export const styles = StyleSheet.create({
   },
   noteActionCard: {
     alignItems: "center",
-    backgroundColor: colors.reviewCard,
+    backgroundColor: colors.surfaceContainer,
     borderColor: colors.lineStrong,
     borderRadius: 8,
     borderWidth: 0,
@@ -2842,7 +2843,7 @@ export const styles = StyleSheet.create({
   },
   noteActionCardIcon: {
     alignItems: "center",
-    backgroundColor: colors.accentSoft,
+    backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.accentLine,
     borderRadius: 8,
     borderWidth: 0,
