@@ -905,6 +905,60 @@ export const styles = StyleSheet.create({
   statusGlyphFailed: {
     backgroundColor: colors.dangerSoft
   },
+  processingStatusPill: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: colors.processingSoft,
+    borderRadius: 12,
+    flexDirection: "row",
+    flexShrink: 0,
+    gap: 7,
+    minHeight: 34,
+    paddingHorizontal: 9,
+    paddingVertical: 6
+  },
+  processingStatusPillReview: {
+    backgroundColor: "rgba(192, 214, 223, 0.94)",
+    borderRadius: 14,
+    minHeight: 38,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    ...bottomControlShadow
+  },
+  processingStatusIconWell: {
+    alignItems: "center",
+    backgroundColor: "rgba(53, 37, 245, 0.12)",
+    borderRadius: 8,
+    height: 22,
+    justifyContent: "center",
+    overflow: "hidden",
+    width: 22
+  },
+  processingStatusIconWellReview: {
+    borderRadius: 9,
+    height: 24,
+    width: 24
+  },
+  processingStatusDot: {
+    backgroundColor: colors.accent,
+    borderRadius: 4,
+    height: 7,
+    position: "absolute",
+    right: 3,
+    top: 3,
+    width: 7
+  },
+  processingStatusText: {
+    color: colors.processing,
+    ...typefaces.bold,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 16
+  },
+  processingStatusTextReview: {
+    fontSize: 13,
+    lineHeight: 17
+  },
   rowContent: {
     flex: 1,
     gap: 5,

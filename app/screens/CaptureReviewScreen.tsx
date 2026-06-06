@@ -59,7 +59,7 @@ import {
 import { ReminderEditorSheet } from "../sheets/ReminderEditorSheet";
 import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
-import { AiFieldInsight, AnimatedBottomSheet, SheetHeader, SourceMark } from "../ui/components";
+import { AiFieldInsight, AnimatedBottomSheet, ProcessingStatusPill, SheetHeader, SourceMark } from "../ui/components";
 import { Text, TextInput } from "../ui/typography";
 
 type CaptureReviewScreenProps = {
@@ -273,6 +273,7 @@ function CaptureImageViewer({
           >
             {imageUrl ? (
               <Image
+                key={cacheKey ? `${cacheKey}:${imageUrl}` : imageUrl}
                 cachePolicy="memory-disk"
                 contentFit="contain"
                 source={cacheKey ? { uri: imageUrl, cacheKey } : { uri: imageUrl }}
@@ -361,6 +362,17 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const selectedImageCacheKey = captureImageCacheKey(selected);
   const selectedFullImageUrl = captureFullImageUrl(selected);
   const selectedFullImageCacheKey = captureFullImageCacheKey(selected);
+  const [failedReviewImageUris, setFailedReviewImageUris] = useState<Set<string>>(() => new Set());
+  const selectedHeroImageUrl = [selectedFullImageUrl, selectedImageUrl]
+    .filter((url, index, urls) => Boolean(url) && urls.indexOf(url) === index)
+    .find((url) => !failedReviewImageUris.has(url)) || "";
+  const selectedHeroImageCacheKey =
+    selectedHeroImageUrl === selectedFullImageUrl
+      ? selectedFullImageCacheKey
+      : selectedHeroImageUrl === selectedImageUrl
+        ? selectedImageCacheKey
+        : "";
+  const [loadedReviewImageUris, setLoadedReviewImageUris] = useState<Set<string>>(() => new Set());
   const selectedMediaOpensImage = Boolean(selectedImageUrl && isImageCapture(selected));
   const selectedMediaPressEnabled = selectedMediaOpensImage || Boolean(selectedOpenUrl);
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
@@ -392,7 +404,8 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       locationInlineValue
   );
   const selectedCapturedTime = formatDateTime(selected.createdAt);
-  const selectedNeedsReview = displayStatus(selected) === "needs_review";
+  const selectedStatus = displayStatus(selected);
+  const selectedNeedsReview = selectedStatus === "needs_review";
   const selectedReviewState = selectedNeedsReview
     ? "Needs review"
     : reviewStatusCue(selected, selectedReviewReasons.length > 0);
@@ -424,7 +437,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     : noteSheetKeyboardVisible
       ? Animated.add(captureKeyboardInset, noteKeyboardGap)
       : captureKeyboardInset;
-  const showStatus = displayStatus(selected) !== "ready";
+  const showStatus = selectedStatus !== "ready";
   const reviewScrollY = useRef(new Animated.Value(0)).current;
   const reviewWindowWidth = Dimensions.get("window").width;
   const reviewMediaStatusInset = Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0;
@@ -447,7 +460,31 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   useEffect(() => {
     setImageViewerOpen(false);
     setImageViewerSource(null);
+    setFailedReviewImageUris(new Set());
+    setLoadedReviewImageUris(new Set());
   }, [selected.id]);
+
+  function markReviewImageLoaded(imageUri: string) {
+    const trimmedUri = imageUri.trim();
+    if (!trimmedUri) return;
+    setLoadedReviewImageUris((current) => {
+      if (current.has(trimmedUri)) return current;
+      const next = new Set(current);
+      next.add(trimmedUri);
+      return next;
+    });
+  }
+
+  function markReviewImageFailed(imageUri: string) {
+    const trimmedUri = imageUri.trim();
+    if (!trimmedUri || loadedReviewImageUris.has(trimmedUri)) return;
+    setFailedReviewImageUris((current) => {
+      if (current.has(trimmedUri)) return current;
+      const next = new Set(current);
+      next.add(trimmedUri);
+      return next;
+    });
+  }
 
   function openInlineField(kind: CaptureFieldKind) {
     if (kind === "purpose") {
@@ -535,12 +572,12 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                   }}
                   style={({ pressed }) => [
                     styles.reviewMediaHeader,
-                    selectedImageUrl ? styles.reviewMediaHeaderImage : styles.reviewMediaHeaderFallback,
+                    selectedHeroImageUrl ? styles.reviewMediaHeaderImage : styles.reviewMediaHeaderFallback,
                     pressed && selectedMediaPressEnabled && styles.subtlePressed
                   ]}
                   testID="pc.review.media"
                 >
-                  {selectedImageUrl ? (
+                  {selectedHeroImageUrl ? (
                     <>
                       <Animated.View
                         style={[
@@ -549,9 +586,12 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                         ]}
                       >
                         <Image
+                          key={selectedHeroImageCacheKey ? `${selectedHeroImageCacheKey}:${selectedHeroImageUrl}` : selectedHeroImageUrl}
                           cachePolicy="memory-disk"
                           contentFit="cover"
-                          source={selectedImageCacheKey ? { uri: selectedImageUrl, cacheKey: selectedImageCacheKey } : { uri: selectedImageUrl }}
+                          onError={() => markReviewImageFailed(selectedHeroImageUrl)}
+                          onLoad={() => markReviewImageLoaded(selectedHeroImageUrl)}
+                          source={selectedHeroImageCacheKey ? { uri: selectedHeroImageUrl, cacheKey: selectedHeroImageCacheKey } : { uri: selectedHeroImageUrl }}
                           style={styles.reviewMediaImage}
                         />
                       </Animated.View>
@@ -602,16 +642,19 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                   </Pressable>
                   <View style={styles.reviewMediaRightControls}>
                     {showStatus ? (
-                      <Text
-                        style={[
-                          styles.reviewMediaStatusPill,
-                          displayStatus(selected) === "processing" && styles.statusProcessing,
-                          displayStatus(selected) === "needs_review" && styles.statusReview,
-                          displayStatus(selected) === "failed" && styles.statusFailed
-                        ]}
-                      >
-                        {captureStatusLabel(selected)}
-                      </Text>
+                      selectedStatus === "processing" ? (
+                        <ProcessingStatusPill label={captureStatusLabel(selected)} variant="review" />
+                      ) : (
+                        <Text
+                          style={[
+                            styles.reviewMediaStatusPill,
+                            selectedStatus === "needs_review" && styles.statusReview,
+                            selectedStatus === "failed" && styles.statusFailed
+                          ]}
+                        >
+                          {captureStatusLabel(selected)}
+                        </Text>
+                      )
                     ) : null}
                     <Pressable
                       accessibilityLabel="Delete capture"

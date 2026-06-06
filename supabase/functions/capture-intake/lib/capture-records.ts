@@ -95,7 +95,7 @@ export function withCaptureStates(rows: any[]) {
   return Array.isArray(rows) ? rows.map(withCaptureState) : [];
 }
 
-export const CAPTURE_ASSET_SIGNED_URL_TTL_SECONDS = 60 * 60;
+export const CAPTURE_ASSET_SIGNED_URL_TTL_SECONDS = 60 * 60 * 24 * 7;
 
 export const CAPTURE_IMAGE_TRANSFORMS: Record<
   CaptureImageVariant,

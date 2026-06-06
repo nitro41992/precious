@@ -60,6 +60,7 @@ import {
 import {
   authCallbackPayload,
   captureDraftKey,
+  captureImageLoadKey,
   captureImageUrl,
   cleanedReviewDraft,
   friendlyError,
@@ -308,8 +309,25 @@ export default function App() {
   const collectionListFade = useRef(new Animated.Value(0)).current;
 
   const markCaptureImageLoadState = useCallback((key: string, state: CaptureImageLoadState) => {
-    if (!key || captureImageLoadStatesRef.current[key] === state) return;
+    const currentState = captureImageLoadStatesRef.current[key];
+    if (!key || currentState === state || (currentState === "loaded" && state === "failed")) return;
     const next = { ...captureImageLoadStatesRef.current, [key]: state };
+    captureImageLoadStatesRef.current = next;
+    setCaptureImageLoadStates(next);
+  }, []);
+
+  const clearSupersededCaptureImageFailures = useCallback((rows: Capture[]) => {
+    const activeKeys = new Set(rows.map(captureImageLoadKey).filter(Boolean));
+    if (!activeKeys.size) return;
+    let changed = false;
+    const next = { ...captureImageLoadStatesRef.current };
+    for (const [key, state] of Object.entries(next)) {
+      if (state === "failed" && !activeKeys.has(key)) {
+        delete next[key];
+        changed = true;
+      }
+    }
+    if (!changed) return;
     captureImageLoadStatesRef.current = next;
     setCaptureImageLoadStates(next);
   }, []);
@@ -568,6 +586,7 @@ export default function App() {
           ) as RemoteCapturePage;
         });
         const next = ((json.captures ?? []) as Array<Record<string, any>>).map(captureFromRemote);
+        if (!options.append) clearSupersededCaptureImageFailures(next);
         if (mode === "archived") {
           const rows = commitCaptureRows("archived", (current) =>
             options.append ? sortCaptures(uniqueCaptures([...current, ...next])) : sortCaptures(next)
@@ -777,6 +796,7 @@ export default function App() {
         ) as RemoteCapturePage;
       });
       const next = capturesForListMode((json.captures ?? []).map(captureFromRemote), "active");
+      if (!options.append) clearSupersededCaptureImageFailures(next);
       const merged = options.append
         ? capturesForListMode(
             uniqueCaptures([...(collectionCapturesCacheRef.current[collectionId] || []), ...next]),
@@ -797,7 +817,7 @@ export default function App() {
         setCollectionCapturesLoadPhase("idle");
       }
     }
-  }, [config, session, withFreshAccessToken]);
+  }, [clearSupersededCaptureImageFailures, config, session, withFreshAccessToken]);
 
   const loadMoreCollectionCaptures = useCallback(() => {
     if (!selectedCollectionId || !collectionCapturesNextCursor || collectionCapturesLoading) return;

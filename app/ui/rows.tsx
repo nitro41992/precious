@@ -347,9 +347,11 @@ function CollectionCollageTile({
   const cacheKey = item?.imageAssetCacheKey || imageUri;
   const host = hostFromUrl(item?.sourceUrl || "");
   if (imageUri) {
+    const imageRenderKey = cacheKey ? `${cacheKey}:${imageUri}` : imageUri;
     return (
       <View style={[styles.collectionCollageTile, style]}>
         <Image
+          key={imageRenderKey}
           accessibilityLabel={item?.title ? `Preview: ${item.title}` : "Collection preview"}
           cachePolicy="memory-disk"
           contentFit="cover"

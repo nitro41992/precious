@@ -315,6 +315,7 @@ export function SourceMark({
   const faviconUri = host && !failedFavicons[host] ? sourceFaviconUrl(iconHost) || extractedFavicon : "";
   const imageUri = size === "row" && !imageUnavailable ? captureImageUrl(capture) : "";
   const imageCacheKey = size === "row" && imageUri ? captureImageCacheKey(capture) : "";
+  const imageRenderKey = imageLoadKey || (imageCacheKey ? `${imageCacheKey}:${imageUri}` : imageUri);
   const Icon = sourceIconForCapture(capture);
   const itemStatus = displayStatus(capture);
   const metaScreenshotPill = size === "meta" && isScreenshotCapture(capture);
@@ -339,6 +340,7 @@ export function SourceMark({
         style={styles.captureThumbnailFrame}
       >
         <Image
+          key={imageRenderKey}
           cachePolicy="memory-disk"
           contentFit="cover"
           onError={() => {
@@ -396,29 +398,54 @@ export function sourceIconColor(status: CaptureStatus) {
 export function StatusGlyph({ capture }: { capture: Capture }) {
   const status = displayStatus(capture);
   if (status === "ready" || status === "needs_review") return null;
-  const Icon = status === "processing"
-      ? ClockClockwise
-      : Warning;
+  if (status === "processing") {
+    return <ProcessingStatusPill label={captureStatusLabel(capture)} variant="row" />;
+  }
   const label = captureStatusLabel(capture);
-  const iconColor = status === "processing"
-      ? colors.processing
-      : colors.danger;
   return (
     <View
       accessibilityLabel={label}
       accessible
       style={[
         styles.statusGlyph,
-        status === "processing" && styles.statusGlyphProcessing,
         status === "failed" && styles.statusGlyphFailed
       ]}
     >
-      <Icon color={iconColor} size={15} weight="fill" />
-      {status === "processing" ? (
-        <Text numberOfLines={1} style={styles.statusGlyphProcessingText}>
-          Analyzing
-        </Text>
-      ) : null}
+      <Warning color={colors.danger} size={15} weight="fill" />
+    </View>
+  );
+}
+
+export function ProcessingStatusPill({
+  label = "Analyzing",
+  variant = "row"
+}: {
+  label?: string;
+  variant?: "row" | "review";
+}) {
+  const review = variant === "review";
+  return (
+    <View
+      accessibilityLabel={label}
+      accessible
+      style={[
+        styles.processingStatusPill,
+        review && styles.processingStatusPillReview
+      ]}
+    >
+      <View style={[styles.processingStatusIconWell, review && styles.processingStatusIconWellReview]}>
+        <View style={styles.processingStatusDot} />
+        <ClockClockwise color={colors.processing} size={review ? 16 : 14} weight="bold" />
+      </View>
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.processingStatusText,
+          review && styles.processingStatusTextReview
+        ]}
+      >
+        {label}
+      </Text>
     </View>
   );
 }

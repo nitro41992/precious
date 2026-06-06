@@ -16,8 +16,8 @@ type SourcePreviewImage = {
 };
 
 export type SourcePreviewMirrorResult =
-  | { status: "mirrored"; storagePath: string; sourceUrl: string }
-  | { status: "existing"; storagePath: string; sourceUrl: string }
+  | { status: "mirrored"; storagePath: string; sourceUrl: string; mimeType: string }
+  | { status: "existing"; storagePath: string; sourceUrl: string; mimeType: string }
   | { status: "skipped"; reason: string };
 
 export function sourcePreviewContentType(value: string | null | undefined) {
@@ -133,7 +133,14 @@ export async function mirrorSourcePreviewAsset(
   capture: Pick<CaptureRow, "id" | "source_url">,
   urlEvidence: UrlEvidence | null,
 ): Promise<SourcePreviewMirrorResult> {
-  const imageUrl = normalizeUrl(urlEvidence?.image || null);
+  const evidence = urlEvidence as Record<string, unknown> | null;
+  const imageUrl = normalizeUrl(
+    typeof evidence?.image_url === "string"
+      ? evidence.image_url
+      : typeof evidence?.image === "string"
+        ? evidence.image
+        : null,
+  );
   if (!imageUrl) return { status: "skipped", reason: "missing_image_url" };
   if (!imageUrl.startsWith("https://")) {
     return { status: "skipped", reason: "non_https_image_url" };
@@ -141,7 +148,7 @@ export async function mirrorSourcePreviewAsset(
 
   const existing = await supabase
     .from("capture_assets")
-    .select("id,storage_path,source_url")
+    .select("id,storage_path,source_url,mime_type")
     .eq("user_id", userId)
     .eq("capture_id", capture.id)
     .eq("asset_role", SOURCE_PREVIEW_ROLE)
@@ -157,6 +164,7 @@ export async function mirrorSourcePreviewAsset(
       status: "existing",
       storagePath: existingStoragePath,
       sourceUrl: imageUrl,
+      mimeType: String(existingRow?.mime_type || ""),
     };
   }
 
@@ -202,7 +210,7 @@ export async function mirrorSourcePreviewAsset(
     if (insert.error) throw insert.error;
   }
 
-  return { status: "mirrored", storagePath, sourceUrl: imageUrl };
+  return { status: "mirrored", storagePath, sourceUrl: imageUrl, mimeType: image.contentType };
 }
 
 export async function mirrorSourcePreviewAssetQuietly(

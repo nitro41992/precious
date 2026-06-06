@@ -80,7 +80,7 @@ test("captureDisplayTitle never falls back to Saved from source domain", () => {
   assert.notEqual(title, "Saved from instagram.com");
 });
 
-test("capture image load keys change with refreshed signed URLs while cache keys stay stable", () => {
+test("capture image load keys stay stable across refreshed signed URLs", () => {
   const {
     captureImageCacheKey,
     captureImageLoadKey
@@ -97,7 +97,22 @@ test("capture image load keys change with refreshed signed URLs while cache keys
 
   assert.equal(captureImageCacheKey(base), "captures/user/a.png:thumb");
   assert.equal(captureImageCacheKey(refreshed), "captures/user/a.png:thumb");
-  assert.notEqual(captureImageLoadKey(base), captureImageLoadKey(refreshed));
+  assert.equal(captureImageLoadKey(base), "captures/user/a.png:thumb");
+  assert.equal(captureImageLoadKey(refreshed), "captures/user/a.png:thumb");
+});
+
+test("capture image load keys still track public fallback URLs", () => {
+  const { captureImageLoadKey } = loadCapturePresentation();
+  const base = capture({
+    thumbnailUrl: "https://cdn.example.com/preview-old.jpg"
+  });
+  const refreshed = {
+    ...base,
+    thumbnailUrl: "https://cdn.example.com/preview-new.jpg"
+  };
+
+  assert.equal(captureImageLoadKey(base), "https://cdn.example.com/preview-old.jpg");
+  assert.equal(captureImageLoadKey(refreshed), "https://cdn.example.com/preview-new.jpg");
 });
 
 test("captureDisplayTitle uses non-source summary before generic fallback", () => {

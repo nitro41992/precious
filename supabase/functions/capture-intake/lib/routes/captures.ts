@@ -3,6 +3,7 @@ import { activeSaveIntentKeySet, CAPTURE_DETAIL_SELECT, CAPTURE_LIST_SELECT } fr
 import { boundedLimit, isUuid, runInBackground } from "../common.ts";
 import { json } from "../http.ts";
 import { archivedFilter, capturePayloadExpectsAsset, mergeAnalysisPatch, readCapturePayload, withCaptureState, withCaptureStates, withSignedCaptureAssetRows } from "../capture-records.ts";
+import { mirrorSourcePreviewAssetQuietly, SOURCE_PREVIEW_ROLE } from "../source-previews.ts";
 import { createOrGetCaptureFromFields, createOrGetCaptureWithAsset, failCaptureMissingAsset, processCapture } from "../captures.ts";
 import { analysisRequiresReview, analysisWithCurrentIntent, normalizedReviewAnalysis, normalizedReviewTargets, resolveReviewTargets, reviewTargetsForAnalysis } from "../analysis/review-normalization.ts";
 import {
@@ -19,6 +20,92 @@ import {
   hydrateResolvedPlaceThumbnails,
   resolvePlacePatchForAnalysis,
 } from "../places.ts";
+
+const LIST_SOURCE_PREVIEW_MIRROR_LIMIT = 8;
+
+function sourcePreviewEvidenceForRow(row: Record<string, unknown>) {
+  const analysis = row.analysis && typeof row.analysis === "object"
+    ? row.analysis as Record<string, unknown>
+    : {};
+  const evidence = analysis.url_evidence && typeof analysis.url_evidence === "object"
+    ? analysis.url_evidence as Record<string, unknown>
+    : {};
+  return evidence.image_url || evidence.image ? evidence : null;
+}
+
+function hasSourcePreviewAsset(row: Record<string, unknown>) {
+  const assets = Array.isArray(row.capture_assets) ? row.capture_assets : [];
+  return assets.some((asset) => {
+    if (!asset || typeof asset !== "object") return false;
+    const record = asset as Record<string, unknown>;
+    return String(record.asset_role || "") === SOURCE_PREVIEW_ROLE &&
+      String(record.storage_path || record.public_url || "").trim();
+  });
+}
+
+async function withLazySourcePreviewAsset(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  row: Record<string, unknown>,
+) {
+  if (!row.id || hasSourcePreviewAsset(row)) return row;
+  const evidence = sourcePreviewEvidenceForRow(row);
+  if (!evidence) return row;
+  const result = await mirrorSourcePreviewAssetQuietly(
+    supabase,
+    userId,
+    {
+      id: String(row.id),
+      source_url: typeof row.source_url === "string" ? row.source_url : null,
+    },
+    evidence as any,
+  );
+  if (
+    (result.status !== "mirrored" && result.status !== "existing") ||
+    !result.storagePath ||
+    !result.mimeType.startsWith("image/")
+  ) {
+    return row;
+  }
+  const assets = Array.isArray(row.capture_assets) ? row.capture_assets : [];
+  return {
+    ...row,
+    capture_assets: [
+      ...assets,
+      {
+        user_id: userId,
+        capture_id: row.id,
+        storage_path: result.storagePath,
+        public_url: null,
+        mime_type: result.mimeType,
+        asset_role: SOURCE_PREVIEW_ROLE,
+        source_url: result.sourceUrl,
+      },
+    ],
+  };
+}
+
+async function withLazySourcePreviewAssets(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  rows: Array<Record<string, unknown>>,
+  awaitLimit: number,
+) {
+  const mirroredRows = await Promise.all(
+    rows.map((row, index) =>
+      index < awaitLimit ? withLazySourcePreviewAsset(supabase, userId, row) : Promise.resolve(row)
+    ),
+  );
+  const deferredRows = rows.slice(awaitLimit).filter((row) =>
+    Boolean(row.id && !hasSourcePreviewAsset(row) && sourcePreviewEvidenceForRow(row))
+  );
+  if (deferredRows.length) {
+    runInBackground(Promise.all(
+      deferredRows.map((row) => withLazySourcePreviewAsset(supabase, userId, row)),
+    ));
+  }
+  return mirroredRows;
+}
 
 export async function handleCapturesResource(
   request: Request,
@@ -84,8 +171,14 @@ export async function handleCapturesResource(
       userId,
       pageRows,
     );
-    const placeHydratedRows = await hydrateResolvedPlaceThumbnails(
+    const previewRows = await withLazySourcePreviewAssets(
+      supabase,
+      userId,
       rows as Array<Record<string, unknown>>,
+      clientCaptureKey ? rows.length : LIST_SOURCE_PREVIEW_MIRROR_LIMIT,
+    );
+    const placeHydratedRows = await hydrateResolvedPlaceThumbnails(
+      previewRows as Array<Record<string, unknown>>,
     );
     const signedRows = await withSignedCaptureAssetRows(
       supabase,

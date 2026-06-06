@@ -758,10 +758,10 @@ export function captureImageLoadKey(capture: Capture) {
   const imageUri = captureImageUrl(capture);
   if (!imageUri) return "";
   if (capture.imageAssetUrl && imageUri === capture.imageAssetUrl) {
-    return [capture.imageAssetCacheKey, imageUri].filter(Boolean).join(":");
+    return capture.imageAssetCacheKey || imageUri;
   }
   if (capture.sourcePreviewAssetUrl && imageUri === capture.sourcePreviewAssetUrl) {
-    return [capture.sourcePreviewAssetCacheKey, imageUri].filter(Boolean).join(":");
+    return capture.sourcePreviewAssetCacheKey || imageUri;
   }
   return imageUri;
 }
