@@ -506,6 +506,35 @@ function capturesEquivalent(left, right) {
   );
 }
 
+const CARRIED_IMAGE_FIELDS = [
+  ["imageAssetUrl", "imageAssetCacheKey"],
+  ["imageAssetFullUrl", "imageAssetFullCacheKey"],
+  ["sourcePreviewAssetUrl", "sourcePreviewAssetCacheKey"],
+  ["thumbnailUrl", null]
+];
+
+// A refreshed row must never blank an image the user is already seeing:
+// carry fields forward over transient gaps, and keep the URL the views are
+// rendering when only its signature rotated (a source swap restarts the
+// native image load).
+function withStableImageFields(previous, next) {
+  let patch = null;
+  for (const [urlField, keyField] of CARRIED_IMAGE_FIELDS) {
+    const previousUrl = previous[urlField];
+    if (!previousUrl) continue;
+    const nextUrl = next[urlField];
+    const sameAsset = keyField
+      ? Boolean(previous[keyField]) && previous[keyField] === next[keyField]
+      : normalizedComparableValue(previousUrl) === normalizedComparableValue(nextUrl);
+    if (!nextUrl || (sameAsset && nextUrl !== previousUrl)) {
+      patch = patch || {};
+      patch[urlField] = previousUrl;
+      if (keyField && !next[keyField]) patch[keyField] = previous[keyField];
+    }
+  }
+  return patch ? { ...next, ...patch } : next;
+}
+
 function preserveCaptureRowIdentities(previousCaptures, nextCaptures, shouldPreferNext) {
   const previousById = new Map();
   for (const capture of previousCaptures || []) {
@@ -514,11 +543,13 @@ function preserveCaptureRowIdentities(previousCaptures, nextCaptures, shouldPref
   let allSamePosition = previousCaptures.length === nextCaptures.length;
   const merged = nextCaptures.map((capture, index) => {
     const previous = capture?.id ? previousById.get(capture.id) : undefined;
-    const keepPrevious =
-      previous &&
-      !(shouldPreferNext && shouldPreferNext(previous)) &&
-      capturesEquivalent(previous, capture);
-    const row = keepPrevious ? previous : capture;
+    const preferNext = Boolean(previous && shouldPreferNext && shouldPreferNext(previous));
+    const keepPrevious = previous && !preferNext && capturesEquivalent(previous, capture);
+    const row = keepPrevious
+      ? previous
+      : previous && !preferNext
+        ? withStableImageFields(previous, capture)
+        : capture;
     if (allSamePosition && row !== previousCaptures[index]) allSamePosition = false;
     return row;
   });

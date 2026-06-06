@@ -683,7 +683,11 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   function markReviewImageFailed(imageUri: string) {
     const trimmedUri = imageUri.trim();
     if (!trimmedUri || loadedReviewImageUris.has(trimmedUri)) return;
-    if (trimmedUri === selectedHeroImageUrl) markReviewHandoffReady(reviewHandoffKey);
+    // Only the currently rendered hero may trigger the URL fail-over —
+    // errors from stale/superseded sources must not swap (and blank) the
+    // image the user is looking at.
+    if (trimmedUri !== selectedHeroImageUrl) return;
+    markReviewHandoffReady(reviewHandoffKey);
     setFailedReviewImageUris((current) => {
       if (current.has(trimmedUri)) return current;
       const next = new Set(current);

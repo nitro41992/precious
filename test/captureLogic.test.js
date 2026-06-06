@@ -876,3 +876,48 @@ test("preserveCaptureRowIdentities handles reordering and nested data", () => {
   assert.equal(merged[0], c2);
   assert.equal(merged[1], c1);
 });
+
+test("preserveCaptureRowIdentities carries known image fields over transient gaps", () => {
+  const { preserveCaptureRowIdentities } = require("../app/captureLogic");
+  const previous = [
+    {
+      id: "c1",
+      title: "First",
+      status: "processing",
+      imageAssetUrl: "https://cdn.example.com/c1.jpg?sig=a",
+      imageAssetCacheKey: "asset-c1",
+      thumbnailUrl: "https://cdn.example.com/c1-thumb.jpg?sig=a"
+    }
+  ];
+  const next = [
+    { id: "c1", title: "First", status: "ready" }
+  ];
+  const merged = preserveCaptureRowIdentities(previous, next);
+  assert.equal(merged[0].status, "ready");
+  assert.equal(merged[0].imageAssetUrl, "https://cdn.example.com/c1.jpg?sig=a");
+  assert.equal(merged[0].imageAssetCacheKey, "asset-c1");
+  assert.equal(merged[0].thumbnailUrl, "https://cdn.example.com/c1-thumb.jpg?sig=a");
+});
+
+test("preserveCaptureRowIdentities keeps rendered URLs when only signatures rotate on changed rows", () => {
+  const { preserveCaptureRowIdentities } = require("../app/captureLogic");
+  const previous = [
+    {
+      id: "c1",
+      title: "First",
+      imageAssetUrl: "https://cdn.example.com/c1.jpg?sig=old",
+      imageAssetCacheKey: "asset-c1"
+    }
+  ];
+  const next = [
+    {
+      id: "c1",
+      title: "First renamed",
+      imageAssetUrl: "https://cdn.example.com/c1.jpg?sig=new",
+      imageAssetCacheKey: "asset-c1"
+    }
+  ];
+  const merged = preserveCaptureRowIdentities(previous, next);
+  assert.equal(merged[0].title, "First renamed");
+  assert.equal(merged[0].imageAssetUrl, "https://cdn.example.com/c1.jpg?sig=old");
+});

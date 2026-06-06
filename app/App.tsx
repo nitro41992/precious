@@ -166,6 +166,7 @@ function reviewHeroTargetRect(windowWidth: number): ReviewHandoffRect {
 
 function ReviewHandoffOverlay({
   arrived,
+  cancelled,
   fade,
   handoff,
   heroReady,
@@ -174,6 +175,7 @@ function ReviewHandoffOverlay({
   target
 }: {
   arrived: SharedValue<boolean>;
+  cancelled: SharedValue<boolean>;
   fade: SharedValue<number>;
   handoff: ReviewHandoffState;
   heroReady: SharedValue<boolean>;
@@ -191,7 +193,7 @@ function ReviewHandoffOverlay({
   useAnimatedReaction(
     () => Boolean(target.value),
     (hasTarget, hadTarget) => {
-      if (!hasTarget || hadTarget) return;
+      if (!hasTarget || hadTarget || cancelled.value) return;
       progress.value = 0;
       progress.value = withTiming(
         1,
@@ -591,6 +593,9 @@ export default function App() {
   const reviewHandoffTarget = useSharedValue<ReviewHandoffRect | null>(null);
   const reviewHandoffArrived = useSharedValue(false);
   const reviewHandoffHeroReady = useSharedValue(false);
+  // Set when back interrupts an in-flight open: blocks a late-arriving
+  // target from starting the forward morph mid-reversal.
+  const reviewHandoffCancelled = useSharedValue(false);
   const captureComposerMotion = useRef(new Animated.Value(0)).current;
   const captureKeyboardInset = useRef(new Animated.Value(0)).current;
   const skeletonPulse = useRef(new Animated.Value(0)).current;
@@ -772,6 +777,7 @@ export default function App() {
         reviewHandoffFade.value = 1;
         reviewHandoffArrived.value = false;
         reviewHandoffHeroReady.value = false;
+        reviewHandoffCancelled.value = false;
         reviewHandoffTarget.value = null;
         reviewHandoffRef.current = nextHandoff;
         setReviewHandoff(nextHandoff);
@@ -1561,7 +1567,13 @@ export default function App() {
       reviewHandoffFade.value = 1;
       reviewHandoffArrived.value = false;
       reviewHandoffHeroReady.value = true;
-      reviewHandoffTarget.value = null;
+      reviewHandoffCancelled.value = false;
+      // Start the return morph immediately against the rect the opening
+      // morph launched from — the covered list cannot have moved. The live
+      // thumbnail measurement refines the target asynchronously if needed.
+      const origin = reviewOriginRectRef.current;
+      reviewHandoffTarget.value =
+        origin && origin.captureId === capture.id ? origin.rect : null;
       reviewHandoffRef.current = nextHandoff;
       // Keep the capture selected (drafts and all) while the return morph
       // runs — clearing it here visibly blanked the still-fading screen.
@@ -1966,13 +1978,43 @@ export default function App() {
   // gesture back runs the same scroll-aware return morph as the back button.
   const reviewHeroCloseRef = useRef<(() => void) | null>(null);
 
+  // Back during an in-flight open reverses the morph from wherever it is —
+  // the shared progress clock takes the screen fade back down with it.
+  const cancelReviewOpeningHandoff = useCallback((handoff: ReviewHandoffState) => {
+    if (reviewHandoffArrived.value) return; // reveal underway; finish is imminent
+    reviewHandoffCancelled.value = true;
+    const remaining = Math.max(80, REVIEW_HANDOFF_CLOSE_MS * reviewHandoffProgress.value);
+    const key = handoff.key;
+    reviewHandoffProgress.value = withTiming(
+      0,
+      {
+        duration: remaining,
+        easing: ReanimatedEasing.bezier(0.2, 0, 0, 1),
+        reduceMotion: motionReduceMotion
+      },
+      (finished) => {
+        if (finished) runOnJS(abandonReviewOpen)(key);
+      }
+    );
+  }, [reviewHandoffArrived, reviewHandoffCancelled, reviewHandoffProgress]);
+
+  function abandonReviewOpen(key: number) {
+    if (reviewHandoffRef.current?.key !== key) return;
+    reviewHandoffRef.current = null;
+    setReviewHandoff(null);
+    selectCaptureRef.current(null);
+  }
+
   const closeSelectedCapture = useCallback((options?: {
     allowHandoff?: boolean;
     fromRect?: ReviewHandoffRect | null;
     heroScale?: number;
   }) => {
     if (!selected) return;
-    if (reviewHandoff) return;
+    if (reviewHandoff) {
+      if (reviewHandoff.direction === "opening") cancelReviewOpeningHandoff(reviewHandoff);
+      return;
+    }
     if (captureReturnCollectionId) {
       returnToCollectionDetail(captureReturnCollectionId);
       return;
@@ -1986,6 +2028,7 @@ export default function App() {
     }
     selectCapture(null);
   }, [
+    cancelReviewOpeningHandoff,
     captureReturnCollectionId,
     captureReviewOrigin,
     returnToCollectionDetail,
@@ -3500,6 +3543,9 @@ export default function App() {
     // fully covered: freeze once the opening handoff settles, thaw the moment
     // a close begins (the return morph reveals the list behind the fade).
     const paneFrozenByOverlay = overlayVisible && !reviewHandoff;
+    // The tab bar / gradient / FAB are part of the page the return morph
+    // lands on — they must be present for the whole close, not pop in after.
+    const paneChromeVisible = !overlayVisible || reviewHandoff?.direction === "closing";
     return (
       <View collapsable={false} ref={handoffRootRef} style={styles.screenStack}>
         <TopLevelPane
@@ -3507,14 +3553,14 @@ export default function App() {
           direction={-1}
           frozen={active !== "recent" || paneFrozenByOverlay}
         >
-          {renderHomeScreen({ includeChrome: active === "recent" && !overlayVisible })}
+          {renderHomeScreen({ includeChrome: active === "recent" && paneChromeVisible })}
         </TopLevelPane>
         <TopLevelPane
           active={active === "collections"}
           direction={1}
           frozen={active !== "collections" || paneFrozenByOverlay}
         >
-          {renderCollectionsScreen({ includeChrome: active === "collections" && !overlayVisible })}
+          {renderCollectionsScreen({ includeChrome: active === "collections" && paneChromeVisible })}
         </TopLevelPane>
         {overlay ? (
           <ScreenOverlayFrame handoff={overlayHandoff} progress={reviewHandoffProgress}>
@@ -3524,6 +3570,7 @@ export default function App() {
         {reviewHandoff ? (
           <ReviewHandoffOverlay
             arrived={reviewHandoffArrived}
+            cancelled={reviewHandoffCancelled}
             fade={reviewHandoffFade}
             handoff={reviewHandoff}
             heroReady={reviewHandoffHeroReady}
