@@ -202,7 +202,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                   <View style={styles.homeEmptyTileStack}>
                     <View style={[styles.homeEmptyTile, styles.homeEmptyTilePrimary]}>
                       <View style={styles.homeEmptyIconMark}>
-                        <Link2 color={colors.accent} size={19} weight="regular" />
+                        <Link2 color={colors.accentText} size={19} weight="regular" />
                       </View>
                       <View style={styles.homeEmptyLineGroup}>
                         <View style={styles.homeEmptyLineStrong} />
@@ -242,7 +242,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                   <Text style={styles.homeEmptyPrimaryText}>Paste link or note</Text>
                 </Pressable>
                 <View style={styles.homeEmptyCue}>
-                  <Check color={colors.accent} size={16} weight="bold" />
+                  <Check color={colors.accentText} size={16} weight="bold" />
                   <Text style={[styles.emptyCue, styles.homeEmptyCueText]}>
                     You can review details after the capture is saved.
                   </Text>

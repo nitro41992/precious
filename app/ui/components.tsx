@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import type { StyleProp, ViewStyle } from "react-native";
+import type { StyleProp, TextStyle, ViewStyle } from "react-native";
 import { Animated, Dimensions, Easing, Pressable, View } from "react-native";
 import { Image } from "expo-image";
 import { Check, ClockClockwise, Folder, Folders, Gear, HouseSimple, Info, Plus, Sparkle, Warning } from "phosphor-react-native";
@@ -142,7 +142,7 @@ export function IconButton({
     : tone === "danger"
       ? colors.danger
       : tone === "primary" || selected
-        ? colors.accent
+        ? colors.accentText
         : colors.ink;
   return (
     <Pressable
@@ -169,7 +169,7 @@ export function AiFieldInsight({ insight }: { insight: CaptureFieldRationale }) 
     <View style={styles.aiInsight}>
       <View style={styles.aiInsightHeader}>
         <View style={styles.aiInsightIcon}>
-          <Sparkle color={colors.accent} size={16} weight="fill" />
+          <Sparkle color={colors.accentText} size={16} weight="fill" />
         </View>
         <Text style={styles.aiInsightTitle}>{insight.title || "AI insight"}</Text>
       </View>
@@ -340,7 +340,7 @@ export function SourceMark({
 export function sourceIconColor(status: CaptureStatus) {
   if (status === "processing") return colors.processing;
   if (status === "failed") return colors.danger;
-  return colors.accent;
+  return colors.accentText;
 }
 
 export function StatusGlyph({ capture }: { capture: Capture }) {
@@ -376,16 +376,18 @@ export function StatusGlyph({ capture }: { capture: Capture }) {
 export function MeaningToken({
   Icon,
   iconColor = colors.muted,
-  text
+  text,
+  textStyle
 }: {
   Icon: AppIconComponent;
   iconColor?: string;
   text: string;
+  textStyle?: StyleProp<TextStyle>;
 }) {
   return (
     <View style={styles.meaningToken}>
       <Icon color={iconColor} size={13} weight="regular" />
-      <Text numberOfLines={1} style={styles.meaningTokenText}>
+      <Text numberOfLines={1} style={[styles.meaningTokenText, textStyle]}>
         {text}
       </Text>
     </View>
@@ -411,7 +413,7 @@ export function CollectionMeaningToken({ collections }: { collections: LinkedCol
       ]}
     >
       <Folder
-        color={colors.collectionAccent}
+        color={colors.collectionAccentText}
         size={13}
         weight={overflowCount > 0 ? "fill" : "regular"}
       />
@@ -509,7 +511,7 @@ function toastIconForTone(tone: ToastTone) {
 }
 
 function toastColorForTone(tone: ToastTone) {
-  if (tone === "success") return colors.accent;
+  if (tone === "success") return colors.accentText;
   if (tone === "error" || tone === "destructive") return colors.danger;
   if (tone === "processing") return colors.processing;
   return colors.ink;
@@ -544,12 +546,12 @@ export function HeaderContentGradient({ density = "standard" }: { density?: "sta
       <Svg height="100%" preserveAspectRatio="none" width="100%">
         <Defs>
           <LinearGradient id="header-content-fade" x1="0" x2="0" y1="0" y2="1">
-            <Stop offset="0" stopColor={colors.surface} stopOpacity="1" />
-            <Stop offset="0.34" stopColor={colors.surface} stopOpacity="0.96" />
-            <Stop offset={stops.middleOffset} stopColor={colors.surface} stopOpacity={stops.middleOpacity} />
-            <Stop offset={stops.dropOffset} stopColor={colors.surface} stopOpacity={stops.dropOpacity} />
-            <Stop offset={stops.clearOffset} stopColor={colors.surface} stopOpacity="0" />
-            <Stop offset="1" stopColor={colors.surface} stopOpacity="0" />
+            <Stop offset="0" stopColor={colors.paper} stopOpacity="1" />
+            <Stop offset="0.34" stopColor={colors.paper} stopOpacity="0.96" />
+            <Stop offset={stops.middleOffset} stopColor={colors.paper} stopOpacity={stops.middleOpacity} />
+            <Stop offset={stops.dropOffset} stopColor={colors.surfaceContainer} stopOpacity={stops.dropOpacity} />
+            <Stop offset={stops.clearOffset} stopColor={colors.paper} stopOpacity="0" />
+            <Stop offset="1" stopColor={colors.paper} stopOpacity="0" />
           </LinearGradient>
         </Defs>
         <Rect fill="url(#header-content-fade)" height="100%" width="100%" x="0" y="0" />
@@ -613,7 +615,7 @@ export function BottomAppBar({
           <Defs>
             <LinearGradient id="bottom-nav-fade" x1="0" x2="0" y1="0" y2="1">
               <Stop offset="0" stopColor={colors.paper} stopOpacity="0" />
-              <Stop offset="0.28" stopColor={colors.paper} stopOpacity="0.18" />
+              <Stop offset="0.28" stopColor={colors.surfaceContainer} stopOpacity="0.22" />
               <Stop offset="1" stopColor={colors.paper} stopOpacity="1" />
             </LinearGradient>
           </Defs>
@@ -623,7 +625,7 @@ export function BottomAppBar({
       <View style={styles.bottomNavDock}>
         <View style={styles.bottomNavBar}>
           {navItems.map(({ key, label, Icon, selected, onPress, testID }) => {
-            const selectedColor = key === "collections" ? colors.collectionAccent : colors.accent;
+            const selectedColor = key === "collections" ? colors.collectionAccentText : colors.accentText;
             return (
               <Pressable
                 accessibilityLabel={label}
@@ -665,7 +667,7 @@ export function BottomAppBar({
           ]}
           testID={collectionAction ? "pc.nav.collection-create" : "pc.nav.capture"}
         >
-          <Plus color={colors.onAccent} size={20} weight="bold" />
+          <Plus color={collectionAction ? colors.onCollectionAccent : colors.onAccent} size={22} weight="thin" />
         </Pressable>
       </View>
     </View>

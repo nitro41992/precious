@@ -76,35 +76,41 @@ Use the warm light palette as the default app base and add state colors sparingl
 
 | Role | Token | Use |
 | --- | --- | --- |
-| Paper | `#f7f8f5` | App background and sticky footers |
-| Surface | `#ffffff` | Bounded review blocks or grouped surfaces only |
-| Surface Container | `#f2f4ef` | Search bars, sheets, rows with emphasis |
-| Surface Container High | `#e9ede6` | Pressed states, dense inputs, secondary panels |
-| Surface Container Highest | `#dde4da` | Highest tonal emphasis for selected controls or bottom app bar wells |
-| Review Card | `#ffffff` | Capture Review source and action cards |
-| Review Card Well | `#f6f8f3` | Icon wells inside Capture Review action cards |
-| Ink | `#17211b` | Primary text and high-emphasis actions |
-| Muted | `#5d675f` | Metadata, helper text, secondary labels |
-| Placeholder | `#78827a` | Input placeholder text |
-| Line | `#d6ddd4` | Rare subtle borders when tonal separation is not enough |
-| Line Strong | `#bbc7bd` | Higher-emphasis borders for grouped surfaces |
-| Accent | `#2f6f50` | Primary action, ready, selected positive state |
-| Accent Soft | `#e5f2eb` | Selected chip or successful quiet state |
-| Accent Line | `#a6cdb8` | Borders for selected or primary-accent surfaces |
-| Accent Pressed | `#25583f` | Pressed primary actions |
-| Collection Accent | `#8a641d` | Collection navigation and secondary emphasis |
-| Collection Accent Soft | `#f4ead2` | Quiet collection emphasis |
-| Collection Accent Pressed | `#6f5017` | Pressed collection actions |
-| Secondary | `#4f5f55` | Secondary text and action color |
-| Processing | `#3f7190` | Analyzing, syncing, queued |
-| Processing Soft | `#e6f1f6` | Quiet processing state surfaces |
-| Processing Line | `#a9cbdc` | Processing state borders |
-| Review | `#9a6b1f` | Needs review, maybe, action needed |
-| Review Soft | `#f5ead2` | Review callouts and changed suggestions |
-| Danger | `#b4473a` | Failed, destructive, could not save |
-| Danger Soft | `#fbe6e2` | Quiet destructive state surfaces |
-| Danger Line | `#e4a59c` | Destructive state borders |
-| Deleted | `#b4473a` | Destructive delete actions and pending-delete undo |
+| Paper | `#FFF7E6` | App background, native window chrome, bottom fades, and sticky footers |
+| Surface | `#FFFFFF` | Bounded review blocks or grouped surfaces only |
+| Surface Container | `#FFF1DA` | Search bars, sheets, rows with emphasis, and warm fade support |
+| Surface Container High | `#F8E6C6` | Pressed states, dense inputs, secondary panels |
+| Surface Container Highest | `#F0D9AD` | Highest tonal emphasis for selected controls or bottom app bar wells |
+| Review Card | `#FFFFFF` | Capture Review source and action cards |
+| Review Card Well | `#FFF1DA` | Icon wells inside Capture Review action cards |
+| Ink | `#17211B` | Primary text and high-emphasis actions |
+| Muted | `#625F51` | Metadata, helper text, secondary labels |
+| Placeholder | `#817866` | Input placeholder text |
+| Line | `#E6D8BB` | Legacy subtle line token; avoid visible hairline borders and dividers |
+| Line Strong | `#D0BE95` | Legacy stronger line token; use only when tonal separation is insufficient |
+| Accent | `#C5D86D` | Lime primary fill for primary actions, ready states, and selected positive controls |
+| Accent Text | `#C5D86D` | Bright lime text and icon tint for primary emphasis |
+| Accent Soft | `#EEF7C6` | Selected chip or successful quiet state |
+| Accent Line | `#C5D86D` | Bright lime borders or small primary accent lines |
+| Accent Pressed | `#C5D86D` | Pressed primary actions; motion carries the pressed state |
+| On Accent | `#17211B` | Text and icons on lime-filled controls |
+| Intent Accent | `#556600` | Darker lime for Save Intent icon and text in Capture rows |
+| Collection Accent | `#F18F01` | Carrot secondary fill and collection emphasis |
+| Collection Accent Text | `#F18F01` | Bright carrot text and icon tint for secondary emphasis |
+| Collection Accent Soft | `#FFE5BC` | Quiet collection emphasis |
+| Collection Accent Line | `#F18F01` | Bright carrot borders or small secondary accent lines |
+| Collection Accent Pressed | `#F18F01` | Pressed collection actions; motion carries the pressed state |
+| On Collection Accent | `#17211B` | Text and icons on carrot-filled controls |
+| Secondary | `#F18F01` | Alias for bright secondary text and action color |
+| Processing | `#3525F5` | Analyzing, syncing, queued |
+| Processing Soft | `#C0D6DF` | Quiet processing state surfaces |
+| Processing Line | `#C0D6DF` | Processing state borders |
+| Review | `#A05E00` | Needs review, maybe, action needed |
+| Review Soft | `#FFE6BE` | Review callouts and changed suggestions |
+| Danger | `#D13A2F` | Failed, destructive, could not save |
+| Danger Soft | `#FFE1DA` | Quiet destructive state surfaces |
+| Danger Line | `#F0A29A` | Destructive state borders |
+| Deleted | `#D13A2F` | Destructive delete actions and pending-delete undo |
 
 Rules:
 
@@ -112,6 +118,7 @@ Rules:
 - Do not use confidence percentages or red/yellow/green scoring.
 - Pair color with text labels such as `Ready`, `Analyzing`, `Needs review`, `Failed`, or `Deleted`.
 - Avoid pure black, pure white as the whole page background, purple gradients, glass effects, and decorative blobs.
+- Header and bottom-navigation fades should use `Paper` and `Surface Container` stops so gradients stay within the warm light palette.
 - Treat available source imagery, thumbnails, screenshots, and shared image assets as product content. Use them for rows and Capture Review headers when already persisted; do not add decorative imagery or new extraction work only to fill space.
 
 ### Typography
@@ -138,7 +145,7 @@ Rules:
 - Use a compact spacing scale: 4, 8, 12, 16, 22 or 24, 32.
 - Default horizontal screen padding: 22px unless a native component requires otherwise.
 - Default radius: 8px. Segments may use 6px. Avoid large pill-heavy UI unless the element is truly a chip.
-- Prefer spacing and tonal separation for lists. Avoid visible hairline dividers; use header gradients or tonal grouping when a boundary needs soft separation.
+- Prefer spacing and tonal separation for lists. Do not use visible hairline borders or one-pixel dividers; use header gradients, tonal grouping, or soft surface changes when a boundary needs separation.
 - Do not put cards inside cards.
 - Prefer grouping and spacing before adding borders.
 
@@ -176,13 +183,13 @@ Rules:
 
 - Chips represent editable meaning: Save Intent, Collection, Reminder, source filter, or review state.
 - Chips must have visible text and at least 44px effective height when interactive.
-- Selected chips may use `Accent Soft` or `Ink`; unselected chips use `Soft` or paper with a line border.
+- Selected chips may use `Accent Soft` or `Ink`; unselected chips should use tonal fills and avoid hairline outlines.
 - Long-press rationale is allowed, but the primary tap should still perform the obvious edit or selection.
 
 ### Buttons And Actions
 
 - Primary buttons use `Accent` or `Ink` depending on context; they should be visually stable and bottom-reachable where possible.
-- Secondary actions should often be text buttons or light bordered buttons.
+- Secondary actions should often be text buttons or tonal buttons; avoid hairline-outline buttons.
 - Destructive actions use danger text and should sit near the footer or object settings, not beside the main save action.
 - Button copy should use direct verbs: `Save review`, `Retry analysis`, `Delete capture`, `Undo`, `Use collection`.
 

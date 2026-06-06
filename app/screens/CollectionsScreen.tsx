@@ -99,14 +99,14 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
                   <View style={styles.collectionsEmptyFolderBack} />
                   <View style={styles.collectionsEmptyFolder}>
                     <View style={styles.collectionsEmptyFolderTab} />
-                    <Folder color={colors.accent} size={28} weight="regular" />
+                    <Folder color={colors.collectionAccentText} size={28} weight="regular" />
                     <View style={styles.collectionsEmptyLines}>
                       <View style={styles.collectionsEmptyLineStrong} />
                       <View style={styles.collectionsEmptyLineSoft} />
                     </View>
                   </View>
                   <View style={styles.collectionsEmptyBadge}>
-                    <Plus color={colors.onAccent} size={18} weight="bold" />
+                    <Plus color={colors.onCollectionAccent} size={18} weight="bold" />
                   </View>
                 </View>
                 <View style={styles.collectionsEmptyCopy}>

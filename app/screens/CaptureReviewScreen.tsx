@@ -650,7 +650,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                       <View style={styles.reviewSourceCluster}>
                         {selectedSourceIsSharedImage ? (
                           <View style={styles.reviewSourceImageIconPill}>
-                            <Camera color={colors.accent} size={17} weight="regular" />
+                            <Camera color={colors.accentText} size={17} weight="regular" />
                           </View>
                         ) : (
                           <SourceMark
@@ -790,7 +790,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                       testID="pc.review.note.open"
                     >
                       <View style={styles.noteActionCardIcon}>
-                        <StickyNote color={colors.accent} size={21} weight="regular" />
+                        <StickyNote color={colors.accentText} size={21} weight="regular" />
                       </View>
                       <View style={styles.noteActionCopy}>
                         <View style={styles.noteActionHeader}>

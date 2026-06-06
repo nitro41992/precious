@@ -129,7 +129,7 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
                   <View style={styles.collectionChoiceBody}>
                     <View style={styles.collectionRowTop}>
                       <View style={styles.collectionIconMark}>
-                        <Folder color={colors.accent} size={18} weight="regular" />
+                        <Folder color={colors.collectionAccentText} size={18} weight="regular" />
                       </View>
                       <View style={styles.collectionRowCopy}>
                         <Text numberOfLines={1} style={styles.captureTitle}>
@@ -169,7 +169,7 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
                     ]}
                   >
                     <X
-                      color={collectionSelectionIds.length === 0 ? colors.accent : colors.muted}
+                      color={collectionSelectionIds.length === 0 ? colors.accentText : colors.muted}
                       size={18}
                       weight={collectionSelectionIds.length === 0 ? "bold" : "regular"}
                     />

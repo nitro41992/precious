@@ -142,7 +142,12 @@ export function CaptureRow({
         {hasMeaningTokens ? (
           <View style={styles.rowMeaningLine}>
             {intentLabel ? (
-              <MeaningToken Icon={Lightbulb} iconColor={colors.accent} text={intentLabel} />
+              <MeaningToken
+                Icon={Lightbulb}
+                iconColor={colors.intentAccent}
+                text={intentLabel}
+                textStyle={styles.intentMeaningTokenText}
+              />
             ) : null}
             <CollectionMeaningToken collections={collectionTokens} />
             {reminderText ? (
@@ -304,7 +309,7 @@ export function CollectionRow({
       >
         <View style={styles.collectionRowTop}>
           <View style={styles.collectionIconMark}>
-            <Folder color={colors.accent} size={18} weight="regular" />
+            <Folder color={colors.collectionAccentText} size={18} weight="regular" />
           </View>
           <View style={styles.collectionRowCopy}>
             <Text numberOfLines={1} style={styles.captureTitle}>

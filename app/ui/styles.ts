@@ -934,6 +934,9 @@ export const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 17
   },
+  intentMeaningTokenText: {
+    color: colors.intentAccent
+  },
   collectionMeaningToken: {
     paddingRight: 2
   },
@@ -941,11 +944,11 @@ export const styles = StyleSheet.create({
     paddingRight: 0
   },
   collectionMeaningTokenText: {
-    color: colors.secondary
+    color: colors.collectionAccentText
   },
   collectionOverflowBadge: {
     alignItems: "center",
-    backgroundColor: colors.accent,
+    backgroundColor: colors.collectionAccent,
     borderRadius: 6,
     flexShrink: 0,
     justifyContent: "center",
@@ -954,13 +957,13 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 5
   },
   collectionOverflowText: {
-    color: colors.onAccent,
+    color: colors.onCollectionAccent,
     fontSize: 11,
     fontWeight: "800",
     lineHeight: 14
   },
   searchMatchText: {
-    color: colors.accent,
+    color: colors.accentText,
     fontSize: 13,
     fontWeight: "700",
     lineHeight: 18
@@ -1071,7 +1074,7 @@ export const styles = StyleSheet.create({
     minWidth: 0
   },
   homeEmptyLineStrong: {
-    backgroundColor: colors.secondary,
+    backgroundColor: colors.collectionAccentLine,
     borderRadius: 6,
     height: 13,
     width: "76%"
@@ -1395,11 +1398,9 @@ export const styles = StyleSheet.create({
     gap: 7
   },
   collectionCaptureSeparator: {
-    backgroundColor: colors.line,
-    height: StyleSheet.hairlineWidth,
+    height: 0,
     marginLeft: 108,
-    marginRight: 22,
-    opacity: 0.5
+    marginRight: 22
   },
   collectionRow: {
     gap: 7,
@@ -1413,7 +1414,7 @@ export const styles = StyleSheet.create({
   },
   collectionIconMark: {
     alignItems: "center",
-    backgroundColor: colors.accentSoft,
+    backgroundColor: colors.collectionAccentSoft,
     borderRadius: 8,
     height: 36,
     justifyContent: "center",
@@ -1610,8 +1611,8 @@ export const styles = StyleSheet.create({
     top: 18
   },
   collectionsEmptyFolderTab: {
-    backgroundColor: colors.accentSoft,
-    borderColor: colors.accentLine,
+    backgroundColor: colors.collectionAccentSoft,
+    borderColor: colors.collectionAccentLine,
     borderRadius: 8,
     borderWidth: 0,
     height: 28,
@@ -1625,7 +1626,7 @@ export const styles = StyleSheet.create({
     width: "100%"
   },
   collectionsEmptyLineStrong: {
-    backgroundColor: colors.secondary,
+    backgroundColor: colors.collectionAccentLine,
     borderRadius: 6,
     height: 13,
     width: "74%"
@@ -1638,7 +1639,7 @@ export const styles = StyleSheet.create({
   },
   collectionsEmptyBadge: {
     alignItems: "center",
-    backgroundColor: colors.accent,
+    backgroundColor: colors.collectionAccent,
     borderColor: colors.paper,
     borderRadius: 8,
     borderWidth: 3,
@@ -1732,9 +1733,8 @@ export const styles = StyleSheet.create({
   },
   collectionSelectionControl: {
     alignItems: "center",
-    borderColor: colors.line,
+    backgroundColor: colors.surfaceContainerHigh,
     borderRadius: 8,
-    borderWidth: 1,
     flexShrink: 0,
     height: 34,
     justifyContent: "center",
@@ -1742,8 +1742,7 @@ export const styles = StyleSheet.create({
     width: 34
   },
   collectionSelectionControlSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent
+    backgroundColor: colors.accent
   },
   collectionSelectionFooter: {
     backgroundColor: colors.paper,
@@ -1797,7 +1796,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 14
   },
   authGoogleButtonPressed: {
-    backgroundColor: colors.secondary,
+    backgroundColor: colors.ink,
     transform: [{ scale: 0.99 }]
   },
   authGoogleMark: {
@@ -1932,9 +1931,7 @@ export const styles = StyleSheet.create({
   },
   reviewMediaHeaderImage: {
     backgroundColor: colors.surfaceContainerHigh,
-    borderColor: colors.mediaFrameLine,
     borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
     bottom: 8,
     left: 8,
     right: 8,
@@ -2140,7 +2137,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 3
   },
   inlineMeaningPillText: {
-    color: colors.accent,
+    color: colors.accentText,
     ...typefaces.medium,
     fontSize: 24,
     fontWeight: "500",
@@ -2300,10 +2297,10 @@ export const styles = StyleSheet.create({
     opacity: 0.72
   },
   reviewEditRailPlaceholder: {
-    color: colors.accent
+    color: colors.accentText
   },
   editRowPlaceholderText: {
-    color: colors.accent
+    color: colors.accentText
   },
   reviewSentenceSubtext: {
     color: colors.muted,
@@ -2516,7 +2513,7 @@ export const styles = StyleSheet.create({
     lineHeight: 21
   },
   reminderInlineAction: {
-    color: colors.accent,
+    color: colors.accentText,
     fontSize: 13,
     fontWeight: "800",
     marginLeft: "auto"
@@ -2596,7 +2593,7 @@ export const styles = StyleSheet.create({
   },
   reminderUnitChipSelected: {
     backgroundColor: colors.accentSoft,
-    borderColor: colors.accent
+    borderColor: colors.accentLine
   },
   reminderUnitText: {
     color: colors.secondary,
@@ -2605,7 +2602,7 @@ export const styles = StyleSheet.create({
     lineHeight: 17
   },
   reminderUnitTextSelected: {
-    color: colors.accent
+    color: colors.accentText
   },
   rationaleSheetHeader: {
     alignItems: "center",
@@ -2723,15 +2720,13 @@ export const styles = StyleSheet.create({
     gap: 8
   },
   intentChip: {
-    borderColor: colors.line,
+    backgroundColor: colors.surfaceContainer,
     borderRadius: 8,
-    borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 8
   },
   intentChipSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent
+    backgroundColor: colors.accent
   },
   intentChipText: {
     color: colors.ink,
@@ -2982,9 +2977,8 @@ export const styles = StyleSheet.create({
   },
   secondaryButton: {
     alignItems: "center",
-    borderColor: colors.line,
+    backgroundColor: colors.surfaceContainer,
     borderRadius: 8,
-    borderWidth: 1,
     justifyContent: "center",
     minHeight: 50,
     paddingVertical: 14
@@ -3061,7 +3055,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 8
   },
   toastAction: {
-    color: colors.accent,
+    color: colors.accentText,
     fontSize: 14,
     fontWeight: "800"
   },

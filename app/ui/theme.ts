@@ -6,87 +6,91 @@ export const colors = {
 
   /**
    * Core light surfaces
-   * Cleaner, quieter neutrals. Still warm, but no longer parchment-heavy.
+   * Warm ivory paper with nearby tonal containers.
    */
-  paper: "#f7f8f5",
-  surface: "#ffffff",
-  surfaceContainer: "#f2f4ef",
-  surfaceContainerHigh: "#e9ede6",
-  surfaceContainerHighest: "#dde4da",
+  paper: "#FFF7E6",
+  surface: "#FFFFFF",
+  surfaceContainer: "#FFF1DA",
+  surfaceContainerHigh: "#F8E6C6",
+  surfaceContainerHighest: "#F0D9AD",
 
-  reviewCard: "#ffffff",
-  reviewCardWell: "#f6f8f3",
+  reviewCard: "#FFFFFF",
+  reviewCardWell: "#FFF1DA",
 
   /**
    * Text
-   * Slight green-black instead of brown-black.
-   * This works better with the primary accent and feels less rustic.
+   * High-contrast warm ink and restrained neutral labels.
    */
-  ink: "#17211b",
-  muted: "#5d675f",
-  placeholder: "#78827a",
+  ink: "#17211B",
+  muted: "#625F51",
+  placeholder: "#817866",
 
   /**
    * Lines
-   * Cooler, softer dividers for light surfaces.
+   * Low-contrast warm dividers for light surfaces.
    */
-  line: "#d6ddd4",
-  lineStrong: "#bbc7bd",
+  line: "#E6D8BB",
+  lineStrong: "#D0BE95",
 
   /**
    * Primary accent
-   * Cleaner botanical green. Strong enough on white, not overly saturated.
+   * Lime stays bright across primary accent fills, icons, and labels.
    */
-  accent: "#2f6f50",
-  accentSoft: "#e5f2eb",
-  accentLine: "#a6cdb8",
-  accentPressed: "#25583f",
+  accent: "#C5D86D",
+  accentText: "#C5D86D",
+  accentSoft: "#EEF7C6",
+  accentLine: "#C5D86D",
+  accentPressed: "#C5D86D",
+  intentAccent: "#556600",
 
   /**
    * Collection / secondary emphasis
-   * Kept as amber, but less muddy and more deliberate.
+   * Carrot stays bright across secondary accent fills, icons, and labels.
    */
-  collectionAccent: "#8a641d",
-  collectionAccentSoft: "#f4ead2",
-  collectionAccentPressed: "#6f5017",
+  collectionAccent: "#F18F01",
+  collectionAccentText: "#F18F01",
+  collectionAccentSoft: "#FFE5BC",
+  collectionAccentLine: "#F18F01",
+  collectionAccentPressed: "#F18F01",
 
   /**
    * Secondary text/action color
-   * Aligned with the neutral/green system instead of reading as a separate hue.
+   * Kept as an alias for existing secondary-emphasis call sites.
    */
-  secondary: "#4f5f55",
+  secondary: "#F18F01",
 
-  onAccent: "#ffffff",
+  onAccent: "#17211B",
+  onCollectionAccent: "#17211B",
 
   /**
    * Processing / informational state
-   * Muted blue that fits the palette without becoming loud.
+   * Vivid blue appears sparingly with pale sky support.
    */
-  processing: "#3f7190",
-  processingSoft: "#e6f1f6",
-  processingLine: "#a9cbdc",
+  processing: "#3525F5",
+  processingSoft: "#C0D6DF",
+  processingLine: "#C0D6DF",
 
   /**
    * Review / warning-ish state
-   * Uses the same amber family as collection to reduce palette sprawl.
+   * Darkened carrot for readable review text on light surfaces.
    */
-  review: "#9a6b1f",
-  reviewSoft: "#f5ead2",
+  review: "#A05E00",
+  reviewSoft: "#FFE6BE",
 
   /**
    * Danger
-   * Clear red, but softened for a light product UI.
+   * Brighter red while preserving readable text contrast.
    */
-  danger: "#b4473a",
-  dangerSoft: "#fbe6e2",
-  dangerLine: "#e4a59c",
-  onDanger: "#ffffff",
+  danger: "#D13A2F",
+  dangerSoft: "#FFE1DA",
+  dangerLine: "#F0A29A",
+  onDanger: "#FFFFFF",
 
   /**
    * Interaction / overlays
    */
   navBorder: "rgba(23, 33, 27, 0.14)",
-  rowRipple: "rgba(47, 111, 80, 0.10)",
+  rowRipple: "rgba(197, 216, 109, 0.22)",
   skeletonSheen: "rgba(255, 255, 255, 0.72)",
 
   shadow: "#000000",
@@ -99,8 +103,8 @@ export const colors = {
   mediaControl: "rgba(12, 18, 14, 0.74)",
   mediaControlStrong: "rgba(3, 7, 5, 0.72)",
   mediaDangerControl: "rgba(100, 28, 23, 0.80)",
-  mediaControlLine: "rgba(240, 247, 242, 0.20)",
-  onMediaControl: "#f1f7f2",
+  mediaControlLine: "rgba(255, 247, 230, 0.24)",
+  onMediaControl: "#FFF7E6",
 
   imageViewerBackground: "#000000"
 };

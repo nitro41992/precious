@@ -189,7 +189,7 @@ export function ReminderEditorSheet({
         <View style={styles.sheetGrabber} />
         <View style={styles.rationaleSheetHeader}>
           <View style={[styles.rationaleSheetHeaderIcon, styles.reminderSheetHeaderIcon]}>
-            <Bell color={colors.accent} size={22} weight="regular" />
+            <Bell color={colors.accentText} size={22} weight="regular" />
           </View>
           <View style={styles.rationaleSheetHeaderCopy}>
             <Text style={styles.sheetTitle}>Reminder</Text>
@@ -276,7 +276,7 @@ export function ReminderEditorSheet({
           {pickerMode ? (
             <View style={styles.reminderNativePickerWrap}>
               <DateTimePicker
-                accentColor={colors.accent}
+                accentColor={colors.accentText}
                 display={pickerMode === "date" && Platform.OS === "ios" ? "inline" : "default"}
                 mode={pickerMode}
                 negativeButton={{ label: "Cancel" }}
