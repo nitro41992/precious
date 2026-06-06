@@ -6,7 +6,7 @@ import { Check, Folder, MagnifyingGlass as Search, X } from "phosphor-react-nati
 import type { Capture, Collection, LoadPhase } from "../types";
 import { collectionSelectionActionState } from "../captureLogic";
 import { captureFieldRationale, collectionCountLabel } from "../capturePresentation";
-import { AiFieldInsight, AnimatedBottomSheet, IconButton } from "../ui/components";
+import { AiFieldInsight, AnimatedBottomSheet, SheetHeader } from "../ui/components";
 import { styles } from "../ui/styles";
 import { colors } from "../ui/theme";
 import { Text, TextInput } from "../ui/typography";
@@ -88,6 +88,10 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
         );
   const selectionCountText = collectionSelectionIds.length ? `${collectionSelectionIds.length} selected` : "No collection";
   const rationale = captureFieldRationale(selected, "collection", { collectionSelectionIds });
+  const completeSelection = () => {
+    if (selectionAction.shouldSave) saveCollectionSelection();
+    else closeCollectionPicker();
+  };
 
   return (
     <AnimatedBottomSheet
@@ -97,14 +101,17 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
       visible={collectionPickerOpen}
     >
         <View style={styles.sheetGrabber} />
-        <View style={styles.sheetHeader}>
-          <View style={styles.sheetHeaderCopy}>
-            <Text style={styles.sheetTitle}>Collection</Text>
-            <Text style={styles.sheetSubtitle}>{selectionCountText}</Text>
-          </View>
-          <IconButton Icon={X} label="Close Collection selection" onPress={closeCollectionPicker} />
-        </View>
-        <View style={styles.collectionSelectorSearchInput}>
+        <SheetHeader
+          closeLabel="Close Collection selection"
+          confirmDisabled={selectionSaving}
+          confirmLabel={selectionSaving ? "Saving collections" : selectionAction.label}
+          confirmTestID="pc.collection.select.save"
+          onClose={closeCollectionPicker}
+          onConfirm={completeSelection}
+          subtitle={selectionCountText}
+          title="Collection"
+        />
+        <View style={[styles.collectionSelectorSearchInput, styles.collectionSelectorSearchInputSheet]}>
           <Search color={colors.muted} size={18} weight="regular" />
           <TextInput
             onChangeText={setCollectionPickerQuery}
@@ -132,7 +139,11 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: selectedRow }}
                   onPress={() => toggleCollectionSelection(item.id)}
-                  style={({ pressed }) => [styles.collectionChoiceRow, pressed && styles.captureRowPressed]}
+                  style={({ pressed }) => [
+                    styles.collectionChoiceRow,
+                    styles.collectionChoiceRowSheet,
+                    pressed && styles.captureRowPressed
+                  ]}
                   testID={`pc.collection.select.${item.id}`}
                 >
                   <View style={styles.collectionChoiceBody}>
@@ -141,7 +152,7 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
                         <Folder color={colors.collectionAccentText} size={18} weight="regular" />
                       </View>
                       <View style={styles.collectionRowCopy}>
-                        <Text numberOfLines={1} style={styles.captureTitle}>
+                        <Text numberOfLines={1} style={styles.collectionChoiceTitle}>
                           {item.title}
                         </Text>
                         <Text style={styles.meta}>{collectionCountLabel(item.captureCount)}</Text>
@@ -166,7 +177,11 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
               accessibilityRole="checkbox"
               accessibilityState={{ checked: collectionSelectionIds.length === 0 }}
               onPress={() => setCollectionSelectionIds([])}
-              style={({ pressed }) => [styles.collectionChoiceRow, pressed && styles.captureRowPressed]}
+              style={({ pressed }) => [
+                styles.collectionChoiceRow,
+                styles.collectionChoiceRowSheet,
+                pressed && styles.captureRowPressed
+              ]}
               testID="pc.collection.select.none"
             >
               <View style={styles.collectionChoiceBody}>
@@ -184,7 +199,7 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
                     />
                   </View>
                   <View style={styles.collectionRowCopy}>
-                    <Text numberOfLines={1} style={styles.captureTitle}>No collection</Text>
+                    <Text numberOfLines={1} style={styles.collectionChoiceTitle}>No collection</Text>
                     <Text style={styles.meta}>Leave this capture ungrouped.</Text>
                   </View>
                 </View>
@@ -216,28 +231,6 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
           contentContainerStyle={styles.collectionSelectorSheetListContent}
           style={styles.collectionSelectorSheetList}
         />
-        <Pressable
-          disabled={selectionSaving}
-          onPress={() => {
-            if (selectionAction.shouldSave) saveCollectionSelection();
-            else closeCollectionPicker();
-          }}
-          style={({ pressed }) => [
-            styles.primaryButton,
-            pressed && !selectionSaving && styles.primaryButtonPressed,
-            selectionSaving && styles.disabledButton
-          ]}
-          testID="pc.collection.select.save"
-        >
-          <View style={styles.primaryButtonContent}>
-            {!selectionSaving && selectionAction.shouldSave ? (
-              <Check color={colors.onAccent} size={18} weight="bold" />
-            ) : null}
-            <Text style={styles.primaryButtonText}>
-              {selectionSaving ? "Saving..." : selectionAction.label}
-            </Text>
-          </View>
-        </Pressable>
         {toast}
     </AnimatedBottomSheet>
   );

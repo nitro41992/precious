@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, ScrollView, View } from "react-native";
 import { DateTimePicker } from "@expo/ui/community/datetime-picker";
-import { Bell, Calendar, Clock, X } from "phosphor-react-native";
+import { Calendar, Clock, Trash } from "phosphor-react-native";
 
 import type { CaptureFieldRationale, ReminderDatePrecision, ReminderScheduleDraft, ReminderSuggestion, ReminderTimePrecision } from "../types";
 import {
@@ -16,7 +16,7 @@ import {
   reminderTimeLabel,
   timeStringFromDate
 } from "../capturePresentation";
-import { AiFieldInsight, AnimatedBottomSheet, IconButton } from "../ui/components";
+import { AiFieldInsight, AnimatedBottomSheet, SheetHeader } from "../ui/components";
 import { styles } from "../ui/styles";
 import { Text } from "../ui/typography";
 import { appTheme, colors } from "../ui/theme";
@@ -187,18 +187,16 @@ export function ReminderEditorSheet({
       visible={visible}
     >
         <View style={styles.sheetGrabber} />
-        <View style={styles.rationaleSheetHeader}>
-          <View style={[styles.rationaleSheetHeaderIcon, styles.reminderSheetHeaderIcon]}>
-            <Bell color={colors.accentText} size={22} weight="regular" />
-          </View>
-          <View style={styles.rationaleSheetHeaderCopy}>
-            <Text style={styles.sheetTitle}>Reminder</Text>
-            <Text numberOfLines={1} style={styles.rationaleSheetKicker}>
-              {preview}
-            </Text>
-          </View>
-          <IconButton Icon={X} label="Close reminder editor" onPress={onClose} />
-        </View>
+        <SheetHeader
+          closeLabel="Close reminder editor"
+          confirmDisabled={saveDisabled}
+          confirmLabel="Save reminder"
+          confirmTestID="pc.reminder.save"
+          onClose={onClose}
+          onConfirm={save}
+          subtitle={preview}
+          title="Reminder"
+        />
         <ScrollView
           contentContainerStyle={styles.reminderSheetScrollContent}
           keyboardShouldPersistTaps="handled"
@@ -307,26 +305,14 @@ export function ReminderEditorSheet({
             </Text>
           </View>
         </ScrollView>
-        <Pressable
-          accessibilityRole="button"
-          disabled={saveDisabled}
-          onPress={save}
-          style={({ pressed }) => [
-            styles.primaryButton,
-            saveDisabled && styles.disabledButton,
-            pressed && !saveDisabled && styles.primaryButtonPressed
-          ]}
-          testID="pc.reminder.save"
-        >
-          <Text style={styles.primaryButtonText}>Save reminder</Text>
-        </Pressable>
         {typeof reminderIndex === "number" && onRemove ? (
           <Pressable
             accessibilityRole="button"
             onPress={() => onRemove(reminderIndex)}
-            style={({ pressed }) => [styles.secondaryButton, pressed && styles.subtlePressed]}
+            style={({ pressed }) => [styles.sheetActionRow, pressed && styles.subtlePressed]}
             testID="pc.reminder.remove"
           >
+            <Trash color={colors.danger} size={20} weight="regular" />
             <Text style={styles.dangerButtonText}>Remove reminder</Text>
           </Pressable>
         ) : null}

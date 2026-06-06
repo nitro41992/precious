@@ -467,13 +467,13 @@ export const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderTopWidth: 0,
-    gap: 12,
+    gap: 14,
     paddingBottom: Platform.OS === "android" ? 20 : 28,
     paddingHorizontal: 22,
     paddingTop: 8
   },
   purposeSheet: {
-    gap: 14,
+    gap: 12,
     paddingBottom: Platform.OS === "android" ? 34 : 42
   },
   fieldRationaleBox: {
@@ -500,12 +500,14 @@ export const styles = StyleSheet.create({
     lineHeight: 19
   },
   aiInsight: {
-    backgroundColor: colors.surfaceContainerHighest,
+    alignItems: "flex-start",
+    backgroundColor: colors.surfaceContainerHigh,
     borderRadius: 8,
+    flexDirection: "row",
     gap: 10,
     marginBottom: 2,
-    paddingHorizontal: 14,
-    paddingVertical: 14
+    paddingHorizontal: 12,
+    paddingVertical: 10
   },
   aiInsightHeader: {
     alignItems: "center",
@@ -515,13 +517,19 @@ export const styles = StyleSheet.create({
   aiInsightIcon: {
     alignItems: "center",
     backgroundColor: colors.accentSoft,
-    borderRadius: 8,
-    height: 28,
+    borderRadius: 7,
+    height: 26,
     justifyContent: "center",
-    width: 28
+    marginTop: 1,
+    width: 26
+  },
+  aiInsightCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0
   },
   aiInsightTitle: {
-    color: colors.secondary,
+    color: colors.accentTextStrong,
     fontSize: 12,
     fontWeight: "800",
     ...typefaces.displaySemibold,
@@ -530,9 +538,9 @@ export const styles = StyleSheet.create({
   aiInsightText: {
     color: colors.ink,
     ...typefaces.medium,
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "600",
-    lineHeight: 21
+    lineHeight: 18
   },
   purposeOptionGrid: {
     flexDirection: "row",
@@ -543,13 +551,17 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
-    borderRadius: 12,
+    borderRadius: 8,
     borderWidth: 0,
-    flexGrow: 1,
+    flexGrow: 0,
     justifyContent: "center",
-    minHeight: 48,
-    minWidth: 96,
-    paddingHorizontal: 12
+    minHeight: 54,
+    minWidth: 0,
+    paddingHorizontal: 12,
+    width: "31.6%"
+  },
+  purposeOptionWide: {
+    width: "100%"
   },
   purposeOptionSelected: {
     backgroundColor: colors.accent,
@@ -569,7 +581,7 @@ export const styles = StyleSheet.create({
   collectionSelectorSheet: {
     gap: 12,
     maxHeight: "88%",
-    paddingBottom: Platform.OS === "android" ? 34 : 42
+    paddingBottom: Platform.OS === "android" ? 24 : 32
   },
   collectionSelectorSheetList: {
     flexGrow: 0,
@@ -642,6 +654,7 @@ export const styles = StyleSheet.create({
   sheetActions: {
     alignItems: "center",
     flexDirection: "row",
+    flexShrink: 0,
     gap: 10
   },
   sheetActionRow: {
@@ -1736,6 +1749,10 @@ export const styles = StyleSheet.create({
     minHeight: 50,
     paddingHorizontal: 12
   },
+  collectionSelectorSearchInputSheet: {
+    backgroundColor: colors.paper,
+    minHeight: 48
+  },
   collectionSelectorList: {
     flex: 1
   },
@@ -1749,6 +1766,18 @@ export const styles = StyleSheet.create({
     gap: 12,
     minHeight: 76,
     paddingVertical: 15
+  },
+  collectionChoiceRowSheet: {
+    minHeight: 62,
+    paddingVertical: 10
+  },
+  collectionChoiceTitle: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 17,
+    fontWeight: "400",
+    ...typefaces.displayMedium,
+    lineHeight: 22
   },
   collectionChoiceBody: {
     flex: 1,
@@ -2454,7 +2483,8 @@ export const styles = StyleSheet.create({
   },
   sheetHeaderCopy: {
     flex: 1,
-    gap: 3
+    gap: 3,
+    minWidth: 0
   },
   sheetTitle: {
     color: colors.ink,
@@ -2478,9 +2508,9 @@ export const styles = StyleSheet.create({
     paddingTop: 12
   },
   reminderSheet: {
-    gap: 14,
+    gap: 12,
     maxHeight: "92%",
-    paddingBottom: Platform.OS === "android" ? 34 : 42,
+    paddingBottom: Platform.OS === "android" ? 24 : 32,
     paddingTop: 8
   },
   reminderSheetHeaderIcon: {
@@ -2490,20 +2520,24 @@ export const styles = StyleSheet.create({
     flexShrink: 1
   },
   reminderSheetScrollContent: {
-    gap: 14,
+    gap: 12,
     paddingBottom: 2
   },
   reminderFieldGroup: {
+    backgroundColor: colors.paper,
     borderTopColor: colors.line,
-    borderTopWidth: 0
+    borderTopWidth: 0,
+    borderRadius: 8,
+    gap: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 8
   },
   reminderFieldSectionHeader: {
     alignItems: "center",
     flexDirection: "row",
     gap: 9,
-    minHeight: 44,
-    paddingTop: 10,
-    paddingBottom: 6
+    minHeight: 34,
+    paddingBottom: 4
   },
   reminderFieldRow: {
     alignItems: "center",
@@ -2511,8 +2545,8 @@ export const styles = StyleSheet.create({
     borderBottomWidth: 0,
     flexDirection: "row",
     gap: 12,
-    minHeight: 64,
-    paddingVertical: 12
+    minHeight: 52,
+    paddingVertical: 8
   },
   reminderFieldCopy: {
     flex: 1,
@@ -2534,9 +2568,9 @@ export const styles = StyleSheet.create({
   },
   reminderFieldValue: {
     color: colors.ink,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "800",
-    lineHeight: 21
+    lineHeight: 20
   },
   reminderInlineAction: {
     color: colors.accentText,
@@ -2545,7 +2579,7 @@ export const styles = StyleSheet.create({
     marginLeft: "auto"
   },
   reminderNativePickerWrap: {
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: colors.paper,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 0,
@@ -2558,14 +2592,15 @@ export const styles = StyleSheet.create({
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 0,
-    gap: 4,
-    padding: 12
+    gap: 3,
+    paddingHorizontal: 12,
+    paddingVertical: 10
   },
   reminderSummaryText: {
     color: colors.ink,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "800",
-    lineHeight: 21
+    lineHeight: 20
   },
   reminderDurationBlock: {
     backgroundColor: colors.surfaceContainerHigh,

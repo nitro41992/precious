@@ -1,13 +1,12 @@
 import type { RefObject } from "react";
 import { Animated, Dimensions, KeyboardAvoidingView, Pressable, View } from "react-native";
 import type { TextInput as NativeTextInput } from "react-native";
-import { Check, X } from "phosphor-react-native";
 
 import type { Collection } from "../types";
-import { IconButton } from "../ui/components";
+import { SheetHeader } from "../ui/components";
 import { styles } from "../ui/styles";
 import { colors } from "../ui/theme";
-import { Text, TextInput } from "../ui/typography";
+import { TextInput } from "../ui/typography";
 
 export function CollectionComposerSheet({
   captureComposerMotion,
@@ -83,25 +82,16 @@ export function CollectionComposerSheet({
           ]}
         >
           <View style={styles.sheetGrabber} />
-          <View style={styles.captureSheetHeader}>
-            <View style={styles.sheetHeaderCopy}>
-              <Text style={styles.sheetTitle}>New collection</Text>
-              <Text style={styles.sheetSubtitle}>
-                Keep projects, trips, recipes, and purchase decisions tidy without making them the main way to browse.
-              </Text>
-            </View>
-            <View style={styles.sheetActions}>
-              <IconButton Icon={X} label="Close" onPress={onClose} />
-              <IconButton
-                Icon={Check}
-                label="Create collection"
-                disabled={saveDisabled}
-                onPress={onSave}
-                tone="primary"
-                testID="pc.collections.create.save"
-              />
-            </View>
-          </View>
+          <SheetHeader
+            closeLabel="Close"
+            confirmDisabled={saveDisabled}
+            confirmLabel="Create collection"
+            confirmTestID="pc.collections.create.save"
+            onClose={onClose}
+            onConfirm={onSave}
+            subtitle="Keep projects, trips, recipes, and purchase decisions tidy without making them the main way to browse."
+            title="New collection"
+          />
           <View
             style={[
               styles.captureSheetBody,

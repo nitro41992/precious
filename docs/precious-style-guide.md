@@ -195,6 +195,14 @@ Rules:
 - Destructive actions use danger text and should sit near the footer or object settings, not beside the main save action.
 - Button copy should use direct verbs: `Save review`, `Retry analysis`, `Delete capture`, `Undo`, `Use collection`.
 
+### Focused Bottom Sheets
+
+- Focused sheets use one warm tonal surface with a small grabber, compact Clash title, optional short helper line, and icon-only close plus header check actions when completion is explicit.
+- Header check is the default completion pattern for New Capture, New Collection, Note, Collection selection, and Reminder editing; use a full-width bottom CTA only when a sheet has a truly separate final step that cannot stay visible in the header.
+- Sheet content should have one working area: mode chips plus one input, a compact option grid, a searchable choice list, or a small interval editor. Avoid nested cards, heavy stacked panels, and duplicate save controls.
+- AI rationale inside Purpose, Collection, and Later sheets should be a compact tonal row tied to the current field value. Hide it when the draft no longer matches the analyzer-selected value.
+- Keep sheet actions clear of Android gesture navigation and avoid visible hairline dividers.
+
 ### Summary Cards
 
 Cards are allowed only for bounded summaries or decisions:

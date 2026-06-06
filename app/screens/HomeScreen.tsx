@@ -16,14 +16,13 @@ import {
   Link as Link2,
   MagnifyingGlass as Search,
   Note as StickyNote,
-  Plus,
-  X
+  Plus
 } from "phosphor-react-native";
 
 import type { CaptureComposerMode, HomeListRow } from "../types";
 import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
-import { HeaderContentGradient, IconButton } from "../ui/components";
+import { HeaderContentGradient, IconButton, SheetHeader } from "../ui/components";
 import { Text, TextInput } from "../ui/typography";
 
 type HomeScreenProps = {
@@ -289,22 +288,15 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
               ]}
             >
               <View style={styles.sheetGrabber} />
-              <View style={styles.captureSheetHeader}>
-                <View style={styles.sheetHeaderCopy}>
-                  <Text style={styles.sheetTitle}>New capture</Text>
-                </View>
-                <View style={styles.sheetActions}>
-                  <IconButton Icon={X} label="Close" onPress={() => closeCaptureComposer()} />
-                  <IconButton
-                    Icon={Check}
-                    label={savingCapture ? "Saving capture" : "Save capture"}
-                    disabled={savingCapture || !sourceDraft.trim()}
-                    onPress={() => void saveCaptureSource()}
-                    tone="primary"
-                    testID="pc.capture.save"
-                  />
-                </View>
-              </View>
+              <SheetHeader
+                closeLabel="Close"
+                confirmDisabled={savingCapture || !sourceDraft.trim()}
+                confirmLabel={savingCapture ? "Saving capture" : "Save capture"}
+                confirmTestID="pc.capture.save"
+                onClose={() => closeCaptureComposer()}
+                onConfirm={() => void saveCaptureSource()}
+                title="New capture"
+              />
               <View style={styles.captureModeRow}>
                 {([
                   { mode: "link", label: "Link", Icon: Link2 },

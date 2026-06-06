@@ -17,7 +17,6 @@ import {
   ArrowLeft,
   Camera,
   CaretRight,
-  Check,
   Copy,
   Note as StickyNote,
   Trash as Trash2,
@@ -60,7 +59,7 @@ import {
 import { ReminderEditorSheet } from "../sheets/ReminderEditorSheet";
 import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
-import { AiFieldInsight, AnimatedBottomSheet, IconButton, SourceMark } from "../ui/components";
+import { AiFieldInsight, AnimatedBottomSheet, SheetHeader, SourceMark } from "../ui/components";
 import { Text, TextInput } from "../ui/typography";
 
 type CaptureReviewScreenProps = {
@@ -842,15 +841,13 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
               ]}
             >
               <View style={styles.sheetGrabber} />
-              <View style={styles.captureSheetHeader}>
-                <View style={styles.sheetHeaderCopy}>
-                  <Text style={styles.sheetTitle}>Note</Text>
-                </View>
-                <View style={styles.sheetActions}>
-                  <IconButton Icon={X} label="Close note editor" onPress={() => closeNoteSheet()} />
-                  <IconButton Icon={Check} label="Done" onPress={() => closeNoteSheet()} tone="primary" />
-                </View>
-              </View>
+              <SheetHeader
+                closeLabel="Close note editor"
+                confirmLabel="Done"
+                onClose={() => closeNoteSheet()}
+                onConfirm={() => closeNoteSheet()}
+                title="Note"
+              />
               <View
                 style={[
                   styles.captureSheetBody,
@@ -889,13 +886,12 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
         visible={quickIntentOpen}
       >
             <View style={styles.sheetGrabber} />
-            <View style={styles.sheetHeader}>
-              <View style={styles.sheetHeaderCopy}>
-                <Text style={styles.sheetTitle}>Purpose</Text>
-                <Text style={styles.sheetSubtitle}>Choose what this capture should help you do later.</Text>
-              </View>
-              <IconButton Icon={X} label="Close Purpose choices" onPress={() => setQuickIntentOpen(false)} />
-            </View>
+            <SheetHeader
+              closeLabel="Close Purpose choices"
+              onClose={() => setQuickIntentOpen(false)}
+              subtitle="Choose what this capture should help you do later."
+              title="Purpose"
+            />
             {purposeRationale.visible ? (
               <AiFieldInsight insight={purposeRationale} />
             ) : null}
@@ -931,6 +927,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                 }}
                 style={({ pressed }) => [
                   styles.purposeOption,
+                  styles.purposeOptionWide,
                   !quickIntentValue && styles.purposeOptionSelected,
                   pressed && styles.subtlePressed
                 ]}

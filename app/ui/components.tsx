@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import { Animated, Dimensions, Easing, Pressable, View } from "react-native";
 import { Image } from "expo-image";
-import { Check, ClockClockwise, Folder, Folders, Gear, HouseSimple, Info, Plus, Sparkle, Warning } from "phosphor-react-native";
+import { Check, ClockClockwise, Folder, Folders, Gear, HouseSimple, Info, Plus, Sparkle, Warning, X } from "phosphor-react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 import type {
@@ -164,16 +164,62 @@ export function IconButton({
   );
 }
 
+export function SheetHeader({
+  closeLabel,
+  confirmDisabled = false,
+  confirmLabel = "Done",
+  confirmTestID,
+  onClose,
+  onConfirm,
+  subtitle,
+  title
+}: {
+  closeLabel: string;
+  confirmDisabled?: boolean;
+  confirmLabel?: string;
+  confirmTestID?: string;
+  onClose: () => void;
+  onConfirm?: () => void;
+  subtitle?: string;
+  title: string;
+}) {
+  return (
+    <View style={styles.sheetHeader}>
+      <View style={styles.sheetHeaderCopy}>
+        <Text style={styles.sheetTitle}>{title}</Text>
+        {subtitle ? (
+          <Text numberOfLines={2} style={styles.sheetSubtitle}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      <View style={styles.sheetActions}>
+        <IconButton Icon={X} label={closeLabel} onPress={onClose} />
+        {onConfirm ? (
+          <IconButton
+            Icon={Check}
+            label={confirmLabel}
+            disabled={confirmDisabled}
+            onPress={onConfirm}
+            tone="primary"
+            testID={confirmTestID}
+          />
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 export function AiFieldInsight({ insight }: { insight: CaptureFieldRationale }) {
   return (
     <View style={styles.aiInsight}>
-      <View style={styles.aiInsightHeader}>
-        <View style={styles.aiInsightIcon}>
-          <Sparkle color={colors.accentText} size={16} weight="fill" />
-        </View>
-        <Text style={styles.aiInsightTitle}>{insight.title || "AI insight"}</Text>
+      <View style={styles.aiInsightIcon}>
+        <Sparkle color={colors.accentTextStrong} size={15} weight="fill" />
       </View>
-      <Text style={styles.aiInsightText}>{insight.text}</Text>
+      <View style={styles.aiInsightCopy}>
+        <Text style={styles.aiInsightTitle}>{insight.title || "AI insight"}</Text>
+        <Text style={styles.aiInsightText}>{insight.text}</Text>
+      </View>
     </View>
   );
 }

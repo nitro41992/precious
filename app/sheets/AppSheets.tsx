@@ -1,10 +1,7 @@
 import { Pressable, View } from "react-native";
-import {
-  SignOut as LogOut,
-  X
-} from "phosphor-react-native";
+import { SignOut as LogOut } from "phosphor-react-native";
 
-import { AnimatedBottomSheet, IconButton } from "../ui/components";
+import { AnimatedBottomSheet, SheetHeader } from "../ui/components";
 import { styles } from "../ui/styles";
 import { colors } from "../ui/theme";
 import { Text } from "../ui/typography";
@@ -26,13 +23,12 @@ export function AppSheets({
       visible={accountSheetOpen}
     >
           <View style={styles.sheetGrabber} />
-          <View style={styles.sheetHeader}>
-            <View style={styles.sheetHeaderCopy}>
-              <Text style={styles.sheetTitle}>Settings</Text>
-              <Text style={styles.sheetSubtitle}>Manage this device session.</Text>
-            </View>
-            <IconButton Icon={X} label="Close account actions" onPress={() => setAccountSheetOpen(false)} />
-          </View>
+          <SheetHeader
+            closeLabel="Close account actions"
+            onClose={() => setAccountSheetOpen(false)}
+            subtitle="Manage this device session."
+            title="Settings"
+          />
           <Pressable
             onPress={() => {
               setAccountSheetOpen(false);
