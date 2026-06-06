@@ -84,7 +84,7 @@ New Capture must:
 Capture Review must:
 
 - Feel like editing a saved memory, not inspecting an analysis report.
-- Lead with existing capture imagery or source media as a full-bleed top preview that can extend under the transparent status bar, with the editable title, source context, and detail controls gathered in a flatter tonal detail plane below it. Tapping uploaded image or screenshot media opens a full-screen image viewer with pinch zoom; tapping source/link preview media opens the source URL when one is available.
+- Lead with existing capture imagery or source media as a full-bleed top preview that can extend under the transparent status bar, with the image matte and editable title/source/detail controls gathered against the same warm paper background as Recents and Collections. Tapping uploaded image or screenshot media opens a full-screen image viewer with pinch zoom; tapping source/link preview media opens the source URL when one is available.
 - Make the saved media or designed source fallback a strong first-viewport visual anchor with a taller portrait-like frame at rest that eases toward square as the same native page scroll advances into the detail plane. Do not use nested detail-only scrolling, sticky collapse behavior, or draggable sheet affordances for Capture Review.
 - Keep source app, host, and URL represented only as source context; the editable title should not default to source-only copy such as `Saved from [domain]`.
 - Show Save Intent, Collections, and Reminder as one compact editable sentence below the title/source area, using language like `Saved as [Purpose] in [Collection] for [Later]`. Use Material 3 Expressive-style emphasis through type, color, underline, and touch target sizing rather than pill cards.

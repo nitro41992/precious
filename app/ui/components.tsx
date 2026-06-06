@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import type { StyleProp, TextStyle, ViewStyle } from "react-native";
+import type { StyleProp, ViewStyle } from "react-native";
 import { Animated, Dimensions, Easing, Pressable, View } from "react-native";
 import { Image } from "expo-image";
 import { Check, ClockClockwise, Folder, Folders, Gear, HouseSimple, Info, Plus, Sparkle, Warning } from "phosphor-react-native";
@@ -376,18 +376,16 @@ export function StatusGlyph({ capture }: { capture: Capture }) {
 export function MeaningToken({
   Icon,
   iconColor = colors.muted,
-  text,
-  textStyle
+  text
 }: {
   Icon: AppIconComponent;
   iconColor?: string;
   text: string;
-  textStyle?: StyleProp<TextStyle>;
 }) {
   return (
     <View style={styles.meaningToken}>
       <Icon color={iconColor} size={13} weight="regular" />
-      <Text numberOfLines={1} style={[styles.meaningTokenText, textStyle]}>
+      <Text numberOfLines={1} style={styles.meaningTokenText}>
         {text}
       </Text>
     </View>
@@ -413,7 +411,7 @@ export function CollectionMeaningToken({ collections }: { collections: LinkedCol
       ]}
     >
       <Folder
-        color={colors.collectionAccentText}
+        color={colors.muted}
         size={13}
         weight={overflowCount > 0 ? "fill" : "regular"}
       />
@@ -648,27 +646,29 @@ export function BottomAppBar({
                   <Icon
                     color={selected ? selectedColor : colors.muted}
                     selected={selected}
-                    size={22}
+                    size={26}
                   />
                 </View>
               </Pressable>
             );
           })}
         </View>
-        <Pressable
-          accessibilityLabel={collectionAction ? "New collection" : "New capture"}
-          accessibilityRole="button"
-          onPress={onFabPress}
-          style={({ pressed }) => [
-            styles.bottomNavFab,
-            collectionAction && styles.bottomNavFabCollection,
-            pressed && styles.bottomNavFabPressed,
-            pressed && collectionAction && styles.bottomNavFabCollectionPressed
-          ]}
-          testID={collectionAction ? "pc.nav.collection-create" : "pc.nav.capture"}
-        >
-          <Plus color={collectionAction ? colors.onCollectionAccent : colors.onAccent} size={22} weight="thin" />
-        </Pressable>
+        <View style={[styles.bottomNavFabShadow, collectionAction && styles.bottomNavFabShadowCollection]}>
+          <Pressable
+            accessibilityLabel={collectionAction ? "New collection" : "New capture"}
+            accessibilityRole="button"
+            onPress={onFabPress}
+            style={({ pressed }) => [
+              styles.bottomNavFab,
+              collectionAction && styles.bottomNavFabCollection,
+              pressed && styles.bottomNavFabPressed,
+              pressed && collectionAction && styles.bottomNavFabCollectionPressed
+            ]}
+            testID={collectionAction ? "pc.nav.collection-create" : "pc.nav.capture"}
+          >
+            <Plus color={collectionAction ? colors.onCollectionAccent : colors.onAccent} size={28} weight="thin" />
+          </Pressable>
+        </View>
       </View>
     </View>
   );

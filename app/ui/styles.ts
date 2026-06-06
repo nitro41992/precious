@@ -2,6 +2,18 @@ import { Platform, StatusBar, StyleSheet } from "react-native";
 
 import { colors, typefaces } from "./theme";
 
+const bottomControlShadow = Platform.OS === "android"
+  ? {
+      boxShadow: "0px 0px 44px 6px rgba(23, 33, 27, 0.105)",
+      elevation: 0
+    }
+  : {
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.075,
+      shadowRadius: 34
+    };
+
 export const styles = StyleSheet.create({
   safe: {
     backgroundColor: colors.paper,
@@ -13,7 +25,7 @@ export const styles = StyleSheet.create({
     flex: 1
   },
   reviewSafe: {
-    backgroundColor: colors.surfaceContainer,
+    backgroundColor: colors.paper,
     flex: 1
   },
   screenStack: {
@@ -149,7 +161,8 @@ export const styles = StyleSheet.create({
     height: Platform.OS === "android" ? 152 : 162,
     left: 0,
     position: "absolute",
-    right: 0
+    right: 0,
+    zIndex: 0
   },
   bottomNavDock: {
     alignItems: "center",
@@ -158,6 +171,8 @@ export const styles = StyleSheet.create({
     gap: 16,
     justifyContent: "center",
     maxWidth: "78%",
+    position: "relative",
+    zIndex: 1,
     width: 264
   },
   bottomNavBar: {
@@ -170,7 +185,8 @@ export const styles = StyleSheet.create({
     justifyContent: "space-between",
     minHeight: 50,
     paddingHorizontal: 5,
-    paddingVertical: 5
+    paddingVertical: 5,
+    ...bottomControlShadow
   },
   bottomNavItem: {
     alignItems: "center",
@@ -192,12 +208,22 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 8
   },
   bottomNavIconWrapSelected: {},
+  bottomNavFabShadow: {
+    backgroundColor: colors.accent,
+    borderRadius: 25,
+    height: 50,
+    width: 50,
+    ...bottomControlShadow
+  },
+  bottomNavFabShadowCollection: {
+    backgroundColor: colors.collectionAccent
+  },
   bottomNavFab: {
     alignItems: "center",
     backgroundColor: colors.accent,
     borderRadius: 25,
-    justifyContent: "center",
     height: 50,
+    justifyContent: "center",
     width: 50
   },
   bottomNavFabPressed: {
@@ -690,7 +716,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 16
   },
   captureRowPressed: {
-    backgroundColor: colors.surface
+    backgroundColor: colors.accentPressed
   },
   subtlePressed: {
     backgroundColor: colors.surfaceContainerHigh,
@@ -934,9 +960,6 @@ export const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 17
   },
-  intentMeaningTokenText: {
-    color: colors.intentAccent
-  },
   collectionMeaningToken: {
     paddingRight: 2
   },
@@ -944,11 +967,11 @@ export const styles = StyleSheet.create({
     paddingRight: 0
   },
   collectionMeaningTokenText: {
-    color: colors.collectionAccentText
+    color: colors.muted
   },
   collectionOverflowBadge: {
     alignItems: "center",
-    backgroundColor: colors.collectionAccent,
+    backgroundColor: colors.surfaceContainerHigh,
     borderRadius: 6,
     flexShrink: 0,
     justifyContent: "center",
@@ -957,7 +980,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 5
   },
   collectionOverflowText: {
-    color: colors.onCollectionAccent,
+    color: colors.muted,
     fontSize: 11,
     fontWeight: "800",
     lineHeight: 14
@@ -1446,7 +1469,7 @@ export const styles = StyleSheet.create({
     width: "100%"
   },
   collectionCardPressed: {
-    backgroundColor: colors.surface
+    backgroundColor: colors.collectionAccentPressed
   },
   collectionCollageFrame: {
     aspectRatio: 1,
@@ -1866,12 +1889,12 @@ export const styles = StyleSheet.create({
     flex: 1
   },
   reviewScrollLayout: {
-    backgroundColor: colors.surfaceContainer,
+    backgroundColor: colors.paper,
     flex: 1,
     minHeight: 0
   },
   reviewMediaStage: {
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: colors.paper,
     marginHorizontal: 0,
     marginTop: 0,
     minHeight: 286,
@@ -1885,14 +1908,14 @@ export const styles = StyleSheet.create({
     zIndex: 2
   },
   reviewDetailPlane: {
-    backgroundColor: colors.surfaceContainer,
+    backgroundColor: colors.paper,
     gap: 18,
     minHeight: 520,
     paddingHorizontal: 22,
     paddingTop: 22
   },
   reviewDetailContent: {
-    backgroundColor: colors.surfaceContainer,
+    backgroundColor: colors.paper,
     paddingBottom: 118
   },
   reviewDetailContentNoFooter: {
@@ -1930,7 +1953,7 @@ export const styles = StyleSheet.create({
     top: 0
   },
   reviewMediaHeaderImage: {
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: colors.paper,
     borderRadius: 18,
     bottom: 8,
     left: 8,

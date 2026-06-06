@@ -40,8 +40,7 @@ export const colors = {
   accentText: "#C5D86D",
   accentSoft: "#EEF7C6",
   accentLine: "#C5D86D",
-  accentPressed: "#C5D86D",
-  intentAccent: "#556600",
+  accentPressed: "#9FB348",
 
   /**
    * Collection / secondary emphasis
@@ -51,7 +50,7 @@ export const colors = {
   collectionAccentText: "#F18F01",
   collectionAccentSoft: "#FFE5BC",
   collectionAccentLine: "#F18F01",
-  collectionAccentPressed: "#F18F01",
+  collectionAccentPressed: "#C66F00",
 
   /**
    * Secondary text/action color

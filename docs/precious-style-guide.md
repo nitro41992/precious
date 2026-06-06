@@ -92,14 +92,13 @@ Use the warm light palette as the default app base and add state colors sparingl
 | Accent Text | `#C5D86D` | Bright lime text and icon tint for primary emphasis |
 | Accent Soft | `#EEF7C6` | Selected chip or successful quiet state |
 | Accent Line | `#C5D86D` | Bright lime borders or small primary accent lines |
-| Accent Pressed | `#C5D86D` | Pressed primary actions; motion carries the pressed state |
+| Accent Pressed | `#9FB348` | Darker lime pressed fill for Recent Capture row/card feedback and primary actions |
 | On Accent | `#17211B` | Text and icons on lime-filled controls |
-| Intent Accent | `#556600` | Darker lime for Save Intent icon and text in Capture rows |
 | Collection Accent | `#F18F01` | Carrot secondary fill and collection emphasis |
-| Collection Accent Text | `#F18F01` | Bright carrot text and icon tint for secondary emphasis |
+| Collection Accent Text | `#F18F01` | Bright carrot text and icon tint for Collection navigation and management emphasis |
 | Collection Accent Soft | `#FFE5BC` | Quiet collection emphasis |
 | Collection Accent Line | `#F18F01` | Bright carrot borders or small secondary accent lines |
-| Collection Accent Pressed | `#F18F01` | Pressed collection actions; motion carries the pressed state |
+| Collection Accent Pressed | `#C66F00` | Darker carrot pressed fill for Collection card feedback and collection actions |
 | On Collection Accent | `#17211B` | Text and icons on carrot-filled controls |
 | Secondary | `#F18F01` | Alias for bright secondary text and action color |
 | Processing | `#3525F5` | Analyzing, syncing, queued |
@@ -119,6 +118,7 @@ Rules:
 - Pair color with text labels such as `Ready`, `Analyzing`, `Needs review`, `Failed`, or `Deleted`.
 - Avoid pure black, pure white as the whole page background, purple gradients, glass effects, and decorative blobs.
 - Header and bottom-navigation fades should use `Paper` and `Surface Container` stops so gradients stay within the warm light palette.
+- Recent Captures, Collections, the Capture Review edit/detail plane, and the hero media matte around persisted imagery share the same `Paper` background. Use tonal containers only inside controls, media fallbacks, thumbnails, and pressed states.
 - Treat available source imagery, thumbnails, screenshots, and shared image assets as product content. Use them for rows and Capture Review headers when already persisted; do not add decorative imagery or new extraction work only to fill space.
 
 ### Typography
@@ -177,6 +177,7 @@ Rules:
 - Do not show model/provider details, analysis mode, confidence percentages, or generic `Analyzed` metadata in Recent Captures rows.
 - Do not show analyzer rationale, summary prose, or note previews in Recents rows. Keep those details available in Capture Review and Search.
 - When a Capture belongs to multiple Collections, rows should make that visible compactly, such as first Collection plus a quiet `+N` count, rather than rendering only one Collection or listing every Collection name.
+- The bottom meaning line for Save Intent, Collection, and Reminder should read as muted metadata: keep its icons, text, and overflow count neutral rather than accent-colored.
 - Group Recent Captures by recency with headers such as `Today`, `Yesterday`, `This week`, and `Earlier`.
 
 ### Chips
@@ -208,7 +209,7 @@ Each card should have one purpose, one short headline, one evidence line, and on
 ### Motion And Feedback
 
 - Use restrained native-feeling transitions for opening Search, Capture Review, collection edit views, and reminder edit views.
-- Use press feedback on rows, buttons, and chips.
+- Use press feedback on rows, buttons, and chips. Recent Capture rows press with `Accent Pressed`; Collection cards press with `Collection Accent Pressed`.
 - Use inline loading placeholders or skeleton rows for captures and search results; avoid full-screen spinners except during app boot.
 - Use toast undo for reversible destructive or removal actions such as delete and collection removal.
 - Use the shared tonal toast host for transient action feedback such as saved, copied, removed, undo, unavailable, and could-not-complete states. Toasts should be bottom-docked, tonal, borderless, icon-led, and should show tone through the icon/action accent rather than a colored card edge. Keep page-level load errors, authentication form errors, and field-level autosave state inline where they orient the current task.

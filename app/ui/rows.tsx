@@ -142,16 +142,11 @@ export function CaptureRow({
         {hasMeaningTokens ? (
           <View style={styles.rowMeaningLine}>
             {intentLabel ? (
-              <MeaningToken
-                Icon={Lightbulb}
-                iconColor={colors.intentAccent}
-                text={intentLabel}
-                textStyle={styles.intentMeaningTokenText}
-              />
+              <MeaningToken Icon={Lightbulb} text={intentLabel} />
             ) : null}
             <CollectionMeaningToken collections={collectionTokens} />
             {reminderText ? (
-              <MeaningToken Icon={CalendarBlank} iconColor={colors.review} text={reminderText} />
+              <MeaningToken Icon={CalendarBlank} text={reminderText} />
             ) : null}
           </View>
         ) : null}

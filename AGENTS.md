@@ -12,6 +12,10 @@ Before product, UI, workflow, capture-review, search, collection, reminder, or n
 
 If a product decision changes, update the smallest relevant artifact immediately. Use `CONTEXT.md` only for domain language, use the acceptance doc for current UI criteria, use the style guide for visual/workflow rules, and create or update an ADR when the decision is durable, surprising without context, and the result of a real trade-off.
 
+## Visual Guardrails
+
+Do not add hairline borders, one-pixel outlines, or visible hairline dividers to the consumer app UI. They make the product feel fussy and brittle; prefer spacing, tonal fills, soft grouped surfaces, shadows, or typography to create separation.
+
 ## Architecture Documentation Expectations
 
 When documenting architecture, system flows, data flows, persistence, external integrations, or runtime boundaries:
