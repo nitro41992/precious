@@ -1817,10 +1817,10 @@ export default function App() {
     setCollectionSearchQuery("");
   }
 
-  function markFaviconFailed(host: string) {
+  const markFaviconFailed = useCallback((host: string) => {
     if (!host) return;
     setFaviconFailures((current) => (current[host] ? current : { ...current, [host]: true }));
-  }
+  }, []);
 
   function replaceLocalCaptureLists(next: Capture[]) {
     commitCaptureRows("active", () => sortCaptures(capturesForListMode(next, "active")));
@@ -3256,7 +3256,10 @@ export default function App() {
     await saveCaptureImage("camera");
   }
 
-
+  const handleCollectionPress = useCallback((collectionId: string) => {
+    setCollectionSearchOpen(false);
+    selectCollection(collectionId);
+  }, [selectCollection]);
 
   const {
     renderBottomAppBar,
@@ -3287,10 +3290,7 @@ export default function App() {
     onCaptureImageLoadState: markCaptureImageLoadState,
     onCollectionComposerOpen: openCollectionComposer,
     onCollectionDescriptionChange: setCollectionDescription,
-    onCollectionPress: (collectionId) => {
-      setCollectionSearchOpen(false);
-      selectCollection(collectionId);
-    },
+    onCollectionPress: handleCollectionPress,
     onCollectionTitleChange: setCollectionTitle,
     onCaptureThumbnailRef: registerCaptureThumbnailRef,
     onCollectionsScreenOpen: (mode) => void openCollectionsScreen(mode),

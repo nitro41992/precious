@@ -23,7 +23,8 @@ import {
   CaptureRow,
   CaptureRowInlineSkeleton,
   CaptureSkeletonRows,
-  CollectionSkeletonRows
+  CollectionSkeletonRows,
+  HomeCaptureRowItem
 } from "./rows";
 import { styles } from "./styles";
 import { colors } from "./theme";
@@ -233,16 +234,20 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
         layout={input.screenHandoffActive ? undefined : rowLayout}
       >
         <Animated.View style={{ opacity: input.homeRowsFade }}>
-          {renderCaptureRow({
-            item: item.capture,
-            deferFallbackIcon: input.capturesLoading && !input.activeCapturesLoadedOnce,
-            forceSkeleton: input.homeFeedRevealPending,
-            onPress: () => input.onOpenRecentCapture(item.capture),
-            showInlineSourceIcon: true,
-            surface: "card",
-            testID: `pc.capture.row.${item.capture.id}`,
-            thumbnailRef: (node: View | null) => input.onCaptureThumbnailRef(item.capture.id, node)
-          })}
+          <HomeCaptureRowItem
+            capture={item.capture}
+            captureImageLoadStates={input.captureImageLoadStates}
+            captureRowRevealStates={input.captureRowRevealStates}
+            deferFallbackIcon={input.capturesLoading && !input.activeCapturesLoadedOnce}
+            failedFavicons={input.failedFavicons}
+            forceSkeleton={input.homeFeedRevealPending}
+            onCaptureThumbnailRef={input.onCaptureThumbnailRef}
+            onFaviconFailure={input.onFaviconFailure}
+            onImageLoadState={input.onCaptureImageLoadState}
+            onOpenRecentCapture={input.onOpenRecentCapture}
+            SkeletonBlock={SkeletonBlock}
+            testID={`pc.capture.row.${item.capture.id}`}
+          />
         </Animated.View>
       </Reanimated.View>
     );

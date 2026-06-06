@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, memo, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { PressableProps, PressableStateCallbackType, StyleProp, ViewStyle } from "react-native";
 import { Animated, Dimensions, Easing, Pressable, View } from "react-native";
@@ -28,6 +28,7 @@ import type {
 } from "../types";
 import { displayStatus, hostFromUrl } from "../captureLogic";
 import {
+  captureFaviconHost,
   captureImageCacheKey,
   captureImageUrl,
   captureSourceHost,
@@ -376,15 +377,7 @@ export function SkeletonRevealFrame({
   );
 }
 
-export function SourceMark({
-  capture,
-  failedFavicons,
-  imageLoadKey = "",
-  imageUnavailable = false,
-  onFaviconFailure,
-  onImageLoadState,
-  size = "row"
-}: {
+type SourceMarkProps = {
   capture: Capture;
   failedFavicons: Record<string, boolean>;
   imageLoadKey?: string;
@@ -392,8 +385,18 @@ export function SourceMark({
   onFaviconFailure: (host: string) => void;
   onImageLoadState?: (key: string, state: CaptureImageLoadState) => void;
   size?: "row" | "detail" | "inline" | "meta";
-}) {
-  const host = captureSourceHost(capture).replace(/^www\./i, "");
+};
+
+export const SourceMark = memo(function SourceMark({
+  capture,
+  failedFavicons,
+  imageLoadKey = "",
+  imageUnavailable = false,
+  onFaviconFailure,
+  onImageLoadState,
+  size = "row"
+}: SourceMarkProps) {
+  const host = captureFaviconHost(capture);
   const iconHost =
     hostFromUrl(capture.urlEvidence?.final_url) ||
     hostFromUrl(capture.urlEvidence?.canonical_url) ||
@@ -479,7 +482,21 @@ export function SourceMark({
       )}
     </View>
   );
-}
+}, (previous, next) => {
+  // Re-render only when something this mark actually reads changes. The
+  // failedFavicons map is shared across all rows and gets a new identity on
+  // every favicon failure, so compare just this capture's host entry.
+  const host = captureFaviconHost(previous.capture);
+  return (
+    previous.capture === next.capture &&
+    previous.imageLoadKey === next.imageLoadKey &&
+    previous.imageUnavailable === next.imageUnavailable &&
+    previous.size === next.size &&
+    previous.onFaviconFailure === next.onFaviconFailure &&
+    previous.onImageLoadState === next.onImageLoadState &&
+    Boolean(previous.failedFavicons[host]) === Boolean(next.failedFavicons[host])
+  );
+});
 
 export function sourceIconColor(status: CaptureStatus) {
   if (status === "processing") return colors.processing;

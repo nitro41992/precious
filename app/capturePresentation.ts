@@ -716,6 +716,13 @@ export function captureSourceHost(capture: Capture) {
   return hostFromUrl(capture.sourceUrl) || capture.siteName || "";
 }
 
+// The key used to look up a capture's entry in the failedFavicons map. Must
+// stay in sync with the host computed inside SourceMark so row-level memo
+// comparators can detect favicon-failure changes for exactly this capture.
+export function captureFaviconHost(capture: Capture) {
+  return captureSourceHost(capture).replace(/^www\./i, "");
+}
+
 export function sourceFaviconUrl(host: string) {
   const cleaned = host.replace(/^www\./i, "").trim();
   if (!cleaned || !cleaned.includes(".") || /[\s/]/.test(cleaned)) return "";

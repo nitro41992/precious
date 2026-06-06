@@ -8,6 +8,7 @@ import { collectionCollageSlots, hostFromUrl } from "../captureLogic";
 import type { Capture, CaptureImageLoadState, Collection } from "../types";
 import {
   captureDisplayTitle,
+  captureFaviconHost,
   captureImageLoadKey,
   captureIntentLabel,
   captureRowRevealKey,
@@ -172,6 +173,102 @@ export function CaptureRow({
       {row}
     </SkeletonRevealFrame>
   );
+}
+
+type HomeCaptureRowItemProps = {
+  capture: Capture;
+  captureImageLoadStates: Record<string, CaptureImageLoadState>;
+  captureRowRevealStates: Record<string, boolean>;
+  deferFallbackIcon: boolean;
+  failedFavicons: Record<string, boolean>;
+  forceSkeleton: boolean;
+  onCaptureThumbnailRef: (captureId: string, node: View | null) => void;
+  onFaviconFailure: (host: string) => void;
+  onImageLoadState: (key: string, state: CaptureImageLoadState) => void;
+  onOpenRecentCapture: (capture: Capture) => void;
+  SkeletonBlock: SkeletonBlockRenderer;
+  testID?: string;
+};
+
+// Memoized Home feed row. App-level state changes re-render the whole tree, so
+// without this every visible row re-renders on each tap. Capture row objects
+// keep identity across data refreshes (preserveCaptureRowIdentities), so the
+// comparator can bail unless something this row reads actually changed. The
+// per-row onPress/thumbnailRef closures are built INSIDE the memo from stable
+// handlers + the (stable-identity) capture, so they don't break bailout.
+//
+// Excluded from the comparator on purpose: SkeletonBlock and the (unused for
+// Home rows) inline-skeleton path are recreated every App render but are
+// functionally stable, so comparing them would force needless re-renders.
+export const HomeCaptureRowItem = memo(function HomeCaptureRowItem({
+  capture,
+  captureImageLoadStates,
+  captureRowRevealStates,
+  deferFallbackIcon,
+  failedFavicons,
+  forceSkeleton,
+  onCaptureThumbnailRef,
+  onFaviconFailure,
+  onImageLoadState,
+  onOpenRecentCapture,
+  SkeletonBlock,
+  testID
+}: HomeCaptureRowItemProps) {
+  const onPress = useCallback(() => onOpenRecentCapture(capture), [onOpenRecentCapture, capture]);
+  const thumbnailRef = useCallback(
+    (node: View | null) => onCaptureThumbnailRef(capture.id, node),
+    [onCaptureThumbnailRef, capture.id]
+  );
+  return (
+    <CaptureRow
+      captureImageLoadStates={captureImageLoadStates}
+      captureRowRevealStates={captureRowRevealStates}
+      deferFallbackIcon={deferFallbackIcon}
+      failedFavicons={failedFavicons}
+      forceSkeleton={forceSkeleton}
+      item={capture}
+      onFaviconFailure={onFaviconFailure}
+      onImageLoadState={onImageLoadState}
+      onPress={onPress}
+      renderInlineSkeleton={emptyInlineSkeleton}
+      showInlineSourceIcon
+      SkeletonBlock={SkeletonBlock}
+      surface="card"
+      testID={testID}
+      thumbnailRef={thumbnailRef}
+    />
+  );
+}, (previous, next) => {
+  // Re-render only when this row's inputs change: capture identity, its image
+  // load state, its reveal state, its favicon-failure entry, the relevant
+  // primitive flags, or a (stable) handler identity. The maps are shared and
+  // change identity App-wide, so compare just this capture's entries.
+  if (
+    previous.capture !== next.capture ||
+    previous.deferFallbackIcon !== next.deferFallbackIcon ||
+    previous.forceSkeleton !== next.forceSkeleton ||
+    previous.testID !== next.testID ||
+    previous.onOpenRecentCapture !== next.onOpenRecentCapture ||
+    previous.onCaptureThumbnailRef !== next.onCaptureThumbnailRef ||
+    previous.onFaviconFailure !== next.onFaviconFailure ||
+    previous.onImageLoadState !== next.onImageLoadState
+  ) {
+    return false;
+  }
+  const imageLoadKey = captureImageLoadKey(next.capture);
+  if (imageLoadKey && previous.captureImageLoadStates[imageLoadKey] !== next.captureImageLoadStates[imageLoadKey]) {
+    return false;
+  }
+  const revealKey = captureRowRevealKey(next.capture);
+  if (Boolean(previous.captureRowRevealStates[revealKey]) !== Boolean(next.captureRowRevealStates[revealKey])) {
+    return false;
+  }
+  const host = captureFaviconHost(next.capture);
+  return Boolean(previous.failedFavicons[host]) === Boolean(next.failedFavicons[host]);
+});
+
+function emptyInlineSkeleton(): ReactElement | null {
+  return null;
 }
 
 export function CaptureRowInlineSkeleton({
