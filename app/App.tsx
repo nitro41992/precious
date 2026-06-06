@@ -20,6 +20,7 @@ import Reanimated, {
   Easing as ReanimatedEasing,
   interpolate,
   runOnJS,
+  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withTiming
@@ -135,16 +136,13 @@ type ReviewHandoffRect = {
 };
 
 type ReviewHandoffState = {
-  arrived: boolean;
   cacheKey: string;
   captureId: string;
   direction: "opening" | "closing";
   from: ReviewHandoffRect;
   imageUrl: string;
   key: number;
-  ready: boolean;
   returnCollectionId: string | null;
-  to: ReviewHandoffRect | null;
 };
 
 function reviewHeroTargetRect(windowWidth: number): ReviewHandoffRect {
@@ -160,73 +158,85 @@ function reviewHeroTargetRect(windowWidth: number): ReviewHandoffRect {
 }
 
 function ReviewHandoffOverlay({
+  arrived,
+  fade,
   handoff,
-  onArrived,
+  heroReady,
   onDone,
-  progress
+  progress,
+  target
 }: {
+  arrived: SharedValue<boolean>;
+  fade: SharedValue<number>;
   handoff: ReviewHandoffState;
-  onArrived: (key: number) => void;
+  heroReady: SharedValue<boolean>;
   onDone: (key: number) => void;
   progress: SharedValue<number>;
+  target: SharedValue<ReviewHandoffRect | null>;
 }) {
-  const fade = useSharedValue(1);
-  const hasHandoffTarget = Boolean(handoff.to);
+  const direction = handoff.direction;
+  const handoffKey = handoff.key;
+  const morphDuration = direction === "closing" ? REVIEW_HANDOFF_CLOSE_MS : REVIEW_HANDOFF_OPEN_MS;
 
-  // Start the morph once per handoff; a refined target rect retargets the
-  // in-flight interpolation instead of restarting the timing (no flash).
-  useEffect(() => {
-    fade.value = 1;
-    if (!hasHandoffTarget) return;
-    progress.value = 0;
-    progress.value = withTiming(
-      1,
-      {
-        duration: handoff.direction === "closing" ? REVIEW_HANDOFF_CLOSE_MS : REVIEW_HANDOFF_OPEN_MS,
-        easing: ReanimatedEasing.bezier(0.2, 0, 0, 1),
-        reduceMotion: motionReduceMotion
-      },
-      (finished) => {
-        if (finished) runOnJS(onArrived)(handoff.key);
-      }
-    );
-  }, [fade, handoff.direction, handoff.key, hasHandoffTarget, onArrived, progress]);
+  // The whole sequence runs on the UI thread; React is only involved at
+  // handoff start and at onDone. Start the morph the moment the target rect
+  // lands; later refinements retarget the in-flight interpolation.
+  useAnimatedReaction(
+    () => Boolean(target.value),
+    (hasTarget, hadTarget) => {
+      if (!hasTarget || hadTarget) return;
+      progress.value = 0;
+      progress.value = withTiming(
+        1,
+        {
+          duration: morphDuration,
+          easing: ReanimatedEasing.bezier(0.2, 0, 0, 1),
+          reduceMotion: motionReduceMotion
+        },
+        (finished) => {
+          if (finished) arrived.value = true;
+        }
+      );
+    },
+    [direction, handoffKey, morphDuration]
+  );
 
-  useEffect(() => {
-    if (!handoff.arrived) return;
-    if (handoff.direction === "closing") {
-      const frame = requestAnimationFrame(() => {
-        onDone(handoff.key);
-      });
-      return () => cancelAnimationFrame(frame);
-    }
-    if (!handoff.ready) return;
-    // Crossfade out over the now-revealed hero instead of a hard cut, so the
-    // swap can never flash; the chrome reveals beneath this fade in parallel.
-    fade.value = 1;
-    fade.value = withTiming(
-      0,
-      {
-        duration: motionDuration.exit,
-        easing: ReanimatedEasing.in(ReanimatedEasing.cubic),
-        reduceMotion: motionReduceMotion
-      },
-      (finished) => {
-        if (finished) runOnJS(onDone)(handoff.key);
+  // Resolve: closing hands control back on arrival; opening crossfades out
+  // over the now-revealed hero instead of a hard cut, so the swap can never
+  // flash and the chrome reveals beneath this fade in parallel.
+  useAnimatedReaction(
+    () => arrived.value && (direction === "closing" || heroReady.value),
+    (resolve, wasResolving) => {
+      if (!resolve || wasResolving) return;
+      if (direction === "closing") {
+        runOnJS(onDone)(handoffKey);
+        return;
       }
-    );
-  }, [fade, handoff.arrived, handoff.direction, handoff.key, handoff.ready, onDone]);
+      fade.value = withTiming(
+        0,
+        {
+          duration: motionDuration.exit,
+          easing: ReanimatedEasing.in(ReanimatedEasing.cubic),
+          reduceMotion: motionReduceMotion
+        },
+        (finished) => {
+          if (finished) runOnJS(onDone)(handoffKey);
+        }
+      );
+    },
+    [direction, handoffKey, onDone]
+  );
 
   const animatedStyle = useAnimatedStyle(() => {
     const value = progress.value;
-    const target = handoff.to || handoff.from;
+    const to = target.value || handoff.from;
     return {
-      borderRadius: interpolate(value, [0, 1], [handoff.from.radius, target.radius]),
-      height: interpolate(value, [0, 1], [handoff.from.height, target.height]),
-      left: interpolate(value, [0, 1], [handoff.from.x, target.x]),
+      borderRadius: interpolate(value, [0, 1], [handoff.from.radius, to.radius]),
+      height: interpolate(value, [0, 1], [handoff.from.height, to.height]),
+      left: interpolate(value, [0, 1], [handoff.from.x, to.x]),
       opacity: fade.value,
-      top: interpolate(value, [0, 1], [handoff.from.y, target.y]),
-      width: interpolate(value, [0, 1], [handoff.from.width, target.width])
+      top: interpolate(value, [0, 1], [handoff.from.y, to.y]),
+      width: interpolate(value, [0, 1], [handoff.from.width, to.width])
     };
   });
 
@@ -561,7 +571,14 @@ export default function App() {
   const reviewMotion = useRef(new Animated.Value(1)).current;
   // Single clock for the hero morph and the review screen fade — both read
   // this value so the image handoff and the view transition run in parallel.
+  // The whole handoff lifecycle (target measured → morph → arrived → ready →
+  // crossfade) lives in shared values so it never re-renders the tree
+  // mid-transition; React commits only at handoff start and finish.
   const reviewHandoffProgress = useSharedValue(1);
+  const reviewHandoffFade = useSharedValue(1);
+  const reviewHandoffTarget = useSharedValue<ReviewHandoffRect | null>(null);
+  const reviewHandoffArrived = useSharedValue(false);
+  const reviewHandoffHeroReady = useSharedValue(false);
   const captureComposerMotion = useRef(new Animated.Value(0)).current;
   const captureKeyboardInset = useRef(new Animated.Value(0)).current;
   const skeletonPulse = useRef(new Animated.Value(0)).current;
@@ -581,24 +598,10 @@ export default function App() {
     reviewHandoffRef.current = reviewHandoff;
   }, [reviewHandoff]);
 
-  const markReviewHandoffArrived = useCallback((key: number) => {
-    setReviewHandoff((current) => {
-      if (!current || current.key !== key || current.arrived) return current;
-      const next = { ...current, arrived: true };
-      reviewHandoffRef.current = next;
-      return next;
-    });
-  }, []);
-
   const markReviewHandoffReady = useCallback((key: number | null) => {
-    if (!key) return;
-    setReviewHandoff((current) => {
-      if (!current || current.key !== key || current.ready) return current;
-      const next = { ...current, ready: true };
-      reviewHandoffRef.current = next;
-      return next;
-    });
-  }, []);
+    if (!key || reviewHandoffRef.current?.key !== key) return;
+    reviewHandoffHeroReady.value = true;
+  }, [reviewHandoffHeroReady]);
 
   const normalizeHandoffWindowRect = useCallback((
     rect: ReviewHandoffRect,
@@ -625,26 +628,21 @@ export default function App() {
   const markReviewHandoffTarget = useCallback((key: number | null, rect: ReviewHandoffRect) => {
     normalizeHandoffWindowRect(rect, (normalized) => {
       reviewHeroRectRef.current = normalized;
-      if (!key) return;
-      setReviewHandoff((current) => {
-        if (!current || current.key !== key) return current;
-        if (current.direction !== "opening" && current.to) return current;
-        if (
-          current.to &&
-          current.to.x === normalized.x &&
-          current.to.y === normalized.y &&
-          current.to.width === normalized.width &&
-          current.to.height === normalized.height &&
-          current.to.radius === normalized.radius
-        ) {
-          return current;
-        }
-        const next = { ...current, to: normalized };
-        reviewHandoffRef.current = next;
-        return next;
-      });
+      if (!key || reviewHandoffRef.current?.key !== key) return;
+      const current = reviewHandoffTarget.value;
+      if (
+        current &&
+        current.x === normalized.x &&
+        current.y === normalized.y &&
+        current.width === normalized.width &&
+        current.height === normalized.height &&
+        current.radius === normalized.radius
+      ) {
+        return;
+      }
+      reviewHandoffTarget.value = normalized;
     });
-  }, [normalizeHandoffWindowRect]);
+  }, [normalizeHandoffWindowRect, reviewHandoffTarget]);
 
   const measureClosingHandoffTarget = useCallback((handoff: ReviewHandoffState) => {
     const thumbnailNode = captureThumbnailRefs.current[handoff.captureId];
@@ -662,21 +660,18 @@ export default function App() {
         return;
       }
       normalizeHandoffWindowRect({ x, y, width, height, radius: 14 }, (normalized) => {
-        setReviewHandoff((current) => {
-          if (!current || current.key !== handoff.key || current.direction !== "closing" || current.to) return current;
-          const next = {
-            ...current,
-            to: normalized
-          };
-          reviewHandoffRef.current = next;
-          return next;
-        });
+        if (reviewHandoffRef.current?.key !== handoff.key) return;
+        reviewHandoffTarget.value = normalized;
       });
     });
-  }, [normalizeHandoffWindowRect]);
+  }, [normalizeHandoffWindowRect, reviewHandoffTarget]);
+
+  const closingMeasureKeyRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!reviewHandoff || reviewHandoff.direction !== "closing" || reviewHandoff.to || selectedId) return;
+    if (!reviewHandoff || reviewHandoff.direction !== "closing" || selectedId) return;
+    if (closingMeasureKeyRef.current === reviewHandoff.key) return;
+    closingMeasureKeyRef.current = reviewHandoff.key;
     let innerFrame: number | null = null;
     const frame = requestAnimationFrame(() => {
       innerFrame = requestAnimationFrame(() => {
@@ -705,26 +700,34 @@ export default function App() {
         const key = reviewHandoffKeyRef.current + 1;
         reviewHandoffKeyRef.current = key;
         const nextHandoff: ReviewHandoffState = {
-          arrived: false,
           cacheKey: captureImageCacheKey(capture),
           captureId: capture.id,
           direction: "opening",
           from,
           imageUrl,
           key,
-          ready: false,
-          returnCollectionId: null,
-          // The morph starts only once the review screen has mounted and
-          // measured its hero, so image and view transition together.
-          to: null
+          returnCollectionId: null
         };
+        // The morph starts only once the review screen has mounted and
+        // measured its hero (target lands), so image and view move together.
         reviewHandoffProgress.value = 0;
+        reviewHandoffFade.value = 1;
+        reviewHandoffArrived.value = false;
+        reviewHandoffHeroReady.value = false;
+        reviewHandoffTarget.value = null;
         reviewHandoffRef.current = nextHandoff;
         setReviewHandoff(nextHandoff);
         open();
       });
     });
-  }, [normalizeHandoffWindowRect]);
+  }, [
+    normalizeHandoffWindowRect,
+    reviewHandoffArrived,
+    reviewHandoffFade,
+    reviewHandoffHeroReady,
+    reviewHandoffProgress,
+    reviewHandoffTarget
+  ]);
 
   const markCaptureImageLoadState = useCallback((key: string, state: CaptureImageLoadState) => {
     const currentState = captureImageLoadStatesRef.current[key];
@@ -1462,18 +1465,19 @@ export default function App() {
       const key = reviewHandoffKeyRef.current + 1;
       reviewHandoffKeyRef.current = key;
       const nextHandoff: ReviewHandoffState = {
-        arrived: false,
         cacheKey: captureImageCacheKey(capture),
         captureId: capture.id,
         direction: "closing",
         from,
         imageUrl,
         key,
-        ready: true,
-        returnCollectionId: null,
-        to: null
+        returnCollectionId: null
       };
       reviewHandoffProgress.value = 0;
+      reviewHandoffFade.value = 1;
+      reviewHandoffArrived.value = false;
+      reviewHandoffHeroReady.value = true;
+      reviewHandoffTarget.value = null;
       reviewHandoffRef.current = nextHandoff;
       setReviewHandoff(nextHandoff);
       setClosingReviewCapture(capture);
@@ -1485,7 +1489,15 @@ export default function App() {
       start(reviewHeroRectRef.current || reviewHeroTargetRect(Dimensions.get("window").width));
     }
     return true;
-  }, [normalizeHandoffWindowRect, selectCapture]);
+  }, [
+    normalizeHandoffWindowRect,
+    reviewHandoffArrived,
+    reviewHandoffFade,
+    reviewHandoffHeroReady,
+    reviewHandoffProgress,
+    reviewHandoffTarget,
+    selectCapture
+  ]);
 
   async function openCaptureUrl(url: string) {
     if (!url) return;
@@ -3175,16 +3187,12 @@ export default function App() {
 
   function renderCaptureReviewScreen(capture: Capture) {
     const activeReviewHandoff = reviewHandoff?.captureId === capture.id ? reviewHandoff : null;
-    // Once the morph has arrived and the hero is ready, the overlay crossfades
-    // out — reveal the hero and chrome beneath it during that fade.
-    const reviewHandoffRevealing = Boolean(
-      activeReviewHandoff?.direction === "opening" &&
-        activeReviewHandoff.arrived &&
-        activeReviewHandoff.ready
-    );
-    const reviewHeroHiddenForHandoff = Boolean(activeReviewHandoff) && !reviewHandoffRevealing;
+    // The hero/chrome reveal under the crossfade is worklet-driven from
+    // reviewHandoffFade inside the screen; these flags change only at handoff
+    // start and finish.
+    const reviewHeroHiddenForHandoff = Boolean(activeReviewHandoff?.direction === "closing");
     const animateReviewChromeForHandoff = Boolean(
-      activeReviewHandoff?.direction === "opening" && !reviewHandoffRevealing
+      activeReviewHandoff?.direction === "opening"
     );
     return (
       <CaptureReviewScreen
@@ -3225,6 +3233,7 @@ export default function App() {
           reviewMotion,
           animateReviewChromeForHandoff,
           hideReviewHeroForHandoff: reviewHeroHiddenForHandoff,
+          reviewHandoffFade,
           reviewHandoffKey: activeReviewHandoff?.key ?? null,
           selected: capture,
           toast: renderToast("footer"),
@@ -3354,10 +3363,13 @@ export default function App() {
         ) : null}
         {reviewHandoff ? (
           <ReviewHandoffOverlay
+            arrived={reviewHandoffArrived}
+            fade={reviewHandoffFade}
             handoff={reviewHandoff}
-            onArrived={markReviewHandoffArrived}
+            heroReady={reviewHandoffHeroReady}
             onDone={finishReviewHandoff}
             progress={reviewHandoffProgress}
+            target={reviewHandoffTarget}
           />
         ) : null}
       </View>

@@ -17,11 +17,13 @@ import Reanimated, {
   Extrapolation,
   cancelAnimation,
   interpolate,
+  useAnimatedReaction,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
   withTiming
 } from "react-native-reanimated";
+import type { SharedValue } from "react-native-reanimated";
 import {
   ArrowLeft,
   Camera,
@@ -91,6 +93,7 @@ type CaptureReviewScreenProps = {
     reviewMotion: Animated.Value;
     animateReviewChromeForHandoff: boolean;
     hideReviewHeroForHandoff: boolean;
+    reviewHandoffFade: SharedValue<number>;
     reviewHandoffKey: number | null;
     selected: Capture;
     toast: ReactNode;
@@ -336,6 +339,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     reviewMotion,
     animateReviewChromeForHandoff,
     hideReviewHeroForHandoff,
+    reviewHandoffFade,
     reviewHandoffKey,
     selected,
     toast,
@@ -524,6 +528,14 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     ]
   }));
   const hideHeroImageForHandoff = hideReviewHeroForHandoff;
+  // During an opening handoff the live hero fades in underneath the morph
+  // overlay's crossfade — both read reviewHandoffFade on the UI thread, so
+  // the swap is a true crossfade with no React commit involved.
+  const reviewHeroVisibilityStyle = useAnimatedStyle(() => {
+    if (hideHeroImageForHandoff) return { opacity: 0 };
+    if (animateReviewChromeForHandoff) return { opacity: 1 - reviewHandoffFade.value };
+    return { opacity: 1 };
+  });
   const reviewDetailMotion = useSharedValue(animateReviewChromeForHandoff ? 0 : 1);
   const reviewMediaChromeMotion = useSharedValue(animateReviewChromeForHandoff ? 0 : 1);
   const reviewMediaChromeStyle = useAnimatedStyle(() => ({
@@ -545,6 +557,23 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
 
   const reviewHandoffWasActiveRef = useRef(animateReviewChromeForHandoff);
 
+  // Reveal the chrome the moment the overlay's crossfade begins (UI thread,
+  // no React commit) so it appears together with the live hero, not after.
+  useAnimatedReaction(
+    () => (animateReviewChromeForHandoff ? reviewHandoffFade.value : 1),
+    (fadeValue, previousFade) => {
+      if (!animateReviewChromeForHandoff) return;
+      if (fadeValue < 1 && (previousFade === null || previousFade >= 1)) {
+        reviewMediaChromeMotion.value = withTiming(1, {
+          duration: motionDuration.quick,
+          easing: motionEasing.standard,
+          reduceMotion: motionReduceMotion
+        });
+      }
+    },
+    [animateReviewChromeForHandoff]
+  );
+
   useEffect(() => {
     const handoffWasActive = reviewHandoffWasActiveRef.current;
     reviewHandoffWasActiveRef.current = animateReviewChromeForHandoff;
@@ -552,7 +581,8 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     cancelAnimation(reviewMediaChromeMotion);
     if (animateReviewChromeForHandoff) {
       // Handoff in flight: the detail plane rises alongside the hero morph,
-      // while the media chrome stays hidden (it sits under the morph overlay).
+      // while the media chrome stays hidden (it sits under the morph overlay)
+      // until the crossfade reveal above kicks in.
       reviewMediaChromeMotion.value = 0;
       reviewDetailMotion.value = 0;
       // The detail plane mounts one frame after the media stage; start its
@@ -567,9 +597,8 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     }
     reviewDetailMotion.value = 1;
     if (handoffWasActive) {
-      // Handoff just finished: the overlay is gone, reveal the chrome on top
-      // of the now-live hero.
-      reviewMediaChromeMotion.value = 0;
+      // Handoff finished; the crossfade reveal may still be mid-flight —
+      // continue it to fully visible from wherever it is (no reset).
       reviewMediaChromeMotion.value = withTiming(1, {
         duration: motionDuration.quick,
         easing: motionEasing.standard,
@@ -751,7 +780,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                       <Reanimated.View
                         style={[
                           styles.reviewMediaImageFrame,
-                          { opacity: hideHeroImageForHandoff ? 0 : 1 },
+                          reviewHeroVisibilityStyle,
                           reviewMediaImageStyle
                         ]}
                       >
