@@ -93,13 +93,13 @@ Use the warm light palette as the default app base and add state colors sparingl
 | Accent Text Strong | `#556600` | Darker green for readable inline values on warm paper |
 | Accent Soft | `#EEF7C6` | Selected chip or successful quiet state |
 | Accent Line | `#C5D86D` | Bright lime borders or small primary accent lines |
-| Accent Pressed | `#9FB348` | Darker lime pressed fill for Recent Capture row/card feedback and primary actions |
+| Accent Pressed | `#9FB348` | Darker lime pressed fill for compact primary actions |
 | On Accent | `#17211B` | Text and icons on lime-filled controls |
 | Collection Accent | `#F18F01` | Carrot secondary fill and collection emphasis |
 | Collection Accent Text | `#F18F01` | Bright carrot text and icon tint for Collection navigation and management emphasis |
 | Collection Accent Soft | `#FFE5BC` | Quiet collection emphasis |
 | Collection Accent Line | `#F18F01` | Bright carrot borders or small secondary accent lines |
-| Collection Accent Pressed | `#C66F00` | Darker carrot pressed fill for Collection card feedback and collection actions |
+| Collection Accent Pressed | `#C66F00` | Darker carrot pressed fill for compact collection actions |
 | On Collection Accent | `#17211B` | Text and icons on carrot-filled controls |
 | Secondary | `#F18F01` | Alias for bright secondary text and action color |
 | Processing | `#3525F5` | Analyzing, syncing, queued |
@@ -210,7 +210,7 @@ Each card should have one purpose, one short headline, one evidence line, and on
 ### Motion And Feedback
 
 - Use restrained native-feeling transitions for opening Search, Capture Review, collection edit views, and reminder edit views.
-- Use press feedback on rows, buttons, and chips. Recent Capture rows press with `Accent Pressed`; Collection cards press with `Collection Accent Pressed`.
+- Use press feedback on rows, buttons, and chips. Recent Capture row back highlights use bright `Accent`; Collection card back highlights use bright `Collection Accent` with the card radius preserved.
 - Use inline loading placeholders or skeleton rows for captures and search results; avoid full-screen spinners except during app boot.
 - Use toast undo for reversible destructive or removal actions such as delete and collection removal.
 - Use the shared tonal toast host for transient action feedback such as saved, copied, removed, undo, unavailable, and could-not-complete states. Toasts should be bottom-docked, tonal, borderless, icon-led, and should show tone through the icon/action accent rather than a colored card edge. Keep page-level load errors, authentication form errors, and field-level autosave state inline where they orient the current task.
@@ -314,6 +314,8 @@ When reminders are not fully implemented, use `Later` for the main Capture Revie
 When a Capture has a maps-searchable Visit Target, Capture Review may show `Open in Maps` actions for Google Maps and Apple Maps. Treat this as a Maps search action from persisted Visit Target evidence, preferring the target name for launch when present, not a verified address, place ID, or top-level Map lens.
 
 Uploaded image and screenshot Captures should treat the media header as inspectable content: tapping it opens a full-screen viewer with pinch zoom and a high-resolution uncropped viewer image. Link/source preview media may still open the saved source URL instead.
+
+Capture Review media overlay controls should stay legible over busy imagery with diffuse centered shadows rather than borders. The back control uses a bright white icon on a dark translucent circle; destructive media controls use a white circle with a colored danger icon.
 
 ### Collection Management
 

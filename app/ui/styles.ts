@@ -716,7 +716,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 16
   },
   captureRowPressed: {
-    backgroundColor: colors.accentPressed
+    backgroundColor: colors.accent
   },
   subtlePressed: {
     backgroundColor: colors.surfaceContainerHigh,
@@ -1462,6 +1462,7 @@ export const styles = StyleSheet.create({
     flex: 1
   },
   collectionCard: {
+    borderRadius: 8,
     flex: 1,
     gap: 9,
     minHeight: 0,
@@ -1469,7 +1470,7 @@ export const styles = StyleSheet.create({
     width: "100%"
   },
   collectionCardPressed: {
-    backgroundColor: colors.collectionAccentPressed
+    backgroundColor: colors.collectionAccent
   },
   collectionCollageFrame: {
     aspectRatio: 1,
@@ -2004,10 +2005,11 @@ export const styles = StyleSheet.create({
     borderWidth: 0,
     height: 48,
     justifyContent: "center",
-    width: 48
+    width: 48,
+    ...bottomControlShadow
   },
   reviewMediaDangerButton: {
-    backgroundColor: colors.mediaDangerControl
+    backgroundColor: colors.surface
   },
   reviewMediaStatusPill: {
     backgroundColor: colors.mediaControl,

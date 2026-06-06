@@ -105,6 +105,7 @@ export const colors = {
   mediaDangerControl: "rgba(100, 28, 23, 0.80)",
   mediaControlLine: "rgba(255, 247, 230, 0.24)",
   onMediaControl: "#FFF7E6",
+  onMediaControlStrong: "#FFFFFF",
 
   imageViewerBackground: "#000000"
 };

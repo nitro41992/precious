@@ -599,7 +599,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                     }}
                     style={({ pressed }) => [styles.reviewMediaIconButton, pressed && styles.subtlePressed]}
                   >
-                    <ArrowLeft color={colors.onMediaControl} size={22} weight="regular" />
+                    <ArrowLeft color={colors.onMediaControlStrong} size={22} weight="regular" />
                   </Pressable>
                   <View style={styles.reviewMediaRightControls}>
                     {showStatus ? (
@@ -626,7 +626,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                       ]}
                       testID="pc.capture.delete"
                     >
-                      <Trash2 color={colors.onMediaControl} size={21} weight="regular" />
+                      <Trash2 color={colors.danger} size={21} weight="regular" />
                     </Pressable>
                   </View>
                 </View>
