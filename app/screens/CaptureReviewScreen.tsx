@@ -411,6 +411,21 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     [selectedHeroImageCacheKey, selectedHeroImageUrl]
   );
   const [loadedReviewImageUris, setLoadedReviewImageUris] = useState<Set<string>>(() => new Set());
+  // Two-stage mount: the first commit renders only the media stage so the
+  // handoff can measure the hero and start immediately; the detail plane and
+  // sheets (opacity 0 during the morph anyway) mount on the next frame.
+  const [deferredContentReady, setDeferredContentReady] = useState(false);
+
+  useEffect(() => {
+    let innerFrame: number | null = null;
+    const frame = requestAnimationFrame(() => {
+      innerFrame = requestAnimationFrame(() => setDeferredContentReady(true));
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      if (innerFrame !== null) cancelAnimationFrame(innerFrame);
+    };
+  }, []);
   const selectedMediaOpensImage = Boolean(selectedImageUrl && isImageCapture(selected));
   const selectedMediaPressEnabled = selectedMediaOpensImage || Boolean(selectedOpenUrl);
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
@@ -540,6 +555,9 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       // while the media chrome stays hidden (it sits under the morph overlay).
       reviewMediaChromeMotion.value = 0;
       reviewDetailMotion.value = 0;
+      // The detail plane mounts one frame after the media stage; start its
+      // rise only once it exists.
+      if (!deferredContentReady) return;
       reviewDetailMotion.value = withTiming(1, {
         duration: motionDuration.enter,
         easing: motionEasing.standard,
@@ -560,7 +578,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       return;
     }
     reviewMediaChromeMotion.value = 1;
-  }, [animateReviewChromeForHandoff, reviewDetailMotion, reviewMediaChromeMotion, selected.id]);
+  }, [animateReviewChromeForHandoff, deferredContentReady, reviewDetailMotion, reviewMediaChromeMotion, selected.id]);
 
   function measureReviewHeroFrame(onMeasured: (rect: ReviewHandoffRect | null) => void) {
     const node = reviewHeroFrameRef.current;
@@ -818,6 +836,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                   </View>
                 </Reanimated.View>
               </Reanimated.View>
+              {deferredContentReady ? (
                 <Reanimated.View style={[styles.reviewDetailPlane, reviewDetailStyle]}>
                   <View style={styles.reviewPrimaryBlock}>
                     <TextInput
@@ -998,10 +1017,15 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                     </MotionPressable>
                   </View>
                 </Reanimated.View>
+              ) : null}
               </Reanimated.ScrollView>
           </View>
         </View>
       </Animated.View>
+      {!deferredContentReady ? (
+        toast
+      ) : (
+        <>
       {noteSheetOpen ? (
         <View style={styles.sheetLayer} pointerEvents="box-none">
           <Pressable
@@ -1151,6 +1175,8 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       />
       {appSheets}
       {toast}
+        </>
+      )}
     </View>
   );
 }
