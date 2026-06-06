@@ -21,6 +21,7 @@ const {
   mergeRemoteCaptures,
   mergeSearchResults,
   normalizeIntent,
+  normalizeCaptureLink,
   normalizeSearchQuery,
   parseCaptureUrl,
   reviewReasonSummary,
@@ -56,6 +57,23 @@ test("extractHttpUrl returns the first clean http URL from shared text", () => {
   );
   assert.equal(extractHttpUrl("mailto:person@example.com"), "");
   assert.equal(hostFromUrl("https://www.example.com/a"), "example.com");
+});
+
+test("normalizeCaptureLink accepts clean links and bare domains", () => {
+  assert.equal(
+    normalizeCaptureLink("https://example.com/path?q=1#details"),
+    "https://example.com/path?q=1#details"
+  );
+  assert.equal(normalizeCaptureLink("http://example.com"), "http://example.com/");
+  assert.equal(normalizeCaptureLink("example.com/saved"), "https://example.com/saved");
+});
+
+test("normalizeCaptureLink rejects mixed text and unsafe URL shapes", () => {
+  assert.equal(normalizeCaptureLink("https://example.com Yosemite reservation note"), "");
+  assert.equal(normalizeCaptureLink("mailto:person@example.com"), "");
+  assert.equal(normalizeCaptureLink("https://user:pass@example.com"), "");
+  assert.equal(normalizeCaptureLink("https://example"), "");
+  assert.equal(normalizeCaptureLink("not a link"), "");
 });
 
 test("parseCaptureUrl extracts deep-link capture ids", () => {

@@ -304,7 +304,7 @@ export function useAppUiEffects({
   ]);
 
   useEffect(() => {
-    if (!showCaptureComposer || captureComposerClosing || pickingCaptureImage) return;
+    if (!showCaptureComposer || captureMode !== "link" || captureComposerClosing || pickingCaptureImage) return;
     const frame = requestAnimationFrame(() => {
       sourceInputRef.current?.focus();
     });

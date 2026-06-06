@@ -358,6 +358,15 @@ export const styles = StyleSheet.create({
     minHeight: 80,
     paddingVertical: 10
   },
+  captureHelperText: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18
+  },
+  captureHelperTextError: {
+    color: colors.danger
+  },
   collectionSheetTitleInput: {
     ...typefaces.displayMedium,
     fontSize: 18,
@@ -411,20 +420,30 @@ export const styles = StyleSheet.create({
     color: colors.onAccent
   },
   captureImagePanel: {
-    alignItems: "stretch"
+    alignItems: "stretch",
+    gap: 10
   },
   captureImageButton: {
     alignItems: "center",
     alignSelf: "stretch",
-    backgroundColor: colors.surfaceContainerHighest,
+    backgroundColor: colors.reviewCardWell,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 0,
     flexDirection: "row",
-    gap: 8,
+    gap: 12,
+    justifyContent: "flex-start",
+    minHeight: 64,
+    paddingHorizontal: 14,
+    paddingVertical: 10
+  },
+  captureImageButtonIcon: {
+    alignItems: "center",
+    backgroundColor: colors.accentSoft,
+    borderRadius: 8,
+    height: 42,
     justifyContent: "center",
-    minHeight: 56,
-    paddingHorizontal: 14
+    width: 42
   },
   captureImageButtonDisabled: {
     opacity: 0.56

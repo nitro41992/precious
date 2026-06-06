@@ -154,6 +154,7 @@ export function collectionCollageSlots<T extends {
 export function confidenceRequiresReview(value?: string): boolean;
 export function displayStatus(capture: StatusCapture): CaptureStatus;
 export function extractHttpUrl(value?: string | null): string;
+export function normalizeCaptureLink(value?: string | null): string;
 export function hasExtractedData(capture: StatusCapture): boolean;
 export function hostFromUrl(value?: string | null): string;
 export function captureFieldState(input?: CaptureFieldStateInput): CaptureFieldState;

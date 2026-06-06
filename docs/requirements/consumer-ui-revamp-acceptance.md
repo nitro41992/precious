@@ -75,9 +75,10 @@ New Capture must:
 - Open from the primary `+` action as a bottom sheet, not as an inline form in Recent Captures.
 - Keep the paste input, close action, and save action visible and reachable when the keyboard is open on a small Android phone.
 - Open with one upward sheet motion; keyboard focus must not make the sheet appear to pull down or jump against its entrance.
-- Present exactly one capture mode at a time: `Link`, `Note`, or `Image`.
-- Offer an explicit in-app image upload action that uses existing image capture processing and opens the platform photo picker directly from the Image control, without adding new extraction rules. Cancelling the picker returns to Recent Captures with the New Capture sheet closed.
-- Route Link captures through public URL evidence and preflight. Link-only captures with no useful public or user-provided context should not remain in Recent Captures; notify the user that the capture was not saved and suggest adding a screenshot or note. Route Note, Image, Screenshot, and mixed image captures through modality-specific note/visual evidence so weak URL evidence does not decide whether non-link analysis is useful.
+- Present exactly one capture mode at a time: `Link` or `Image`; New Capture no longer offers free-text Note creation.
+- Validate Link captures as a single absolute `http`/`https` URL or bare domain before saving, with inline helper copy for invalid input while preserving backend/native URL validation.
+- Offer explicit in-app image actions for `Take photo` and `Choose from photos`, both using existing image capture processing without adding new extraction rules. Cancelling either image path returns to Recent Captures with the New Capture sheet closed.
+- Route Link captures through public URL evidence and preflight. Link-only captures with no useful public or user-provided context should not remain in Recent Captures; notify the user that the capture was not saved and suggest adding a screenshot or note. Route Image, Screenshot, and mixed image captures through modality-specific visual evidence so weak URL evidence does not decide whether non-link analysis is useful.
 
 ## Capture Review
 

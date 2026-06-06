@@ -11,15 +11,16 @@ import {
 import type { FlatListProps, ListRenderItemInfo } from "react-native";
 import type { TextInput as NativeTextInput } from "react-native";
 import {
+  Camera,
   Check,
   ImageSquare as ImageIcon,
   Link as Link2,
   MagnifyingGlass as Search,
-  Note as StickyNote,
   Plus
 } from "phosphor-react-native";
 
 import type { CaptureComposerMode, HomeListRow } from "../types";
+import { normalizeCaptureLink } from "../captureLogic";
 import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
 import { HeaderContentGradient, IconButton, SheetHeader } from "../ui/components";
@@ -61,11 +62,13 @@ type HomeScreenProps = {
     loadMoreActiveCaptures: () => void;
     openCaptureComposer: () => void;
     openSearch: () => void;
+    pickCaptureImage: () => void;
     renderCaptureSkeletonRows: (count?: number, withRemoveAction?: boolean) => ReactElement | null;
     renderHomeRow: (input: ListRenderItemInfo<HomeListRow>) => ReactElement | null;
     renderListLoadingFooter: (label?: string) => ReactElement | null;
     saveCaptureSource: () => void;
     setSourceDraft: (value: string) => void;
+    takeCapturePhoto: () => void;
   };
 };
 
@@ -105,11 +108,13 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
     loadMoreActiveCaptures,
     openCaptureComposer,
     openSearch,
+    pickCaptureImage,
     renderCaptureSkeletonRows,
     renderHomeRow,
     renderListLoadingFooter,
     saveCaptureSource,
-    setSourceDraft
+    setSourceDraft,
+    takeCapturePhoto
   } = actions;
 
   const homeCaptureRows = homeCaptures.flatMap((row) => row.type === "capture" ? [row.capture] : []);
@@ -135,7 +140,9 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
   const captureSheetMaxHeight = composerKeyboardVisible
     ? Math.min(430, composerAvailableHeight)
     : Math.min(560, Math.max(340, windowHeight * 0.72));
-  const captureSourcePlaceholder = captureMode === "link" ? "Paste a link" : "Write a note";
+  const normalizedCaptureLink = normalizeCaptureLink(sourceDraft);
+  const captureLinkHasText = Boolean(sourceDraft.trim());
+  const captureLinkInvalid = captureMode === "link" && captureLinkHasText && !normalizedCaptureLink;
   const captureSheetBottomInset = windowAlreadyKeyboardSized
     ? composerKeyboardGap
     : composerKeyboardVisible
@@ -210,7 +217,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                     </View>
                     <View style={styles.homeEmptyTileRow}>
                       <View style={[styles.homeEmptyTile, styles.homeEmptyTileSmall]}>
-                        <StickyNote color={colors.secondary} size={20} weight="regular" />
+                        <Camera color={colors.secondary} size={20} weight="regular" />
                         <View style={styles.homeEmptyMiniLines}>
                           <View style={styles.homeEmptyMiniLine} />
                           <View style={styles.homeEmptyMiniLineShort} />
@@ -238,7 +245,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                   testID="pc.capture.empty.open"
                 >
                   <Plus color={colors.onAccent} size={20} weight="bold" />
-                  <Text style={styles.homeEmptyPrimaryText}>Paste link or note</Text>
+                  <Text style={styles.homeEmptyPrimaryText}>Add link or image</Text>
                 </Pressable>
                 <View style={styles.homeEmptyCue}>
                   <Check color={colors.accentText} size={16} weight="bold" />
@@ -290,25 +297,22 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
               <View style={styles.sheetGrabber} />
               <SheetHeader
                 closeLabel="Close"
-                confirmDisabled={savingCapture || !sourceDraft.trim()}
+                confirmDisabled={savingCapture || !normalizedCaptureLink}
                 confirmLabel={savingCapture ? "Saving capture" : "Save capture"}
                 confirmTestID="pc.capture.save"
                 onClose={() => closeCaptureComposer()}
-                onConfirm={() => void saveCaptureSource()}
+                onConfirm={captureMode === "link" ? () => void saveCaptureSource() : undefined}
                 title="New capture"
               />
               <View style={styles.captureModeRow}>
                 {([
                   { mode: "link", label: "Link", Icon: Link2 },
-                  { mode: "note", label: "Note", Icon: StickyNote },
                   { mode: "image", label: "Image", Icon: ImageIcon }
                 ] as const).map(({ mode, label, Icon }) => {
-                  const imageAction = mode === "image";
-                  const selectedMode = !imageAction && captureMode === mode;
+                  const selectedMode = captureMode === mode;
                   return (
                     <Pressable
                       accessibilityRole="button"
-                      disabled={imageAction && pickingCaptureImage}
                       key={mode}
                       onPress={() => chooseCaptureMode(mode)}
                       style={({ pressed }) => [
@@ -339,19 +343,61 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                   composerKeyboardVisible && styles.captureSheetBodyContentCompact
                 ]}
               >
-                <TextInput
-                  autoCapitalize={captureMode === "link" ? "none" : "sentences"}
-                  autoCorrect={captureMode !== "link"}
-                  keyboardType={captureMode === "link" ? "url" : "default"}
-                  multiline
-                  ref={sourceInputRef}
-                  onChangeText={setSourceDraft}
-                  placeholder={captureSourcePlaceholder}
-                  placeholderTextColor={colors.placeholder}
-                  style={[styles.captureInput, composerKeyboardVisible && styles.captureInputCompact]}
-                  testID="pc.capture.source"
-                  value={sourceDraft}
-                />
+                {captureMode === "link" ? (
+                  <>
+                    <TextInput
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="url"
+                      multiline
+                      ref={sourceInputRef}
+                      onChangeText={setSourceDraft}
+                      placeholder="Paste a link"
+                      placeholderTextColor={colors.placeholder}
+                      style={[styles.captureInput, composerKeyboardVisible && styles.captureInputCompact]}
+                      testID="pc.capture.source"
+                      value={sourceDraft}
+                    />
+                    <Text style={[styles.captureHelperText, captureLinkInvalid && styles.captureHelperTextError]}>
+                      Paste a valid link, like https://example.com.
+                    </Text>
+                  </>
+                ) : (
+                  <View style={styles.captureImagePanel}>
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={pickingCaptureImage}
+                      onPress={takeCapturePhoto}
+                      style={({ pressed }) => [
+                        styles.captureImageButton,
+                        pickingCaptureImage && styles.captureImageButtonDisabled,
+                        pressed && styles.subtlePressed
+                      ]}
+                      testID="pc.capture.image.camera"
+                    >
+                      <View style={styles.captureImageButtonIcon}>
+                        <Camera color={colors.accentTextStrong} size={21} weight="bold" />
+                      </View>
+                      <Text style={styles.captureImageButtonText}>Take photo</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={pickingCaptureImage}
+                      onPress={pickCaptureImage}
+                      style={({ pressed }) => [
+                        styles.captureImageButton,
+                        pickingCaptureImage && styles.captureImageButtonDisabled,
+                        pressed && styles.subtlePressed
+                      ]}
+                      testID="pc.capture.image.upload"
+                    >
+                      <View style={styles.captureImageButtonIcon}>
+                        <ImageIcon color={colors.accentTextStrong} size={21} weight="bold" />
+                      </View>
+                      <Text style={styles.captureImageButtonText}>Choose from photos</Text>
+                    </Pressable>
+                  </View>
+                )}
               </View>
             </Animated.View>
           </KeyboardAvoidingView>

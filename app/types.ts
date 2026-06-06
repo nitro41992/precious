@@ -247,7 +247,7 @@ export type ReminderScheduleDraft = {
 export type ReminderDraftAction = "keep" | "remove";
 export type CollectionDraftAction = "keep" | "remove" | "ignore" | "link" | "create" | "added";
 export type NoteSaveState = "idle" | "saving" | "saved" | "error";
-export type CaptureComposerMode = "link" | "note" | "image";
+export type CaptureComposerMode = "link" | "image";
 export const DEFAULT_CAPTURE_COMPOSER_MODE: CaptureComposerMode = "link";
 
 export type ReminderReviewDecision = {
@@ -288,6 +288,7 @@ export type CaptureReviewDraft = {
 export type CaptureStore = {
   captureSource: (sourceText: string) => Promise<string>;
   captureImage?: () => Promise<string | null>;
+  captureCameraImage?: () => Promise<string | null>;
   submitExpandedUrl?: (id: string, expandedUrl: string) => Promise<string>;
   getCaptures: () => Promise<string>;
   getCachedCapturePage?: (userId: string, mode: "active" | "archived") => Promise<string | null>;

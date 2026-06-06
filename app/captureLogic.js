@@ -1,6 +1,8 @@
 const LOCAL_PROCESSING_GRACE_MS = 30 * 60 * 1000;
 const REVIEW_TARGETS = ["intent", "collections", "reminder", "analysis"];
 const REVIEW_TARGET_SET = new Set(REVIEW_TARGETS);
+const CAPTURE_LINK_PATTERN = /^(?:https?:\/\/)?(?=.{1,2048}$)(?!.*\s)(?!.*@)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?::[0-9]{1,5})?(?:[/?#][^\s]*)?$/i;
+const CAPTURE_LINK_HOST_PATTERN = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
 
 function hostFromUrl(value) {
   if (!value) return "";
@@ -17,6 +19,21 @@ function extractHttpUrl(value) {
   try {
     const url = new URL(match[0].replace(/[),.;\]]+$/g, ""));
     return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
+function normalizeCaptureLink(value) {
+  const raw = String(value || "").trim();
+  if (!raw || !CAPTURE_LINK_PATTERN.test(raw)) return "";
+  const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const url = new URL(candidate);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return "";
+    if (url.username || url.password) return "";
+    if (!CAPTURE_LINK_HOST_PATTERN.test(url.hostname)) return "";
+    return url.toString();
   } catch {
     return "";
   }
@@ -490,6 +507,7 @@ module.exports = {
   collectionCollageSlots,
   displayStatus,
   extractHttpUrl,
+  normalizeCaptureLink,
   confidenceRequiresReview,
   hasExtractedData,
   hostFromUrl,

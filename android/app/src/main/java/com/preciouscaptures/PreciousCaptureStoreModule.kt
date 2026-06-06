@@ -1,11 +1,13 @@
 package com.preciouscaptures
 
 import android.app.Activity
+import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import androidx.core.content.FileProvider
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.BaseActivityEventListener
 import com.facebook.react.bridge.ReactApplicationContext
@@ -19,21 +21,35 @@ class PreciousCaptureStoreModule(
   private val reactContext: ReactApplicationContext
 ) : ReactContextBaseJavaModule(reactContext) {
   private val imagePickerRequestCode = 41029
+  private val cameraImageRequestCode = 41030
   private var pendingImagePromise: Promise? = null
+  private var pendingCameraImageFile: File? = null
 
   init {
     reactContext.addActivityEventListener(object : BaseActivityEventListener() {
       override fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?) {
-        if (requestCode != imagePickerRequestCode) return
+        if (requestCode != imagePickerRequestCode && requestCode != cameraImageRequestCode) return
         val promise = pendingImagePromise ?: return
         pendingImagePromise = null
 
         if (resultCode != Activity.RESULT_OK) {
+          pendingCameraImageFile = null
           promise.resolve(null)
           return
         }
 
         try {
+          if (requestCode == cameraImageRequestCode) {
+            val file = pendingCameraImageFile
+            pendingCameraImageFile = null
+            if (file == null || !file.exists() || file.length() <= 0L) {
+              promise.reject("capture_camera_image_missing", "No photo was captured.")
+              return
+            }
+            enqueuePickedImage(promise, PickedImage(file, "image/jpeg", file.name), "camera")
+            return
+          }
+
           val uri = data?.data
           if (uri == null) {
             promise.reject("capture_image_missing", "No image was selected.")
@@ -48,25 +64,9 @@ class PreciousCaptureStoreModule(
             promise.reject("capture_image_read_failed", "Could not read the selected image.")
             return
           }
-          val capture = PreciousCaptureStore.addProcessingCapture(reactContext, imageSourceText(asset.fileName))
-          val captureId = capture.getString("id")
-          CaptureNotifications.showQueued(reactContext, captureId)
-          val networkType = if (configuredApiUrl().isNotBlank() || capture.optString("sourceUrl").isNotBlank()) {
-            NetworkType.CONNECTED
-          } else {
-            NetworkType.NOT_REQUIRED
-          }
-          enqueueCaptureWork(
-            reactContext,
-            captureId,
-            networkType,
-            asset.file.absolutePath,
-            asset.mimeType,
-            asset.fileName,
-            assetExpected = true
-          )
-          promise.resolve(capture.toString())
+          enqueuePickedImage(promise, asset, "library")
         } catch (error: Exception) {
+          pendingCameraImageFile = null
           promise.reject("capture_image_enqueue_failed", error)
         }
       }
@@ -175,6 +175,44 @@ class PreciousCaptureStoreModule(
     } catch (error: Exception) {
       pendingImagePromise = null
       promise.reject("capture_image_picker_failed", error)
+    }
+  }
+
+  @ReactMethod
+  fun captureCameraImage(promise: Promise) {
+    try {
+      if (configuredApiUrl().isNotBlank() && readNativeAuthSession(reactContext) == null) {
+        promise.reject("capture_auth_required", "Sign in before saving captures.")
+        return
+      }
+      val activity = reactContext.currentActivity
+      if (activity == null) {
+        promise.reject("capture_camera_activity_unavailable", "Open Precious Captures before taking a photo.")
+        return
+      }
+      if (pendingImagePromise != null) {
+        promise.reject("capture_image_in_progress", "Finish choosing the current image first.")
+        return
+      }
+
+      val outputFile = cameraImageFile()
+      val outputUri = FileProvider.getUriForFile(
+        reactContext,
+        "${reactContext.packageName}.fileprovider",
+        outputFile
+      )
+      val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+        putExtra(MediaStore.EXTRA_OUTPUT, outputUri)
+        clipData = ClipData.newUri(reactContext.contentResolver, "Capture image", outputUri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+      }
+      pendingImagePromise = promise
+      pendingCameraImageFile = outputFile
+      activity.startActivityForResult(intent, cameraImageRequestCode)
+    } catch (error: Exception) {
+      pendingImagePromise = null
+      pendingCameraImageFile = null
+      promise.reject("capture_camera_failed", error)
     }
   }
 
@@ -293,8 +331,34 @@ class PreciousCaptureStoreModule(
     }
   }
 
-  private fun imageSourceText(fileName: String): String {
-    return "Selected image: $fileName"
+  private fun imageSourceText(fileName: String, source: String): String {
+    return if (source == "camera") "Camera photo: $fileName" else "Selected image: $fileName"
+  }
+
+  private fun enqueuePickedImage(promise: Promise, asset: PickedImage, source: String) {
+    val capture = PreciousCaptureStore.addProcessingCapture(reactContext, imageSourceText(asset.fileName, source))
+    val captureId = capture.getString("id")
+    CaptureNotifications.showQueued(reactContext, captureId)
+    val networkType = if (configuredApiUrl().isNotBlank() || capture.optString("sourceUrl").isNotBlank()) {
+      NetworkType.CONNECTED
+    } else {
+      NetworkType.NOT_REQUIRED
+    }
+    enqueueCaptureWork(
+      reactContext,
+      captureId,
+      networkType,
+      asset.file.absolutePath,
+      asset.mimeType,
+      asset.fileName,
+      assetExpected = true
+    )
+    promise.resolve(capture.toString())
+  }
+
+  private fun cameraImageFile(): File {
+    val dir = File(reactContext.cacheDir, "shared-intake").apply { mkdirs() }
+    return File(dir, "${UUID.randomUUID()}-camera.jpg")
   }
 
   private fun copyPickedImage(uri: Uri): PickedImage? {

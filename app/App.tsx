@@ -102,6 +102,7 @@ import {
   extractHttpUrl,
   isDeleted,
   mergeRemoteCaptures,
+  normalizeCaptureLink,
   parseCaptureUrl,
   reviewTargetsForCapture,
   sortCaptures
@@ -1146,12 +1147,12 @@ export default function App() {
   }
 
   function chooseCaptureMode(mode: CaptureComposerMode) {
-    if (mode === "image") {
-      void pickCaptureImage();
-      return;
-    }
     setCaptureMode(mode);
-    requestAnimationFrame(() => sourceInputRef.current?.focus());
+    if (mode === "link") {
+      requestAnimationFrame(() => sourceInputRef.current?.focus());
+    } else {
+      Keyboard.dismiss();
+    }
   }
 
   async function openCollectionsScreen(mode: CollectionListMode = collectionsMode) {
@@ -2398,7 +2399,7 @@ export default function App() {
   }
 
   async function saveCaptureSource() {
-    const source = sourceDraft.trim();
+    const source = normalizeCaptureLink(sourceDraft);
     if (!source) return;
     if (!nativeStore) {
       showToast("Native capture worker is unavailable.", "error");
@@ -2419,17 +2420,24 @@ export default function App() {
     }
   }
 
-  async function pickCaptureImage() {
+  async function saveCaptureImage(source: "camera" | "library") {
     if (pickingCaptureImage || captureImagePickerActiveRef.current) return;
-    if (!nativeStore?.captureImage) {
-      showToast("Image upload is unavailable in this build.", "error");
+    const captureImage =
+      source === "camera" ? nativeStore?.captureCameraImage : nativeStore?.captureImage;
+    if (!captureImage) {
+      showToast(
+        source === "camera"
+          ? "Camera capture is unavailable in this build."
+          : "Image upload is unavailable in this build.",
+        "error"
+      );
       return;
     }
     captureImagePickerActiveRef.current = true;
     setPickingCaptureImage(true);
     setToast(null);
     try {
-      const raw = await nativeStore.captureImage();
+      const raw = await captureImage();
       if (!raw) return;
       const localCapture = JSON.parse(raw) as Capture;
       commitCaptureRows("active", (current) => [localCapture, ...current.filter((item) => item.id !== localCapture.id)]);
@@ -2444,6 +2452,14 @@ export default function App() {
         resetCaptureComposerSurface();
       }
     }
+  }
+
+  async function pickCaptureImage() {
+    await saveCaptureImage("library");
+  }
+
+  async function takeCapturePhoto() {
+    await saveCaptureImage("camera");
   }
 
 
@@ -2629,11 +2645,13 @@ export default function App() {
           loadMoreActiveCaptures: () => loadMoreCaptures("active"),
           openCaptureComposer,
           openSearch,
+          pickCaptureImage: () => void pickCaptureImage(),
           renderCaptureSkeletonRows,
           renderHomeRow,
           renderListLoadingFooter,
           saveCaptureSource: () => void saveCaptureSource(),
-          setSourceDraft
+          setSourceDraft,
+          takeCapturePhoto: () => void takeCapturePhoto()
         }}
         data={{
           appSheets: includeChrome ? renderAppSheets() : null,
