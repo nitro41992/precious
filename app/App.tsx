@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import type { FlatList, TextInput } from "react-native";
 import { Image } from "expo-image";
+import { Freeze } from "react-freeze";
 import Reanimated, {
   Easing as ReanimatedEasing,
   interpolate,
@@ -320,11 +321,13 @@ function ScreenOverlayFrame({
 function TopLevelPane({
   active,
   children,
-  direction
+  direction,
+  frozen
 }: {
   active: boolean;
   children: ReactNode;
   direction: -1 | 1;
+  frozen: boolean;
 }) {
   const progress = useSharedValue(active ? 1 : 0);
 
@@ -356,7 +359,9 @@ function TopLevelPane({
         animatedStyle
       ]}
     >
-      {children}
+      {/* Covered/inactive panes stay visible natively but stop re-rendering
+          until they are revealed again. */}
+      <Freeze freeze={frozen}>{children}</Freeze>
     </Reanimated.View>
   );
 }
@@ -3348,12 +3353,25 @@ export default function App() {
     overlayHandoff?: ReviewHandoffState | null;
   } = {}) {
     const overlayVisible = Boolean(overlay);
+    // Freeze covered panes only once the handoff settles: during the morph
+    // the background pane must stay live (it hides the source thumbnail);
+    // afterwards it stops re-rendering while the overlay covers it — data
+    // hydration on the review screen no longer reconciles the whole list.
+    const paneFrozenByOverlay = overlayVisible && !reviewHandoff;
     return (
       <View collapsable={false} ref={handoffRootRef} style={styles.screenStack}>
-        <TopLevelPane active={active === "recent"} direction={-1}>
+        <TopLevelPane
+          active={active === "recent"}
+          direction={-1}
+          frozen={active !== "recent" || paneFrozenByOverlay}
+        >
           {renderHomeScreen({ includeChrome: active === "recent" && !overlayVisible })}
         </TopLevelPane>
-        <TopLevelPane active={active === "collections"} direction={1}>
+        <TopLevelPane
+          active={active === "collections"}
+          direction={1}
+          frozen={active !== "collections" || paneFrozenByOverlay}
+        >
           {renderCollectionsScreen({ includeChrome: active === "collections" && !overlayVisible })}
         </TopLevelPane>
         {overlay ? (
