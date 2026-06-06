@@ -126,8 +126,10 @@ Rules:
 
 - Use bundled Clash Display for page headers, section headers, sheet headers, Capture Review title headers, capture row titles, Collection titles, and card titles. Use medium-weight Clash for dense row/card titles and reserve heavier Clash cuts for page-level hierarchy. Use bundled Satoshi for body copy, metadata, inputs, buttons, navigation, labels, and non-title row content. Native system fonts remain the fallback when bundled families are unavailable. Avoid Inter as the primary product typeface.
 - Page title: 28-30px, 800-900 weight, tight but readable line height.
+- Capture Review edit title: 28-30px, medium display weight, with enough space before source metadata.
 - Section title: 17-19px, 700 weight.
-- Row title: 17-18px, 600-700 weight, usually one line.
+- Row title: 17-19px, 600-700 weight, usually one line. Carded Recent rows may use 21-22px when the row has enough white space.
+- Collection card title: 17-18px, 600-700 weight, usually one or two lines.
 - Body: 15-16px, 21-23px line height.
 - Metadata: 12-13px, muted, often 700 when used as a label.
 - Inputs: at least 16px to avoid tiny mobile form text.
@@ -145,7 +147,7 @@ Rules:
 
 - Use a compact spacing scale: 4, 8, 12, 16, 22 or 24, 32.
 - Default horizontal screen padding: 22px unless a native component requires otherwise.
-- Default radius: 8px. Segments may use 6px. Avoid large pill-heavy UI unless the element is truly a chip.
+- Default radius: 8px. Segments may use 6px. Recents cards, Collection cards, and Capture Review editable card/pill surfaces may use a softer 16-18px radius when they sit directly on Paper and need to feel less boxy. Avoid large pill-heavy UI unless the element is truly a chip.
 - Prefer spacing and tonal separation for lists. Do not use visible hairline borders or one-pixel dividers; use header gradients, tonal grouping, or soft surface changes when a boundary needs separation.
 - Do not put cards inside cards.
 - Prefer grouping and spacing before adding borders.

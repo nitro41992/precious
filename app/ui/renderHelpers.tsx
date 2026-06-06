@@ -138,6 +138,7 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     matchReason?: string;
     showCollectionToken?: boolean;
     showInlineSourceIcon?: boolean;
+    surface?: "plain" | "card";
     deferFallbackIcon?: boolean;
     deferMediaUntilLoaded?: boolean;
     forceSkeleton?: boolean;
@@ -216,6 +217,7 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
           forceSkeleton: input.homeFeedRevealPending,
           onPress: () => input.onOpenRecentCapture(item.capture.id),
           showInlineSourceIcon: true,
+          surface: "card",
           testID: `pc.capture.row.${item.capture.id}`
         })}
       </Animated.View>

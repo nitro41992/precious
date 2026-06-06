@@ -38,6 +38,7 @@ type CaptureRowProps = {
   showCollectionToken?: boolean;
   showInlineSourceIcon?: boolean;
   SkeletonBlock: SkeletonBlockRenderer;
+  surface?: "plain" | "card";
   testID?: string;
   trailingAction?: ReactElement | null;
 };
@@ -58,9 +59,11 @@ export function CaptureRow({
   showCollectionToken = true,
   showInlineSourceIcon = false,
   SkeletonBlock,
+  surface = "plain",
   testID,
   trailingAction = null
 }: CaptureRowProps) {
+  const carded = surface === "card";
   const imageLoadKey = captureImageLoadKey(item);
   const imageLoadState = imageLoadKey ? captureImageLoadStates[imageLoadKey] : undefined;
   const revealKey = captureRowRevealKey(item);
@@ -95,7 +98,11 @@ export function CaptureRow({
   const row = (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.captureRow, pressed && styles.captureRowPressed]}
+      style={({ pressed }) => [
+        styles.captureRow,
+        carded && styles.captureRowCard,
+        pressed && (carded ? styles.captureRowCardPressed : styles.captureRowPressed)
+      ]}
       testID={testID}
     >
       {ghostSourceMark ? (
@@ -105,7 +112,7 @@ export function CaptureRow({
       )}
       <View style={styles.rowContent}>
         <View style={styles.rowTitleLine}>
-          <Text numberOfLines={2} style={styles.captureTitle}>
+          <Text numberOfLines={2} style={[styles.captureTitle, carded && styles.captureCardTitle]}>
             {captureDisplayTitle(item)}
           </Text>
           <StatusGlyph capture={item} />

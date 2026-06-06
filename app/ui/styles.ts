@@ -14,6 +14,22 @@ const bottomControlShadow = Platform.OS === "android"
       shadowRadius: 34
     };
 
+const softCardEdgeColor = "rgba(208, 190, 149, 0.30)";
+const softCardRadius = 18;
+const softCardInnerRadius = 14;
+const softPillRadius = 16;
+const softCardShadow = Platform.OS === "android"
+  ? {
+      boxShadow: "0px 10px 24px 0px rgba(23, 33, 27, 0.05)",
+      elevation: 0
+    }
+  : {
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.045,
+      shadowRadius: 18
+    };
+
 export const styles = StyleSheet.create({
   safe: {
     backgroundColor: colors.paper,
@@ -735,9 +751,10 @@ export const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     ...typefaces.displaySemibold,
+    lineHeight: 17,
     paddingHorizontal: 22,
-    paddingBottom: 2,
-    paddingTop: 16
+    paddingBottom: 10,
+    paddingTop: 24
   },
   captureRow: {
     alignItems: "flex-start",
@@ -749,6 +766,22 @@ export const styles = StyleSheet.create({
   },
   captureRowPressed: {
     backgroundColor: colors.accent
+  },
+  captureRowCard: {
+    backgroundColor: colors.reviewCard,
+    borderColor: softCardEdgeColor,
+    borderRadius: softCardRadius,
+    borderWidth: 2,
+    marginBottom: 18,
+    marginHorizontal: 22,
+    minHeight: 124,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    ...softCardShadow
+  },
+  captureRowCardPressed: {
+    backgroundColor: colors.surfaceContainer,
+    transform: [{ scale: 0.99 }]
   },
   subtlePressed: {
     backgroundColor: colors.surfaceContainerHigh,
@@ -895,6 +928,10 @@ export const styles = StyleSheet.create({
     fontWeight: "400",
     ...typefaces.displayMedium,
     lineHeight: 24
+  },
+  captureCardTitle: {
+    fontSize: 22,
+    lineHeight: 28
   },
   status: {
     color: colors.ink,
@@ -1491,23 +1528,28 @@ export const styles = StyleSheet.create({
     minWidth: 0
   },
   collectionCardWrap: {
-    flex: 1
+    flex: 1,
+    padding: 8
   },
   collectionCard: {
-    borderRadius: 8,
+    backgroundColor: colors.reviewCard,
+    borderColor: softCardEdgeColor,
+    borderRadius: softCardRadius,
+    borderWidth: 2,
     flex: 1,
-    gap: 9,
+    gap: 10,
     minHeight: 0,
-    padding: 5,
-    width: "100%"
+    padding: 8,
+    ...softCardShadow
   },
   collectionCardPressed: {
-    backgroundColor: colors.collectionAccent
+    backgroundColor: colors.collectionAccentSoft,
+    transform: [{ scale: 0.99 }]
   },
   collectionCollageFrame: {
     aspectRatio: 1,
     backgroundColor: colors.surfaceContainer,
-    borderRadius: 8,
+    borderRadius: softCardInnerRadius,
     overflow: "hidden",
     width: "100%"
   },
@@ -1593,10 +1635,10 @@ export const styles = StyleSheet.create({
   },
   collectionCardTitle: {
     color: colors.ink,
-    fontSize: 15,
+    fontSize: 18,
     fontWeight: "400",
     ...typefaces.displayMedium,
-    lineHeight: 19
+    lineHeight: 23
   },
   collectionCardMeta: {
     color: colors.muted,
@@ -1958,10 +2000,10 @@ export const styles = StyleSheet.create({
   },
   reviewDetailPlane: {
     backgroundColor: colors.paper,
-    gap: 18,
+    gap: 22,
     minHeight: 520,
     paddingHorizontal: 22,
-    paddingTop: 22
+    paddingTop: 26
   },
   reviewDetailContent: {
     backgroundColor: colors.paper,
@@ -2174,12 +2216,13 @@ export const styles = StyleSheet.create({
   },
   quickEditBlock: {
     gap: 12,
-    paddingHorizontal: 2
+    paddingHorizontal: 2,
+    paddingTop: 2
   },
   inlineMeaningBlock: {
     gap: 10,
     paddingHorizontal: 0,
-    paddingVertical: 4
+    paddingVertical: 6
   },
   inlineMeaningSentence: {
     gap: 8
@@ -2200,10 +2243,10 @@ export const styles = StyleSheet.create({
   },
   inlineMeaningPill: {
     alignSelf: "flex-start",
-    backgroundColor: colors.surfaceContainer,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 0,
+    backgroundColor: colors.reviewCard,
+    borderColor: softCardEdgeColor,
+    borderRadius: softPillRadius,
+    borderWidth: 2,
     justifyContent: "center",
     maxWidth: "100%",
     minHeight: 44,
@@ -2221,15 +2264,16 @@ export const styles = StyleSheet.create({
     color: colors.review
   },
   reviewPrimaryBlock: {
-    gap: 8,
+    gap: 12,
     paddingHorizontal: 0
   },
   reviewTitleInput: {
     color: colors.ink,
-    fontSize: 25,
+    fontSize: 29,
     fontWeight: "400",
     ...typefaces.displayMedium,
-    lineHeight: 31,
+    lineHeight: 36,
+    minHeight: 42,
     padding: 0,
     paddingVertical: 0
   },
@@ -2242,18 +2286,18 @@ export const styles = StyleSheet.create({
   reviewSourceCluster: {
     alignItems: "center",
     alignSelf: "flex-start",
-    backgroundColor: colors.surfaceContainer,
-    borderColor: colors.lineStrong,
-    borderRadius: 8,
-    borderWidth: 0,
+    backgroundColor: colors.reviewCard,
+    borderColor: softCardEdgeColor,
+    borderRadius: softPillRadius,
+    borderWidth: 2,
     flexDirection: "row",
     flexShrink: 1,
     gap: 8,
-    minHeight: 34,
+    minHeight: 38,
     minWidth: 0,
-    paddingLeft: 5,
-    paddingRight: 4,
-    paddingVertical: 4
+    paddingLeft: 6,
+    paddingRight: 6,
+    paddingVertical: 5
   },
   reviewSourceName: {
     color: colors.ink,
@@ -2887,15 +2931,16 @@ export const styles = StyleSheet.create({
   },
   noteActionCard: {
     alignItems: "center",
-    backgroundColor: colors.surfaceContainer,
-    borderColor: colors.lineStrong,
-    borderRadius: 8,
-    borderWidth: 0,
+    backgroundColor: colors.reviewCard,
+    borderColor: softCardEdgeColor,
+    borderRadius: softCardRadius,
+    borderWidth: 2,
     flexDirection: "row",
     gap: 12,
     minHeight: 82,
     paddingHorizontal: 14,
-    paddingVertical: 14
+    paddingVertical: 14,
+    ...softCardShadow
   },
   noteActionCardIcon: {
     alignItems: "center",
