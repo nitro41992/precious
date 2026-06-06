@@ -16,7 +16,6 @@ import {
 } from "react-native";
 import type { FlatList, TextInput } from "react-native";
 import { Image } from "expo-image";
-import { Freeze } from "react-freeze";
 import Reanimated, {
   Easing as ReanimatedEasing,
   interpolate,
@@ -218,6 +217,11 @@ function ReviewHandoffOverlay({
     (resolve, wasResolving) => {
       if (!resolve || wasResolving) return;
       if (direction === "closing") {
+        // The morph landed on the identical, visible thumbnail — hide the
+        // copy right here on the UI thread. The React teardown commit can
+        // lag behind JS work without leaving a stale image floating over
+        // the list (it would stay fixed while the user scrolls).
+        fade.value = 0;
         runOnJS(onDone)(handoffKey);
         return;
       }
@@ -329,13 +333,11 @@ function ScreenOverlayFrame({
 function TopLevelPane({
   active,
   children,
-  direction,
-  frozen
+  direction
 }: {
   active: boolean;
   children: ReactNode;
   direction: -1 | 1;
-  frozen: boolean;
 }) {
   const progress = useSharedValue(active ? 1 : 0);
 
@@ -367,9 +369,7 @@ function TopLevelPane({
         animatedStyle
       ]}
     >
-      {/* Covered/inactive panes stay visible natively but stop re-rendering
-          until they are revealed again. */}
-      <Freeze freeze={frozen}>{children}</Freeze>
+      {children}
     </Reanimated.View>
   );
 }
@@ -618,9 +618,8 @@ export default function App() {
   }, [reviewHandoff]);
 
   // Hide the source card's thumbnail while its image flies to the review
-  // hero — natively (setNativeProps), so the list never re-renders for it
-  // and the panes can stay frozen for the whole overlay session. Closing
-  // lands the morph on the visible, pixel-identical thumbnail instead.
+  // hero — natively (setNativeProps), so the list never re-renders for it.
+  // Closing lands the morph on the visible, pixel-identical thumbnail.
   useEffect(() => {
     if (!reviewHandoff || reviewHandoff.direction !== "opening") return;
     const captureId = reviewHandoff.captureId;
@@ -695,9 +694,10 @@ export default function App() {
   }, [normalizeHandoffWindowRect, reviewHandoffTarget]);
 
   const measureClosingHandoffTarget = useCallback((handoff: ReviewHandoffState) => {
-    // The list is frozen (and untouchable) while the review is open, so the
-    // rect the opening morph launched from is still exactly where the card
-    // sits — use it whenever a live measurement is unavailable.
+    // The list is covered (and untouchable) while the review is open, so
+    // the rect the opening morph launched from is where the card still sits
+    // in almost all cases — use it when a live measurement fails; the live
+    // measurement refines the in-flight target when it lands.
     const applyOriginFallback = () => {
       const origin = reviewOriginRectRef.current;
       if (origin && origin.captureId === handoff.captureId) {
@@ -3539,27 +3539,15 @@ export default function App() {
     overlayHandoff?: ReviewHandoffState | null;
   } = {}) {
     const overlayVisible = Boolean(overlay);
-    // Frozen panes are hidden by Suspense, so a pane may only be frozen while
-    // fully covered: freeze once the opening handoff settles, thaw the moment
-    // a close begins (the return morph reveals the list behind the fade).
-    const paneFrozenByOverlay = overlayVisible && !reviewHandoff;
     // The tab bar / gradient / FAB are part of the page the return morph
     // lands on — they must be present for the whole close, not pop in after.
     const paneChromeVisible = !overlayVisible || reviewHandoff?.direction === "closing";
     return (
       <View collapsable={false} ref={handoffRootRef} style={styles.screenStack}>
-        <TopLevelPane
-          active={active === "recent"}
-          direction={-1}
-          frozen={active !== "recent" || paneFrozenByOverlay}
-        >
+        <TopLevelPane active={active === "recent"} direction={-1}>
           {renderHomeScreen({ includeChrome: active === "recent" && paneChromeVisible })}
         </TopLevelPane>
-        <TopLevelPane
-          active={active === "collections"}
-          direction={1}
-          frozen={active !== "collections" || paneFrozenByOverlay}
-        >
+        <TopLevelPane active={active === "collections"} direction={1}>
           {renderCollectionsScreen({ includeChrome: active === "collections" && paneChromeVisible })}
         </TopLevelPane>
         {overlay ? (
