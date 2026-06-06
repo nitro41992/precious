@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { Dispatch, ReactNode, RefObject, SetStateAction } from "react";
+import type { Dispatch, MutableRefObject, ReactNode, RefObject, SetStateAction } from "react";
 import type { GestureResponderEvent } from "react-native";
 import type { TextInput as NativeTextInput } from "react-native";
 import {
@@ -95,6 +95,7 @@ type CaptureReviewScreenProps = {
     hideReviewHeroForHandoff: boolean;
     reviewHandoffFade: SharedValue<number>;
     reviewHandoffKey: number | null;
+    reviewHeroCloseRef: MutableRefObject<(() => void) | null>;
     selected: Capture;
     toast: ReactNode;
     visitTargetMapCandidates: MapSearchCandidate[];
@@ -115,7 +116,11 @@ type CaptureReviewScreenProps = {
     reminderSheetOpen: boolean;
   };
   actions: {
-    closeReview: (fromRect?: ReviewHandoffRect | null) => void;
+    closeReview: (options?: {
+      allowHandoff?: boolean;
+      fromRect?: ReviewHandoffRect | null;
+      heroScale?: number;
+    }) => void;
     closeNoteSheet: (options?: { keyboardHidden?: boolean }) => void;
     deleteCapture: () => void;
     copySource: () => void;
@@ -341,6 +346,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     hideReviewHeroForHandoff,
     reviewHandoffFade,
     reviewHandoffKey,
+    reviewHeroCloseRef,
     selected,
     toast,
     visitTargetMapCandidates,
@@ -634,6 +640,15 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     return () => cancelAnimationFrame(frame);
   }, [reviewHandoffKey, selectedHeroImageUrl, reviewWindowWidth]);
 
+  // Hardware/gesture back must run the same scroll-aware hero return as the
+  // back button; keep the latest closure registered with the app shell.
+  useEffect(() => {
+    reviewHeroCloseRef.current = closeReviewFromHero;
+    return () => {
+      reviewHeroCloseRef.current = null;
+    };
+  });
+
   useEffect(() => {
     setImageViewerOpen(false);
     setImageViewerSource(null);
@@ -701,7 +716,24 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       closeReview();
       return;
     }
-    measureReviewHeroFrame((rect) => closeReview(rect));
+    measureReviewHeroFrame((rect) => {
+      // The morph must take over exactly where the scroll-driven collapse
+      // left the hero: same rect, same interpolated image scale. If the hero
+      // has been scrolled mostly out of view there is nothing to hand off —
+      // close plainly instead of flying an unclipped copy across content.
+      if (!rect || rect.y < -rect.height * 0.5) {
+        closeReview({ allowHandoff: false });
+        return;
+      }
+      const collapseProgress = Math.min(
+        1,
+        Math.max(0, reviewScrollY.value / reviewAspectShiftDistance)
+      );
+      const heroScale =
+        REVIEW_MEDIA_EXPANDED_IMAGE_SCALE +
+        (REVIEW_MEDIA_COLLAPSED_IMAGE_SCALE - REVIEW_MEDIA_EXPANDED_IMAGE_SCALE) * collapseProgress;
+      closeReview({ fromRect: rect, heroScale });
+    });
   }
 
   return (

@@ -143,6 +143,10 @@ type ReviewHandoffState = {
   captureId: string;
   direction: "opening" | "closing";
   from: ReviewHandoffRect;
+  // The hero image's scale at the review end of the morph. Opening always
+  // lands at the expanded scale (scroll resets per mount); closing starts
+  // from whatever scale the scroll-driven collapse left the hero at.
+  heroScale: number;
   imageUrl: string;
   key: number;
   returnCollectionId: string | null;
@@ -244,8 +248,8 @@ function ReviewHandoffOverlay({
   });
 
   const imageAnimatedStyle = useAnimatedStyle(() => {
-    const fromScale = handoff.direction === "closing" ? REVIEW_HERO_EXPANDED_IMAGE_SCALE : 1;
-    const toScale = handoff.direction === "closing" ? 1 : REVIEW_HERO_EXPANDED_IMAGE_SCALE;
+    const fromScale = handoff.direction === "closing" ? handoff.heroScale : 1;
+    const toScale = handoff.direction === "closing" ? 1 : handoff.heroScale;
     return {
       transform: [
         {
@@ -595,15 +599,30 @@ export default function App() {
   const collectionListFade = useRef(new Animated.Value(0)).current;
 
   const registerCaptureThumbnailRef = useCallback((captureId: string, node: View | null) => {
+    // Keep the last node on detach: react-freeze detaches refs when a pane
+    // freezes, but the native view stays alive — the closing morph still
+    // needs to measure it and restore its opacity. Stale nodes from truly
+    // unmounted rows measure as zero and are handled by the origin fallback.
     if (node) {
       captureThumbnailRefs.current[captureId] = node;
-      return;
     }
-    delete captureThumbnailRefs.current[captureId];
   }, []);
 
   useEffect(() => {
     reviewHandoffRef.current = reviewHandoff;
+  }, [reviewHandoff]);
+
+  // Hide the source card's thumbnail while its image flies to the review
+  // hero — natively (setNativeProps), so the list never re-renders for it
+  // and the panes can stay frozen for the whole overlay session. Closing
+  // lands the morph on the visible, pixel-identical thumbnail instead.
+  useEffect(() => {
+    if (!reviewHandoff || reviewHandoff.direction !== "opening") return;
+    const captureId = reviewHandoff.captureId;
+    captureThumbnailRefs.current[captureId]?.setNativeProps({ opacity: 0 });
+    return () => {
+      captureThumbnailRefs.current[captureId]?.setNativeProps({ opacity: 1 });
+    };
   }, [reviewHandoff]);
 
   const markReviewHandoffReady = useCallback((key: number | null) => {
@@ -611,10 +630,23 @@ export default function App() {
     reviewHandoffHeroReady.value = true;
   }, [reviewHandoffHeroReady]);
 
+  const handoffRootOffsetRef = useRef<{ x: number; y: number } | null>(null);
+  const reviewOriginRectRef = useRef<{ captureId: string; rect: ReviewHandoffRect } | null>(null);
+  // selectCapture is created by a hook further down; the closing-handoff
+  // fallback (declared earlier) reaches it through this ref.
+  const selectCaptureRef = useRef<(captureId: string | null) => void>(() => {});
+
   const normalizeHandoffWindowRect = useCallback((
     rect: ReviewHandoffRect,
     onMeasured: (normalized: ReviewHandoffRect) => void
   ) => {
+    // The root container never moves; measure its window offset once so each
+    // handoff needs a single async measurement instead of two.
+    const cachedOffset = handoffRootOffsetRef.current;
+    if (cachedOffset) {
+      onMeasured({ ...rect, x: rect.x - cachedOffset.x, y: rect.y - cachedOffset.y });
+      return;
+    }
     const root = handoffRootRef.current;
     if (!root) {
       onMeasured(rect);
@@ -625,6 +657,7 @@ export default function App() {
         onMeasured(rect);
         return;
       }
+      handoffRootOffsetRef.current = { x: rootX, y: rootY };
       onMeasured({
         ...rect,
         x: rect.x - rootX,
@@ -637,6 +670,10 @@ export default function App() {
     normalizeHandoffWindowRect(rect, (normalized) => {
       reviewHeroRectRef.current = normalized;
       if (!key || reviewHandoffRef.current?.key !== key) return;
+      // Only opening handoffs target the hero. During closing the review
+      // screen re-measures its hero with the closing key; writing that rect
+      // here would race the card measurement and hijack the return morph.
+      if (reviewHandoffRef.current.direction !== "opening") return;
       const current = reviewHandoffTarget.value;
       if (
         current &&
@@ -653,18 +690,29 @@ export default function App() {
   }, [normalizeHandoffWindowRect, reviewHandoffTarget]);
 
   const measureClosingHandoffTarget = useCallback((handoff: ReviewHandoffState) => {
-    const thumbnailNode = captureThumbnailRefs.current[handoff.captureId];
-    if (!thumbnailNode) {
+    // The list is frozen (and untouchable) while the review is open, so the
+    // rect the opening morph launched from is still exactly where the card
+    // sits — use it whenever a live measurement is unavailable.
+    const applyOriginFallback = () => {
+      const origin = reviewOriginRectRef.current;
+      if (origin && origin.captureId === handoff.captureId) {
+        if (reviewHandoffRef.current?.key !== handoff.key) return;
+        reviewHandoffTarget.value = origin.rect;
+        return;
+      }
       setClosingReviewCapture(null);
       reviewHandoffRef.current = null;
       setReviewHandoff(null);
+      selectCaptureRef.current(null);
+    };
+    const thumbnailNode = captureThumbnailRefs.current[handoff.captureId];
+    if (!thumbnailNode) {
+      applyOriginFallback();
       return;
     }
     thumbnailNode.measureInWindow((x, y, width, height) => {
       if (!width || !height) {
-        setClosingReviewCapture(null);
-        reviewHandoffRef.current = null;
-        setReviewHandoff(null);
+        applyOriginFallback();
         return;
       }
       normalizeHandoffWindowRect({ x, y, width, height, radius: 14 }, (normalized) => {
@@ -677,7 +725,7 @@ export default function App() {
   const closingMeasureKeyRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!reviewHandoff || reviewHandoff.direction !== "closing" || selectedId) return;
+    if (!reviewHandoff || reviewHandoff.direction !== "closing") return;
     if (closingMeasureKeyRef.current === reviewHandoff.key) return;
     closingMeasureKeyRef.current = reviewHandoff.key;
     let innerFrame: number | null = null;
@@ -712,10 +760,12 @@ export default function App() {
           captureId: capture.id,
           direction: "opening",
           from,
+          heroScale: REVIEW_HERO_EXPANDED_IMAGE_SCALE,
           imageUrl,
           key,
           returnCollectionId: null
         };
+        reviewOriginRectRef.current = { captureId: capture.id, rect: from };
         // The morph starts only once the review screen has mounted and
         // measured its hero (target lands), so image and view move together.
         reviewHandoffProgress.value = 0;
@@ -1380,6 +1430,8 @@ export default function App() {
     setSelectedId(captureId);
   }, []);
 
+  selectCaptureRef.current = selectCapture;
+
   const selectCollection = useCallback((collectionId: string | null) => {
     setCollectionFeedReadyKey("");
     if (collectionId) {
@@ -1485,7 +1537,11 @@ export default function App() {
     selectCapture(capture.id);
   }, [selectCapture]);
 
-  const startReviewCloseHandoff = useCallback((capture: Capture, fromRect?: ReviewHandoffRect | null) => {
+  const startReviewCloseHandoff = useCallback((
+    capture: Capture,
+    fromRect?: ReviewHandoffRect | null,
+    heroScale: number = REVIEW_HERO_EXPANDED_IMAGE_SCALE
+  ) => {
     const imageUrl = captureImageUrl(capture);
     if (!imageUrl) return false;
     const start = (from: ReviewHandoffRect) => {
@@ -1496,6 +1552,7 @@ export default function App() {
         captureId: capture.id,
         direction: "closing",
         from,
+        heroScale,
         imageUrl,
         key,
         returnCollectionId: null
@@ -1506,9 +1563,10 @@ export default function App() {
       reviewHandoffHeroReady.value = true;
       reviewHandoffTarget.value = null;
       reviewHandoffRef.current = nextHandoff;
+      // Keep the capture selected (drafts and all) while the return morph
+      // runs — clearing it here visibly blanked the still-fading screen.
+      // finishReviewHandoff deselects once the morph lands.
       setReviewHandoff(nextHandoff);
-      setClosingReviewCapture(capture);
-      selectCapture(null);
     };
     if (fromRect) {
       normalizeHandoffWindowRect(fromRect, start);
@@ -1904,14 +1962,28 @@ export default function App() {
     ? collections.find((collection) => collection.id === selectedCollectionId) ?? null
     : null;
 
-  const closeSelectedCapture = useCallback((fromRect?: ReviewHandoffRect | null) => {
+  // The review screen registers its hero-measured close here so hardware/
+  // gesture back runs the same scroll-aware return morph as the back button.
+  const reviewHeroCloseRef = useRef<(() => void) | null>(null);
+
+  const closeSelectedCapture = useCallback((options?: {
+    allowHandoff?: boolean;
+    fromRect?: ReviewHandoffRect | null;
+    heroScale?: number;
+  }) => {
     if (!selected) return;
     if (reviewHandoff) return;
     if (captureReturnCollectionId) {
       returnToCollectionDetail(captureReturnCollectionId);
       return;
     }
-    if (captureReviewOrigin === "recent" && startReviewCloseHandoff(selected, fromRect)) return;
+    if (
+      captureReviewOrigin === "recent" &&
+      options?.allowHandoff !== false &&
+      startReviewCloseHandoff(selected, options?.fromRect, options?.heroScale)
+    ) {
+      return;
+    }
     selectCapture(null);
   }, [
     captureReturnCollectionId,
@@ -1922,6 +1994,14 @@ export default function App() {
     selected,
     startReviewCloseHandoff
   ]);
+
+  const requestCloseSelectedCapture = useCallback(() => {
+    if (reviewHeroCloseRef.current) {
+      reviewHeroCloseRef.current();
+      return;
+    }
+    closeSelectedCapture();
+  }, [closeSelectedCapture]);
 
   const collectionSearchResults = useMemo(() => {
     const term = collectionSearchQuery.trim().toLowerCase();
@@ -2007,7 +2087,7 @@ export default function App() {
     closeCollectionComposer,
     closeCollectionPicker,
     closeNoteSheet,
-    closeSelectedCapture,
+    closeSelectedCapture: requestCloseSelectedCapture,
     collectionSearchOpen,
     collectionPickerOpen,
     collectionDraftDirty,
@@ -2264,19 +2344,54 @@ export default function App() {
       item.remoteId === previousId ||
       item.id === updatedCapture.id ||
       Boolean(updatedCapture.remoteId && item.remoteId === updatedCapture.remoteId);
-    const preserveKnownImageFields = (item: Capture): Capture => ({
-      ...updatedCapture,
-      thumbnailUrl: updatedCapture.thumbnailUrl || item.thumbnailUrl,
-      imageAssetUrl: updatedCapture.imageAssetUrl || item.imageAssetUrl,
-      imageAssetCacheKey: updatedCapture.imageAssetCacheKey || item.imageAssetCacheKey,
-      imageAssetFullUrl: updatedCapture.imageAssetFullUrl || item.imageAssetFullUrl,
-      imageAssetFullCacheKey: updatedCapture.imageAssetFullCacheKey || item.imageAssetFullCacheKey,
-      imageAssetMimeType: updatedCapture.imageAssetMimeType || item.imageAssetMimeType,
-      sourcePreviewAssetUrl: updatedCapture.sourcePreviewAssetUrl || item.sourcePreviewAssetUrl,
-      sourcePreviewAssetCacheKey: updatedCapture.sourcePreviewAssetCacheKey || item.sourcePreviewAssetCacheKey,
-      sourcePreviewAssetMimeType: updatedCapture.sourcePreviewAssetMimeType || item.sourcePreviewAssetMimeType,
-      urlEvidence: updatedCapture.urlEvidence || item.urlEvidence
-    });
+    // When the cache key is unchanged it is the same asset with a freshly
+    // signed URL — keep the URL the views are already rendering so image
+    // sources stay stable (a source swap restarts the native load: flicker).
+    // Failed images do take the fresh URL.
+    const stableAssetUrl = (
+      previousUrl: string | undefined,
+      nextUrl: string | undefined,
+      previousKey: string | undefined,
+      nextKey: string | undefined,
+      imageFailed: boolean
+    ) => {
+      if (!imageFailed && previousUrl && previousKey && previousKey === nextKey) return previousUrl;
+      return nextUrl || previousUrl;
+    };
+    const preserveKnownImageFields = (item: Capture): Capture => {
+      const imageFailed = captureNeedsFreshRow(item);
+      return {
+        ...updatedCapture,
+        thumbnailUrl: updatedCapture.thumbnailUrl || item.thumbnailUrl,
+        imageAssetUrl: stableAssetUrl(
+          item.imageAssetUrl,
+          updatedCapture.imageAssetUrl,
+          item.imageAssetCacheKey,
+          updatedCapture.imageAssetCacheKey,
+          imageFailed
+        ),
+        imageAssetCacheKey: updatedCapture.imageAssetCacheKey || item.imageAssetCacheKey,
+        imageAssetFullUrl: stableAssetUrl(
+          item.imageAssetFullUrl,
+          updatedCapture.imageAssetFullUrl,
+          item.imageAssetFullCacheKey,
+          updatedCapture.imageAssetFullCacheKey,
+          imageFailed
+        ),
+        imageAssetFullCacheKey: updatedCapture.imageAssetFullCacheKey || item.imageAssetFullCacheKey,
+        imageAssetMimeType: updatedCapture.imageAssetMimeType || item.imageAssetMimeType,
+        sourcePreviewAssetUrl: stableAssetUrl(
+          item.sourcePreviewAssetUrl,
+          updatedCapture.sourcePreviewAssetUrl,
+          item.sourcePreviewAssetCacheKey,
+          updatedCapture.sourcePreviewAssetCacheKey,
+          imageFailed
+        ),
+        sourcePreviewAssetCacheKey: updatedCapture.sourcePreviewAssetCacheKey || item.sourcePreviewAssetCacheKey,
+        sourcePreviewAssetMimeType: updatedCapture.sourcePreviewAssetMimeType || item.sourcePreviewAssetMimeType,
+        urlEvidence: updatedCapture.urlEvidence || item.urlEvidence
+      };
+    };
     for (const [collectionId, rows] of Object.entries(collectionCapturesCacheRef.current)) {
       if (!rows.some(matchesCapture)) continue;
       collectionCapturesCacheRef.current[collectionId] = capturesForListMode(
@@ -3123,7 +3238,6 @@ export default function App() {
     collectionListFade,
     collectionRowsFade,
     failedFavicons: faviconFailures,
-    handoffHiddenCaptureId: reviewHandoff ? reviewHandoff.captureId : null,
     homeFeedRevealPending,
     homeRowsFade,
     onAccountActionsPress: openAccountActions,
@@ -3268,6 +3382,7 @@ export default function App() {
           hideReviewHeroForHandoff: reviewHeroHiddenForHandoff,
           reviewHandoffFade,
           reviewHandoffKey: activeReviewHandoff?.key ?? null,
+          reviewHeroCloseRef,
           selected: capture,
           toast: renderToast("footer"),
           visitTargetMapCandidates,
@@ -3381,10 +3496,9 @@ export default function App() {
     overlayHandoff?: ReviewHandoffState | null;
   } = {}) {
     const overlayVisible = Boolean(overlay);
-    // Freeze covered panes only once the handoff settles: during the morph
-    // the background pane must stay live (it hides the source thumbnail);
-    // afterwards it stops re-rendering while the overlay covers it — data
-    // hydration on the review screen no longer reconciles the whole list.
+    // Frozen panes are hidden by Suspense, so a pane may only be frozen while
+    // fully covered: freeze once the opening handoff settles, thaw the moment
+    // a close begins (the return morph reveals the list behind the fade).
     const paneFrozenByOverlay = overlayVisible && !reviewHandoff;
     return (
       <View collapsable={false} ref={handoffRootRef} style={styles.screenStack}>

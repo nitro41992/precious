@@ -31,7 +31,6 @@ type CaptureRowProps = {
   deferMediaUntilLoaded?: boolean;
   failedFavicons: Record<string, boolean>;
   forceSkeleton?: boolean;
-  hideThumbnail?: boolean;
   item: Capture;
   matchReason?: string;
   onFaviconFailure: (host: string) => void;
@@ -54,7 +53,6 @@ export function CaptureRow({
   deferMediaUntilLoaded = false,
   failedFavicons,
   forceSkeleton = false,
-  hideThumbnail = false,
   item,
   matchReason,
   onFaviconFailure,
@@ -111,7 +109,7 @@ export function CaptureRow({
       ]}
       testID={testID}
     >
-      <View collapsable={false} ref={thumbnailRef} style={hideThumbnail && styles.handoffHiddenThumbnail}>
+      <View collapsable={false} ref={thumbnailRef}>
         {ghostSourceMark ? (
           <SkeletonBlock style={styles.loadingThumbnailMark} />
         ) : (

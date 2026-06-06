@@ -41,7 +41,6 @@ export type AppRenderHelpersInput = {
   collectionListFade: Animated.Value;
   collectionRowsFade: Animated.Value;
   failedFavicons: Record<string, boolean>;
-  handoffHiddenCaptureId: string | null;
   homeFeedRevealPending: boolean;
   homeRowsFade: Animated.Value;
   onAccountActionsPress: () => void;
@@ -150,7 +149,6 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     deferFallbackIcon?: boolean;
     deferMediaUntilLoaded?: boolean;
     forceSkeleton?: boolean;
-    hideThumbnail?: boolean;
     thumbnailRef?: (node: View | null) => void;
     trailingAction?: ReactElement | null;
   }) {
@@ -239,7 +237,6 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
             item: item.capture,
             deferFallbackIcon: input.capturesLoading && !input.activeCapturesLoadedOnce,
             forceSkeleton: input.homeFeedRevealPending,
-            hideThumbnail: input.handoffHiddenCaptureId === item.capture.id,
             onPress: () => input.onOpenRecentCapture(item.capture),
             showInlineSourceIcon: true,
             surface: "card",
