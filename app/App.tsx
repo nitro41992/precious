@@ -707,10 +707,11 @@ export default function App() {
   }, [normalizeHandoffWindowRect, reviewHandoffTarget]);
 
   const measureClosingHandoffTarget = useCallback((handoff: ReviewHandoffState) => {
-    // The list is covered (and untouchable) while the review is open, so
-    // the rect the opening morph launched from is where the card still sits
-    // in almost all cases — use it when a live measurement fails; the live
-    // measurement refines the in-flight target when it lands.
+    // The live measurement is the close target's single authority — the
+    // flight does not start until it lands (startReviewCloseHandoff leaves
+    // the target null). The rect the opening morph launched from can be
+    // stale (rows tapped right after a scroll measure mid-settle), so it is
+    // only the fallback when the live measurement fails outright.
     const applyOriginFallback = () => {
       const origin = reviewOriginRectRef.current;
       if (origin && origin.captureId === handoff.captureId) {
@@ -1599,12 +1600,15 @@ export default function App() {
       reviewHandoffHeroReady.value = true;
       reviewHandoffCopyReady.value = false;
       reviewHandoffCancelled.value = false;
-      // Start the return morph immediately against the rect the opening
-      // morph launched from — the covered list cannot have moved. The live
-      // thumbnail measurement refines the target asynchronously if needed.
-      const origin = reviewOriginRectRef.current;
-      reviewHandoffTarget.value =
-        origin && origin.captureId === capture.id ? origin.rect : null;
+      // The flight starts only once the LIVE thumbnail measurement lands
+      // (the start reaction waits for a target). Presetting the open-time
+      // origin rect here made the morph take off toward a stale position —
+      // rows tapped right after a scroll were measured mid-settle — and then
+      // visibly re-aim when the live rect arrived. The live measurement and
+      // the copy's image-display gate take the same few frames, so waiting
+      // costs no takeoff latency; the origin rect remains the fallback when
+      // the live measurement fails (measureClosingHandoffTarget).
+      reviewHandoffTarget.value = null;
       reviewHandoffRef.current = nextHandoff;
       // Keep the capture selected (drafts and all) while the return morph
       // runs — clearing it here visibly blanked the still-fading screen.
