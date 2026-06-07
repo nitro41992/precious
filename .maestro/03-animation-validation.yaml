@@ -20,6 +20,14 @@ name: 03 animation validation
     text: "review-e2e-.*Suggested"
 - assertVisible:
     id: "pc.collection.detail.title"
+- tapOn:
+    id: "pc.collection.detail.edit"
+- assertVisible: "Collection details"
+- assertVisible:
+    id: "pc.collection.edit.save"
+- tapOn: "Close"
+- assertVisible:
+    id: "pc.collection.detail.title"
 - tapOn: "Back"
 - assertVisible: "Collections"
 - tapOn:

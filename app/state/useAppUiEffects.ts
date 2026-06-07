@@ -30,6 +30,7 @@ export function useAppUiEffects({
   closeCollectionDetail,
   closeCollectionPicker,
   closeNoteSheet,
+  closeTitleSheet,
   closeSelectedCapture,
   collectionSearchOpen,
   collectionPickerOpen,
@@ -43,6 +44,8 @@ export function useAppUiEffects({
   lastKeyboardHeightRef,
   noteInputRef,
   noteSheetOpen,
+  titleInputRef,
+  titleSheetOpen,
   pickingCaptureImage,
   quickIntentOpen,
   reminderSheetOpen,
@@ -83,6 +86,7 @@ export function useAppUiEffects({
   closeCollectionDetail: () => void;
   closeCollectionPicker: () => void;
   closeNoteSheet: (options?: { keyboardHidden?: boolean }) => void;
+  closeTitleSheet: (options?: { keyboardHidden?: boolean }) => void;
   closeSelectedCapture: () => void;
   collectionSearchOpen: boolean;
   collectionPickerOpen: boolean;
@@ -96,6 +100,8 @@ export function useAppUiEffects({
   lastKeyboardHeightRef: MutableRefObject<number>;
   noteInputRef: RefObject<TextInput | null>;
   noteSheetOpen: boolean;
+  titleInputRef: RefObject<TextInput | null>;
+  titleSheetOpen: boolean;
   pickingCaptureImage: boolean;
   quickIntentOpen: boolean;
   reminderSheetOpen: boolean;
@@ -164,6 +170,7 @@ export function useAppUiEffects({
       !showCaptureComposer &&
       !showCollectionForm &&
       !noteSheetOpen &&
+      !titleSheetOpen &&
       !collectionPickerOpen &&
       !quickIntentOpen &&
       !reminderSheetOpen &&
@@ -197,6 +204,10 @@ export function useAppUiEffects({
       }
       if (noteSheetOpen) {
         closeNoteSheet();
+        return true;
+      }
+      if (titleSheetOpen) {
+        closeTitleSheet();
         return true;
       }
       if (searchOpen) {
@@ -233,11 +244,13 @@ export function useAppUiEffects({
     closeCollectionDetail,
     closeCollectionPicker,
     closeNoteSheet,
+    closeTitleSheet,
     closeSelectedCapture,
     collectionSearchOpen,
     collectionPickerOpen,
     collectionsOpen,
     noteSheetOpen,
+    titleSheetOpen,
     quickIntentOpen,
     reminderSheetOpen,
     searchOpen,
@@ -296,7 +309,7 @@ export function useAppUiEffects({
   }, [skeletonPulse]);
 
   useEffect(() => {
-    if ((!showCaptureComposer && !showCollectionForm && !noteSheetOpen) || captureComposerClosing) return;
+    if ((!showCaptureComposer && !showCollectionForm && !noteSheetOpen && !titleSheetOpen) || captureComposerClosing) return;
     captureComposerMotion.setValue(0);
     Animated.timing(captureComposerMotion, {
       duration: 220,
@@ -308,6 +321,7 @@ export function useAppUiEffects({
     captureComposerClosing,
     captureComposerMotion,
     noteSheetOpen,
+    titleSheetOpen,
     showCaptureComposer,
     showCollectionForm
   ]);
@@ -327,12 +341,15 @@ export function useAppUiEffects({
   ]);
 
   useEffect(() => {
-    if (!showCollectionForm) return;
+    // Create mode autofocuses the empty title; edit mode (a collection is
+    // selected) opens calm with the keyboard down so the delete row stays
+    // visible.
+    if (!showCollectionForm || selectedCollectionId) return;
     const frame = requestAnimationFrame(() => {
       collectionTitleInputRef.current?.focus();
     });
     return () => cancelAnimationFrame(frame);
-  }, [collectionTitleInputRef, showCollectionForm]);
+  }, [collectionTitleInputRef, selectedCollectionId, showCollectionForm]);
 
   useEffect(() => {
     if (!noteSheetOpen) return;
@@ -341,6 +358,14 @@ export function useAppUiEffects({
     });
     return () => cancelAnimationFrame(frame);
   }, [noteInputRef, noteSheetOpen]);
+
+  useEffect(() => {
+    if (!titleSheetOpen) return;
+    const frame = requestAnimationFrame(() => {
+      titleInputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [titleInputRef, titleSheetOpen]);
 
   useEffect(() => {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
@@ -365,10 +390,11 @@ export function useAppUiEffects({
         closeCollectionPicker();
         return;
       }
-      if (Platform.OS === "android" && (showCaptureComposer || showCollectionForm || noteSheetOpen)) {
+      if (Platform.OS === "android" && (showCaptureComposer || showCollectionForm || noteSheetOpen || titleSheetOpen)) {
         if (showCaptureComposer) closeCaptureComposer({ keyboardHidden: true });
         else if (showCollectionForm) closeCollectionComposer({ keyboardHidden: true });
-        else closeNoteSheet({ keyboardHidden: true });
+        else if (noteSheetOpen) closeNoteSheet({ keyboardHidden: true });
+        else closeTitleSheet({ keyboardHidden: true });
         return;
       }
       if (!captureComposerClosingRef.current) setKeyboardHeight(0);
@@ -392,9 +418,11 @@ export function useAppUiEffects({
     closeCollectionComposer,
     closeCollectionPicker,
     closeNoteSheet,
+    closeTitleSheet,
     collectionPickerOpen,
     lastKeyboardHeightRef,
     noteSheetOpen,
+    titleSheetOpen,
     setKeyboardHeight,
     showCaptureComposer,
     showCollectionForm

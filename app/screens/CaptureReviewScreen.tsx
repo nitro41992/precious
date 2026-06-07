@@ -29,6 +29,7 @@ import {
   CaretRight,
   Copy,
   Note as StickyNote,
+  PencilSimple,
   Trash as Trash2,
   X
 } from "phosphor-react-native";
@@ -89,6 +90,7 @@ type CaptureReviewScreenProps = {
     faviconFailures: Record<string, boolean>;
     keyboardHeight: number;
     noteInputRef: RefObject<NativeTextInput | null>;
+    titleInputRef: RefObject<NativeTextInput | null>;
     reviewMotion: Animated.Value;
     animateReviewChromeForHandoff: boolean;
     hideReviewHeroForHandoff: boolean;
@@ -110,6 +112,7 @@ type CaptureReviewScreenProps = {
     draftTitleDirty: boolean;
     noteSaveState: NoteSaveState;
     noteSheetOpen: boolean;
+    titleSheetOpen: boolean;
     quickIntentOpen: boolean;
     reminderDrafts: Record<string, ReminderDraftAction>;
     reminderSheetOpen: boolean;
@@ -123,6 +126,7 @@ type CaptureReviewScreenProps = {
       imageUrl?: string;
     }) => void;
     closeNoteSheet: (options?: { keyboardHidden?: boolean }) => void;
+    closeTitleSheet: (options?: { keyboardHidden?: boolean }) => void;
     deleteCapture: () => void;
     copySource: () => void;
     markFaviconFailed: (host: string) => void;
@@ -132,6 +136,7 @@ type CaptureReviewScreenProps = {
     openCollectionPicker: () => void;
     openExternalUrl: (url: string) => void;
     openNoteSheet: () => void;
+    openTitleSheet: () => void;
     openVisitTargetMaps: (candidate: MapSearchCandidate) => void;
     pasteExpandedUrl: () => void;
     removeReminder: (reminderIndex: number) => void;
@@ -341,6 +346,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     faviconFailures,
     keyboardHeight,
     noteInputRef,
+    titleInputRef,
     reviewMotion,
     animateReviewChromeForHandoff,
     hideReviewHeroForHandoff,
@@ -361,6 +367,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     draftTitle,
     noteSaveState,
     noteSheetOpen,
+    titleSheetOpen,
     quickIntentOpen,
     reminderDrafts,
     reminderSheetOpen
@@ -368,6 +375,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const {
     closeReview,
     closeNoteSheet,
+    closeTitleSheet,
     deleteCapture,
     copySource,
     markFaviconFailed,
@@ -377,6 +385,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     openCollectionPicker,
     openExternalUrl,
     openNoteSheet,
+    openTitleSheet,
     openVisitTargetMaps,
     pasteExpandedUrl,
     removeReminder,
@@ -542,6 +551,21 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     ? noteKeyboardGap
     : noteSheetKeyboardVisible
       ? Animated.add(captureKeyboardInset, noteKeyboardGap)
+      : captureKeyboardInset;
+  const titleSheetKeyboardVisible = titleSheetOpen && keyboardHeight > 0;
+  const titleWindowAlreadyKeyboardSized =
+    titleSheetKeyboardVisible && Math.abs(windowHeight + keyboardHeight - screenHeight) < 96;
+  const titleVisibleHeight = titleSheetKeyboardVisible && !titleWindowAlreadyKeyboardSized
+    ? windowHeight - keyboardHeight
+    : windowHeight;
+  const titleKeyboardGap = titleSheetKeyboardVisible ? 16 : 0;
+  const titleSheetMaxHeight = titleSheetKeyboardVisible
+    ? Math.min(440, Math.max(320, titleVisibleHeight - 24 - titleKeyboardGap))
+    : Math.min(500, Math.max(340, windowHeight * 0.64));
+  const titleSheetBottomInset = titleWindowAlreadyKeyboardSized
+    ? titleKeyboardGap
+    : titleSheetKeyboardVisible
+      ? Animated.add(captureKeyboardInset, titleKeyboardGap)
       : captureKeyboardInset;
   const showStatus = selectedStatus !== "ready";
   const reviewScrollY = useSharedValue(0);
@@ -984,19 +1008,22 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
               {deferredContentReady ? (
                 <Reanimated.View style={[styles.reviewDetailPlane, reviewDetailStyle]}>
                   <View style={styles.reviewPrimaryBlock}>
-                    <TextInput
-                      multiline
-                      onChangeText={(value) => {
-                        setDraftTitleDirty(true);
-                        setDraftTitle(value);
-                        updateSelectedReviewDraft({ title: value, titleDirty: true });
-                      }}
-                      placeholder="Title"
-                      placeholderTextColor={colors.placeholder}
-                      style={styles.reviewTitleInput}
-                      testID="pc.review.title"
-                      value={draftTitle}
-                    />
+                    <MotionPressable
+                      accessibilityLabel="Edit title"
+                      accessibilityRole="button"
+                      onPress={openTitleSheet}
+                      style={({ pressed }) => [styles.reviewTitleRow, pressed && styles.subtlePressed]}
+                    >
+                      <Text
+                        style={[styles.reviewTitleText, !draftTitle.trim() && styles.reviewTitleTextEmpty]}
+                        testID="pc.review.title"
+                      >
+                        {draftTitle.trim() || "Add a title"}
+                      </Text>
+                      <View style={styles.reviewTitleEditButton}>
+                        <PencilSimple color={colors.muted} size={18} weight="regular" />
+                      </View>
+                    </MotionPressable>
                     <View style={styles.reviewMetaRow}>
                       <View style={styles.reviewSourceCluster}>
                         {selectedSourceIsSharedImage ? (
@@ -1231,6 +1258,66 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                     {noteStatusLabel}
                   </Text>
                 ) : null}
+              </View>
+            </Animated.View>
+          </KeyboardAvoidingView>
+        </View>
+      ) : null}
+      {titleSheetOpen ? (
+        <View style={styles.sheetLayer} pointerEvents="box-none">
+          <Pressable
+            accessibilityLabel="Close title editor"
+            onPress={() => closeTitleSheet()}
+            style={styles.sheetBackdrop}
+          />
+          <KeyboardAvoidingView pointerEvents="box-none" style={styles.sheetKeyboard}>
+            <Animated.View
+              style={[
+                styles.captureSheet,
+                titleSheetKeyboardVisible && styles.captureSheetCompact,
+                {
+                  marginBottom: titleSheetBottomInset,
+                  maxHeight: titleSheetMaxHeight,
+                  transform: [
+                    {
+                      translateY: captureComposerMotion.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [screenHeight, 0]
+                      })
+                    }
+                  ]
+                }
+              ]}
+            >
+              <View style={styles.sheetGrabber} />
+              <SheetHeader
+                closeLabel="Close title editor"
+                confirmLabel="Done"
+                onClose={() => closeTitleSheet()}
+                onConfirm={() => closeTitleSheet()}
+                title="Title"
+              />
+              <View
+                style={[
+                  styles.captureSheetBody,
+                  styles.captureSheetBodyContent,
+                  titleSheetKeyboardVisible && styles.captureSheetBodyContentCompact
+                ]}
+              >
+                <TextInput
+                  multiline
+                  onChangeText={(value) => {
+                    setDraftTitleDirty(true);
+                    setDraftTitle(value);
+                    updateSelectedReviewDraft({ title: value, titleDirty: true });
+                  }}
+                  placeholder="Title"
+                  placeholderTextColor={colors.placeholder}
+                  ref={titleInputRef}
+                  style={[styles.captureInput, styles.noteSheetInput]}
+                  testID="pc.review.title.input"
+                  value={draftTitle}
+                />
               </View>
             </Animated.View>
           </KeyboardAvoidingView>

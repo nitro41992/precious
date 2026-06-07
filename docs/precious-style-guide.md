@@ -126,7 +126,7 @@ Rules:
 
 - Use bundled Clash Display for page headers, section headers, sheet headers, Capture Review title headers, capture row titles, Collection titles, and card titles. Use medium-weight Clash for dense row/card titles and reserve heavier Clash cuts for page-level hierarchy. Use bundled Satoshi for body copy, metadata, inputs, buttons, navigation, labels, and non-title row content. Native system fonts remain the fallback when bundled families are unavailable. Avoid Inter as the primary product typeface.
 - Page title: 28-30px, 800-900 weight, tight but readable line height.
-- Capture Review edit title: 28-30px, medium display weight, with enough space before source metadata.
+- Capture Review title: 28-30px, medium display weight, with enough space before source metadata. The title reads as calm display text with a pencil affordance; editing happens in a focused `Title` bottom sheet rather than an always-on inline input.
 - Section title: 17-19px, 700 weight.
 - Row title: 17-19px, 600-700 weight, usually one line. Carded Recent rows may use 21-22px when the row has enough white space.
 - Collection card title: 17-18px, 600-700 weight, usually one or two lines.
@@ -200,7 +200,7 @@ Rules:
 ### Focused Bottom Sheets
 
 - Focused sheets use one warm tonal surface with a small grabber, compact Clash title, optional short helper line, and icon-only close plus header check actions when completion is explicit.
-- Header check is the default completion pattern for New Capture, New Collection, Note, Collection selection, and Reminder editing; use a full-width bottom CTA only when a sheet has a truly separate final step that cannot stay visible in the header.
+- Header check is the default completion pattern for New Capture, New Collection, Collection details, Title, Note, Collection selection, and Reminder editing; use a full-width bottom CTA only when a sheet has a truly separate final step that cannot stay visible in the header.
 - Sheet content should have one working area: mode chips plus one input, a compact option grid, a searchable choice list, or a small interval editor. Avoid nested cards, heavy stacked panels, and duplicate save controls.
 - AI rationale inside Purpose, Collection, and Later sheets should be a compact tonal row tied to the current field value. Hide it when the draft no longer matches the analyzer-selected value.
 - Keep sheet actions clear of Android gesture navigation and avoid visible hairline dividers.
@@ -377,8 +377,8 @@ Avoid:
 
 Collections are ongoing purpose groups, not folders.
 
-- Show title, description, capture count, and a destructive delete action.
-- Open `New collection` from the Collections floating `+` as a focused bottom sheet using the same sheet treatment as New Capture.
+- The collection detail top is read-only: title, description, capture count, and a back/edit action row. A pencil action opens the editing sheet; the detail surface itself never holds an inline edit form.
+- Open `New collection` from the Collections floating `+` as a focused bottom sheet using the same sheet treatment as New Capture. The same sheet handles editing an existing collection (opened from the detail pencil), prefilled and with a quiet destructive `Delete collection` row at the bottom — the only place the destructive delete lives.
 - AI never creates or suggests new Collections. It may only attach high-confidence matches to existing active Collections.
 - A Capture may intentionally have no Collection, and may belong to multiple Collections.
 - Capture Review opens a focused bottom sheet selector for existing active Collections instead of an inline picker.

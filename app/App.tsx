@@ -637,6 +637,7 @@ export default function App() {
   const [captureComposerClosing, setCaptureComposerClosing] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [noteSheetOpen, setNoteSheetOpen] = useState(false);
+  const [titleSheetOpen, setTitleSheetOpen] = useState(false);
   const [reminderSheetOpen, setReminderSheetOpen] = useState(false);
   const [accountSheetOpen, setAccountSheetOpen] = useState(false);
   const [faviconFailures, setFaviconFailures] = useState<Record<string, boolean>>({});
@@ -685,6 +686,7 @@ export default function App() {
   const collectionsPrefetchStartedRef = useRef(false);
   const sourceInputRef = useRef<TextInput>(null);
   const noteInputRef = useRef<TextInput>(null);
+  const titleInputRef = useRef<TextInput>(null);
   const collectionTitleInputRef = useRef<TextInput>(null);
   const collectionDetailListRef = useRef<FlatList<Capture>>(null);
   const captureThumbnailRefs = useRef<Record<string, View | null>>({});
@@ -1115,15 +1117,6 @@ export default function App() {
     if (!known.length) return [];
     const hasCollectionOrder = known.every((capture) => collectionLinkTimestamp(capture, collectionId));
     return hasCollectionOrder ? sortCollectionCaptures(known, collectionId) : [];
-  }
-
-  function scrollCollectionSettingsIntoView() {
-    requestAnimationFrame(() => {
-      collectionDetailListRef.current?.scrollToEnd({ animated: true });
-    });
-    setTimeout(() => {
-      collectionDetailListRef.current?.scrollToEnd({ animated: true });
-    }, 260);
   }
 
   const clearAuthenticatedState = useCallback(() => {
@@ -1931,6 +1924,19 @@ export default function App() {
     setShowCollectionForm(true);
   }
 
+  // Edit mode for the collection sheet: the detail pencil opens the same
+  // composer prefilled by the useAppUiEffects draft sync (selectedCollection
+  // stays set, so the sheet renders its edit header and delete row). No
+  // keyboard priming — the sheet opens calm with the keyboard down.
+  function openCollectionEditor() {
+    setCollectionDraftDirty(false);
+    captureComposerMotion.stopAnimation();
+    captureKeyboardInset.stopAnimation();
+    captureComposerMotion.setValue(0);
+    captureKeyboardInset.setValue(0);
+    setShowCollectionForm(true);
+  }
+
   function openNoteSheet() {
     const screenHeight = Dimensions.get("screen").height;
     const estimatedKeyboardHeight = lastKeyboardHeightRef.current || Math.round(screenHeight * (Platform.OS === "ios" ? 0.34 : 0.4));
@@ -1949,6 +1955,27 @@ export default function App() {
     if (!noteSheetOpen || captureComposerClosing) return;
     animateCaptureSheetClose(() => {
       setNoteSheetOpen(false);
+    }, options);
+  }
+
+  function openTitleSheet() {
+    const screenHeight = Dimensions.get("screen").height;
+    const estimatedKeyboardHeight = lastKeyboardHeightRef.current || Math.round(screenHeight * (Platform.OS === "ios" ? 0.34 : 0.4));
+    setQuickIntentOpen(false);
+    setMessage("");
+    lastKeyboardHeightRef.current = estimatedKeyboardHeight;
+    captureComposerMotion.stopAnimation();
+    captureKeyboardInset.stopAnimation();
+    captureComposerMotion.setValue(0);
+    captureKeyboardInset.setValue(estimatedKeyboardHeight);
+    setKeyboardHeight(estimatedKeyboardHeight);
+    setTitleSheetOpen(true);
+  }
+
+  function closeTitleSheet(options?: { keyboardHidden?: boolean }) {
+    if (!titleSheetOpen || captureComposerClosing) return;
+    animateCaptureSheetClose(() => {
+      setTitleSheetOpen(false);
     }, options);
   }
 
@@ -2335,6 +2362,7 @@ export default function App() {
     closeCollectionDetail,
     closeCollectionPicker,
     closeNoteSheet,
+    closeTitleSheet,
     closeSelectedCapture: requestCloseSelectedCapture,
     collectionSearchOpen,
     collectionPickerOpen,
@@ -2348,6 +2376,8 @@ export default function App() {
     lastKeyboardHeightRef,
     noteInputRef,
     noteSheetOpen,
+    titleInputRef,
+    titleSheetOpen,
     pickingCaptureImage,
     reviewMotion,
     searchMotion,
@@ -2956,6 +2986,7 @@ export default function App() {
           item.id === updated.id ? updated : item
         );
         setCollections((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+        closeCollectionComposer();
       } else {
         const json = await collectionRequest<{ collection: Record<string, any> }>("collections", {
           method: "POST",
@@ -3528,6 +3559,10 @@ export default function App() {
         collectionTitleInputRef={collectionTitleInputRef}
         keyboardHeight={keyboardHeight}
         onClose={closeCollectionComposer}
+        onDelete={(collection) => {
+          closeCollectionComposer();
+          void deleteCollection(collection);
+        }}
         onCollectionDescriptionChange={(value) => {
           setCollectionDraftDirty(true);
           setCollectionDescription(value);
@@ -3608,6 +3643,7 @@ export default function App() {
         actions={{
           closeReview: closeSelectedCapture,
           closeNoteSheet,
+          closeTitleSheet,
           copySource,
           deleteCapture: () => void deleteSelectedCapture(),
           markReviewHandoffReady,
@@ -3617,6 +3653,7 @@ export default function App() {
           openCollectionPicker: () => void openCollectionPicker(),
           openExternalUrl: (url) => void Linking.openURL(url),
           openNoteSheet,
+          openTitleSheet,
           openVisitTargetMaps: (candidate) => void openVisitTargetMaps(candidate),
           pasteExpandedUrl: () => void pasteExpandedUrl(),
           removeReminder: (reminderIndex) => void dismissReminder(reminderIndex),
@@ -3639,6 +3676,7 @@ export default function App() {
           faviconFailures,
           keyboardHeight,
           noteInputRef,
+          titleInputRef,
           reviewMotion,
           animateReviewChromeForHandoff,
           hideReviewHeroForHandoff: reviewHeroHiddenForHandoff,
@@ -3666,6 +3704,7 @@ export default function App() {
           draftTitleDirty,
           noteSaveState,
           noteSheetOpen,
+          titleSheetOpen,
           quickIntentOpen,
           reminderDrafts,
           reminderSheetOpen
@@ -3834,20 +3873,20 @@ export default function App() {
         <CollectionDetailScreen
           actions={{
             closeCollectionDetail,
-            deleteCollection: (target) => void deleteCollection(target),
             loadMoreCollectionCaptures,
+            openCollectionEditor,
             renderCollectionCapture,
             renderCollectionCaptureSkeletonRows,
             renderListLoadingFooter,
-            retryLoadCollectionCaptures,
-            saveCollection: () => void saveCollection(),
-            scrollCollectionSettingsIntoView,
-            setCollectionDescription,
-            setCollectionDraftDirty,
-            setCollectionTitle
+            retryLoadCollectionCaptures
           }}
           data={{
-            appSheets: includeChrome ? renderAppSheets() : null,
+            appSheets: includeChrome ? (
+              <>
+                {renderAppSheets()}
+                {renderCollectionComposerSheet()}
+              </>
+            ) : null,
             collectionCaptures,
             collectionCapturesColdSkeletonVisible,
             collectionCapturesError,
@@ -3855,14 +3894,9 @@ export default function App() {
             collectionCapturesLoadPhase,
             collectionCapturesLoading,
             collectionDetailListRef,
-            keyboardHeight,
             listPerfProps: COLLECTION_CAPTURE_LIST_PERF_PROPS,
             selectedCollection: collection,
             toast: includeChrome ? renderToast("footer") : null
-          }}
-          state={{
-            collectionDescription,
-            collectionTitle
           }}
         />
       </CollectionDetailFrame>

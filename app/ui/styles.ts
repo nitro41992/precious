@@ -148,13 +148,6 @@ export const styles = StyleSheet.create({
   topAppBarListInset: {
     paddingTop: (Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0) + 60
   },
-  kicker: {
-    color: colors.muted,
-    ...typefaces.bold,
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0
-  },
   title: {
     color: colors.ink,
     fontSize: 30,
@@ -424,12 +417,6 @@ export const styles = StyleSheet.create({
     minHeight: 54,
     paddingVertical: 10,
     textAlignVertical: "center"
-  },
-  collectionDetailTitleInput: {
-    ...typefaces.displayMedium,
-    fontSize: 18,
-    fontWeight: "400",
-    lineHeight: 24
   },
   collectionSheetDescriptionInput: {
     minHeight: 96
@@ -1849,14 +1836,6 @@ export const styles = StyleSheet.create({
     gap: 2,
     maxWidth: 318
   },
-  collectionSettings: {
-    borderTopColor: colors.line,
-    borderTopWidth: 0,
-    gap: 10,
-    marginTop: 8,
-    paddingHorizontal: 22,
-    paddingTop: 16
-  },
   collectionsScreen: {
     flex: 1,
     gap: 14,
@@ -2113,6 +2092,11 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between"
   },
+  detailHeaderActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10
+  },
   textButton: {
     alignSelf: "flex-start",
     paddingVertical: 8
@@ -2363,15 +2347,31 @@ export const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 0
   },
-  reviewTitleInput: {
+  reviewTitleRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 44
+  },
+  reviewTitleText: {
     color: colors.ink,
+    flex: 1,
     fontSize: 29,
     fontWeight: "400",
     ...typefaces.displayMedium,
     lineHeight: 36,
-    minHeight: 42,
-    padding: 0,
-    paddingVertical: 0
+    paddingTop: 3
+  },
+  reviewTitleTextEmpty: {
+    color: colors.placeholder
+  },
+  reviewTitleEditButton: {
+    alignItems: "center",
+    borderRadius: 8,
+    height: 36,
+    justifyContent: "center",
+    marginTop: 2,
+    width: 36
   },
   reviewMetaRow: {
     alignItems: "center",
