@@ -118,6 +118,8 @@ type CaptureReviewScreenProps = {
       allowHandoff?: boolean;
       fromRect?: ReviewHandoffRect | null;
       heroScale?: number;
+      imageCacheKey?: string;
+      imageUrl?: string;
     }) => void;
     closeNoteSheet: (options?: { keyboardHidden?: boolean }) => void;
     deleteCapture: () => void;
@@ -751,7 +753,15 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       const heroScale =
         reviewHeroExpandedScale +
         (REVIEW_MEDIA_COLLAPSED_IMAGE_SCALE - reviewHeroExpandedScale) * collapseProgress;
-      closeReview({ fromRect: rect, heroScale });
+      // Fly the exact source the hero is rendering (the pinned open-time
+      // URL) — deriving it from the hydrated capture flew an upgraded asset
+      // the row thumbnail never showed, so the landing swap changed pixels.
+      closeReview({
+        fromRect: rect,
+        heroScale,
+        imageCacheKey: selectedHeroImageCacheKey,
+        imageUrl: selectedHeroImageUrl
+      });
     });
   }
 

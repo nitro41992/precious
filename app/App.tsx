@@ -1555,16 +1555,28 @@ export default function App() {
 
   const startReviewCloseHandoff = useCallback((
     capture: Capture,
-    fromRect?: ReviewHandoffRect | null,
-    heroScale: number = reviewHeroExpandedScale
+    options?: {
+      fromRect?: ReviewHandoffRect | null;
+      heroScale?: number;
+      imageCacheKey?: string;
+      imageUrl?: string;
+    }
   ) => {
-    const imageUrl = captureImageUrl(capture);
+    const fromRect = options?.fromRect;
+    const heroScale = options?.heroScale ?? reviewHeroExpandedScale;
+    // Fly the source the hero is actually rendering (its pinned open-time
+    // URL) when the screen provides it. Deriving from the hydrated capture
+    // flew an upgraded asset the row thumbnail never showed — the landing
+    // swap then visibly changed pixels.
+    const imageUrl = options?.imageUrl || captureImageUrl(capture);
     if (!imageUrl) return false;
     const start = (from: ReviewHandoffRect) => {
       const key = reviewHandoffKeyRef.current + 1;
       reviewHandoffKeyRef.current = key;
       const nextHandoff: ReviewHandoffState = {
-        cacheKey: captureImageCacheKey(capture),
+        cacheKey: options?.imageUrl
+          ? options.imageCacheKey || ""
+          : captureImageCacheKey(capture),
         captureAliases: captureIdentityAliases(capture),
         captureId: capture.id,
         direction: "closing",
@@ -2019,6 +2031,8 @@ export default function App() {
     allowHandoff?: boolean;
     fromRect?: ReviewHandoffRect | null;
     heroScale?: number;
+    imageCacheKey?: string;
+    imageUrl?: string;
   }) => {
     if (!selected) return;
     if (reviewHandoff) {
@@ -2032,7 +2046,7 @@ export default function App() {
     if (
       captureReviewOrigin === "recent" &&
       options?.allowHandoff !== false &&
-      startReviewCloseHandoff(selected, options?.fromRect, options?.heroScale)
+      startReviewCloseHandoff(selected, options)
     ) {
       return;
     }
