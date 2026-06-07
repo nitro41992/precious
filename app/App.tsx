@@ -124,7 +124,8 @@ import {
   sortCaptures
 } from "./captureLogic";
 
-const DELETE_UNDO_MS = 8000;
+const TOAST_DEFAULT_MS = 2500;
+const DELETE_UNDO_MS = 6000;
 const CAPTURES_FRESH_MS = 30_000;
 const REVIEW_HANDOFF_OPEN_MS = 220;
 const REVIEW_HANDOFF_CLOSE_MS = 180;
@@ -360,16 +361,45 @@ function TopLevelPane({
   direction: -1 | 1;
 }) {
   const progress = useSharedValue(active ? 1 : 0);
+  // The worklet style drives the pane only while a transition is in flight. At
+  // rest we drop it so the committed opacity in topLevelPaneActive/Hidden is the
+  // sole source: Android re-attaches the surface on background→resume and
+  // restores committed props, and a worklet-only opacity comes back as its stale
+  // alpha-0 snapshot — an invisible pane that still owns every touch (the same
+  // re-attach failure ScreenOverlayFrame documents).
+  const [animating, setAnimating] = useState(false);
+  const prevActiveRef = useRef(active);
+  const everMountedRef = useRef(false);
+  // Flip the flag in the same render the active prop changes (not an effect
+  // later) so the worklet style is attached before the first painted frame —
+  // otherwise the pane flashes the committed target opacity for one frame.
+  if (prevActiveRef.current !== active) {
+    prevActiveRef.current = active;
+    if (!animating) setAnimating(true);
+  }
 
   useEffect(() => {
+    // The initial tab rests immediately — no enter flight for the pane that
+    // mounts already on screen.
+    if (!everMountedRef.current) {
+      everMountedRef.current = true;
+      progress.value = active ? 1 : 0;
+      return;
+    }
     // Shared-axis X: the incoming pane decelerates in from its directional
     // offset while the outgoing one accelerates away — the two read as one
     // surface sliding along a shared horizontal axis rather than a flat fade.
-    progress.value = withTiming(active ? 1 : 0, {
-      duration: active ? motionPaneTransition.in : motionPaneTransition.out,
-      easing: active ? motionEasing.decelerate : motionEasing.accelerate,
-      reduceMotion: motionReduceMotion
-    });
+    progress.value = withTiming(
+      active ? 1 : 0,
+      {
+        duration: active ? motionPaneTransition.in : motionPaneTransition.out,
+        easing: active ? motionEasing.decelerate : motionEasing.accelerate,
+        reduceMotion: motionReduceMotion
+      },
+      (finished) => {
+        if (finished) runOnJS(setAnimating)(false);
+      }
+    );
   }, [active, progress]);
 
   const animatedStyle = useAnimatedStyle(() => {
@@ -389,7 +419,7 @@ function TopLevelPane({
       style={[
         styles.topLevelPane,
         active ? styles.topLevelPaneActive : styles.topLevelPaneHidden,
-        animatedStyle
+        animating && animatedStyle
       ]}
     >
       {children}
@@ -417,6 +447,21 @@ function CollectionDetailFrame({
   progress: SharedValue<number>;
 }) {
   const everMountedRef = useRef(false);
+  // The worklet style drives the frame only mid-flight. Once the open lands it
+  // rests on committed opacity (screenOverlayResting): the frame's opacity is
+  // otherwise worklet-only, so a background→resume surface re-attach restores it
+  // as a stale alpha-0 snapshot — an invisible detail page that still owns every
+  // touch (the re-attach failure ScreenOverlayFrame documents). The opened
+  // plateau is always direction "opening"; closing animates straight to unmount.
+  const [animating, setAnimating] = useState(true);
+  const prevDirectionRef = useRef(direction);
+  // A reopen that interrupts a closing flight flips direction on the already
+  // mounted frame — re-arm the worklet in the same render so the reverse flight
+  // is driven instead of resting on a stale committed opacity.
+  if (prevDirectionRef.current !== direction) {
+    prevDirectionRef.current = direction;
+    if (!animating) setAnimating(true);
+  }
 
   useEffect(() => {
     if (direction === "opening") {
@@ -433,7 +478,10 @@ function CollectionDetailFrame({
           reduceMotion: motionReduceMotion
         },
         (finished) => {
-          if (finished) runOnJS(onOpened)();
+          if (finished) {
+            runOnJS(onOpened)();
+            runOnJS(setAnimating)(false);
+          }
         }
       );
     } else {
@@ -466,7 +514,7 @@ function CollectionDetailFrame({
   return (
     <Reanimated.View
       pointerEvents={direction === "closing" ? "none" : "auto"}
-      style={[styles.screenOverlay, animatedStyle]}
+      style={[styles.screenOverlay, animating ? animatedStyle : styles.screenOverlayResting]}
     >
       {children}
     </Reanimated.View>
@@ -2454,7 +2502,7 @@ export default function App() {
 
   useEffect(() => {
     if (!toast) return;
-    const timer = setTimeout(() => setToast(null), toast.durationMs ?? 5000);
+    const timer = setTimeout(() => setToast(null), toast.durationMs ?? TOAST_DEFAULT_MS);
     return () => clearTimeout(timer);
   }, [toast]);
 
