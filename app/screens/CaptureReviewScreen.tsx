@@ -93,6 +93,7 @@ type CaptureReviewScreenProps = {
     animateReviewChromeForHandoff: boolean;
     hideReviewHeroForHandoff: boolean;
     reviewHandoffKey: number | null;
+    reviewHandoffPinSource: { cacheKey: string; url: string } | null;
     reviewHeroCloseRef: MutableRefObject<(() => void) | null>;
     selected: Capture;
     toast: ReactNode;
@@ -344,6 +345,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     animateReviewChromeForHandoff,
     hideReviewHeroForHandoff,
     reviewHandoffKey,
+    reviewHandoffPinSource,
     reviewHeroCloseRef,
     selected,
     toast,
@@ -423,12 +425,29 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   if (pinnedHeroRef.current && failedReviewImageUris.has(pinnedHeroRef.current.url)) {
     pinnedHeroRef.current = null;
   }
-  if (!pinnedHeroRef.current && heroCandidateUrl) {
-    pinnedHeroRef.current = {
-      cacheKey: heroCandidateCacheKey,
-      captureId: selected.id,
-      url: heroCandidateUrl
-    };
+  if (!pinnedHeroRef.current) {
+    // Prefer the source the opening morph is flying (the row thumbnail's
+    // DISPLAYED pixels, which can lag the capture's current image url while
+    // a source upgrade loads — or forever when it fails). The hero must show
+    // those exact pixels or the landing swap visibly re-crops. Skip it once
+    // it has failed here; the candidate chain takes over.
+    const handoffPinUrl =
+      reviewHandoffPinSource?.url && !failedReviewImageUris.has(reviewHandoffPinSource.url)
+        ? reviewHandoffPinSource.url
+        : "";
+    if (handoffPinUrl) {
+      pinnedHeroRef.current = {
+        cacheKey: reviewHandoffPinSource?.cacheKey || "",
+        captureId: selected.id,
+        url: handoffPinUrl
+      };
+    } else if (heroCandidateUrl) {
+      pinnedHeroRef.current = {
+        cacheKey: heroCandidateCacheKey,
+        captureId: selected.id,
+        url: heroCandidateUrl
+      };
+    }
   }
   const selectedHeroImageUrl = pinnedHeroRef.current?.url || heroCandidateUrl;
   const selectedHeroImageCacheKey = pinnedHeroRef.current?.cacheKey || heroCandidateCacheKey;

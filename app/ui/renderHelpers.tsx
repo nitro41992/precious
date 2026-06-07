@@ -46,6 +46,7 @@ export type AppRenderHelpersInput = {
   homeRowsFade: Animated.Value;
   onAccountActionsPress: () => void;
   onCaptureImageLoadState: (key: string, state: CaptureImageLoadState) => void;
+  onCaptureRowImageDisplayed: (capture: Capture, url: string, cacheKey: string) => void;
   onCollectionComposerOpen: () => void;
   onCollectionsScreenOpen: (mode: CollectionListMode) => void;
   onCollectionDescriptionChange: (value: string) => void;
@@ -243,6 +244,7 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
             failedFavicons={input.failedFavicons}
             forceSkeleton={input.homeFeedRevealPending}
             thumbnailHidden={Boolean(input.handoffHiddenCaptureAliases?.includes(item.capture.id))}
+            onCaptureRowImageDisplayed={input.onCaptureRowImageDisplayed}
             onCaptureThumbnailRef={input.onCaptureThumbnailRef}
             onFaviconFailure={input.onFaviconFailure}
             onImageLoadState={input.onCaptureImageLoadState}

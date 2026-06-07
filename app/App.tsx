@@ -760,7 +760,15 @@ export default function App() {
   }, [measureClosingHandoffTarget, reviewHandoff, selectedId]);
 
   const startReviewHandoff = useCallback((capture: Capture, open: () => void) => {
-    const imageUrl = captureImageUrl(capture);
+    // Fly the source the row thumbnail has actually PAINTED, not the
+    // capture's current image url: the thumbnail holds its previous pixels
+    // across same-capture source upgrades (recyclingKey design), so after a
+    // poll upgrades a row's asset — or the new url 403s — the data and the
+    // screen disagree. Flying the data url made the copy pop over the row
+    // with a different crop at takeoff, and mismatch again at the close
+    // landing. The displayed source is ground truth for both ends.
+    const displayed = displayedRowImagesRef.current.get(capture.id);
+    const imageUrl = displayed?.url || captureImageUrl(capture);
     const thumbnailNode = captureThumbnailRefs.current[capture.id];
     if (!imageUrl || !thumbnailNode) {
       open();
@@ -778,7 +786,7 @@ export default function App() {
         const key = reviewHandoffKeyRef.current + 1;
         reviewHandoffKeyRef.current = key;
         const nextHandoff: ReviewHandoffState = {
-          cacheKey: captureImageCacheKey(capture),
+          cacheKey: displayed ? displayed.cacheKey : captureImageCacheKey(capture),
           captureAliases: captureIdentityAliases(capture),
           captureId: capture.id,
           direction: "opening",
@@ -811,6 +819,21 @@ export default function App() {
     reviewHandoffProgress,
     reviewHandoffTarget
   ]);
+
+  // Last source each row thumbnail actually painted (expo-image onDisplay),
+  // keyed by every capture identity alias. Read imperatively by the handoff
+  // (no re-renders): the morph must fly the pixels on screen, which diverge
+  // from the capture's current image url while a source upgrade is loading —
+  // or forever, when the upgraded url fails.
+  const displayedRowImagesRef = useRef(new Map<string, { cacheKey: string; url: string }>());
+
+  const recordCaptureRowImageDisplayed = useCallback((capture: Capture, url: string, cacheKey: string) => {
+    if (!url) return;
+    const entry = { cacheKey, url };
+    for (const alias of captureIdentityAliases(capture)) {
+      displayedRowImagesRef.current.set(alias, entry);
+    }
+  }, []);
 
   const markCaptureImageLoadState = useCallback((key: string, state: CaptureImageLoadState) => {
     const currentState = captureImageLoadStatesRef.current[key];
@@ -3324,6 +3347,7 @@ export default function App() {
     homeRowsFade,
     onAccountActionsPress: openAccountActions,
     onCaptureImageLoadState: markCaptureImageLoadState,
+    onCaptureRowImageDisplayed: recordCaptureRowImageDisplayed,
     onCollectionComposerOpen: openCollectionComposer,
     onCollectionDescriptionChange: setCollectionDescription,
     onCollectionPress: handleCollectionPress,
@@ -3473,6 +3497,13 @@ export default function App() {
           animateReviewChromeForHandoff,
           hideReviewHeroForHandoff: reviewHeroHiddenForHandoff,
           reviewHandoffKey: activeReviewHandoff?.key ?? null,
+          // The hero pins this source on mount so it renders the exact
+          // pixels the opening morph flew (the row's DISPLAYED source,
+          // which can lag the capture's current image url mid-upgrade).
+          reviewHandoffPinSource:
+            activeReviewHandoff?.direction === "opening" && activeReviewHandoff.imageUrl
+              ? { cacheKey: activeReviewHandoff.cacheKey, url: activeReviewHandoff.imageUrl }
+              : null,
           reviewHeroCloseRef,
           selected: capture,
           toast: renderToast("footer"),

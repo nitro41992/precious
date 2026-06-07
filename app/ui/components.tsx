@@ -383,6 +383,7 @@ type SourceMarkProps = {
   imageLoadKey?: string;
   imageUnavailable?: boolean;
   onFaviconFailure: (host: string) => void;
+  onImageDisplayed?: (url: string, cacheKey: string) => void;
   onImageLoadState?: (key: string, state: CaptureImageLoadState) => void;
   size?: "row" | "detail" | "inline" | "meta";
 };
@@ -393,6 +394,7 @@ export const SourceMark = memo(function SourceMark({
   imageLoadKey = "",
   imageUnavailable = false,
   onFaviconFailure,
+  onImageDisplayed,
   onImageLoadState,
   size = "row"
 }: SourceMarkProps) {
@@ -443,6 +445,12 @@ export const SourceMark = memo(function SourceMark({
           onLoad={() => {
             if (imageLoadKey) onImageLoadState?.(imageLoadKey, "loaded");
           }}
+          // Reports the source this view actually painted. Because the
+          // recyclingKey holds previous pixels across same-capture source
+          // upgrades, the capture's CURRENT image url is not necessarily
+          // what this thumbnail shows — the review handoff must fly the
+          // displayed source or the morph pops at takeoff and landing.
+          onDisplay={() => onImageDisplayed?.(imageUri, imageCacheKey)}
           // Keyed by capture identity, not asset identity: recyclingKey
           // resets the view to blank when it changes, which is right when a
           // recycled cell shows a different capture but wrong when detail
@@ -499,6 +507,7 @@ export const SourceMark = memo(function SourceMark({
     previous.imageUnavailable === next.imageUnavailable &&
     previous.size === next.size &&
     previous.onFaviconFailure === next.onFaviconFailure &&
+    previous.onImageDisplayed === next.onImageDisplayed &&
     previous.onImageLoadState === next.onImageLoadState &&
     Boolean(previous.failedFavicons[host]) === Boolean(next.failedFavicons[host])
   );

@@ -37,6 +37,7 @@ type CaptureRowProps = {
   onFaviconFailure: (host: string) => void;
   onImageLoadState: (key: string, state: CaptureImageLoadState) => void;
   onPress: () => void;
+  onThumbnailImageDisplayed?: (url: string, cacheKey: string) => void;
   renderInlineSkeleton: () => ReactElement | null;
   showCollectionToken?: boolean;
   hideThumbnail?: boolean;
@@ -60,6 +61,7 @@ export function CaptureRow({
   onFaviconFailure,
   onImageLoadState,
   onPress,
+  onThumbnailImageDisplayed,
   renderInlineSkeleton,
   showCollectionToken = true,
   hideThumbnail = false,
@@ -99,6 +101,7 @@ export function CaptureRow({
       imageLoadKey={imageLoadKey}
       imageUnavailable={imageLoadState === "failed"}
       onFaviconFailure={onFaviconFailure}
+      onImageDisplayed={onThumbnailImageDisplayed}
       onImageLoadState={onImageLoadState}
     />
   );
@@ -189,6 +192,7 @@ type HomeCaptureRowItemProps = {
   deferFallbackIcon: boolean;
   failedFavicons: Record<string, boolean>;
   forceSkeleton: boolean;
+  onCaptureRowImageDisplayed: (capture: Capture, url: string, cacheKey: string) => void;
   onCaptureThumbnailRef: (captureId: string, node: View | null) => void;
   onFaviconFailure: (host: string) => void;
   onImageLoadState: (key: string, state: CaptureImageLoadState) => void;
@@ -215,6 +219,7 @@ export const HomeCaptureRowItem = memo(function HomeCaptureRowItem({
   deferFallbackIcon,
   failedFavicons,
   forceSkeleton,
+  onCaptureRowImageDisplayed,
   onCaptureThumbnailRef,
   onFaviconFailure,
   onImageLoadState,
@@ -228,6 +233,10 @@ export const HomeCaptureRowItem = memo(function HomeCaptureRowItem({
     (node: View | null) => onCaptureThumbnailRef(capture.id, node),
     [onCaptureThumbnailRef, capture.id]
   );
+  const onThumbnailImageDisplayed = useCallback(
+    (url: string, cacheKey: string) => onCaptureRowImageDisplayed(capture, url, cacheKey),
+    [onCaptureRowImageDisplayed, capture]
+  );
   return (
     <CaptureRow
       captureImageLoadStates={captureImageLoadStates}
@@ -240,6 +249,7 @@ export const HomeCaptureRowItem = memo(function HomeCaptureRowItem({
       onFaviconFailure={onFaviconFailure}
       onImageLoadState={onImageLoadState}
       onPress={onPress}
+      onThumbnailImageDisplayed={onThumbnailImageDisplayed}
       renderInlineSkeleton={emptyInlineSkeleton}
       showInlineSourceIcon
       SkeletonBlock={SkeletonBlock}
@@ -260,6 +270,7 @@ export const HomeCaptureRowItem = memo(function HomeCaptureRowItem({
     previous.thumbnailHidden !== next.thumbnailHidden ||
     previous.testID !== next.testID ||
     previous.onOpenRecentCapture !== next.onOpenRecentCapture ||
+    previous.onCaptureRowImageDisplayed !== next.onCaptureRowImageDisplayed ||
     previous.onCaptureThumbnailRef !== next.onCaptureThumbnailRef ||
     previous.onFaviconFailure !== next.onFaviconFailure ||
     previous.onImageLoadState !== next.onImageLoadState
