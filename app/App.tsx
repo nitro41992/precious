@@ -37,7 +37,7 @@ import { useCaptureReview } from "./state/useCaptureReview";
 import { useCaptureSearch } from "./state/useCaptureSearch";
 import { useCollectionsState } from "./state/useCollections";
 import { createAppRenderHelpers } from "./ui/renderHelpers";
-import { motionDuration, motionReduceMotion, reviewHeroExpandedScale } from "./ui/motion";
+import { motionEasing, motionPaneTransition, motionReduceMotion, reviewHeroExpandedScale } from "./ui/motion";
 import { styles } from "./ui/styles";
 import { appTheme } from "./ui/theme";
 
@@ -362,9 +362,12 @@ function TopLevelPane({
   const progress = useSharedValue(active ? 1 : 0);
 
   useEffect(() => {
+    // Shared-axis X: the incoming pane decelerates in from its directional
+    // offset while the outgoing one accelerates away — the two read as one
+    // surface sliding along a shared horizontal axis rather than a flat fade.
     progress.value = withTiming(active ? 1 : 0, {
-      duration: motionDuration.settle,
-      easing: ReanimatedEasing.bezier(0.2, 0, 0, 1),
+      duration: active ? motionPaneTransition.in : motionPaneTransition.out,
+      easing: active ? motionEasing.decelerate : motionEasing.accelerate,
       reduceMotion: motionReduceMotion
     });
   }, [active, progress]);
@@ -374,8 +377,8 @@ function TopLevelPane({
     return {
       opacity: interpolate(value, [0, 1], [0, 1]),
       transform: [
-        { translateX: interpolate(value, [0, 1], [direction * 18, 0]) },
-        { scale: interpolate(value, [0, 1], [0.992, 1]) }
+        { translateX: interpolate(value, [0, 1], [direction * motionPaneTransition.enterOffset, 0]) },
+        { scale: interpolate(value, [0, 1], [0.985, 1]) }
       ]
     };
   });
@@ -425,8 +428,8 @@ function CollectionDetailFrame({
       progress.value = withTiming(
         1,
         {
-          duration: motionDuration.settle,
-          easing: ReanimatedEasing.bezier(0.2, 0, 0, 1),
+          duration: motionPaneTransition.in,
+          easing: motionEasing.decelerate,
           reduceMotion: motionReduceMotion
         },
         (finished) => {
@@ -437,8 +440,8 @@ function CollectionDetailFrame({
       progress.value = withTiming(
         0,
         {
-          duration: motionDuration.settle,
-          easing: ReanimatedEasing.bezier(0.2, 0, 0, 1),
+          duration: motionPaneTransition.out,
+          easing: motionEasing.accelerate,
           reduceMotion: motionReduceMotion
         },
         (finished) => {
@@ -449,11 +452,14 @@ function CollectionDetailFrame({
     everMountedRef.current = true;
   }, [direction, onClosed, onOpened, progress]);
 
+  // Shared-axis Z: the detail page rises forward from a slightly inset scale
+  // while sliding in, so opening a collection reads as moving deeper into the
+  // app rather than a sideways swap.
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: interpolate(progress.value, [0, 1], [0, 1]),
     transform: [
-      { translateX: interpolate(progress.value, [0, 1], [18, 0]) },
-      { scale: interpolate(progress.value, [0, 1], [0.992, 1]) }
+      { translateX: interpolate(progress.value, [0, 1], [motionPaneTransition.enterOffset, 0]) },
+      { scale: interpolate(progress.value, [0, 1], [motionPaneTransition.overlayEnterScale, 1]) }
     ]
   }));
 

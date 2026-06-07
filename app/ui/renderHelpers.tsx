@@ -26,7 +26,7 @@ import {
   HomeCaptureRowItem
 } from "./rows";
 import { styles } from "./styles";
-import { rowEntering, rowExiting, rowLayout } from "./motion";
+import { rowEntering } from "./motion";
 import { Text } from "./typography";
 
 export type AppRenderHelpersInput = {
@@ -227,7 +227,7 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     );
   }
 
-  function renderHomeRow({ item, index = 0 }: { item: HomeListRow; index?: number }) {
+  function renderHomeRow({ item }: { item: HomeListRow }) {
     if (item.type === "section") {
       return (
         <Animated.Text style={[styles.groupHeader, { opacity: input.homeFeedRevealPending ? 0 : input.homeRowsFade }]}>
@@ -235,34 +235,34 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
         </Animated.Text>
       );
     }
+    // No per-row Reanimated entering/exiting/layout: the home feed is a
+    // FlashList, which recycles cells. Layout animations on a recycled cell
+    // re-fire on every reuse — that produced the staggered "cascade", the dim
+    // mid-fade rows, and cards stuck overlapping (a `layout` transform left
+    // mid-flight). The feed reveals as one surface via `homeRowsFade`; a
+    // recycled row just swaps its content with no per-cell animation.
     return (
-      <Reanimated.View
-        entering={input.screenHandoffActive ? undefined : rowEntering(index)}
-        exiting={input.screenHandoffActive ? undefined : rowExiting}
-        layout={input.screenHandoffActive ? undefined : rowLayout}
-      >
-        <Animated.View style={{ opacity: input.homeRowsFade }}>
-          <HomeCaptureRowItem
-            capture={item.capture}
-            captureImageLoadStates={input.captureImageLoadStates}
-            captureRowRevealStates={input.captureRowRevealStates}
-            deferFallbackIcon={input.capturesLoading && !input.activeCapturesLoadedOnce}
-            failedFavicons={input.failedFavicons}
-            forceSkeleton={input.homeFeedRevealPending}
-            thumbnailHidden={Boolean(
+      <Animated.View style={{ opacity: input.homeRowsFade }}>
+        <HomeCaptureRowItem
+          capture={item.capture}
+          captureImageLoadStates={input.captureImageLoadStates}
+          captureRowRevealStates={input.captureRowRevealStates}
+          deferFallbackIcon={input.capturesLoading && !input.activeCapturesLoadedOnce}
+          failedFavicons={input.failedFavicons}
+          forceSkeleton={input.homeFeedRevealPending}
+          thumbnailHidden={Boolean(
             input.handoffHiddenCapture?.surface === "home" &&
               input.handoffHiddenCapture.aliases.includes(item.capture.id)
           )}
-            onCaptureRowImageDisplayed={input.onCaptureRowImageDisplayed}
-            onCaptureThumbnailRef={input.onCaptureThumbnailRef}
-            onFaviconFailure={input.onFaviconFailure}
-            onImageLoadState={input.onCaptureImageLoadState}
-            onOpenRecentCapture={input.onOpenRecentCapture}
-            SkeletonBlock={SkeletonBlock}
-            testID={`pc.capture.row.${item.capture.id}`}
-          />
-        </Animated.View>
-      </Reanimated.View>
+          onCaptureRowImageDisplayed={input.onCaptureRowImageDisplayed}
+          onCaptureThumbnailRef={input.onCaptureThumbnailRef}
+          onFaviconFailure={input.onFaviconFailure}
+          onImageLoadState={input.onCaptureImageLoadState}
+          onOpenRecentCapture={input.onOpenRecentCapture}
+          SkeletonBlock={SkeletonBlock}
+          testID={`pc.capture.row.${item.capture.id}`}
+        />
+      </Animated.View>
     );
   }
 
@@ -302,12 +302,16 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     return renderCaptureSkeletonRows(count, true);
   }
 
-  function renderListLoadingFooter(label = "Loading more captures...") {
-    return (
-      <View style={styles.listLoadingFooter}>
-        <Text style={styles.meta}>{label}</Text>
-      </View>
-    );
+  // Pagination footer mirrors the shape of the rows that are loading rather
+  // than a plain "Loading more..." line: a couple of shimmering skeleton rows
+  // read as content arriving, which makes the wait feel shorter and snappier.
+  function renderListLoadingFooter(
+    variant: "captures" | "collectionCaptures" | "collections" = "captures"
+  ) {
+    if (variant === "collections") {
+      return renderCollectionSkeletonRows(2);
+    }
+    return renderCaptureSkeletonRows(2, variant === "collectionCaptures");
   }
 
   function renderToast(placement: ToastPlacement = "base") {

@@ -36,7 +36,7 @@ type CollectionDetailScreenProps = {
     openCollectionEditor: () => void;
     renderCollectionCapture: (input: ListRenderItemInfo<Capture>) => ReactElement | null;
     renderCollectionCaptureSkeletonRows: (count?: number) => ReactElement | null;
-    renderListLoadingFooter: (label?: string) => ReactElement | null;
+    renderListLoadingFooter: (variant?: "captures" | "collectionCaptures" | "collections") => ReactElement | null;
     retryLoadCollectionCaptures: () => void;
   };
 };
@@ -140,7 +140,7 @@ export function CollectionDetailScreen({ actions, data }: CollectionDetailScreen
         }
         ListFooterComponent={
           visibleCollectionCaptures.length && collectionCapturesAppending
-            ? renderListLoadingFooter("Loading more captures...")
+            ? renderListLoadingFooter("collectionCaptures")
             : null
         }
         contentContainerStyle={styles.collectionDetailContent}

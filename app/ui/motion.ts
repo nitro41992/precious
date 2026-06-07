@@ -22,6 +22,11 @@ export const motionEasing = {
   standard: Easing.out(Easing.cubic),
   exit: Easing.in(Easing.cubic),
   emphasized: Easing.bezier(0.2, 0, 0, 1),
+  // Expressive decelerate: a surface arriving from depth/offset settles late
+  // and soft. Used for incoming panes and overlays in the shared-axis system.
+  decelerate: Easing.bezier(0.05, 0.7, 0.1, 1),
+  // Accelerate: a surface leaving picks up speed as it exits.
+  accelerate: Easing.bezier(0.3, 0, 0.8, 0.15),
   press: Easing.out(Easing.cubic)
 };
 
@@ -38,13 +43,25 @@ export const motionPressScale = {
 export const reviewHeroExpandedScale = 1.08;
 
 export const motionPressSpring = {
-  damping: 18,
-  mass: 0.7,
+  damping: 20,
+  mass: 0.6,
   overshootClamping: true,
   reduceMotion: motionReduceMotion,
-  stiffness: 320
+  stiffness: 380
 };
 
+// Shared-axis pane/overlay transition timing. Incoming leads (decelerate),
+// outgoing is shorter and accelerates away so the surfaces feel connected.
+export const motionPaneTransition = {
+  in: 260,
+  out: 200,
+  enterOffset: 30,
+  overlayEnterScale: 0.97
+};
+
+// Kept deliberately small. A wide cascade reads as gimmicky ("won solitaire"),
+// and recycled lists (FlashList) must not stagger per row at all — only the
+// short collection-card grid and status pills use this now.
 const STAGGER_STEP_MS = 20;
 const STAGGER_MAX_MS = 40;
 
@@ -72,12 +89,6 @@ function subtleExiting() {
 export function rowEntering(index = 0) {
   return subtleEntering(index);
 }
-
-export const rowExiting = subtleExiting();
-export const rowLayout = LinearTransition
-  .duration(motionDuration.settle)
-  .easing(motionEasing.emphasized)
-  .reduceMotion(motionReduceMotion);
 
 export function cardEntering(index = 0) {
   return subtleEntering(index);

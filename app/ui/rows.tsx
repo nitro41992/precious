@@ -443,6 +443,12 @@ export function CaptureRowInlineSkeleton({
   return <View style={styles.captureRowSkeletonInline}>{body}</View>;
 }
 
+// A standalone loading row mirrors the real carded capture row by reusing the
+// exact same card styles (captureRow + captureRowCard). So the skeleton reads
+// as "a card is loading here" — same white surface, radius, inset, and
+// geometry — instead of a flat placeholder that looks foreign on the feed.
+// Shared by every capture-card surface: Recents cold load + pagination, and
+// collection-detail cold load + pagination (via withRemoveAction).
 function CaptureSkeletonRow({
   SkeletonBlock,
   keyValue,
@@ -453,15 +459,13 @@ function CaptureSkeletonRow({
   withRemoveAction?: boolean;
 }) {
   return (
-    <View key={keyValue} style={withRemoveAction ? styles.collectionCaptureSkeletonRow : styles.captureSkeletonRow}>
-      <View style={styles.collectionCaptureSkeletonMain}>
-        <SkeletonBlock style={styles.loadingThumbnailMark} />
-        <View style={styles.collectionCaptureSkeletonCopy}>
-          <SkeletonBlock style={styles.collectionLoadingTitle} />
-          <SkeletonBlock style={styles.collectionLoadingLine} />
-          <SkeletonBlock style={styles.collectionLoadingLineShort} />
-          <SkeletonBlock style={styles.collectionLoadingToken} />
-        </View>
+    <View key={keyValue} style={[styles.captureRow, styles.captureRowCard]}>
+      <SkeletonBlock style={styles.loadingThumbnailMark} />
+      <View style={styles.captureRowSkeletonCopy}>
+        <SkeletonBlock style={styles.collectionLoadingTitle} />
+        <SkeletonBlock style={styles.collectionLoadingLine} />
+        <SkeletonBlock style={styles.collectionLoadingLineShort} />
+        <SkeletonBlock style={styles.collectionLoadingToken} />
       </View>
       {withRemoveAction ? <SkeletonBlock style={styles.collectionLoadingAction} /> : null}
     </View>

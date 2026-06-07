@@ -1,13 +1,13 @@
 import type { ReactElement, ReactNode, RefObject } from "react";
 import {
   Animated,
-  FlatList,
   Pressable,
   StatusBar,
   View
 } from "react-native";
-import type { FlatListProps, ListRenderItemInfo } from "react-native";
 import type { TextInput as NativeTextInput } from "react-native";
+import { FlashList } from "@shopify/flash-list";
+import type { FlashListProps, ListRenderItemInfo } from "@shopify/flash-list";
 import {
   Camera,
   Check,
@@ -32,7 +32,7 @@ type HomeScreenProps = {
     captureKeyboardInset: Animated.Value;
     homeCaptureTotalCount: number | null;
     homeCaptures: HomeListRow[];
-    listPerfProps: Partial<FlatListProps<HomeListRow>>;
+    listPerfProps: Partial<FlashListProps<HomeListRow>>;
     toast: ReactNode;
     sourceInputRef: RefObject<NativeTextInput | null>;
     visibleHomeRows: HomeListRow[];
@@ -63,7 +63,7 @@ type HomeScreenProps = {
     pickCaptureImage: () => void;
     renderCaptureSkeletonRows: (count?: number, withRemoveAction?: boolean) => ReactElement | null;
     renderHomeRow: (input: ListRenderItemInfo<HomeListRow>) => ReactElement | null;
-    renderListLoadingFooter: (label?: string) => ReactElement | null;
+    renderListLoadingFooter: (variant?: "captures" | "collectionCaptures" | "collections") => ReactElement | null;
     saveCaptureSource: () => void;
     setSourceDraft: (value: string) => void;
     takeCapturePhoto: () => void;
@@ -164,11 +164,12 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
             ) : null}
           </View>
         </View>
-        <FlatList
+        <FlashList
           {...listPerfProps}
           data={visibleHomeRows}
           keyExtractor={(item) => item.id}
           renderItem={renderHomeRow}
+          getItemType={(item) => item.type}
           style={styles.homeList}
           onEndReached={loadMoreActiveCaptures}
           onEndReachedThreshold={0.35}

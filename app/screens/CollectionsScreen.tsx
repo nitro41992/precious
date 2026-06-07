@@ -36,7 +36,7 @@ type CollectionsScreenProps = {
       withSelectionControl?: boolean,
       skeletonCollections?: Collection[]
     ) => ReactElement | null;
-    renderListLoadingFooter: (label?: string) => ReactElement | null;
+    renderListLoadingFooter: (variant?: "captures" | "collectionCaptures" | "collections") => ReactElement | null;
   };
 };
 
@@ -146,7 +146,7 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
           onEndReachedThreshold={0.35}
           ListFooterComponent={
             visibleManagedCollections.length && collectionsLoading && collectionsLoadPhase === "append"
-              ? renderListLoadingFooter("Loading more collections...")
+              ? renderListLoadingFooter("collections")
               : null
           }
         />

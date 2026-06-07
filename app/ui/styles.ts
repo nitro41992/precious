@@ -14,7 +14,7 @@ const bottomControlShadow = Platform.OS === "android"
       shadowRadius: 34
     };
 
-const softCardEdgeColor = "rgba(208, 190, 149, 0.30)";
+const softCardEdgeColor = "rgba(207, 198, 180, 0.35)";
 const softCardRadius = 18;
 const softCardInnerRadius = 14;
 const softPillRadius = 16;
@@ -1419,38 +1419,6 @@ export const styles = StyleSheet.create({
     top: -14,
     width: 38
   },
-  captureSkeletonRow: {
-    alignItems: "flex-start",
-    borderBottomColor: colors.line,
-    borderBottomWidth: 0,
-    flexDirection: "row",
-    gap: 12,
-    minHeight: 136,
-    paddingVertical: 16
-  },
-  collectionCaptureSkeletonRow: {
-    alignItems: "flex-start",
-    borderBottomColor: colors.line,
-    borderBottomWidth: 0,
-    flexDirection: "row",
-    gap: 12,
-    minHeight: 156,
-    paddingHorizontal: 22,
-    paddingVertical: 16
-  },
-  collectionCaptureSkeletonMain: {
-    alignItems: "flex-start",
-    flex: 1,
-    flexDirection: "row",
-    gap: 10,
-    minWidth: 0
-  },
-  collectionCaptureSkeletonCopy: {
-    flex: 1,
-    gap: 8,
-    minWidth: 0,
-    paddingTop: 3
-  },
   captureRowSkeletonInline: {
     alignItems: "flex-start",
     flexDirection: "row",
@@ -1549,11 +1517,6 @@ export const styles = StyleSheet.create({
     borderRadius: 8,
     height: 44,
     width: 44
-  },
-  listLoadingFooter: {
-    alignItems: "center",
-    paddingBottom: 12,
-    paddingTop: 12
   },
   collectionDetailContent: {
     paddingBottom: 40,
