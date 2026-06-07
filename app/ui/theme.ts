@@ -138,5 +138,6 @@ export const typefaces = {
   displayRegular: androidExactFont("ClashDisplay-Regular"),
   displayMedium: androidExactFont("ClashDisplay-Medium"),
   displaySemibold: androidExactFont("ClashDisplay-Semibold"),
-  displayBold: androidExactFont("ClashDisplay-Bold")
+  displayBold: androidExactFont("ClashDisplay-Bold"),
+  cardTitle: androidExactFont("Geist-SemiBold")
 };

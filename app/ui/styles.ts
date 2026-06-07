@@ -1007,14 +1007,14 @@ export const styles = StyleSheet.create({
   captureTitle: {
     color: colors.ink,
     flex: 1,
-    fontSize: 19,
+    fontSize: 18,
     fontWeight: "400",
-    ...typefaces.displayMedium,
-    lineHeight: 24
+    ...typefaces.cardTitle,
+    lineHeight: 23
   },
   captureCardTitle: {
-    fontSize: 22,
-    lineHeight: 28
+    fontSize: 20,
+    lineHeight: 25
   },
   status: {
     color: colors.ink,
@@ -1681,10 +1681,10 @@ export const styles = StyleSheet.create({
   },
   collectionCardTitle: {
     color: colors.ink,
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "400",
-    ...typefaces.displayMedium,
-    lineHeight: 23
+    ...typefaces.cardTitle,
+    lineHeight: 22
   },
   collectionCardMeta: {
     color: colors.muted,
