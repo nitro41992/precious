@@ -1889,20 +1889,34 @@ export default function App() {
     });
   }
 
+  // Snap the shared sheet animation surface to its open resting state. With the
+  // keyboard up, prime the inset to the last/estimated keyboard height so the
+  // sheet opens already docked above the keyboard; calm opens (the collection
+  // editor) start with the keyboard down. Shared by every keyboard sheet so the
+  // priming can't drift between them.
+  function primeSheetSurface({ keyboardUp }: { keyboardUp: boolean }) {
+    captureComposerMotion.stopAnimation();
+    captureKeyboardInset.stopAnimation();
+    captureComposerMotion.setValue(0);
+    if (!keyboardUp) {
+      captureKeyboardInset.setValue(0);
+      return;
+    }
+    const screenHeight = Dimensions.get("screen").height;
+    const estimatedKeyboardHeight =
+      lastKeyboardHeightRef.current || Math.round(screenHeight * (Platform.OS === "ios" ? 0.34 : 0.4));
+    lastKeyboardHeightRef.current = estimatedKeyboardHeight;
+    captureKeyboardInset.setValue(estimatedKeyboardHeight);
+    setKeyboardHeight(estimatedKeyboardHeight);
+  }
+
   function openCaptureComposer() {
     setShowCollectionForm(false);
-    const screenHeight = Dimensions.get("screen").height;
-    const estimatedKeyboardHeight = lastKeyboardHeightRef.current || Math.round(screenHeight * (Platform.OS === "ios" ? 0.34 : 0.4));
     setMessage("");
     setCaptureMode(DEFAULT_CAPTURE_COMPOSER_MODE);
     captureComposerClosingRef.current = false;
     setCaptureComposerClosing(false);
-    lastKeyboardHeightRef.current = estimatedKeyboardHeight;
-    setKeyboardHeight(estimatedKeyboardHeight);
-    captureComposerMotion.stopAnimation();
-    captureKeyboardInset.stopAnimation();
-    captureComposerMotion.setValue(0);
-    captureKeyboardInset.setValue(estimatedKeyboardHeight);
+    primeSheetSurface({ keyboardUp: true });
     setShowCaptureComposer(true);
   }
 
@@ -1918,14 +1932,7 @@ export default function App() {
     setCollectionDescription("");
     setCollectionDraftDirty(false);
     setShowCaptureComposer(false);
-    const screenHeight = Dimensions.get("screen").height;
-    const estimatedKeyboardHeight = lastKeyboardHeightRef.current || Math.round(screenHeight * (Platform.OS === "ios" ? 0.34 : 0.4));
-    lastKeyboardHeightRef.current = estimatedKeyboardHeight;
-    setKeyboardHeight(estimatedKeyboardHeight);
-    captureComposerMotion.stopAnimation();
-    captureKeyboardInset.stopAnimation();
-    captureComposerMotion.setValue(0);
-    captureKeyboardInset.setValue(estimatedKeyboardHeight);
+    primeSheetSurface({ keyboardUp: true });
     setShowCollectionForm(true);
   }
 
@@ -1944,24 +1951,14 @@ export default function App() {
       setCollectionDescription(collection.description);
     }
     setCollectionDraftDirty(false);
-    captureComposerMotion.stopAnimation();
-    captureKeyboardInset.stopAnimation();
-    captureComposerMotion.setValue(0);
-    captureKeyboardInset.setValue(0);
+    primeSheetSurface({ keyboardUp: false });
     setShowCollectionForm(true);
   }
 
   function openNoteSheet() {
-    const screenHeight = Dimensions.get("screen").height;
-    const estimatedKeyboardHeight = lastKeyboardHeightRef.current || Math.round(screenHeight * (Platform.OS === "ios" ? 0.34 : 0.4));
     setQuickIntentOpen(false);
     setMessage("");
-    lastKeyboardHeightRef.current = estimatedKeyboardHeight;
-    captureComposerMotion.stopAnimation();
-    captureKeyboardInset.stopAnimation();
-    captureComposerMotion.setValue(0);
-    captureKeyboardInset.setValue(estimatedKeyboardHeight);
-    setKeyboardHeight(estimatedKeyboardHeight);
+    primeSheetSurface({ keyboardUp: true });
     setNoteSheetOpen(true);
   }
 
@@ -1973,16 +1970,9 @@ export default function App() {
   }
 
   function openTitleSheet() {
-    const screenHeight = Dimensions.get("screen").height;
-    const estimatedKeyboardHeight = lastKeyboardHeightRef.current || Math.round(screenHeight * (Platform.OS === "ios" ? 0.34 : 0.4));
     setQuickIntentOpen(false);
     setMessage("");
-    lastKeyboardHeightRef.current = estimatedKeyboardHeight;
-    captureComposerMotion.stopAnimation();
-    captureKeyboardInset.stopAnimation();
-    captureComposerMotion.setValue(0);
-    captureKeyboardInset.setValue(estimatedKeyboardHeight);
-    setKeyboardHeight(estimatedKeyboardHeight);
+    primeSheetSurface({ keyboardUp: true });
     setTitleSheetOpen(true);
   }
 

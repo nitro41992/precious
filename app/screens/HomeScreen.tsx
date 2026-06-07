@@ -1,9 +1,7 @@
 import type { ReactElement, ReactNode, RefObject } from "react";
 import {
   Animated,
-  Dimensions,
   FlatList,
-  KeyboardAvoidingView,
   Pressable,
   StatusBar,
   View
@@ -23,7 +21,7 @@ import type { CaptureComposerMode, HomeListRow } from "../types";
 import { normalizeCaptureLink } from "../captureLogic";
 import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
-import { HeaderContentGradient, IconButton, MotionPressable, SheetHeader } from "../ui/components";
+import { HeaderContentGradient, IconButton, KeyboardSheet, MotionPressable, SheetHeader, keyboardSheetMetrics } from "../ui/components";
 import { Text, TextInput } from "../ui/typography";
 
 type HomeScreenProps = {
@@ -126,28 +124,23 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
     : typeof homeCaptureCount === "number"
       ? `${homeCaptureCount} ${homeCaptureCount === 1 ? "capture" : "captures"}`
       : "";
-  const composerKeyboardVisible = showCaptureComposer && keyboardHeight > 0;
-  const screenHeight = Dimensions.get("screen").height;
-  const windowAlreadyKeyboardSized =
-    composerKeyboardVisible && Math.abs(windowHeight + keyboardHeight - screenHeight) < 96;
-  const composerVisibleHeight = composerKeyboardVisible && !windowAlreadyKeyboardSized
-    ? windowHeight - keyboardHeight
-    : windowHeight;
-  const composerKeyboardGap = composerKeyboardVisible ? 16 : 0;
-  const composerAvailableHeight = composerKeyboardVisible
-    ? Math.max(320, composerVisibleHeight - 24 - composerKeyboardGap)
-    : Math.max(360, windowHeight * 0.72);
-  const captureSheetMaxHeight = composerKeyboardVisible
-    ? Math.min(430, composerAvailableHeight)
-    : Math.min(560, Math.max(340, windowHeight * 0.72));
+  const {
+    keyboardVisible: composerKeyboardVisible,
+    screenHeight,
+    maxHeight: captureSheetMaxHeight,
+    bottomInset: captureSheetBottomInset
+  } = keyboardSheetMetrics({
+    active: showCaptureComposer,
+    keyboardHeight,
+    windowHeight,
+    keyboardInset: captureKeyboardInset,
+    maxWithKeyboard: 430,
+    maxWithoutKeyboard: 560,
+    withoutKeyboardScale: 0.72
+  });
   const normalizedCaptureLink = normalizeCaptureLink(sourceDraft);
   const captureLinkHasText = Boolean(sourceDraft.trim());
   const captureLinkInvalid = captureMode === "link" && captureLinkHasText && !normalizedCaptureLink;
-  const captureSheetBottomInset = windowAlreadyKeyboardSized
-    ? composerKeyboardGap
-    : composerKeyboardVisible
-      ? Animated.add(captureKeyboardInset, composerKeyboardGap)
-      : captureKeyboardInset;
 
   return (
     <View style={styles.edgeToEdgeSafe}>
@@ -269,32 +262,16 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
         />
       </View>
       {showCaptureComposer ? (
-        <View style={styles.sheetLayer} pointerEvents="box-none">
-          <Pressable
-            accessibilityLabel="Close capture composer"
-            onPress={() => closeCaptureComposer()}
-            style={styles.sheetBackdrop}
-          />
-          <KeyboardAvoidingView pointerEvents="box-none" style={styles.sheetKeyboard}>
-            <Animated.View
-              style={[
-                styles.captureSheet,
-                composerKeyboardVisible && styles.captureSheetCompact,
-                {
-                  marginBottom: captureSheetBottomInset,
-                  maxHeight: captureSheetMaxHeight,
-                  transform: [
-                    {
-                      translateY: captureComposerMotion.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [screenHeight, 0]
-                      })
-                    }
-                  ]
-                }
-              ]}
-            >
-              <View style={styles.sheetGrabber} />
+        <KeyboardSheet
+          backdropLabel="Close capture composer"
+          bottomInset={captureSheetBottomInset}
+          compact={composerKeyboardVisible}
+          maxHeight={captureSheetMaxHeight}
+          motion={captureComposerMotion}
+          onBackdropPress={() => closeCaptureComposer()}
+          screenHeight={screenHeight}
+        >
+          <View style={styles.sheetGrabber} />
               <SheetHeader
                 closeLabel="Close"
                 confirmDisabled={savingCapture || !normalizedCaptureLink}
@@ -399,9 +376,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                   </View>
                 )}
               </View>
-            </Animated.View>
-          </KeyboardAvoidingView>
-        </View>
+        </KeyboardSheet>
       ) : null}
       {appSheets}
       {bottomAppBar}

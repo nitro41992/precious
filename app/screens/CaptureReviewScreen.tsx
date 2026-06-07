@@ -5,7 +5,6 @@ import type { TextInput as NativeTextInput } from "react-native";
 import {
   Animated,
   Dimensions,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -71,7 +70,7 @@ import { ReminderEditorSheet } from "../sheets/ReminderEditorSheet";
 import { motionDuration, motionEasing, motionReduceMotion, reviewHeroExpandedScale } from "../ui/motion";
 import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
-import { AiFieldInsight, AnimatedBottomSheet, MotionPressable, ProcessingStatusPill, SheetHeader, SourceMark } from "../ui/components";
+import { AiFieldInsight, AnimatedBottomSheet, KeyboardSheet, MotionPressable, ProcessingStatusPill, SheetHeader, SourceMark, keyboardSheetMetrics } from "../ui/components";
 import { Text, TextInput } from "../ui/typography";
 
 type ReviewHandoffRect = {
@@ -575,37 +574,33 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
             ? "Autosaves"
             : "";
   const noteHasText = Boolean(draftNote.trim());
-  const noteSheetKeyboardVisible = noteSheetOpen && keyboardHeight > 0;
-  const noteWindowAlreadyKeyboardSized =
-    noteSheetKeyboardVisible && Math.abs(windowHeight + keyboardHeight - Dimensions.get("screen").height) < 96;
-  const screenHeight = Dimensions.get("screen").height;
-  const noteVisibleHeight = noteSheetKeyboardVisible && !noteWindowAlreadyKeyboardSized
-    ? windowHeight - keyboardHeight
-    : windowHeight;
-  const noteKeyboardGap = noteSheetKeyboardVisible ? 16 : 0;
-  const noteSheetMaxHeight = noteSheetKeyboardVisible
-    ? Math.min(440, Math.max(320, noteVisibleHeight - 24 - noteKeyboardGap))
-    : Math.min(500, Math.max(340, windowHeight * 0.64));
-  const noteSheetBottomInset = noteWindowAlreadyKeyboardSized
-    ? noteKeyboardGap
-    : noteSheetKeyboardVisible
-      ? Animated.add(captureKeyboardInset, noteKeyboardGap)
-      : captureKeyboardInset;
-  const titleSheetKeyboardVisible = titleSheetOpen && keyboardHeight > 0;
-  const titleWindowAlreadyKeyboardSized =
-    titleSheetKeyboardVisible && Math.abs(windowHeight + keyboardHeight - screenHeight) < 96;
-  const titleVisibleHeight = titleSheetKeyboardVisible && !titleWindowAlreadyKeyboardSized
-    ? windowHeight - keyboardHeight
-    : windowHeight;
-  const titleKeyboardGap = titleSheetKeyboardVisible ? 16 : 0;
-  const titleSheetMaxHeight = titleSheetKeyboardVisible
-    ? Math.min(440, Math.max(320, titleVisibleHeight - 24 - titleKeyboardGap))
-    : Math.min(500, Math.max(340, windowHeight * 0.64));
-  const titleSheetBottomInset = titleWindowAlreadyKeyboardSized
-    ? titleKeyboardGap
-    : titleSheetKeyboardVisible
-      ? Animated.add(captureKeyboardInset, titleKeyboardGap)
-      : captureKeyboardInset;
+  const {
+    keyboardVisible: noteSheetKeyboardVisible,
+    screenHeight,
+    maxHeight: noteSheetMaxHeight,
+    bottomInset: noteSheetBottomInset
+  } = keyboardSheetMetrics({
+    active: noteSheetOpen,
+    keyboardHeight,
+    windowHeight,
+    keyboardInset: captureKeyboardInset,
+    maxWithKeyboard: 440,
+    maxWithoutKeyboard: 500,
+    withoutKeyboardScale: 0.64
+  });
+  const {
+    keyboardVisible: titleSheetKeyboardVisible,
+    maxHeight: titleSheetMaxHeight,
+    bottomInset: titleSheetBottomInset
+  } = keyboardSheetMetrics({
+    active: titleSheetOpen,
+    keyboardHeight,
+    windowHeight,
+    keyboardInset: captureKeyboardInset,
+    maxWithKeyboard: 440,
+    maxWithoutKeyboard: 500,
+    withoutKeyboardScale: 0.64
+  });
   const showStatus = selectedStatus !== "ready";
   const reviewScrollY = useSharedValue(0);
   const reviewScrollRef = useRef<ScrollView | null>(null);
@@ -873,6 +868,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
         height: stageHeight - reviewMediaStatusInset - 16,
         radius: 18
       };
+      console.log("[JUT] close.takeoff", JSON.stringify({ layoutY, scrollY, statusInset: reviewMediaStatusInset, stageHeight, y: rect.y, h: rect.height, x: rect.x, w: rect.width }));
       // Scrolled mostly out of view: nothing to hand off — close plainly
       // instead of flying an unclipped copy across content.
       if (rect.y < -rect.height * 0.5) {
@@ -1252,129 +1248,93 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       ) : (
         <>
       {noteSheetOpen ? (
-        <View style={styles.sheetLayer} pointerEvents="box-none">
-          <Pressable
-            accessibilityLabel="Close note editor"
-            onPress={() => closeNoteSheet()}
-            style={styles.sheetBackdrop}
+        <KeyboardSheet
+          backdropLabel="Close note editor"
+          bottomInset={noteSheetBottomInset}
+          compact={noteSheetKeyboardVisible}
+          maxHeight={noteSheetMaxHeight}
+          motion={captureComposerMotion}
+          onBackdropPress={() => closeNoteSheet()}
+          screenHeight={screenHeight}
+        >
+          <View style={styles.sheetGrabber} />
+          <SheetHeader
+            closeLabel="Close note editor"
+            confirmLabel="Done"
+            onClose={() => closeNoteSheet()}
+            onConfirm={() => closeNoteSheet()}
+            title="Note"
           />
-          <KeyboardAvoidingView pointerEvents="box-none" style={styles.sheetKeyboard}>
-            <Animated.View
-              style={[
-                styles.captureSheet,
-                noteSheetKeyboardVisible && styles.captureSheetCompact,
-                {
-                  marginBottom: noteSheetBottomInset,
-                  maxHeight: noteSheetMaxHeight,
-                  transform: [
-                    {
-                      translateY: captureComposerMotion.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [screenHeight, 0]
-                      })
-                    }
-                  ]
-                }
-              ]}
-            >
-              <View style={styles.sheetGrabber} />
-              <SheetHeader
-                closeLabel="Close note editor"
-                confirmLabel="Done"
-                onClose={() => closeNoteSheet()}
-                onConfirm={() => closeNoteSheet()}
-                title="Note"
-              />
-              <View
-                style={[
-                  styles.captureSheetBody,
-                  styles.captureSheetBodyContent,
-                  noteSheetKeyboardVisible && styles.captureSheetBodyContentCompact
-                ]}
-              >
-                <TextInput
-                  multiline
-                  onChangeText={(value) => {
-                    setDraftNoteDirty(true);
-                    setDraftNote(value);
-                    updateSelectedReviewDraft({ note: value, noteDirty: true });
-                  }}
-                  placeholder="Why did you save this?"
-                  placeholderTextColor={colors.placeholder}
-                  ref={noteInputRef}
-                  style={[styles.captureInput, styles.noteSheetInput]}
-                  testID="pc.review.note"
-                  value={draftNote}
-                />
-                {noteStatusLabel ? (
-                  <Text style={[styles.noteSaveState, noteSaveState === "error" && styles.noteSaveStateError]}>
-                    {noteStatusLabel}
-                  </Text>
-                ) : null}
-              </View>
-            </Animated.View>
-          </KeyboardAvoidingView>
-        </View>
+          <View
+            style={[
+              styles.captureSheetBody,
+              styles.captureSheetBodyContent,
+              noteSheetKeyboardVisible && styles.captureSheetBodyContentCompact
+            ]}
+          >
+            <TextInput
+              multiline
+              onChangeText={(value) => {
+                setDraftNoteDirty(true);
+                setDraftNote(value);
+                updateSelectedReviewDraft({ note: value, noteDirty: true });
+              }}
+              placeholder="Why did you save this?"
+              placeholderTextColor={colors.placeholder}
+              ref={noteInputRef}
+              style={[styles.captureInput, styles.noteSheetInput]}
+              testID="pc.review.note"
+              value={draftNote}
+            />
+            {noteStatusLabel ? (
+              <Text style={[styles.noteSaveState, noteSaveState === "error" && styles.noteSaveStateError]}>
+                {noteStatusLabel}
+              </Text>
+            ) : null}
+          </View>
+        </KeyboardSheet>
       ) : null}
       {titleSheetOpen ? (
-        <View style={styles.sheetLayer} pointerEvents="box-none">
-          <Pressable
-            accessibilityLabel="Close title editor"
-            onPress={() => closeTitleSheet()}
-            style={styles.sheetBackdrop}
+        <KeyboardSheet
+          backdropLabel="Close title editor"
+          bottomInset={titleSheetBottomInset}
+          compact={titleSheetKeyboardVisible}
+          maxHeight={titleSheetMaxHeight}
+          motion={captureComposerMotion}
+          onBackdropPress={() => closeTitleSheet()}
+          screenHeight={screenHeight}
+        >
+          <View style={styles.sheetGrabber} />
+          <SheetHeader
+            closeLabel="Close title editor"
+            confirmLabel="Done"
+            onClose={() => closeTitleSheet()}
+            onConfirm={() => closeTitleSheet()}
+            title="Title"
           />
-          <KeyboardAvoidingView pointerEvents="box-none" style={styles.sheetKeyboard}>
-            <Animated.View
-              style={[
-                styles.captureSheet,
-                titleSheetKeyboardVisible && styles.captureSheetCompact,
-                {
-                  marginBottom: titleSheetBottomInset,
-                  maxHeight: titleSheetMaxHeight,
-                  transform: [
-                    {
-                      translateY: captureComposerMotion.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [screenHeight, 0]
-                      })
-                    }
-                  ]
-                }
-              ]}
-            >
-              <View style={styles.sheetGrabber} />
-              <SheetHeader
-                closeLabel="Close title editor"
-                confirmLabel="Done"
-                onClose={() => closeTitleSheet()}
-                onConfirm={() => closeTitleSheet()}
-                title="Title"
-              />
-              <View
-                style={[
-                  styles.captureSheetBody,
-                  styles.captureSheetBodyContent,
-                  titleSheetKeyboardVisible && styles.captureSheetBodyContentCompact
-                ]}
-              >
-                <TextInput
-                  multiline
-                  onChangeText={(value) => {
-                    setDraftTitleDirty(true);
-                    setDraftTitle(value);
-                    updateSelectedReviewDraft({ title: value, titleDirty: true });
-                  }}
-                  placeholder="Title"
-                  placeholderTextColor={colors.placeholder}
-                  ref={titleInputRef}
-                  style={[styles.captureInput, styles.noteSheetInput]}
-                  testID="pc.review.title.input"
-                  value={draftTitle}
-                />
-              </View>
-            </Animated.View>
-          </KeyboardAvoidingView>
-        </View>
+          <View
+            style={[
+              styles.captureSheetBody,
+              styles.captureSheetBodyContent,
+              titleSheetKeyboardVisible && styles.captureSheetBodyContentCompact
+            ]}
+          >
+            <TextInput
+              multiline
+              onChangeText={(value) => {
+                setDraftTitleDirty(true);
+                setDraftTitle(value);
+                updateSelectedReviewDraft({ title: value, titleDirty: true });
+              }}
+              placeholder="Title"
+              placeholderTextColor={colors.placeholder}
+              ref={titleInputRef}
+              style={[styles.captureInput, styles.noteSheetInput]}
+              testID="pc.review.title.input"
+              value={draftTitle}
+            />
+          </View>
+        </KeyboardSheet>
       ) : null}
       <AnimatedBottomSheet
         closeLabel="Close Purpose choices"

@@ -1,7 +1,7 @@
 import { forwardRef, memo, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { PressableProps, PressableStateCallbackType, StyleProp, ViewStyle } from "react-native";
-import { Animated, Dimensions, Easing, Pressable, View } from "react-native";
+import { Animated, Dimensions, Easing, KeyboardAvoidingView, Pressable, View } from "react-native";
 import { Image } from "expo-image";
 import { Check, ClockClockwise, Folder, Folders, Gear, HouseSimple, Info, Plus, Sparkle, Warning, X } from "phosphor-react-native";
 import Reanimated, {
@@ -192,6 +192,115 @@ export function AnimatedBottomSheet({
       >
         {children}
       </Animated.View>
+    </View>
+  );
+}
+
+// Bottom margin for a keyboard sheet: the raw keyboard inset, the inset plus a
+// resting gap, or a plain gap when the window is already keyboard-sized.
+type KeyboardSheetInset = Animated.Value | Animated.AnimatedAddition<number> | number;
+
+type KeyboardSheetMetrics = {
+  keyboardVisible: boolean;
+  screenHeight: number;
+  maxHeight: number;
+  bottomInset: KeyboardSheetInset;
+};
+
+// Shared sizing for the keyboard-aware bottom sheets (capture composer, note,
+// title, collection composer). They all clamp the sheet to the space above the
+// keyboard and pin its bottom to the keyboard inset; only the height caps and
+// the resting-height scale differ per sheet, so those come in as parameters.
+// Centralizing this keeps the four sheets from drifting apart and means a sizing
+// fix lands in one place.
+export function keyboardSheetMetrics({
+  active,
+  keyboardHeight,
+  windowHeight,
+  keyboardInset,
+  maxWithKeyboard,
+  maxWithoutKeyboard,
+  withoutKeyboardScale
+}: {
+  active: boolean;
+  keyboardHeight: number;
+  windowHeight: number;
+  keyboardInset: Animated.Value;
+  maxWithKeyboard: number;
+  maxWithoutKeyboard: number;
+  withoutKeyboardScale: number;
+}): KeyboardSheetMetrics {
+  const keyboardVisible = active && keyboardHeight > 0;
+  const screenHeight = Dimensions.get("screen").height;
+  // When the OS already shrinks the window to exclude the keyboard
+  // (android:windowSoftInputMode=adjustResize), don't subtract the inset twice —
+  // just leave the resting gap.
+  const windowAlreadyKeyboardSized =
+    keyboardVisible && Math.abs(windowHeight + keyboardHeight - screenHeight) < 96;
+  const visibleHeight = keyboardVisible && !windowAlreadyKeyboardSized
+    ? windowHeight - keyboardHeight
+    : windowHeight;
+  const keyboardGap = keyboardVisible ? 16 : 0;
+  const maxHeight = keyboardVisible
+    ? Math.min(maxWithKeyboard, Math.max(320, visibleHeight - 24 - keyboardGap))
+    : Math.min(maxWithoutKeyboard, Math.max(340, windowHeight * withoutKeyboardScale));
+  const bottomInset: KeyboardSheetInset = windowAlreadyKeyboardSized
+    ? keyboardGap
+    : keyboardVisible
+      ? Animated.add(keyboardInset, keyboardGap)
+      : keyboardInset;
+  return { keyboardVisible, screenHeight, maxHeight, bottomInset };
+}
+
+// Shared shell for the keyboard-aware bottom sheets: backdrop + keyboard-avoiding
+// frame + the sliding Animated.View. `motion` (translateY) and `bottomInset`
+// (marginBottom) must both be JS-driven Animated values — they share this one
+// view, and mixing a native-driven transform with a JS-driven layout prop here
+// crashes the keyboard animation. Each sheet supplies only its own children.
+export function KeyboardSheet({
+  backdropLabel,
+  bottomInset,
+  children,
+  compact,
+  maxHeight,
+  motion,
+  onBackdropPress,
+  screenHeight
+}: {
+  backdropLabel: string;
+  bottomInset: KeyboardSheetInset;
+  children: ReactNode;
+  compact: boolean;
+  maxHeight: number;
+  motion: Animated.Value;
+  onBackdropPress: () => void;
+  screenHeight: number;
+}) {
+  return (
+    <View style={styles.sheetLayer} pointerEvents="box-none">
+      <Pressable accessibilityLabel={backdropLabel} onPress={onBackdropPress} style={styles.sheetBackdrop} />
+      <KeyboardAvoidingView pointerEvents="box-none" style={styles.sheetKeyboard}>
+        <Animated.View
+          style={[
+            styles.captureSheet,
+            compact && styles.captureSheetCompact,
+            {
+              marginBottom: bottomInset,
+              maxHeight,
+              transform: [
+                {
+                  translateY: motion.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [screenHeight, 0]
+                  })
+                }
+              ]
+            }
+          ]}
+        >
+          {children}
+        </Animated.View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
