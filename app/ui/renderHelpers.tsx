@@ -303,15 +303,15 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
   }
 
   // Pagination footer mirrors the shape of the rows that are loading rather
-  // than a plain "Loading more..." line: a couple of shimmering skeleton rows
-  // read as content arriving, which makes the wait feel shorter and snappier.
+  // than a plain "Loading more..." line: a run of shimmering skeleton rows
+  // reads as content arriving, which makes the wait feel shorter and snappier.
   function renderListLoadingFooter(
     variant: "captures" | "collectionCaptures" | "collections" = "captures"
   ) {
     if (variant === "collections") {
-      return renderCollectionSkeletonRows(2);
+      return renderCollectionSkeletonRows(4);
     }
-    return renderCaptureSkeletonRows(2, variant === "collectionCaptures");
+    return renderCaptureSkeletonRows(4, variant === "collectionCaptures");
   }
 
   function renderToast(placement: ToastPlacement = "base") {
