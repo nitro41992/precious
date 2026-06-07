@@ -527,6 +527,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const showStatus = selectedStatus !== "ready";
   const reviewScrollY = useSharedValue(0);
   const reviewScrollRef = useRef<ScrollView | null>(null);
+  const reviewScrollLayoutRef = useRef<View | null>(null);
   const reviewHeroFrameRef = useRef<View | null>(null);
   const reviewWindowWidth = Dimensions.get("window").width;
   const reviewMediaStatusInset = Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0;
@@ -737,22 +738,51 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       closeReview();
       return;
     }
-    measureReviewHeroFrame((rect) => {
-      // The morph must take over exactly where the scroll-driven collapse
-      // left the hero: same rect, same interpolated image scale. If the hero
-      // has been scrolled mostly out of view there is nothing to hand off —
-      // close plainly instead of flying an unclipped copy across content.
-      if (!rect || rect.y < -rect.height * 0.5) {
+    const layoutNode = reviewScrollLayoutRef.current;
+    if (!layoutNode) {
+      closeReview({ allowHandoff: false });
+      return;
+    }
+    // The morph must take over exactly where the scroll-driven collapse left
+    // the hero: same rect, same interpolated image scale. ONE scrollY sample
+    // drives position, height and zoom — the same value the on-screen
+    // worklets render from — so the derived rect and scale can never
+    // disagree with each other or with the visual. (Measuring the hero node
+    // itself raced settling scrolls: the async rect and the sync scale were
+    // sampled at different instants, and the copy took off at the wrong
+    // spot and zoom.)
+    const scrollY = reviewScrollY.value;
+    // Halt any in-flight momentum so the hero cannot drift between this
+    // sample and the copy's first painted frame.
+    reviewScrollRef.current?.scrollTo({ animated: false, y: scrollY });
+    const collapseProgress = Math.min(
+      1,
+      Math.max(0, scrollY / reviewAspectShiftDistance)
+    );
+    const stageHeight =
+      reviewExpandedMediaHeight +
+      (reviewSquareMediaHeight - reviewExpandedMediaHeight) * collapseProgress;
+    const heroScale =
+      reviewHeroExpandedScale +
+      (REVIEW_MEDIA_COLLAPSED_IMAGE_SCALE - reviewHeroExpandedScale) * collapseProgress;
+    // Only the scroll layout's window origin is measured — it is static
+    // while content scrolls, so this measurement cannot go stale.
+    layoutNode.measureInWindow((layoutX, layoutY, layoutWidth) => {
+      const rect = {
+        // The header card insets the stage by 8 on the sides/bottom and by
+        // the status inset + 8 on top (styles.reviewMediaHeaderImage).
+        x: layoutX + 8,
+        y: layoutY - scrollY + reviewMediaStatusInset + 8,
+        width: layoutWidth - 16,
+        height: stageHeight - reviewMediaStatusInset - 16,
+        radius: 18
+      };
+      // Scrolled mostly out of view: nothing to hand off — close plainly
+      // instead of flying an unclipped copy across content.
+      if (rect.y < -rect.height * 0.5) {
         closeReview({ allowHandoff: false });
         return;
       }
-      const collapseProgress = Math.min(
-        1,
-        Math.max(0, reviewScrollY.value / reviewAspectShiftDistance)
-      );
-      const heroScale =
-        reviewHeroExpandedScale +
-        (REVIEW_MEDIA_COLLAPSED_IMAGE_SCALE - reviewHeroExpandedScale) * collapseProgress;
       // Fly the exact source the hero is rendering (the pinned open-time
       // URL) — deriving it from the hydrated capture flew an upgraded asset
       // the row thumbnail never showed, so the landing swap changed pixels.
@@ -785,7 +815,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
         ]}
       >
         <View style={styles.reviewShell}>
-          <View style={styles.reviewScrollLayout}>
+          <View collapsable={false} ref={reviewScrollLayoutRef} style={styles.reviewScrollLayout}>
             <Reanimated.ScrollView
               ref={reviewScrollRef}
               style={styles.reviewDetailScroller}
