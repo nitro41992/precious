@@ -658,15 +658,20 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     });
   }
 
+  // Measure (= start the morph) only after the deferred content has
+  // committed: the morph clock runs on wall time, so a heavy commit during
+  // the flight drops frames and the animation visibly jump-cuts. With the
+  // measurement gated on stage 2, every mount commit lands BEFORE the first
+  // morph frame and the flight itself is commit-free.
   useLayoutEffect(() => {
-    if (!reviewHandoffKey || !selectedHeroImageUrl) return;
+    if (!reviewHandoffKey || !selectedHeroImageUrl || !deferredContentReady) return;
     const frame = requestAnimationFrame(() => {
       measureReviewHeroFrame((rect) => {
         if (rect) markReviewHandoffTarget(reviewHandoffKey, rect);
       });
     });
     return () => cancelAnimationFrame(frame);
-  }, [reviewHandoffKey, selectedHeroImageUrl, reviewWindowWidth]);
+  }, [deferredContentReady, reviewHandoffKey, selectedHeroImageUrl, reviewWindowWidth]);
 
   // Hardware/gesture back must run the same scroll-aware hero return as the
   // back button; keep the latest closure registered with the app shell.

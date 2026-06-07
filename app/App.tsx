@@ -1506,20 +1506,30 @@ export default function App() {
   const finishReviewHandoff = useCallback((key: number) => {
     const current = reviewHandoffRef.current;
     if (!current || current.key !== key) return;
+    if (current.direction === "opening") {
+      // The copy is already invisible (atomic swap), so its unmount commit
+      // can wait a couple of frames — keeping the teardown cost off the
+      // exact frame the hero takes over.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (reviewHandoffRef.current?.key !== key) return;
+        reviewHandoffRef.current = null;
+        findHandoffThumbnailNode(current.captureAliases)?.setNativeProps({ opacity: 1 });
+        setReviewHandoff(null);
+      }));
+      return;
+    }
     reviewHandoffRef.current = null;
     // Restore the destination thumbnail in the same task that unmounts the
-    // overlay (idempotent with the landing crossfade restore).
+    // overlay (idempotent with the landing restore).
     findHandoffThumbnailNode(current.captureAliases)?.setNativeProps({ opacity: 1 });
     setReviewHandoff(null);
-    if (current.direction === "closing") {
-      setClosingReviewCapture(null);
-      if (current.returnCollectionId) {
-        returnToCollectionDetail(current.returnCollectionId);
-        return;
-      }
-      selectCapture(null);
+    setClosingReviewCapture(null);
+    if (current.returnCollectionId) {
+      returnToCollectionDetail(current.returnCollectionId);
+      return;
     }
-  }, [returnToCollectionDetail, selectCapture]);
+    selectCapture(null);
+  }, [findHandoffThumbnailNode, returnToCollectionDetail, selectCapture]);
 
   const handleClosingHandoffArrived = useCallback((key: number) => {
     const current = reviewHandoffRef.current;
