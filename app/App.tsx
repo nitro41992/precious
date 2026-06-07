@@ -795,11 +795,17 @@ export default function App() {
         reviewHandoffCancelled.value = false;
         reviewHandoffTarget.value = null;
         reviewHandoffRef.current = nextHandoff;
+        // Hide the origin thumbnail in the same task that mounts the morph
+        // copy, so both apply on the same frame — the post-paint effect
+        // variant let the card image linger a frame or two under the
+        // departing copy, then blink out mid-flight.
+        findHandoffThumbnailNode(nextHandoff.captureAliases)?.setNativeProps({ opacity: 0 });
         setReviewHandoff(nextHandoff);
         open();
       });
     }));
   }, [
+    findHandoffThumbnailNode,
     normalizeHandoffWindowRect,
     reviewHandoffArrived,
     reviewHandoffCancelled,
@@ -3578,9 +3584,11 @@ export default function App() {
     overlayHandoff?: ReviewHandoffState | null;
   } = {}) {
     const overlayVisible = Boolean(overlay);
-    // The tab bar / gradient / FAB are part of the page the return morph
-    // lands on — they must be present for the whole close, not pop in after.
-    const paneChromeVisible = !overlayVisible || reviewHandoff?.direction === "closing";
+    // The tab bar / gradient / FAB only change while the pane is fully
+    // covered — never during a flight. Unmounting them at the open tap
+    // popped the bottom of the screen mid-morph (the review is still mostly
+    // transparent); on close they must already be there for the landing.
+    const paneChromeVisible = !overlayVisible || Boolean(reviewHandoff);
     return (
       <View collapsable={false} ref={handoffRootRef} style={styles.screenStack}>
         <TopLevelPane active={active === "recent"} direction={-1}>
