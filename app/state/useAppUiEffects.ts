@@ -315,7 +315,10 @@ export function useAppUiEffects({
       duration: 220,
       easing: Easing.out(Easing.cubic),
       toValue: 1,
-      useNativeDriver: true
+      // JS-driven: this value's translateY shares an Animated.View with the
+      // JS-driven keyboard marginBottom inset, so it cannot use the native driver
+      // (mixing pins the view to native and crashes the JS keyboard animation).
+      useNativeDriver: false
     }).start();
   }, [
     captureComposerClosing,
