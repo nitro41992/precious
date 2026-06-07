@@ -443,7 +443,13 @@ export const SourceMark = memo(function SourceMark({
           onLoad={() => {
             if (imageLoadKey) onImageLoadState?.(imageLoadKey, "loaded");
           }}
-          recyclingKey={imageRenderKey}
+          // Keyed by capture identity, not asset identity: recyclingKey
+          // resets the view to blank when it changes, which is right when a
+          // recycled cell shows a different capture but wrong when detail
+          // hydration upgrades the SAME capture's source (legacy captures
+          // gain imageAssetUrl post-open) — expo-image then holds the old
+          // pixels until the new source is ready instead of flashing blank.
+          recyclingKey={capture.id || imageRenderKey}
           source={imageSource}
           style={styles.captureThumbnailImage}
         />

@@ -411,9 +411,12 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       : selectedHeroImageUrl === selectedFullImageUrl
         ? selectedFullImageCacheKey
         : "";
-  // Keyed by cache key only: refreshed signed URLs keep the same cache key, so
-  // the rendered image must not reset (and flash) when capture data reloads.
-  const selectedHeroImageRenderKey = selectedHeroImageCacheKey || selectedHeroImageUrl;
+  // Keyed by capture identity: recyclingKey resets the view to blank when it
+  // changes, which must only happen when the hero shows a different capture —
+  // never when detail hydration upgrades this capture's source (legacy
+  // captures gain imageAssetUrl right after the open animation completes).
+  // expo-image holds the previous pixels until the new source is decoded.
+  const selectedHeroImageRenderKey = selected.id;
   const selectedHeroImageSource = useMemo(
     () => selectedHeroImageCacheKey
       ? { uri: selectedHeroImageUrl, cacheKey: selectedHeroImageCacheKey }
