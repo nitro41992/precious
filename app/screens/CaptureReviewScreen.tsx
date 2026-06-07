@@ -854,6 +854,11 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                         ]}
                       >
                         <Image
+                          // Decode at full quality like the morph overlay
+                          // copy does: the crossfade hands over between the
+                          // two, and a downscaled-vs-full decode of the same
+                          // source reads as a subtle flicker at the seam.
+                          allowDownscaling={false}
                           cachePolicy="memory-disk"
                           contentFit="cover"
                           onDisplay={() => markReviewImageDisplayed(selectedHeroImageUrl)}
