@@ -32,6 +32,11 @@ export const motionPressScale = {
   icon: 0.975
 };
 
+// The review hero's scroll-prepared zoom: the open morph lands its flying
+// copy at exactly this scale, and the scroll-driven collapse starts from it.
+// One token so the two can never drift apart.
+export const reviewHeroExpandedScale = 1.08;
+
 export const motionPressSpring = {
   damping: 18,
   mass: 0.7,

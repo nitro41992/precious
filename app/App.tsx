@@ -37,7 +37,7 @@ import { useCaptureReview } from "./state/useCaptureReview";
 import { useCaptureSearch } from "./state/useCaptureSearch";
 import { useCollectionsState } from "./state/useCollections";
 import { createAppRenderHelpers } from "./ui/renderHelpers";
-import { motionDuration, motionReduceMotion } from "./ui/motion";
+import { motionDuration, motionReduceMotion, reviewHeroExpandedScale } from "./ui/motion";
 import { styles } from "./ui/styles";
 import { appTheme } from "./ui/theme";
 
@@ -126,7 +126,6 @@ import {
 
 const DELETE_UNDO_MS = 8000;
 const CAPTURES_FRESH_MS = 30_000;
-const REVIEW_HERO_EXPANDED_IMAGE_SCALE = 1.08;
 const REVIEW_HANDOFF_OPEN_MS = 220;
 const REVIEW_HANDOFF_CLOSE_MS = 180;
 
@@ -798,7 +797,7 @@ export default function App() {
           captureId: capture.id,
           direction: "opening",
           from,
-          heroScale: REVIEW_HERO_EXPANDED_IMAGE_SCALE,
+          heroScale: reviewHeroExpandedScale,
           imageUrl,
           key,
           returnCollectionId: null
@@ -1589,7 +1588,7 @@ export default function App() {
   const startReviewCloseHandoff = useCallback((
     capture: Capture,
     fromRect?: ReviewHandoffRect | null,
-    heroScale: number = REVIEW_HERO_EXPANDED_IMAGE_SCALE
+    heroScale: number = reviewHeroExpandedScale
   ) => {
     const imageUrl = captureImageUrl(capture);
     if (!imageUrl) return false;

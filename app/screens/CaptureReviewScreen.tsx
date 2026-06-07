@@ -9,6 +9,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StatusBar,
   View
 } from "react-native";
@@ -68,7 +69,7 @@ import {
   urlEvidenceMessage
 } from "../capturePresentation";
 import { ReminderEditorSheet } from "../sheets/ReminderEditorSheet";
-import { motionDuration, motionEasing, motionReduceMotion } from "../ui/motion";
+import { motionDuration, motionEasing, motionReduceMotion, reviewHeroExpandedScale } from "../ui/motion";
 import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
 import { AiFieldInsight, AnimatedBottomSheet, MotionPressable, ProcessingStatusPill, SheetHeader, SourceMark } from "../ui/components";
@@ -150,7 +151,6 @@ type CaptureReviewScreenProps = {
 
 const MIN_IMAGE_SCALE = 1;
 const MAX_IMAGE_SCALE = 4;
-const REVIEW_MEDIA_EXPANDED_IMAGE_SCALE = 1.08;
 const REVIEW_MEDIA_COLLAPSED_IMAGE_SCALE = 1.02;
 
 function clamp(value: number, min: number, max: number) {
@@ -402,15 +402,38 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const selectedFullImageUrl = captureFullImageUrl(selected);
   const selectedFullImageCacheKey = captureFullImageCacheKey(selected);
   const [failedReviewImageUris, setFailedReviewImageUris] = useState<Set<string>>(() => new Set());
-  const selectedHeroImageUrl = [selectedImageUrl, selectedFullImageUrl]
+  const heroCandidateUrl = [selectedImageUrl, selectedFullImageUrl]
     .filter((url, index, urls) => Boolean(url) && urls.indexOf(url) === index)
     .find((url) => !failedReviewImageUris.has(url)) || "";
-  const selectedHeroImageCacheKey =
-    selectedHeroImageUrl === selectedImageUrl
+  const heroCandidateCacheKey =
+    heroCandidateUrl === selectedImageUrl
       ? selectedImageCacheKey
-      : selectedHeroImageUrl === selectedFullImageUrl
+      : heroCandidateUrl === selectedFullImageUrl
         ? selectedFullImageCacheKey
         : "";
+  // Pin the hero source for the lifetime of this capture view. Detail
+  // hydration upgrades the capture's image fields right after the open
+  // animation (legacy captures gain imageAssetUrl) — a different source has
+  // a different intrinsic aspect ratio under cover, so adopting it mid-view
+  // visibly re-crops/re-zooms the hero out of its scroll-prepared state.
+  // The morph flew the open-time URL; keep rendering exactly that. Upgrades
+  // apply on the next open. Failed pins fall through to the next candidate.
+  const pinnedHeroRef = useRef<{ captureId: string; url: string; cacheKey: string } | null>(null);
+  if (pinnedHeroRef.current && pinnedHeroRef.current.captureId !== selected.id) {
+    pinnedHeroRef.current = null;
+  }
+  if (pinnedHeroRef.current && failedReviewImageUris.has(pinnedHeroRef.current.url)) {
+    pinnedHeroRef.current = null;
+  }
+  if (!pinnedHeroRef.current && heroCandidateUrl) {
+    pinnedHeroRef.current = {
+      cacheKey: heroCandidateCacheKey,
+      captureId: selected.id,
+      url: heroCandidateUrl
+    };
+  }
+  const selectedHeroImageUrl = pinnedHeroRef.current?.url || heroCandidateUrl;
+  const selectedHeroImageCacheKey = pinnedHeroRef.current?.cacheKey || heroCandidateCacheKey;
   // Keyed by capture identity: recyclingKey resets the view to blank when it
   // changes, which must only happen when the hero shows a different capture —
   // never when detail hydration upgrades this capture's source (legacy
@@ -505,6 +528,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       : captureKeyboardInset;
   const showStatus = selectedStatus !== "ready";
   const reviewScrollY = useSharedValue(0);
+  const reviewScrollRef = useRef<ScrollView | null>(null);
   const reviewHeroFrameRef = useRef<View | null>(null);
   const reviewWindowWidth = Dimensions.get("window").width;
   const reviewMediaStatusInset = Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0;
@@ -530,7 +554,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
         scale: interpolate(
           reviewScrollY.value,
           [0, reviewAspectShiftDistance],
-          [REVIEW_MEDIA_EXPANDED_IMAGE_SCALE, REVIEW_MEDIA_COLLAPSED_IMAGE_SCALE],
+          [reviewHeroExpandedScale, REVIEW_MEDIA_COLLAPSED_IMAGE_SCALE],
           Extrapolation.CLAMP
         )
       }
@@ -657,7 +681,12 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     setImageViewerSource(null);
     setFailedReviewImageUris(new Set());
     setLoadedReviewImageUris(new Set());
-  }, [selected.id]);
+    // An in-place capture re-target (the processing poll can swap a local id
+    // for its remote id) must land in the scroll-prepared state: scrollY 0,
+    // hero zoomed to the expanded scale, stage at full height.
+    reviewScrollY.value = 0;
+    reviewScrollRef.current?.scrollTo({ animated: false, y: 0 });
+  }, [reviewScrollY, selected.id]);
 
   useEffect(() => {
     const imageUrls = Array.from(new Set([selectedImageUrl, selectedFullImageUrl].filter(Boolean)));
@@ -737,8 +766,8 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
         Math.max(0, reviewScrollY.value / reviewAspectShiftDistance)
       );
       const heroScale =
-        REVIEW_MEDIA_EXPANDED_IMAGE_SCALE +
-        (REVIEW_MEDIA_COLLAPSED_IMAGE_SCALE - REVIEW_MEDIA_EXPANDED_IMAGE_SCALE) * collapseProgress;
+        reviewHeroExpandedScale +
+        (REVIEW_MEDIA_COLLAPSED_IMAGE_SCALE - reviewHeroExpandedScale) * collapseProgress;
       closeReview({ fromRect: rect, heroScale });
     });
   }
@@ -765,6 +794,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
         <View style={styles.reviewShell}>
           <View style={styles.reviewScrollLayout}>
             <Reanimated.ScrollView
+              ref={reviewScrollRef}
               style={styles.reviewDetailScroller}
               contentContainerStyle={[
                 styles.reviewDetailContent,
