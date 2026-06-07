@@ -1,7 +1,7 @@
 import { memo, useCallback, useMemo, useState, type ReactElement } from "react";
 import { Animated, View } from "react-native";
 import { Image } from "expo-image";
-import { CalendarBlank, Folder, ImageSquare, Lightbulb, Trash } from "phosphor-react-native";
+import { CalendarBlank, Folder, ImageSquare, Lightbulb, MinusCircle } from "phosphor-react-native";
 import Reanimated from "react-native-reanimated";
 
 import { collectionCollageSlots, hostFromUrl } from "../captureLogic";
@@ -353,7 +353,10 @@ export const CollectionCaptureRowItem = memo(function CollectionCaptureRowItem({
       onPress={() => onUnlinkCaptureFromCollection(collectionId, capture)}
       style={({ pressed }) => [styles.collectionRemoveIconButton, pressed && styles.collectionRemoveIconButtonPressed]}
     >
-      <Trash color={colors.danger} size={22} weight="regular" />
+      {/* Muted minus, not a red trash/X: the action unlinks the capture from
+          this collection — it does not delete it — and the previous danger
+          tint read as an alert badge rather than an affordance. */}
+      <MinusCircle color={colors.muted} size={22} weight="regular" />
     </MotionPressable>
   );
   return (
