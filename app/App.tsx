@@ -110,6 +110,7 @@ import { SearchScreen } from "./screens/SearchScreen";
 
 import type { MapSearchCandidate } from "./captureLogic";
 import {
+  captureIdentityAliases,
   captureIntentPatchBody,
   collectionSelectionActionState,
   capturesForListMode,
@@ -139,6 +140,10 @@ type ReviewHandoffRect = {
 
 type ReviewHandoffState = {
   cacheKey: string;
+  // The processing poll can swap a capture's local id for its remote id
+  // mid-session; everything that has to find this capture again (the
+  // selected-capture match, the thumbnail ref) must go through aliases.
+  captureAliases: string[];
   captureId: string;
   direction: "opening" | "closing";
   from: ReviewHandoffRect;
@@ -169,6 +174,7 @@ function ReviewHandoffOverlay({
   fade,
   handoff,
   heroReady,
+  onClosingArrived,
   onDone,
   progress,
   target
@@ -178,6 +184,7 @@ function ReviewHandoffOverlay({
   fade: SharedValue<number>;
   handoff: ReviewHandoffState;
   heroReady: SharedValue<boolean>;
+  onClosingArrived: (key: number) => void;
   onDone: (key: number) => void;
   progress: SharedValue<number>;
   target: SharedValue<ReviewHandoffRect | null>;
@@ -217,7 +224,21 @@ function ReviewHandoffOverlay({
     (resolve, wasResolving) => {
       if (!resolve || wasResolving) return;
       if (direction === "closing") {
-        runOnJS(onDone)(handoffKey);
+        // Restore the destination thumbnail beneath the landed copy, then
+        // crossfade the copy away — masking the swap kills the landing
+        // flash a hard cut produces.
+        runOnJS(onClosingArrived)(handoffKey);
+        fade.value = withTiming(
+          0,
+          {
+            duration: motionDuration.instant,
+            easing: ReanimatedEasing.in(ReanimatedEasing.cubic),
+            reduceMotion: motionReduceMotion
+          },
+          (finished) => {
+            if (finished) runOnJS(onDone)(handoffKey);
+          }
+        );
         return;
       }
       fade.value = withTiming(
@@ -232,7 +253,7 @@ function ReviewHandoffOverlay({
         }
       );
     },
-    [direction, handoffKey, onDone]
+    [direction, handoffKey, onClosingArrived, onDone]
   );
 
   const animatedStyle = useAnimatedStyle(() => {
@@ -280,6 +301,7 @@ function ReviewHandoffOverlay({
     >
       <Reanimated.View style={[styles.reviewHandoffImage, imageAnimatedStyle]}>
         <Image
+          allowDownscaling={false}
           cachePolicy="memory-disk"
           contentFit="cover"
           recyclingKey={`${handoff.captureId}:${handoff.cacheKey || handoff.imageUrl}`}
@@ -616,17 +638,24 @@ export default function App() {
     reviewHandoffRef.current = reviewHandoff;
   }, [reviewHandoff]);
 
+  const findHandoffThumbnailNode = useCallback((aliases: string[]) => {
+    for (const alias of aliases) {
+      const node = captureThumbnailRefs.current[alias];
+      if (node) return node;
+    }
+    return null;
+  }, []);
+
   // Hide the source card's thumbnail while its image flies to the review
   // hero — natively (setNativeProps), so the list never re-renders for it.
-  // Closing lands the morph on the visible, pixel-identical thumbnail.
   useEffect(() => {
     if (!reviewHandoff || reviewHandoff.direction !== "opening") return;
-    const captureId = reviewHandoff.captureId;
-    captureThumbnailRefs.current[captureId]?.setNativeProps({ opacity: 0 });
+    const aliases = reviewHandoff.captureAliases;
+    findHandoffThumbnailNode(aliases)?.setNativeProps({ opacity: 0 });
     return () => {
-      captureThumbnailRefs.current[captureId]?.setNativeProps({ opacity: 1 });
+      findHandoffThumbnailNode(aliases)?.setNativeProps({ opacity: 1 });
     };
-  }, [reviewHandoff]);
+  }, [findHandoffThumbnailNode, reviewHandoff]);
 
   const markReviewHandoffReady = useCallback((key: number | null) => {
     if (!key || reviewHandoffRef.current?.key !== key) return;
@@ -706,11 +735,11 @@ export default function App() {
       }
       setClosingReviewCapture(null);
       reviewHandoffRef.current = null;
-      captureThumbnailRefs.current[handoff.captureId]?.setNativeProps({ opacity: 1 });
+      findHandoffThumbnailNode(handoff.captureAliases)?.setNativeProps({ opacity: 1 });
       setReviewHandoff(null);
       selectCaptureRef.current(null);
     };
-    const thumbnailNode = captureThumbnailRefs.current[handoff.captureId];
+    const thumbnailNode = findHandoffThumbnailNode(handoff.captureAliases);
     if (!thumbnailNode) {
       applyOriginFallback();
       return;
@@ -725,7 +754,7 @@ export default function App() {
         reviewHandoffTarget.value = normalized;
       });
     });
-  }, [normalizeHandoffWindowRect, reviewHandoffTarget]);
+  }, [findHandoffThumbnailNode, normalizeHandoffWindowRect, reviewHandoffTarget]);
 
   const closingMeasureKeyRef = useRef<number | null>(null);
 
@@ -765,6 +794,7 @@ export default function App() {
         reviewHandoffKeyRef.current = key;
         const nextHandoff: ReviewHandoffState = {
           cacheKey: captureImageCacheKey(capture),
+          captureAliases: captureIdentityAliases(capture),
           captureId: capture.id,
           direction: "opening",
           from,
@@ -1485,13 +1515,19 @@ export default function App() {
     resetCollectionDetailScroll();
   }, [resetCollectionDetailScroll, selectCapture, selectCollection]);
 
+  const handleClosingHandoffArrived = useCallback((key: number) => {
+    const current = reviewHandoffRef.current;
+    if (!current || current.key !== key) return;
+    findHandoffThumbnailNode(current.captureAliases)?.setNativeProps({ opacity: 1 });
+  }, [findHandoffThumbnailNode]);
+
   const finishReviewHandoff = useCallback((key: number) => {
     const current = reviewHandoffRef.current;
     if (!current || current.key !== key) return;
     reviewHandoffRef.current = null;
     // Restore the destination thumbnail in the same task that unmounts the
-    // overlay: the morph copy is replaced by identical pixels, no double.
-    captureThumbnailRefs.current[current.captureId]?.setNativeProps({ opacity: 1 });
+    // overlay (idempotent with the landing crossfade restore).
+    findHandoffThumbnailNode(current.captureAliases)?.setNativeProps({ opacity: 1 });
     setReviewHandoff(null);
     if (current.direction === "closing") {
       setClosingReviewCapture(null);
@@ -1562,6 +1598,7 @@ export default function App() {
       reviewHandoffKeyRef.current = key;
       const nextHandoff: ReviewHandoffState = {
         cacheKey: captureImageCacheKey(capture),
+        captureAliases: captureIdentityAliases(capture),
         captureId: capture.id,
         direction: "closing",
         from,
@@ -1583,9 +1620,8 @@ export default function App() {
         origin && origin.captureId === capture.id ? origin.rect : null;
       reviewHandoffRef.current = nextHandoff;
       // Hide the destination thumbnail for the flight so the returning image
-      // is the only copy on screen; finishReviewHandoff restores it the
-      // moment the morph lands on it.
-      captureThumbnailRefs.current[capture.id]?.setNativeProps({ opacity: 0 });
+      // is the only copy on screen; the landing crossfade restores it.
+      findHandoffThumbnailNode(nextHandoff.captureAliases)?.setNativeProps({ opacity: 0 });
       // Keep the capture selected (drafts and all) while the return morph
       // runs — clearing it here visibly blanked the still-fading screen.
       // finishReviewHandoff deselects once the morph lands.
@@ -3387,7 +3423,13 @@ export default function App() {
   }
 
   function renderCaptureReviewScreen(capture: Capture) {
-    const activeReviewHandoff = reviewHandoff?.captureId === capture.id ? reviewHandoff : null;
+    const activeReviewHandoff =
+      reviewHandoff &&
+      reviewHandoff.captureAliases.some(
+        (alias) => alias === capture.id || alias === capture.remoteId
+      )
+        ? reviewHandoff
+        : null;
     // The hero/chrome reveal under the crossfade is worklet-driven from
     // reviewHandoffFade inside the screen; these flags change only at handoff
     // start and finish.
@@ -3573,6 +3615,7 @@ export default function App() {
             fade={reviewHandoffFade}
             handoff={reviewHandoff}
             heroReady={reviewHandoffHeroReady}
+            onClosingArrived={handleClosingHandoffArrived}
             onDone={finishReviewHandoff}
             progress={reviewHandoffProgress}
             target={reviewHandoffTarget}
