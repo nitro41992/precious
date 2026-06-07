@@ -215,42 +215,25 @@ function ReviewHandoffOverlay({
     [direction, handoffKey, morphDuration]
   );
 
-  // Resolve: closing hands control back on arrival; opening crossfades out
-  // over the now-revealed hero instead of a hard cut, so the swap can never
-  // flash and the chrome reveals beneath this fade in parallel.
+  // Resolve with an ATOMIC same-frame swap, never a crossfade: dissolving
+  // between two copies of the same pixels dips to ~75% combined opacity at
+  // the midpoint and lets the background shimmer through — that dip IS a
+  // flicker. The copy and its counterpart (hero / thumbnail) are pixel-
+  // identical by construction (pinned source, decode parity, measured rect),
+  // so flipping `fade` to 0 swaps them invisibly: the overlay's opacity and
+  // the hero's reveal both read `fade` and flip on the same UI frame.
   useAnimatedReaction(
     () => arrived.value && (direction === "closing" || heroReady.value),
     (resolve, wasResolving) => {
       if (!resolve || wasResolving) return;
       if (direction === "closing") {
-        // Restore the destination thumbnail beneath the landed copy, then
-        // crossfade the copy away — masking the swap kills the landing
-        // flash a hard cut produces.
+        // JS restores the destination thumbnail first, then hides the copy
+        // and finishes — ordered in one task so the card is never empty.
         runOnJS(onClosingArrived)(handoffKey);
-        fade.value = withTiming(
-          0,
-          {
-            duration: motionDuration.instant,
-            easing: ReanimatedEasing.in(ReanimatedEasing.cubic),
-            reduceMotion: motionReduceMotion
-          },
-          (finished) => {
-            if (finished) runOnJS(onDone)(handoffKey);
-          }
-        );
         return;
       }
-      fade.value = withTiming(
-        0,
-        {
-          duration: motionDuration.exit,
-          easing: ReanimatedEasing.in(ReanimatedEasing.cubic),
-          reduceMotion: motionReduceMotion
-        },
-        (finished) => {
-          if (finished) runOnJS(onDone)(handoffKey);
-        }
-      );
+      fade.value = 0;
+      runOnJS(onDone)(handoffKey);
     },
     [direction, handoffKey, onClosingArrived, onDone]
   );
@@ -1514,12 +1497,6 @@ export default function App() {
     resetCollectionDetailScroll();
   }, [resetCollectionDetailScroll, selectCapture, selectCollection]);
 
-  const handleClosingHandoffArrived = useCallback((key: number) => {
-    const current = reviewHandoffRef.current;
-    if (!current || current.key !== key) return;
-    findHandoffThumbnailNode(current.captureAliases)?.setNativeProps({ opacity: 1 });
-  }, [findHandoffThumbnailNode]);
-
   const finishReviewHandoff = useCallback((key: number) => {
     const current = reviewHandoffRef.current;
     if (!current || current.key !== key) return;
@@ -1537,6 +1514,16 @@ export default function App() {
       selectCapture(null);
     }
   }, [returnToCollectionDetail, selectCapture]);
+
+  const handleClosingHandoffArrived = useCallback((key: number) => {
+    const current = reviewHandoffRef.current;
+    if (!current || current.key !== key) return;
+    // Atomic landing: thumbnail visible, copy hidden, teardown — ordered in
+    // one task so the swap is a same-frame replacement of identical pixels.
+    findHandoffThumbnailNode(current.captureAliases)?.setNativeProps({ opacity: 1 });
+    reviewHandoffFade.value = 0;
+    finishReviewHandoff(key);
+  }, [findHandoffThumbnailNode, finishReviewHandoff, reviewHandoffFade]);
 
   const openCapture = useCallback(
     (captureId: string | null) => {

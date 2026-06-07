@@ -561,12 +561,13 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     ]
   }));
   const hideHeroImageForHandoff = hideReviewHeroForHandoff;
-  // During an opening handoff the live hero fades in underneath the morph
-  // overlay's crossfade — both read reviewHandoffFade on the UI thread, so
-  // the swap is a true crossfade with no React commit involved.
+  // The hero appears in the SAME UI frame the morph copy disappears (both
+  // worklets read reviewHandoffFade, flipped 1 -> 0 atomically at landing).
+  // Never a crossfade: dissolving two copies of identical pixels dips the
+  // combined opacity mid-blend and the background shimmers through.
   const reviewHeroVisibilityStyle = useAnimatedStyle(() => {
     if (hideHeroImageForHandoff) return { opacity: 0 };
-    if (animateReviewChromeForHandoff) return { opacity: 1 - reviewHandoffFade.value };
+    if (animateReviewChromeForHandoff) return { opacity: reviewHandoffFade.value < 1 ? 1 : 0 };
     return { opacity: 1 };
   });
   const reviewDetailMotion = useSharedValue(animateReviewChromeForHandoff ? 0 : 1);
