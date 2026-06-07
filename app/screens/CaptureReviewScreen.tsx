@@ -868,7 +868,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
         height: stageHeight - reviewMediaStatusInset - 16,
         radius: 18
       };
-      console.log("[JUT] close.takeoff", JSON.stringify({ layoutY, scrollY, statusInset: reviewMediaStatusInset, stageHeight, y: rect.y, h: rect.height, x: rect.x, w: rect.width }));
       // Scrolled mostly out of view: nothing to hand off — close plainly
       // instead of flying an unclipped copy across content.
       if (rect.y < -rect.height * 0.5) {

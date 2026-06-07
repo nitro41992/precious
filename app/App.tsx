@@ -806,7 +806,6 @@ export default function App() {
   const markReviewHandoffTarget = useCallback((key: number | null, rect: ReviewHandoffRect) => {
     normalizeHandoffWindowRect(rect, (normalized) => {
       reviewHeroRectRef.current = normalized;
-      console.log("[JUT] hero.target", JSON.stringify({ rawY: rect.y, rawH: rect.height, y: normalized.y, h: normalized.height, dir: reviewHandoffRef.current?.direction }));
       if (!key || reviewHandoffRef.current?.key !== key) return;
       // Only opening handoffs target the hero. During closing the review
       // screen re-measures its hero with the closing key; writing that rect
@@ -856,7 +855,6 @@ export default function App() {
         return;
       }
       normalizeHandoffWindowRect({ x, y, width, height, radius: 14 }, (normalized) => {
-        console.log("[JUT] close.landing", JSON.stringify({ id: handoff.captureId, rawY: y, rawH: height, y: normalized.y, h: normalized.height, x: normalized.x, w: normalized.width }));
         if (reviewHandoffRef.current?.key !== handoff.key) return;
         reviewHandoffTarget.value = normalized;
       });
@@ -909,7 +907,6 @@ export default function App() {
         return;
       }
       normalizeHandoffWindowRect({ x, y, width, height, radius: 14 }, (from) => {
-        console.log("[JUT] open.from", JSON.stringify({ id: capture.id, rawY: y, rawH: height, y: from.y, h: from.height, x: from.x, w: from.width }));
         const key = reviewHandoffKeyRef.current + 1;
         reviewHandoffKeyRef.current = key;
         const nextHandoff: ReviewHandoffState = {
