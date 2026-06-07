@@ -167,16 +167,18 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     );
   }
 
-  // No per-row entering/exiting here: the detail screen animates as one pane,
-  // and row exit animations that outlive the unmounting screen leave orphaned
-  // Reanimated snapshots floating over the list behind it. Layout transitions
-  // are safe (they never outlive an unmount) and keep remove-from-collection
-  // reflows smooth.
-  function renderCollectionCapture({ item }: { item: Capture; index?: number }) {
+  // No per-row exiting here: row exit animations that outlive the unmounting
+  // screen leave orphaned Reanimated snapshots floating over the list behind
+  // it — the screen-level pane transition covers departure. Entering and
+  // layout are safe (they never outlive an unmount): entering softens rows
+  // that arrive after first paint (the cache-first refresh, pagination), and
+  // layout keeps remove-from-collection reflows smooth.
+  function renderCollectionCapture({ item, index = 0 }: { item: Capture; index?: number }) {
     const collection = input.selectedCollection;
     if (!collection) return null;
     return (
       <Reanimated.View
+        entering={input.screenHandoffActive ? undefined : rowEntering(index)}
         layout={input.screenHandoffActive ? undefined : rowLayout}
         style={styles.collectionCaptureRow}
       >
