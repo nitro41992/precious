@@ -391,3 +391,35 @@ test("captureFromRemote can expose source preview without user media", () => {
   assert.equal(capture.sourcePreviewAssetUrl, "https://storage.example.com/source-preview.jpg");
   assert.equal(capture.sourcePreviewAssetMimeType, "image/jpeg");
 });
+
+test("captureFromRemote maps the full-res asset url and versioned cache keys", () => {
+  const { captureFromRemote } = loadRemoteData();
+  const capture = captureFromRemote({
+    id: "full-asset-capture",
+    client_capture_key: "full-asset-capture",
+    created_at: "2026-06-05T07:22:09.169Z",
+    updated_at: "2026-06-05T07:22:10.914Z",
+    display_title: "Uploaded photo",
+    capture_type: "image",
+    analysis_state: "ready",
+    capture_assets: [
+      {
+        asset_role: "capture_media",
+        mime_type: "image/png",
+        signed_url: "https://storage.example.com/uploaded.png?variant=detail",
+        signed_url_cache_key: "user/capture/uploaded.png:detail:v2",
+        signed_full_url: "https://storage.example.com/uploaded.png?variant=viewer",
+        signed_full_url_cache_key: "user/capture/uploaded.png:viewer:v2"
+      }
+    ],
+    analysis: {}
+  });
+
+  // The hero upgrade depends on the full-res variant + its distinct cache key
+  // surviving the remote -> Capture mapping.
+  assert.equal(capture.imageAssetUrl, "https://storage.example.com/uploaded.png?variant=detail");
+  assert.equal(capture.imageAssetCacheKey, "user/capture/uploaded.png:detail:v2");
+  assert.equal(capture.imageAssetFullUrl, "https://storage.example.com/uploaded.png?variant=viewer");
+  assert.equal(capture.imageAssetFullCacheKey, "user/capture/uploaded.png:viewer:v2");
+  assert.notEqual(capture.imageAssetCacheKey, capture.imageAssetFullCacheKey);
+});

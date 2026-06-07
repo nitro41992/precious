@@ -411,6 +411,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const selectedFullImageUrl = captureFullImageUrl(selected);
   const selectedFullImageCacheKey = captureFullImageCacheKey(selected);
   const [failedReviewImageUris, setFailedReviewImageUris] = useState<Set<string>>(() => new Set());
+  const [loadedReviewImageUris, setLoadedReviewImageUris] = useState<Set<string>>(() => new Set());
   const heroCandidateUrl = [selectedImageUrl, selectedFullImageUrl]
     .filter((url, index, urls) => Boolean(url) && urls.indexOf(url) === index)
     .find((url) => !failedReviewImageUris.has(url)) || "";
@@ -420,13 +421,11 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       : heroCandidateUrl === selectedFullImageUrl
         ? selectedFullImageCacheKey
         : "";
-  // Pin the hero source for the lifetime of this capture view. Detail
-  // hydration upgrades the capture's image fields right after the open
-  // animation (legacy captures gain imageAssetUrl) — a different source has
-  // a different intrinsic aspect ratio under cover, so adopting it mid-view
-  // visibly re-crops/re-zooms the hero out of its scroll-prepared state.
-  // The morph flew the open-time URL; keep rendering exactly that. Upgrades
-  // apply on the next open. Failed pins fall through to the next candidate.
+  // Pin the hero source through the open flight. The morph flies the row
+  // thumbnail's DISPLAYED pixels; the hero must show those exact pixels or the
+  // landing visibly re-crops. We hold the pin until the flight has fully landed
+  // (see the post-landing upgrade below), then swap up to a higher-res variant.
+  // Failed pins fall through to the next candidate.
   const pinnedHeroRef = useRef<{ captureId: string; url: string; cacheKey: string } | null>(null);
   if (pinnedHeroRef.current && pinnedHeroRef.current.captureId !== selected.id) {
     pinnedHeroRef.current = null;
@@ -458,8 +457,49 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       };
     }
   }
-  const selectedHeroImageUrl = pinnedHeroRef.current?.url || heroCandidateUrl;
-  const selectedHeroImageCacheKey = pinnedHeroRef.current?.cacheKey || heroCandidateCacheKey;
+  // Post-landing resolution upgrade. All server image variants now share the
+  // original's intrinsic aspect ratio, so under contentFit="cover" swapping the
+  // pinned (often low-res thumb) source for the highest-res variant re-frames
+  // identically — the hero just sharpens in place. We only swap once the open
+  // flight has fully landed (reviewHandoffKey == null, so we never re-aim a
+  // copy mid-flight) and the upgrade source has actually decoded (it's in the
+  // loaded set, fed by the prefetch effect below). A failed upgrade clears and
+  // falls back to the pin.
+  const adoptedUpgradeRef = useRef<{ captureId: string; url: string; cacheKey: string } | null>(null);
+  if (adoptedUpgradeRef.current && adoptedUpgradeRef.current.captureId !== selected.id) {
+    adoptedUpgradeRef.current = null;
+  }
+  if (adoptedUpgradeRef.current && failedReviewImageUris.has(adoptedUpgradeRef.current.url)) {
+    adoptedUpgradeRef.current = null;
+  }
+  const pinnedHeroUrl = pinnedHeroRef.current?.url || "";
+  const bestUpgradeSourceUrl = [selectedFullImageUrl, selectedImageUrl]
+    .filter(Boolean)
+    .find((url) => !failedReviewImageUris.has(url)) || "";
+  const upgradeCandidateUrl =
+    bestUpgradeSourceUrl && bestUpgradeSourceUrl !== pinnedHeroUrl ? bestUpgradeSourceUrl : "";
+  const upgradeCandidateCacheKey =
+    upgradeCandidateUrl === selectedFullImageUrl
+      ? selectedFullImageCacheKey
+      : upgradeCandidateUrl === selectedImageUrl
+        ? selectedImageCacheKey
+        : "";
+  if (
+    !adoptedUpgradeRef.current &&
+    reviewHandoffKey == null &&
+    upgradeCandidateUrl &&
+    loadedReviewImageUris.has(upgradeCandidateUrl)
+  ) {
+    adoptedUpgradeRef.current = {
+      cacheKey: upgradeCandidateCacheKey,
+      captureId: selected.id,
+      url: upgradeCandidateUrl
+    };
+  }
+  const selectedHeroImageUrl =
+    adoptedUpgradeRef.current?.url || pinnedHeroRef.current?.url || heroCandidateUrl;
+  const selectedHeroImageCacheKey =
+    adoptedUpgradeRef.current?.cacheKey || pinnedHeroRef.current?.cacheKey || heroCandidateCacheKey;
   // Keyed by capture identity: recyclingKey resets the view to blank when it
   // changes, which must only happen when the hero shows a different capture —
   // never when detail hydration upgrades this capture's source (legacy
@@ -472,7 +512,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       : { uri: selectedHeroImageUrl },
     [selectedHeroImageCacheKey, selectedHeroImageUrl]
   );
-  const [loadedReviewImageUris, setLoadedReviewImageUris] = useState<Set<string>>(() => new Set());
   // Two-stage mount: the first commit renders only the media stage so the
   // handoff can measure the hero and start immediately; the detail plane and
   // sheets (opacity 0 during the morph anyway) mount on the next frame.
@@ -720,9 +759,23 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   useEffect(() => {
     const imageUrls = Array.from(new Set([selectedImageUrl, selectedFullImageUrl].filter(Boolean)));
     if (!imageUrls.length) return;
-    void Image.prefetch(imageUrls, "memory-disk").catch(() => {
-      // Display rendering still handles image failures; this only warms review media.
-    });
+    let cancelled = false;
+    // Warm review media off-screen AND record which URLs have decoded. The hero
+    // only ever renders the pinned source, so its onLoad never fires for the
+    // upgrade variant — this prefetch resolution is the loaded signal the
+    // post-landing upgrade gates on, so the swap is a cache hit with no flash.
+    for (const url of imageUrls) {
+      void Image.prefetch(url, "memory-disk")
+        .then((loaded) => {
+          if (!cancelled && loaded) markReviewImageLoaded(url);
+        })
+        .catch(() => {
+          // Display rendering still handles image failures; this only warms review media.
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
   }, [selectedFullImageUrl, selectedImageUrl]);
 
   function markReviewImageLoaded(imageUri: string) {

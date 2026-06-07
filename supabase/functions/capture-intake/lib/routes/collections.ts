@@ -2,7 +2,7 @@ import { adminClient } from "../supabase.ts";
 import { COLLECTION_LIST_SELECT } from "../config.ts";
 import { boundedLimit, isUuid } from "../common.ts";
 import { json } from "../http.ts";
-import { signedCaptureAssetUrl } from "../capture-records.ts";
+import { captureAssetCacheKey, signedCaptureAssetUrl } from "../capture-records.ts";
 import { SOURCE_PREVIEW_ROLE } from "../source-previews.ts";
 import { activeCollectionCounts, collectionFromRow, linkCaptureToCollection } from "../collections/links.ts";
 import { scheduleCaptureEmbeddingRefresh, scheduleCollectionCaptureEmbeddingsRefresh, upsertCollectionEmbedding } from "../collections/embeddings.ts";
@@ -81,9 +81,9 @@ async function signedCollectionPreviewCaptures(
           : null;
         const primaryImageUrl = signedUrl || publicUrl || signedSourcePreviewUrl || sourcePreviewPublicUrl || null;
         const primaryCacheKey = storagePath
-          ? `${storagePath}:thumb`
+          ? captureAssetCacheKey(storagePath, "thumb")
           : sourcePreviewStoragePath
-            ? `${sourcePreviewStoragePath}:thumb`
+            ? captureAssetCacheKey(sourcePreviewStoragePath, "thumb")
             : null;
         return {
           id: String(item.id || remoteId || ""),
@@ -98,7 +98,7 @@ async function signedCollectionPreviewCaptures(
           image_asset_cache_key: primaryCacheKey,
           image_asset_mime_type: item.image_asset_mime_type || null,
           source_preview_asset_url: signedSourcePreviewUrl || sourcePreviewPublicUrl || null,
-          source_preview_asset_cache_key: sourcePreviewStoragePath ? `${sourcePreviewStoragePath}:thumb` : null,
+          source_preview_asset_cache_key: sourcePreviewStoragePath ? captureAssetCacheKey(sourcePreviewStoragePath, "thumb") : null,
           source_preview_asset_mime_type: sourcePreviewMimeType || null,
           linked_at: item.linked_at || null,
         };

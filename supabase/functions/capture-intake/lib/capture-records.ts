@@ -97,14 +97,32 @@ export function withCaptureStates(rows: any[]) {
 
 export const CAPTURE_ASSET_SIGNED_URL_TTL_SECONDS = 60 * 60 * 24 * 7;
 
+// Bump whenever CAPTURE_IMAGE_TRANSFORMS params change. Client expo-image disk
+// caches are keyed by the cache keys we emit below, so a version token is the
+// only thing that forces clients to re-fetch the new pixels instead of reusing
+// stale ones (e.g. the old square-cover thumbs, whose aspect differs).
+export const CAPTURE_ASSET_CACHE_VERSION = "v2";
+
+// All variants use "contain" so every variant shares the original's intrinsic
+// aspect ratio. The client renders with contentFit="cover", which crops two
+// same-aspect sources to identical framing — that lets the review hero upgrade
+// from thumb to a higher-res variant mid-view without re-cropping (see
+// CaptureReviewScreen hero upgrade).
 export const CAPTURE_IMAGE_TRANSFORMS: Record<
   CaptureImageVariant,
   { width: number; height: number; resize: "cover" | "contain"; quality: number }
 > = {
-  thumb: { width: 320, height: 320, resize: "cover", quality: 82 },
-  detail: { width: 1280, height: 744, resize: "cover", quality: 82 },
+  thumb: { width: 640, height: 640, resize: "contain", quality: 80 },
+  detail: { width: 1280, height: 1280, resize: "contain", quality: 85 },
   viewer: { width: 2048, height: 2048, resize: "contain", quality: 88 },
 };
+
+export function captureAssetCacheKey(
+  storagePath: string,
+  variant: CaptureImageVariant,
+) {
+  return `${storagePath}:${variant}:${CAPTURE_ASSET_CACHE_VERSION}`;
+}
 
 export async function signedCaptureAssetUrl(
   supabase: ReturnType<typeof adminClient>,
@@ -164,9 +182,11 @@ export async function withSignedCaptureAssets(
         signed_url: signedUrl,
         signed_url_variant: variant,
         signed_url_expires_in: CAPTURE_ASSET_SIGNED_URL_TTL_SECONDS,
-        signed_url_cache_key: `${storagePath}:${variant}`,
+        signed_url_cache_key: captureAssetCacheKey(storagePath, variant),
         signed_full_url: signedFullUrl,
-        signed_full_url_cache_key: signedFullUrl ? `${storagePath}:viewer` : null,
+        signed_full_url_cache_key: signedFullUrl
+          ? captureAssetCacheKey(storagePath, "viewer")
+          : null,
       };
     }),
   );
