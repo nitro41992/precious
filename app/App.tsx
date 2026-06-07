@@ -1934,6 +1934,15 @@ export default function App() {
   // stays set, so the sheet renders its edit header and delete row). No
   // keyboard priming — the sheet opens calm with the keyboard down.
   function openCollectionEditor() {
+    // Re-seed from the current collection on every open. The draft-sync effect
+    // only fires when selectedCollectionId/collections change, so reopening the
+    // editor for the same collection (e.g. after a gesture-back that cleared the
+    // fields) would otherwise leave the sheet blank.
+    const collection = selectedCollectionRef.current;
+    if (collection) {
+      setCollectionTitle(collection.title);
+      setCollectionDescription(collection.description);
+    }
     setCollectionDraftDirty(false);
     captureComposerMotion.stopAnimation();
     captureKeyboardInset.stopAnimation();
