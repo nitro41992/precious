@@ -3186,7 +3186,7 @@ export const styles = StyleSheet.create({
     zIndex: 32
   },
   toastAboveBottomNav: {
-    bottom: Platform.OS === "android" ? 124 : 128
+    bottom: Platform.OS === "android" ? 100 : 104
   },
   toastAboveFooter: {
     bottom: Platform.OS === "android" ? 94 : 104
