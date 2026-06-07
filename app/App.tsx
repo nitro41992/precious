@@ -332,10 +332,18 @@ function ScreenOverlayFrame({
     };
   });
 
+  // The animated style is attached ONLY while a handoff is in flight. The
+  // worklet-driven opacity lives on the UI thread; the COMMITTED opacity is
+  // whatever the frame mounted with (0 — the open morph's takeoff frame).
+  // Android can detach and re-attach the React surface while the app is
+  // backgrounded (leave via an external link, return through the app
+  // switcher), and the re-mount restores committed props: the screen came
+  // back alpha-0 yet still owned every touch. Steady-state visibility must
+  // be a committed prop, so the resting frame swaps to a plain opacity 1.
   return (
     <Reanimated.View
       pointerEvents={handoff ? "none" : "auto"}
-      style={[styles.screenOverlay, animatedStyle]}
+      style={[styles.screenOverlay, handoff ? animatedStyle : styles.screenOverlayResting]}
     >
       {children}
     </Reanimated.View>

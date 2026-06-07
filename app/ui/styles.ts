@@ -76,6 +76,12 @@ export const styles = StyleSheet.create({
     top: 0,
     zIndex: 40
   },
+  // Committed resting visibility for the overlay frame: a surface re-attach
+  // restores committed props, so opacity 1 must not live only in the
+  // handoff's UI-thread animated style (see ScreenOverlayFrame).
+  screenOverlayResting: {
+    opacity: 1
+  },
   reviewHandoffOverlay: {
     // Transparent until the copy's image displays: an opaque background
     // would blank the card it covers for the first frames of the flight.
