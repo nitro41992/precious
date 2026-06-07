@@ -105,6 +105,11 @@ export function CaptureRow({
   const row = (
     <MotionPressable
       onPress={onPress}
+      // No press scale: this row is the shared-element source for the review
+      // handoff. The morph copy takes off from the measured layout rect, so
+      // a press-scaled card makes the content jut when the copy appears.
+      // The pressed background dim is the press feedback instead.
+      pressScale={1}
       style={({ pressed }) => [
         styles.captureRow,
         carded && styles.captureRowCard,

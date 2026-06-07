@@ -810,9 +810,11 @@ export const styles = StyleSheet.create({
     paddingVertical: 14,
     ...softCardShadow
   },
+  // Press feedback for capture rows is dim-only: the row is a shared-element
+  // source, and any press scale leaves the card mid-restore when the morph
+  // copy appears at the unscaled layout rect — the content visibly juts.
   captureRowCardPressed: {
-    backgroundColor: colors.surfaceContainer,
-    transform: [{ scale: 0.99 }]
+    backgroundColor: colors.surfaceContainer
   },
   subtlePressed: {
     backgroundColor: colors.surfaceContainerHigh,

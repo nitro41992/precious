@@ -200,11 +200,19 @@ function ReviewHandoffOverlay({
     (hasTarget, hadTarget) => {
       if (!hasTarget || hadTarget || cancelled.value) return;
       progress.value = 0;
+      // Closing lands with out-quart: the emphasized bezier's deceleration
+      // tail spends its last ~50ms visibly creeping the final few pixels
+      // into the thumbnail slot, which reads as the image "settling" after
+      // the animation already ended. Out-quart front-loads the travel and
+      // its terminal creep stays under a pixel — the landing is final.
       progress.value = withTiming(
         1,
         {
           duration: morphDuration,
-          easing: ReanimatedEasing.bezier(0.2, 0, 0, 1),
+          easing:
+            direction === "closing"
+              ? ReanimatedEasing.out(ReanimatedEasing.poly(4))
+              : ReanimatedEasing.bezier(0.2, 0, 0, 1),
           reduceMotion: motionReduceMotion
         },
         (finished) => {
