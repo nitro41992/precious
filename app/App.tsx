@@ -898,8 +898,19 @@ export default function App() {
     // with a different crop at takeoff, and mismatch again at the close
     // landing. The displayed source is ground truth for both ends.
     const displayed = displayedRowImagesRef.current.get(capture.id);
-    const imageUrl = displayed?.url || captureImageUrl(capture);
+    // Don't treat a failed image as flyable. The row only paints an image when
+    // one loads; a failed load leaves the icon on screen, so flying
+    // captureImageUrl there flew pixels the user never saw AND stranded the
+    // morph when the hero image failed too (the icon vanished, nothing opened).
+    // A failed image → no imageUrl → the link takes the editorial open path
+    // below. "Displayed" or "still loading" still counts as an image.
+    const loadKey = captureImageLoadKey(capture);
+    const rowImageFailed = Boolean(loadKey && captureImageLoadStatesRef.current[loadKey] === "failed");
+    const imageUrl = displayed?.url || (rowImageFailed ? "" : captureImageUrl(capture));
     const thumbnailNode = captureThumbnailRefs.current[`${sourceSurface}:${capture.id}`];
+    // No image to fly → no shared-element morph: the link opens to the
+    // editorial (title-led) detail with its own fade-rise entrance. This also
+    // means a failed/absent image can never strand a half-started morph.
     if (!imageUrl || !thumbnailNode) {
       open();
       return;

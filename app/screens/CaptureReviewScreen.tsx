@@ -53,7 +53,6 @@ import {
   captureFullImageUrl,
   captureImageCacheKey,
   captureImageUrl,
-  captureIntentLabel,
   captureOpenUrl,
   captureReviewSourceLabel,
   captureSourceLabel,
@@ -663,6 +662,28 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     ]
   }));
 
+  // Links with no preview image open straight to the editorial (title-led)
+  // detail — there is no hero to morph from, so the whole screen fades and
+  // rises in as one piece. Image captures keep their shared-element morph.
+  const reviewIsEditorial = !selectedHeroImageUrl;
+  const editorialEnter = useSharedValue(reviewIsEditorial ? 0 : 1);
+  useEffect(() => {
+    if (!reviewIsEditorial) {
+      editorialEnter.value = 1;
+      return;
+    }
+    editorialEnter.value = 0;
+    editorialEnter.value = withTiming(1, {
+      duration: motionDuration.enter,
+      easing: motionEasing.standard,
+      reduceMotion: motionReduceMotion
+    });
+  }, [editorialEnter, reviewIsEditorial, selected.id]);
+  const editorialEnterStyle = useAnimatedStyle(() => ({
+    opacity: editorialEnter.value,
+    transform: [{ translateY: (1 - editorialEnter.value) * 14 }]
+  }));
+
   const reviewHandoffWasActiveRef = useRef(animateReviewChromeForHandoff);
 
   useEffect(() => {
@@ -826,6 +847,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
 
   function closeReviewFromHero() {
     if (!selectedHeroImageUrl) {
+      // Editorial (no-image) detail has no hero to morph from — it fades out.
       closeReview();
       return;
     }
@@ -886,6 +908,59 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     });
   }
 
+  // Back / status / delete — shared by the image hero (floating over the
+  // media) and the editorial header (in normal flow above the title).
+  const topControls = (
+    <>
+      <MotionPressable
+        accessibilityLabel="Back"
+        accessibilityRole="button"
+        hitSlop={8}
+        onPress={closeReviewFromHero}
+        style={({ pressed }) => [
+          styles.reviewMediaIconButton,
+          // White circle with a dark icon everywhere, matching the delete
+          // button — on the editorial paper and over photo heroes alike.
+          styles.reviewMediaIconButtonInverse,
+          pressed && styles.subtlePressed
+        ]}
+      >
+        <ArrowLeft color={colors.ink} size={22} weight="regular" />
+      </MotionPressable>
+      <View style={styles.reviewMediaRightControls}>
+        {showStatus ? (
+          selectedStatus === "processing" ? (
+            <ProcessingStatusPill label={captureStatusLabel(selected)} variant="review" />
+          ) : (
+            <Text
+              style={[
+                styles.reviewMediaStatusPill,
+                selectedStatus === "needs_review" && styles.statusReview,
+                selectedStatus === "failed" && styles.statusFailed
+              ]}
+            >
+              {captureStatusLabel(selected)}
+            </Text>
+          )
+        ) : null}
+        <MotionPressable
+          accessibilityLabel="Delete capture"
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={deleteCapture}
+          style={({ pressed }) => [
+            styles.reviewMediaIconButton,
+            styles.reviewMediaDangerButton,
+            pressed && styles.subtlePressed
+          ]}
+          testID="pc.capture.delete"
+        >
+          <Trash2 color={colors.danger} size={21} weight="regular" />
+        </MotionPressable>
+      </View>
+    </>
+  );
+
   return (
     <View style={styles.reviewSafe}>
       <StatusBar backgroundColor={colors.transparent} barStyle={appTheme.statusBarStyle} translucent />
@@ -920,141 +995,98 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
               showsHorizontalScrollIndicator={false}
               showsVerticalScrollIndicator={false}
             >
-              <Reanimated.View style={[styles.reviewMediaStage, reviewMediaStageStyle]}>
-                <MotionPressable
-                  collapsable={false}
-                  ref={reviewHeroFrameRef}
-                  accessibilityHint={
-                    selectedMediaOpensImage
-                      ? "Opens the full image viewer"
-                      : selectedOpenUrl
-                        ? "Opens the saved source"
-                        : undefined
-                  }
-                  accessibilityLabel={
-                    selectedMediaOpensImage
-                      ? "Open full image"
-                      : selectedOpenUrl
-                        ? "Open saved source"
-                        : undefined
-                  }
-                  accessibilityRole={selectedMediaPressEnabled ? "button" : undefined}
-                  disabled={!selectedMediaPressEnabled}
-                  onPress={() => {
-                    if (selectedMediaOpensImage) {
-                      setImageViewerSource({
-                        cacheKey: selectedFullImageUrl ? selectedFullImageCacheKey : selectedImageCacheKey,
-                        url: selectedFullImageUrl || selectedImageUrl
-                      });
-                      setImageViewerOpen(true);
-                      return;
-                    }
-                    if (selectedOpenUrl) void openCaptureUrl(selectedOpenUrl);
-                  }}
-                  style={({ pressed }) => [
-                    styles.reviewMediaHeader,
-                    selectedHeroImageUrl ? styles.reviewMediaHeaderImage : styles.reviewMediaHeaderFallback,
-                    pressed && selectedMediaPressEnabled && styles.subtlePressed
-                  ]}
-                  testID="pc.review.media"
+              {reviewIsEditorial ? (
+                // No preview image: skip the tall media hero entirely. A
+                // compact control bar sits over the paper and the title (in
+                // the detail plane below) becomes the hero.
+                <Reanimated.View
+                  pointerEvents="box-none"
+                  style={[styles.reviewEditorialBar, editorialEnterStyle]}
                 >
-                  {selectedHeroImageUrl ? (
-                    <>
-                      <Reanimated.View
-                        style={[
-                          styles.reviewMediaImageFrame,
-                          reviewHeroVisibilityStyle,
-                          reviewMediaImageStyle
-                        ]}
-                      >
-                        <Image
-                          // Decode at full quality like the morph overlay
-                          // copy does: the crossfade hands over between the
-                          // two, and a downscaled-vs-full decode of the same
-                          // source reads as a subtle flicker at the seam.
-                          allowDownscaling={false}
-                          cachePolicy="memory-disk"
-                          contentFit="cover"
-                          onDisplay={() => markReviewImageDisplayed(selectedHeroImageUrl)}
-                          onError={() => markReviewImageFailed(selectedHeroImageUrl)}
-                          onLoad={() => markReviewImageLoaded(selectedHeroImageUrl)}
-                          recyclingKey={selectedHeroImageRenderKey}
-                          source={selectedHeroImageSource}
-                          style={styles.reviewMediaImage}
-                        />
-                      </Reanimated.View>
-                      <Reanimated.View style={[styles.reviewMediaOverlay, reviewMediaChromeStyle]}>
-                        <View style={styles.reviewMediaSourcePill}>
-                          <Text numberOfLines={1} style={styles.reviewMediaSourceText}>
-                            {captureSourceLabel(selected)}
-                          </Text>
-                        </View>
-                      </Reanimated.View>
-                    </>
-                  ) : (
-                    <View style={styles.reviewMediaFallbackContent}>
-                      <SourceMark
-                        capture={selected}
-                        failedFavicons={faviconFailures}
-                        onFaviconFailure={markFaviconFailed}
-                        size="detail"
+                  {topControls}
+                </Reanimated.View>
+              ) : (
+                <Reanimated.View style={[styles.reviewMediaStage, reviewMediaStageStyle]}>
+                  <MotionPressable
+                    collapsable={false}
+                    ref={reviewHeroFrameRef}
+                    accessibilityHint={
+                      selectedMediaOpensImage
+                        ? "Opens the full image viewer"
+                        : selectedOpenUrl
+                          ? "Opens the saved source"
+                          : undefined
+                    }
+                    accessibilityLabel={
+                      selectedMediaOpensImage
+                        ? "Open full image"
+                        : selectedOpenUrl
+                          ? "Open saved source"
+                          : undefined
+                    }
+                    accessibilityRole={selectedMediaPressEnabled ? "button" : undefined}
+                    disabled={!selectedMediaPressEnabled}
+                    onPress={() => {
+                      if (selectedMediaOpensImage) {
+                        setImageViewerSource({
+                          cacheKey: selectedFullImageUrl ? selectedFullImageCacheKey : selectedImageCacheKey,
+                          url: selectedFullImageUrl || selectedImageUrl
+                        });
+                        setImageViewerOpen(true);
+                        return;
+                      }
+                      if (selectedOpenUrl) void openCaptureUrl(selectedOpenUrl);
+                    }}
+                    style={({ pressed }) => [
+                      styles.reviewMediaHeader,
+                      styles.reviewMediaHeaderImage,
+                      pressed && selectedMediaPressEnabled && styles.subtlePressed
+                    ]}
+                    testID="pc.review.media"
+                  >
+                    <Reanimated.View
+                      style={[
+                        styles.reviewMediaImageFrame,
+                        reviewHeroVisibilityStyle,
+                        reviewMediaImageStyle
+                      ]}
+                    >
+                      <Image
+                        // Decode at full quality like the morph overlay
+                        // copy does: the crossfade hands over between the
+                        // two, and a downscaled-vs-full decode of the same
+                        // source reads as a subtle flicker at the seam.
+                        allowDownscaling={false}
+                        cachePolicy="memory-disk"
+                        contentFit="cover"
+                        onDisplay={() => markReviewImageDisplayed(selectedHeroImageUrl)}
+                        onError={() => markReviewImageFailed(selectedHeroImageUrl)}
+                        onLoad={() => markReviewImageLoaded(selectedHeroImageUrl)}
+                        recyclingKey={selectedHeroImageRenderKey}
+                        source={selectedHeroImageSource}
+                        style={styles.reviewMediaImage}
                       />
-                      <View style={styles.reviewMediaFallbackCopy}>
-                        <Text numberOfLines={1} style={styles.reviewMediaFallbackTitle}>
+                    </Reanimated.View>
+                    <Reanimated.View style={[styles.reviewMediaOverlay, reviewMediaChromeStyle]}>
+                      <View style={styles.reviewMediaSourcePill}>
+                        <Text numberOfLines={1} style={styles.reviewMediaSourceText}>
                           {captureSourceLabel(selected)}
                         </Text>
-                        <Text numberOfLines={2} style={styles.reviewMediaFallbackText}>
-                          {captureIntentLabel(selected) || captureStatusLabel(selected)}
-                        </Text>
                       </View>
-                    </View>
-                  )}
-                </MotionPressable>
-                <Reanimated.View pointerEvents="box-none" style={[styles.reviewMediaTopControls, reviewMediaChromeStyle]}>
-                  <MotionPressable
-                    accessibilityLabel="Back"
-                    accessibilityRole="button"
-                    hitSlop={8}
-                    onPress={closeReviewFromHero}
-                    style={({ pressed }) => [styles.reviewMediaIconButton, pressed && styles.subtlePressed]}
-                  >
-                    <ArrowLeft color={colors.onMediaControlStrong} size={22} weight="regular" />
+                    </Reanimated.View>
                   </MotionPressable>
-                  <View style={styles.reviewMediaRightControls}>
-                    {showStatus ? (
-                      selectedStatus === "processing" ? (
-                        <ProcessingStatusPill label={captureStatusLabel(selected)} variant="review" />
-                      ) : (
-                        <Text
-                          style={[
-                            styles.reviewMediaStatusPill,
-                            selectedStatus === "needs_review" && styles.statusReview,
-                            selectedStatus === "failed" && styles.statusFailed
-                          ]}
-                        >
-                          {captureStatusLabel(selected)}
-                        </Text>
-                      )
-                    ) : null}
-                    <MotionPressable
-                      accessibilityLabel="Delete capture"
-                      accessibilityRole="button"
-                      hitSlop={8}
-                      onPress={deleteCapture}
-                      style={({ pressed }) => [
-                        styles.reviewMediaIconButton,
-                        styles.reviewMediaDangerButton,
-                        pressed && styles.subtlePressed
-                      ]}
-                      testID="pc.capture.delete"
-                    >
-                      <Trash2 color={colors.danger} size={21} weight="regular" />
-                    </MotionPressable>
-                  </View>
+                  <Reanimated.View pointerEvents="box-none" style={[styles.reviewMediaTopControls, reviewMediaChromeStyle]}>
+                    {topControls}
+                  </Reanimated.View>
                 </Reanimated.View>
-              </Reanimated.View>
+              )}
               {deferredContentReady ? (
-                <Reanimated.View style={[styles.reviewDetailPlane, reviewDetailStyle]}>
+                <Reanimated.View
+                  style={[
+                    styles.reviewDetailPlane,
+                    reviewIsEditorial ? editorialEnterStyle : reviewDetailStyle
+                  ]}
+                >
                   <View style={styles.reviewPrimaryBlock}>
                     <MotionPressable
                       accessibilityLabel="Edit title"

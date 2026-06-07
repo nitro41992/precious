@@ -2094,12 +2094,23 @@ export const styles = StyleSheet.create({
     right: 8,
     top: Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) + 8 : 8
   },
-  reviewMediaHeaderFallback: {
+  reviewEditorialBar: {
+    // Links with no preview image have no media hero — just this control bar
+    // in normal flow over the paper, aligned to the detail content padding.
+    // The title in the detail plane below becomes the visual hero.
     alignItems: "center",
-    backgroundColor: colors.surfaceContainerHigh,
-    justifyContent: "center",
-    paddingHorizontal: 28,
-    paddingVertical: 24
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 22,
+    paddingTop: (Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) : 0) + 18,
+    // The buttons cast a soft 44px glow. paddingBottom gives it room to finish
+    // over the paper, and zIndex lifts the bar above the opaque detail plane
+    // so the shadow is never clipped by the title beneath it.
+    paddingBottom: 16,
+    zIndex: 2
+  },
+  reviewMediaIconButtonInverse: {
+    backgroundColor: colors.surface
   },
   reviewMediaImage: {
     height: "100%",
@@ -2231,31 +2242,6 @@ export const styles = StyleSheet.create({
     overflow: "hidden",
     paddingHorizontal: 10,
     paddingVertical: 7
-  },
-  reviewMediaFallbackContent: {
-    alignItems: "center",
-    gap: 14,
-    justifyContent: "center"
-  },
-  reviewMediaFallbackCopy: {
-    alignItems: "center",
-    gap: 4,
-    minWidth: 0
-  },
-  reviewMediaFallbackTitle: {
-    color: colors.ink,
-    fontSize: 20,
-    fontWeight: "800",
-    ...typefaces.displayBold,
-    lineHeight: 25,
-    textAlign: "center"
-  },
-  reviewMediaFallbackText: {
-    color: colors.muted,
-    ...typefaces.regular,
-    fontSize: 15,
-    lineHeight: 21,
-    textAlign: "center"
   },
   quickEditBlock: {
     gap: 12,
