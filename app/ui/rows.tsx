@@ -1,7 +1,7 @@
 import { memo, useCallback, useMemo, useState, type ReactElement } from "react";
 import { Animated, View } from "react-native";
 import { Image } from "expo-image";
-import { CalendarBlank, Folder, FolderMinus, ImageSquare, Lightbulb } from "phosphor-react-native";
+import { CalendarBlank, Folder, ImageSquare, Lightbulb, Trash } from "phosphor-react-native";
 import Reanimated from "react-native-reanimated";
 
 import { collectionCollageSlots, hostFromUrl } from "../captureLogic";
@@ -353,7 +353,7 @@ export const CollectionCaptureRowItem = memo(function CollectionCaptureRowItem({
       onPress={() => onUnlinkCaptureFromCollection(collectionId, capture)}
       style={({ pressed }) => [styles.collectionRemoveIconButton, pressed && styles.collectionRemoveIconButtonPressed]}
     >
-      <FolderMinus color={colors.danger} size={22} weight="regular" />
+      <Trash color={colors.danger} size={22} weight="regular" />
     </MotionPressable>
   );
   return (
