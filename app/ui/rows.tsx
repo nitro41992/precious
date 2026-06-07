@@ -39,6 +39,7 @@ type CaptureRowProps = {
   onPress: () => void;
   renderInlineSkeleton: () => ReactElement | null;
   showCollectionToken?: boolean;
+  hideThumbnail?: boolean;
   showInlineSourceIcon?: boolean;
   SkeletonBlock: SkeletonBlockRenderer;
   surface?: "plain" | "card";
@@ -61,6 +62,7 @@ export function CaptureRow({
   onPress,
   renderInlineSkeleton,
   showCollectionToken = true,
+  hideThumbnail = false,
   showInlineSourceIcon = false,
   SkeletonBlock,
   surface = "plain",
@@ -110,7 +112,7 @@ export function CaptureRow({
       ]}
       testID={testID}
     >
-      <View collapsable={false} ref={thumbnailRef}>
+      <View collapsable={false} ref={thumbnailRef} style={hideThumbnail && styles.handoffHiddenThumbnail}>
         {ghostSourceMark ? (
           <SkeletonBlock style={styles.loadingThumbnailMark} />
         ) : (
@@ -188,6 +190,7 @@ type HomeCaptureRowItemProps = {
   onOpenRecentCapture: (capture: Capture) => void;
   SkeletonBlock: SkeletonBlockRenderer;
   testID?: string;
+  thumbnailHidden: boolean;
 };
 
 // Memoized Home feed row. App-level state changes re-render the whole tree, so
@@ -212,7 +215,8 @@ export const HomeCaptureRowItem = memo(function HomeCaptureRowItem({
   onImageLoadState,
   onOpenRecentCapture,
   SkeletonBlock,
-  testID
+  testID,
+  thumbnailHidden
 }: HomeCaptureRowItemProps) {
   const onPress = useCallback(() => onOpenRecentCapture(capture), [onOpenRecentCapture, capture]);
   const thumbnailRef = useCallback(
@@ -226,6 +230,7 @@ export const HomeCaptureRowItem = memo(function HomeCaptureRowItem({
       deferFallbackIcon={deferFallbackIcon}
       failedFavicons={failedFavicons}
       forceSkeleton={forceSkeleton}
+      hideThumbnail={thumbnailHidden}
       item={capture}
       onFaviconFailure={onFaviconFailure}
       onImageLoadState={onImageLoadState}
@@ -247,6 +252,7 @@ export const HomeCaptureRowItem = memo(function HomeCaptureRowItem({
     previous.capture !== next.capture ||
     previous.deferFallbackIcon !== next.deferFallbackIcon ||
     previous.forceSkeleton !== next.forceSkeleton ||
+    previous.thumbnailHidden !== next.thumbnailHidden ||
     previous.testID !== next.testID ||
     previous.onOpenRecentCapture !== next.onOpenRecentCapture ||
     previous.onCaptureThumbnailRef !== next.onCaptureThumbnailRef ||

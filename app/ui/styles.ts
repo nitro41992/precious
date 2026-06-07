@@ -77,7 +77,8 @@ export const styles = StyleSheet.create({
     zIndex: 40
   },
   reviewHandoffOverlay: {
-    backgroundColor: colors.paper,
+    // Transparent until the copy's image displays: an opaque background
+    // would blank the card it covers for the first frames of the flight.
     overflow: "hidden",
     position: "absolute",
     zIndex: 64

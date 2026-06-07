@@ -170,20 +170,20 @@ function reviewHeroTargetRect(windowWidth: number): ReviewHandoffRect {
 function ReviewHandoffOverlay({
   arrived,
   cancelled,
-  fade,
+  copyReady,
   handoff,
   heroReady,
-  onClosingArrived,
+  onCopyShown,
   onDone,
   progress,
   target
 }: {
   arrived: SharedValue<boolean>;
   cancelled: SharedValue<boolean>;
-  fade: SharedValue<number>;
+  copyReady: SharedValue<boolean>;
   handoff: ReviewHandoffState;
   heroReady: SharedValue<boolean>;
-  onClosingArrived: (key: number) => void;
+  onCopyShown: (key: number) => void;
   onDone: (key: number) => void;
   progress: SharedValue<number>;
   target: SharedValue<ReviewHandoffRect | null>;
@@ -196,7 +196,7 @@ function ReviewHandoffOverlay({
   // handoff start and at onDone. Start the morph the moment the target rect
   // lands; later refinements retarget the in-flight interpolation.
   useAnimatedReaction(
-    () => Boolean(target.value),
+    () => Boolean(target.value) && copyReady.value,
     (hasTarget, hadTarget) => {
       if (!hasTarget || hadTarget || cancelled.value) return;
       progress.value = 0;
@@ -226,19 +226,14 @@ function ReviewHandoffOverlay({
     () => arrived.value && (direction === "closing" || heroReady.value),
     (resolve, wasResolving) => {
       if (!resolve || wasResolving) return;
-      if (direction === "closing") {
-        // JS restores the destination thumbnail first, then hides the copy
-        // and finishes — ordered in one task so the card is never empty.
-        runOnJS(onClosingArrived)(handoffKey);
-        return;
-      }
-      // Opening hands over via the finish COMMIT: Fabric commits are atomic,
-      // so unmounting the copy and revealing the hero in one commit is a
-      // guaranteed same-frame swap — no cross-component shared-value wiring
-      // (which proved unreliable: the screen's mapper missed the fade flip).
+      // Both directions hand over via the finish COMMIT: Fabric commits are
+      // atomic, so unmounting the copy while the content beneath it unhides
+      // (hero on open, thumbnail on close) is a guaranteed same-frame swap —
+      // no cross-component shared-value wiring (which proved unreliable) and
+      // no setNativeProps racing the commit.
       runOnJS(onDone)(handoffKey);
     },
-    [direction, handoffKey, onClosingArrived, onDone]
+    [direction, handoffKey, onDone]
   );
 
   const animatedStyle = useAnimatedStyle(() => {
@@ -248,7 +243,6 @@ function ReviewHandoffOverlay({
       borderRadius: interpolate(value, [0, 1], [handoff.from.radius, to.radius]),
       height: interpolate(value, [0, 1], [handoff.from.height, to.height]),
       left: interpolate(value, [0, 1], [handoff.from.x, to.x]),
-      opacity: fade.value,
       top: interpolate(value, [0, 1], [handoff.from.y, to.y]),
       width: interpolate(value, [0, 1], [handoff.from.width, to.width])
     };
@@ -289,6 +283,8 @@ function ReviewHandoffOverlay({
           allowDownscaling={false}
           cachePolicy="memory-disk"
           contentFit="cover"
+          onDisplay={() => onCopyShown(handoff.key)}
+          onError={() => onCopyShown(handoff.key)}
           recyclingKey={`${handoff.captureId}:${handoff.cacheKey || handoff.imageUrl}`}
           source={source}
           style={styles.reviewHandoffImage}
@@ -553,6 +549,10 @@ export default function App() {
   const [collectionFeedReadyKey, setCollectionFeedReadyKey] = useState("");
   const [collectionDetailCaptureMotionEnabled, setCollectionDetailCaptureMotionEnabled] = useState(true);
   const [reviewHandoff, setReviewHandoff] = useState<ReviewHandoffState | null>(null);
+  // Set once the morph copy's image has actually displayed: only then may
+  // the content beneath it (origin thumbnail, closing hero) be hidden —
+  // hiding earlier flashes the slot empty while the copy is still blank.
+  const [reviewHandoffCopyShownKey, setReviewHandoffCopyShownKey] = useState<number | null>(null);
   const [closingReviewCapture, setClosingReviewCapture] = useState<Capture | null>(null);
   const latestNoteRef = useRef("");
   const capturesRef = useRef<Capture[]>([]);
@@ -595,10 +595,12 @@ export default function App() {
   // crossfade) lives in shared values so it never re-renders the tree
   // mid-transition; React commits only at handoff start and finish.
   const reviewHandoffProgress = useSharedValue(1);
-  const reviewHandoffFade = useSharedValue(1);
   const reviewHandoffTarget = useSharedValue<ReviewHandoffRect | null>(null);
   const reviewHandoffArrived = useSharedValue(false);
   const reviewHandoffHeroReady = useSharedValue(false);
+  // True once the morph copy's image has displayed; the flight cannot start
+  // (and nothing beneath the copy may hide) until it has pixels.
+  const reviewHandoffCopyReady = useSharedValue(false);
   // Set when back interrupts an in-flight open: blocks a late-arriving
   // target from starting the forward morph mid-reversal.
   const reviewHandoffCancelled = useSharedValue(false);
@@ -631,21 +633,16 @@ export default function App() {
     return null;
   }, []);
 
-  // Hide the source card's thumbnail while its image flies to the review
-  // hero — natively (setNativeProps), so the list never re-renders for it.
-  useEffect(() => {
-    if (!reviewHandoff || reviewHandoff.direction !== "opening") return;
-    const aliases = reviewHandoff.captureAliases;
-    findHandoffThumbnailNode(aliases)?.setNativeProps({ opacity: 0 });
-    return () => {
-      findHandoffThumbnailNode(aliases)?.setNativeProps({ opacity: 1 });
-    };
-  }, [findHandoffThumbnailNode, reviewHandoff]);
-
   const markReviewHandoffReady = useCallback((key: number | null) => {
     if (!key || reviewHandoffRef.current?.key !== key) return;
     reviewHandoffHeroReady.value = true;
   }, [reviewHandoffHeroReady]);
+
+  const markReviewHandoffCopyShown = useCallback((key: number) => {
+    if (reviewHandoffRef.current?.key !== key) return;
+    reviewHandoffCopyReady.value = true;
+    setReviewHandoffCopyShownKey(key);
+  }, [reviewHandoffCopyReady]);
 
   const reviewOriginRectRef = useRef<{ captureId: string; rect: ReviewHandoffRect } | null>(null);
   // selectCapture is created by a hook further down; the closing-handoff
@@ -715,7 +712,6 @@ export default function App() {
       }
       setClosingReviewCapture(null);
       reviewHandoffRef.current = null;
-      findHandoffThumbnailNode(handoff.captureAliases)?.setNativeProps({ opacity: 1 });
       setReviewHandoff(null);
       selectCaptureRef.current(null);
     };
@@ -787,17 +783,12 @@ export default function App() {
         // The morph starts only once the review screen has mounted and
         // measured its hero (target lands), so image and view move together.
         reviewHandoffProgress.value = 0;
-        reviewHandoffFade.value = 1;
         reviewHandoffArrived.value = false;
         reviewHandoffHeroReady.value = false;
+        reviewHandoffCopyReady.value = false;
         reviewHandoffCancelled.value = false;
         reviewHandoffTarget.value = null;
         reviewHandoffRef.current = nextHandoff;
-        // Hide the origin thumbnail in the same task that mounts the morph
-        // copy, so both apply on the same frame — the post-paint effect
-        // variant let the card image linger a frame or two under the
-        // departing copy, then blink out mid-flight.
-        findHandoffThumbnailNode(nextHandoff.captureAliases)?.setNativeProps({ opacity: 0 });
         setReviewHandoff(nextHandoff);
         open();
       });
@@ -807,7 +798,6 @@ export default function App() {
     normalizeHandoffWindowRect,
     reviewHandoffArrived,
     reviewHandoffCancelled,
-    reviewHandoffFade,
     reviewHandoffHeroReady,
     reviewHandoffProgress,
     reviewHandoffTarget
@@ -1505,9 +1495,6 @@ export default function App() {
     const current = reviewHandoffRef.current;
     if (!current || current.key !== key) return;
     reviewHandoffRef.current = null;
-    // Restore the destination thumbnail in the same task that unmounts the
-    // overlay (idempotent with the landing restore).
-    findHandoffThumbnailNode(current.captureAliases)?.setNativeProps({ opacity: 1 });
     setReviewHandoff(null);
     if (current.direction === "closing") {
       setClosingReviewCapture(null);
@@ -1518,16 +1505,6 @@ export default function App() {
       selectCapture(null);
     }
   }, [findHandoffThumbnailNode, returnToCollectionDetail, selectCapture]);
-
-  const handleClosingHandoffArrived = useCallback((key: number) => {
-    const current = reviewHandoffRef.current;
-    if (!current || current.key !== key) return;
-    // Atomic landing: thumbnail visible, copy hidden, teardown — ordered in
-    // one task so the swap is a same-frame replacement of identical pixels.
-    findHandoffThumbnailNode(current.captureAliases)?.setNativeProps({ opacity: 1 });
-    reviewHandoffFade.value = 0;
-    finishReviewHandoff(key);
-  }, [findHandoffThumbnailNode, finishReviewHandoff, reviewHandoffFade]);
 
   const openCapture = useCallback(
     (captureId: string | null) => {
@@ -1598,9 +1575,9 @@ export default function App() {
         returnCollectionId: null
       };
       reviewHandoffProgress.value = 0;
-      reviewHandoffFade.value = 1;
       reviewHandoffArrived.value = false;
       reviewHandoffHeroReady.value = true;
+      reviewHandoffCopyReady.value = false;
       reviewHandoffCancelled.value = false;
       // Start the return morph immediately against the rect the opening
       // morph launched from — the covered list cannot have moved. The live
@@ -1609,9 +1586,6 @@ export default function App() {
       reviewHandoffTarget.value =
         origin && origin.captureId === capture.id ? origin.rect : null;
       reviewHandoffRef.current = nextHandoff;
-      // Hide the destination thumbnail for the flight so the returning image
-      // is the only copy on screen; the landing crossfade restores it.
-      findHandoffThumbnailNode(nextHandoff.captureAliases)?.setNativeProps({ opacity: 0 });
       // Keep the capture selected (drafts and all) while the return morph
       // runs — clearing it here visibly blanked the still-fading screen.
       // finishReviewHandoff deselects once the morph lands.
@@ -1626,7 +1600,6 @@ export default function App() {
   }, [
     normalizeHandoffWindowRect,
     reviewHandoffArrived,
-    reviewHandoffFade,
     reviewHandoffHeroReady,
     reviewHandoffProgress,
     reviewHandoffTarget,
@@ -3340,6 +3313,10 @@ export default function App() {
     onUnlinkCaptureFromCollection: (collectionId, capture) => void unlinkCaptureFromCollection(collectionId, capture),
     searchQuery,
     selectedCollection,
+    handoffHiddenCaptureAliases:
+      reviewHandoff && reviewHandoffCopyShownKey === reviewHandoff.key
+        ? reviewHandoff.captureAliases
+        : null,
     screenHandoffActive: Boolean(reviewHandoff),
     skeletonPulse,
     toast
@@ -3423,7 +3400,10 @@ export default function App() {
     // The hero/chrome reveal under the crossfade is worklet-driven from
     // reviewHandoffFade inside the screen; these flags change only at handoff
     // start and finish.
-    const reviewHeroHiddenForHandoff = Boolean(activeReviewHandoff?.direction === "closing");
+    const reviewHeroHiddenForHandoff = Boolean(
+      activeReviewHandoff?.direction === "closing" &&
+        reviewHandoffCopyShownKey === activeReviewHandoff.key
+    );
     const animateReviewChromeForHandoff = Boolean(
       activeReviewHandoff?.direction === "opening"
     );
@@ -3603,10 +3583,10 @@ export default function App() {
           <ReviewHandoffOverlay
             arrived={reviewHandoffArrived}
             cancelled={reviewHandoffCancelled}
-            fade={reviewHandoffFade}
+            copyReady={reviewHandoffCopyReady}
             handoff={reviewHandoff}
             heroReady={reviewHandoffHeroReady}
-            onClosingArrived={handleClosingHandoffArrived}
+            onCopyShown={markReviewHandoffCopyShown}
             onDone={finishReviewHandoff}
             progress={reviewHandoffProgress}
             target={reviewHandoffTarget}

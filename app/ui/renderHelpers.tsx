@@ -61,6 +61,7 @@ export type AppRenderHelpersInput = {
   onUnlinkCaptureFromCollection: (collectionId: string, capture: Capture) => void;
   searchQuery: string;
   selectedCollection: Collection | null;
+  handoffHiddenCaptureAliases: string[] | null;
   screenHandoffActive: boolean;
   skeletonPulse: Animated.Value;
   toast: ToastState | null;
@@ -241,6 +242,7 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
             deferFallbackIcon={input.capturesLoading && !input.activeCapturesLoadedOnce}
             failedFavicons={input.failedFavicons}
             forceSkeleton={input.homeFeedRevealPending}
+            thumbnailHidden={Boolean(input.handoffHiddenCaptureAliases?.includes(item.capture.id))}
             onCaptureThumbnailRef={input.onCaptureThumbnailRef}
             onFaviconFailure={input.onFaviconFailure}
             onImageLoadState={input.onCaptureImageLoadState}
