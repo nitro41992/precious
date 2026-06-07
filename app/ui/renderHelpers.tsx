@@ -167,19 +167,22 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     );
   }
 
-  // No per-row exiting here: row exit animations that outlive the unmounting
-  // screen leave orphaned Reanimated snapshots floating over the list behind
-  // it — the screen-level pane transition covers departure. Entering and
-  // layout are safe (they never outlive an unmount): entering softens rows
-  // that arrive after first paint (the cache-first refresh, pagination), and
-  // layout keeps remove-from-collection reflows smooth.
+  // No per-row exiting OR layout here. Exit animations that outlive the
+  // unmounting screen leave orphaned Reanimated snapshots floating over the
+  // list — the screen-level pane transition covers departure. The `layout`
+  // LinearTransition has the same failure mode on reflow: opening a collection
+  // arms it as the handoff completes (`screenHandoffActive` flips false), and
+  // the cache-first refresh re-seeds the list while thumbnails load and change
+  // row heights. In that window the transition conflicts with `entering` and
+  // leaves a stuck transform on the top rows, so cards settle overlapping. Only
+  // `entering` stays: it runs on mount and cleans up after itself, softening
+  // rows that arrive after first paint (the cache-first refresh, pagination).
   function renderCollectionCapture({ item, index = 0 }: { item: Capture; index?: number }) {
     const collection = input.selectedCollection;
     if (!collection) return null;
     return (
       <Reanimated.View
         entering={input.screenHandoffActive ? undefined : rowEntering(index)}
-        layout={input.screenHandoffActive ? undefined : rowLayout}
         style={styles.collectionCaptureRow}
       >
         <Animated.View style={{ opacity: input.collectionRowsFade }}>
