@@ -232,7 +232,10 @@ function ReviewHandoffOverlay({
         runOnJS(onClosingArrived)(handoffKey);
         return;
       }
-      fade.value = 0;
+      // Opening hands over via the finish COMMIT: Fabric commits are atomic,
+      // so unmounting the copy and revealing the hero in one commit is a
+      // guaranteed same-frame swap — no cross-component shared-value wiring
+      // (which proved unreliable: the screen's mapper missed the fade flip).
       runOnJS(onDone)(handoffKey);
     },
     [direction, handoffKey, onClosingArrived, onDone]
@@ -644,7 +647,6 @@ export default function App() {
     reviewHandoffHeroReady.value = true;
   }, [reviewHandoffHeroReady]);
 
-  const handoffRootOffsetRef = useRef<{ x: number; y: number } | null>(null);
   const reviewOriginRectRef = useRef<{ captureId: string; rect: ReviewHandoffRect } | null>(null);
   // selectCapture is created by a hook further down; the closing-handoff
   // fallback (declared earlier) reaches it through this ref.
@@ -654,13 +656,10 @@ export default function App() {
     rect: ReviewHandoffRect,
     onMeasured: (normalized: ReviewHandoffRect) => void
   ) => {
-    // The root container never moves; measure its window offset once so each
-    // handoff needs a single async measurement instead of two.
-    const cachedOffset = handoffRootOffsetRef.current;
-    if (cachedOffset) {
-      onMeasured({ ...rect, x: rect.x - cachedOffset.x, y: rect.y - cachedOffset.y });
-      return;
-    }
+    // Measure the root offset fresh every time: window coordinates shift as
+    // Android settles edge-to-edge insets, so a cached offset from launch
+    // can belong to a different coordinate system than the rect being
+    // normalized — landing the morph a status-bar-height off target.
     const root = handoffRootRef.current;
     if (!root) {
       onMeasured(rect);
@@ -671,7 +670,6 @@ export default function App() {
         onMeasured(rect);
         return;
       }
-      handoffRootOffsetRef.current = { x: rootX, y: rootY };
       onMeasured({
         ...rect,
         x: rect.x - rootX,
@@ -1506,29 +1504,19 @@ export default function App() {
   const finishReviewHandoff = useCallback((key: number) => {
     const current = reviewHandoffRef.current;
     if (!current || current.key !== key) return;
-    if (current.direction === "opening") {
-      // The copy is already invisible (atomic swap), so its unmount commit
-      // can wait a couple of frames — keeping the teardown cost off the
-      // exact frame the hero takes over.
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        if (reviewHandoffRef.current?.key !== key) return;
-        reviewHandoffRef.current = null;
-        findHandoffThumbnailNode(current.captureAliases)?.setNativeProps({ opacity: 1 });
-        setReviewHandoff(null);
-      }));
-      return;
-    }
     reviewHandoffRef.current = null;
     // Restore the destination thumbnail in the same task that unmounts the
     // overlay (idempotent with the landing restore).
     findHandoffThumbnailNode(current.captureAliases)?.setNativeProps({ opacity: 1 });
     setReviewHandoff(null);
-    setClosingReviewCapture(null);
-    if (current.returnCollectionId) {
-      returnToCollectionDetail(current.returnCollectionId);
-      return;
+    if (current.direction === "closing") {
+      setClosingReviewCapture(null);
+      if (current.returnCollectionId) {
+        returnToCollectionDetail(current.returnCollectionId);
+        return;
+      }
+      selectCapture(null);
     }
-    selectCapture(null);
   }, [findHandoffThumbnailNode, returnToCollectionDetail, selectCapture]);
 
   const handleClosingHandoffArrived = useCallback((key: number) => {
@@ -3478,7 +3466,6 @@ export default function App() {
           reviewMotion,
           animateReviewChromeForHandoff,
           hideReviewHeroForHandoff: reviewHeroHiddenForHandoff,
-          reviewHandoffFade,
           reviewHandoffKey: activeReviewHandoff?.key ?? null,
           reviewHeroCloseRef,
           selected: capture,

@@ -18,13 +18,11 @@ import Reanimated, {
   Extrapolation,
   cancelAnimation,
   interpolate,
-  useAnimatedReaction,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
   withTiming
 } from "react-native-reanimated";
-import type { SharedValue } from "react-native-reanimated";
 import {
   ArrowLeft,
   Camera,
@@ -94,7 +92,6 @@ type CaptureReviewScreenProps = {
     reviewMotion: Animated.Value;
     animateReviewChromeForHandoff: boolean;
     hideReviewHeroForHandoff: boolean;
-    reviewHandoffFade: SharedValue<number>;
     reviewHandoffKey: number | null;
     reviewHeroCloseRef: MutableRefObject<(() => void) | null>;
     selected: Capture;
@@ -344,7 +341,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     reviewMotion,
     animateReviewChromeForHandoff,
     hideReviewHeroForHandoff,
-    reviewHandoffFade,
     reviewHandoffKey,
     reviewHeroCloseRef,
     selected,
@@ -561,15 +557,13 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     ]
   }));
   const hideHeroImageForHandoff = hideReviewHeroForHandoff;
-  // The hero appears in the SAME UI frame the morph copy disappears (both
-  // worklets read reviewHandoffFade, flipped 1 -> 0 atomically at landing).
-  // Never a crossfade: dissolving two copies of identical pixels dips the
-  // combined opacity mid-blend and the background shimmers through.
-  const reviewHeroVisibilityStyle = useAnimatedStyle(() => {
-    if (hideHeroImageForHandoff) return { opacity: 0 };
-    if (animateReviewChromeForHandoff) return { opacity: reviewHandoffFade.value < 1 ? 1 : 0 };
-    return { opacity: 1 };
-  });
+  // Hidden while a handoff covers it; revealed by the finish COMMIT — the
+  // same Fabric commit that unmounts the morph copy. Commit atomicity makes
+  // the handover a guaranteed same-frame swap of identical pixels (never a
+  // crossfade: blending two copies dips opacity and the background shimmers
+  // through; and never cross-component shared-value wiring, which missed).
+  const reviewHeroHidden = hideHeroImageForHandoff || animateReviewChromeForHandoff;
+  const reviewHeroVisibilityStyle = { opacity: reviewHeroHidden ? 0 : 1 };
   const reviewDetailMotion = useSharedValue(animateReviewChromeForHandoff ? 0 : 1);
   const reviewMediaChromeMotion = useSharedValue(animateReviewChromeForHandoff ? 0 : 1);
   const reviewMediaChromeStyle = useAnimatedStyle(() => ({
@@ -590,23 +584,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   }));
 
   const reviewHandoffWasActiveRef = useRef(animateReviewChromeForHandoff);
-
-  // Reveal the chrome the moment the overlay's crossfade begins (UI thread,
-  // no React commit) so it appears together with the live hero, not after.
-  useAnimatedReaction(
-    () => (animateReviewChromeForHandoff ? reviewHandoffFade.value : 1),
-    (fadeValue, previousFade) => {
-      if (!animateReviewChromeForHandoff) return;
-      if (fadeValue < 1 && (previousFade === null || previousFade >= 1)) {
-        reviewMediaChromeMotion.value = withTiming(1, {
-          duration: motionDuration.quick,
-          easing: motionEasing.standard,
-          reduceMotion: motionReduceMotion
-        });
-      }
-    },
-    [animateReviewChromeForHandoff]
-  );
 
   useEffect(() => {
     const handoffWasActive = reviewHandoffWasActiveRef.current;
