@@ -516,7 +516,7 @@ Unknowns:
 | Collections/search | `supabase/functions/capture-intake/lib/routes/collections.ts`, `supabase/functions/capture-intake/lib/routes/search.ts`, `supabase/functions/capture-intake/lib/collections/*.ts` |
 | Diagnostics/cleanup | `supabase/functions/capture-intake/lib/routes/client-events.ts`, `supabase/functions/capture-intake/lib/routes/purge-deleted.ts` |
 | Database schema | `supabase/migrations/*.sql`, `supabase/config.toml` |
-| CI/release/testing | `.github/workflows/android-release.yml`, `docs/testing.md`, `scripts/*`, `e2e/*` |
+| CI/release/testing | `.github/workflows/android-release.yml`, `docs/testing.md`, `scripts/*`, `.maestro/*` |
 | Legacy/dev paths | `server/index.mjs`, `api/*.js`, `api/_lib/*.cjs`, `pages/api/*.js`, `pages/index.js` |
 
 Coverage limits for this pass:
