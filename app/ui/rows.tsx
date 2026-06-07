@@ -1,7 +1,7 @@
 import { memo, useCallback, useMemo, useState, type ReactElement } from "react";
 import { Animated, View } from "react-native";
 import { Image } from "expo-image";
-import { CalendarBlank, Folder, ImageSquare, Lightbulb } from "phosphor-react-native";
+import { CalendarBlank, Folder, FolderMinus, ImageSquare, Lightbulb } from "phosphor-react-native";
 import Reanimated from "react-native-reanimated";
 
 import { collectionCollageSlots, hostFromUrl } from "../captureLogic";
@@ -292,6 +292,122 @@ export const HomeCaptureRowItem = memo(function HomeCaptureRowItem({
 function emptyInlineSkeleton(): ReactElement | null {
   return null;
 }
+
+type CollectionCaptureRowItemProps = {
+  capture: Capture;
+  captureImageLoadStates: Record<string, CaptureImageLoadState>;
+  captureRowRevealStates: Record<string, boolean>;
+  collectionId: string;
+  failedFavicons: Record<string, boolean>;
+  forceSkeleton: boolean;
+  onCaptureRowImageDisplayed: (capture: Capture, url: string, cacheKey: string) => void;
+  onCaptureThumbnailRef: (captureId: string, node: View | null) => void;
+  onFaviconFailure: (host: string) => void;
+  onImageLoadState: (key: string, state: CaptureImageLoadState) => void;
+  onOpenCaptureFromCollection: (capture: Capture, collectionId: string) => void;
+  onUnlinkCaptureFromCollection: (collectionId: string, capture: Capture) => void;
+  SkeletonBlock: SkeletonBlockRenderer;
+  testID?: string;
+  thumbnailHidden: boolean;
+};
+
+// Memoized collection-detail row: same card design and bailout strategy as
+// HomeCaptureRowItem, plus the remove-from-collection trailing action. Takes
+// the collection ID (not the collection object — its identity churns on every
+// refresh and would defeat the bailout); the per-row closures are built inside
+// the memo from stable handlers.
+export const CollectionCaptureRowItem = memo(function CollectionCaptureRowItem({
+  capture,
+  captureImageLoadStates,
+  captureRowRevealStates,
+  collectionId,
+  failedFavicons,
+  forceSkeleton,
+  onCaptureRowImageDisplayed,
+  onCaptureThumbnailRef,
+  onFaviconFailure,
+  onImageLoadState,
+  onOpenCaptureFromCollection,
+  onUnlinkCaptureFromCollection,
+  SkeletonBlock,
+  testID,
+  thumbnailHidden
+}: CollectionCaptureRowItemProps) {
+  const onPress = useCallback(
+    () => onOpenCaptureFromCollection(capture, collectionId),
+    [capture, collectionId, onOpenCaptureFromCollection]
+  );
+  const thumbnailRef = useCallback(
+    (node: View | null) => onCaptureThumbnailRef(capture.id, node),
+    [onCaptureThumbnailRef, capture.id]
+  );
+  const onThumbnailImageDisplayed = useCallback(
+    (url: string, cacheKey: string) => onCaptureRowImageDisplayed(capture, url, cacheKey),
+    [onCaptureRowImageDisplayed, capture]
+  );
+  const removeAction = (
+    <MotionPressable
+      accessibilityLabel="Remove from collection"
+      accessibilityRole="button"
+      hitSlop={8}
+      onPress={() => onUnlinkCaptureFromCollection(collectionId, capture)}
+      style={({ pressed }) => [styles.collectionRemoveIconButton, pressed && styles.collectionRemoveIconButtonPressed]}
+    >
+      <FolderMinus color={colors.danger} size={22} weight="regular" />
+    </MotionPressable>
+  );
+  return (
+    <CaptureRow
+      captureImageLoadStates={captureImageLoadStates}
+      captureRowRevealStates={captureRowRevealStates}
+      failedFavicons={failedFavicons}
+      forceSkeleton={forceSkeleton}
+      hideThumbnail={thumbnailHidden}
+      item={capture}
+      onFaviconFailure={onFaviconFailure}
+      onImageLoadState={onImageLoadState}
+      onPress={onPress}
+      onThumbnailImageDisplayed={onThumbnailImageDisplayed}
+      renderInlineSkeleton={emptyInlineSkeleton}
+      showCollectionToken={false}
+      showInlineSourceIcon
+      SkeletonBlock={SkeletonBlock}
+      surface="card"
+      testID={testID}
+      thumbnailRef={thumbnailRef}
+      trailingAction={removeAction}
+    />
+  );
+}, (previous, next) => {
+  // Same bailout contract as HomeCaptureRowItem: re-render only when this
+  // row's own inputs change. The shared maps change identity App-wide, so
+  // compare just this capture's entries.
+  if (
+    previous.capture !== next.capture ||
+    previous.collectionId !== next.collectionId ||
+    previous.forceSkeleton !== next.forceSkeleton ||
+    previous.thumbnailHidden !== next.thumbnailHidden ||
+    previous.testID !== next.testID ||
+    previous.onOpenCaptureFromCollection !== next.onOpenCaptureFromCollection ||
+    previous.onUnlinkCaptureFromCollection !== next.onUnlinkCaptureFromCollection ||
+    previous.onCaptureRowImageDisplayed !== next.onCaptureRowImageDisplayed ||
+    previous.onCaptureThumbnailRef !== next.onCaptureThumbnailRef ||
+    previous.onFaviconFailure !== next.onFaviconFailure ||
+    previous.onImageLoadState !== next.onImageLoadState
+  ) {
+    return false;
+  }
+  const imageLoadKey = captureImageLoadKey(next.capture);
+  if (imageLoadKey && previous.captureImageLoadStates[imageLoadKey] !== next.captureImageLoadStates[imageLoadKey]) {
+    return false;
+  }
+  const revealKey = captureRowRevealKey(next.capture);
+  if (Boolean(previous.captureRowRevealStates[revealKey]) !== Boolean(next.captureRowRevealStates[revealKey])) {
+    return false;
+  }
+  const host = captureFaviconHost(next.capture);
+  return Boolean(previous.failedFavicons[host]) === Boolean(next.failedFavicons[host]);
+});
 
 export function CaptureRowInlineSkeleton({
   SkeletonBlock,

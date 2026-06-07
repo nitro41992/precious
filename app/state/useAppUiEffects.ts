@@ -27,6 +27,7 @@ export function useAppUiEffects({
   captures,
   closeCaptureComposer,
   closeCollectionComposer,
+  closeCollectionDetail,
   closeCollectionPicker,
   closeNoteSheet,
   closeSelectedCapture,
@@ -79,6 +80,7 @@ export function useAppUiEffects({
   captures: Capture[];
   closeCaptureComposer: (options?: { keyboardHidden?: boolean }) => void;
   closeCollectionComposer: (options?: { keyboardHidden?: boolean }) => void;
+  closeCollectionDetail: () => void;
   closeCollectionPicker: () => void;
   closeNoteSheet: (options?: { keyboardHidden?: boolean }) => void;
   closeSelectedCapture: () => void;
@@ -210,7 +212,9 @@ export function useAppUiEffects({
         return true;
       }
       if (selectedCollectionId) {
-        selectCollection(null);
+        // Animated close (same path as the back button) — a raw
+        // selectCollection(null) would pop the detail with no exit flight.
+        closeCollectionDetail();
         return true;
       }
       if (collectionsOpen) {
@@ -226,6 +230,7 @@ export function useAppUiEffects({
     accountSheetOpen,
     closeCaptureComposer,
     closeCollectionComposer,
+    closeCollectionDetail,
     closeCollectionPicker,
     closeNoteSheet,
     closeSelectedCapture,

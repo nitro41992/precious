@@ -137,6 +137,11 @@ type ReviewHandoffRect = {
   radius: number;
 };
 
+// Which list the morph flies from/to. Home and collection detail can show the
+// same capture at once, so thumbnail refs are registered per surface and the
+// handoff resolves its source through its own surface only.
+type ReviewHandoffSurface = "home" | "collection";
+
 type ReviewHandoffState = {
   cacheKey: string;
   // The processing poll can swap a capture's local id for its remote id
@@ -153,6 +158,7 @@ type ReviewHandoffState = {
   imageUrl: string;
   key: number;
   returnCollectionId: string | null;
+  sourceSurface: ReviewHandoffSurface;
 };
 
 function reviewHeroTargetRect(windowWidth: number): ReviewHandoffRect {
@@ -380,6 +386,79 @@ function TopLevelPane({
   );
 }
 
+// The collection detail's pane transition. The progress shared value lives in
+// App so it survives the render-branch swap from "open" to "closing": the
+// closing frame picks up the morph from wherever the value sits instead of
+// re-popping. Unmount is deferred until the exit lands — onClosed fires from
+// the UI thread at progress 0, so the screen leaves the tree in one commit
+// while fully invisible (no orphaned row snapshots, no visible re-layout).
+function CollectionDetailFrame({
+  children,
+  direction,
+  onClosed,
+  onOpened,
+  progress
+}: {
+  children: ReactNode;
+  direction: "opening" | "closing";
+  onClosed: () => void;
+  onOpened: () => void;
+  progress: SharedValue<number>;
+}) {
+  const everMountedRef = useRef(false);
+
+  useEffect(() => {
+    if (direction === "opening") {
+      // Fresh mounts enter from invisible; a reopen that interrupts a closing
+      // flight (frame already mounted) animates up from wherever it is.
+      if (!everMountedRef.current) {
+        progress.value = 0;
+      }
+      progress.value = withTiming(
+        1,
+        {
+          duration: motionDuration.settle,
+          easing: ReanimatedEasing.bezier(0.2, 0, 0, 1),
+          reduceMotion: motionReduceMotion
+        },
+        (finished) => {
+          if (finished) runOnJS(onOpened)();
+        }
+      );
+    } else {
+      progress.value = withTiming(
+        0,
+        {
+          duration: motionDuration.settle,
+          easing: ReanimatedEasing.bezier(0.2, 0, 0, 1),
+          reduceMotion: motionReduceMotion
+        },
+        (finished) => {
+          if (finished) runOnJS(onClosed)();
+        }
+      );
+    }
+    everMountedRef.current = true;
+  }, [direction, onClosed, onOpened, progress]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, 1], [0, 1]),
+    transform: [
+      { translateX: interpolate(progress.value, [0, 1], [18, 0]) },
+      { scale: interpolate(progress.value, [0, 1], [0.992, 1]) }
+    ]
+  }));
+
+  return (
+    <Reanimated.View
+      pointerEvents={direction === "closing" ? "none" : "auto"}
+      style={[styles.screenOverlay, animatedStyle]}
+    >
+      {children}
+    </Reanimated.View>
+  );
+}
+
 const CAPTURE_LIST_PERF_PROPS = {
   initialNumToRender: 8,
   maxToRenderPerBatch: 8,
@@ -402,13 +481,17 @@ const COLLECTION_LIST_PERF_PROPS = {
   updateCellsBatchingPeriod: 40,
   windowSize: 7
 };
+// Same render profile as the home feed: a small first batch paints the
+// visible rows immediately and the rest stream in, instead of blocking the
+// JS thread on a full 18-row page (which made entering a >6-capture
+// collection visibly stall).
 const COLLECTION_CAPTURE_LIST_PERF_PROPS = {
-  initialNumToRender: COLLECTION_CAPTURE_PAGE_SIZE,
-  maxToRenderPerBatch: COLLECTION_CAPTURE_PAGE_SIZE,
+  initialNumToRender: 8,
+  maxToRenderPerBatch: 8,
   removeClippedSubviews: false,
   showsHorizontalScrollIndicator: false,
   showsVerticalScrollIndicator: false,
-  updateCellsBatchingPeriod: 0,
+  updateCellsBatchingPeriod: 40,
   windowSize: 9
 };
 const COLLECTION_CAPTURE_PREFETCH_LIMIT = 8;
@@ -555,13 +638,22 @@ export default function App() {
   const [captureRowRevealStates, setCaptureRowRevealStates] = useState<Record<string, boolean>>({});
   const [homeFeedReadyKey, setHomeFeedReadyKey] = useState("");
   const [collectionFeedReadyKey, setCollectionFeedReadyKey] = useState("");
-  const [collectionDetailCaptureMotionEnabled, setCollectionDetailCaptureMotionEnabled] = useState(true);
   const [reviewHandoff, setReviewHandoff] = useState<ReviewHandoffState | null>(null);
   // Set once the morph copy's image has actually displayed: only then may
   // the content beneath it (origin thumbnail, closing hero) be hidden —
   // hiding earlier flashes the slot empty while the copy is still blank.
   const [reviewHandoffCopyShownKey, setReviewHandoffCopyShownKey] = useState<number | null>(null);
   const [closingReviewCapture, setClosingReviewCapture] = useState<Capture | null>(null);
+  // Frozen snapshot of the collection whose detail screen is animating out.
+  // Keeps the screen mounted (and pixel-stable) through the exit flight;
+  // cleared in one commit once the pane lands at opacity 0.
+  const [closingCollectionDetail, setClosingCollectionDetail] = useState<Collection | null>(null);
+  // True from the open tap until the enter flight lands: the collections
+  // pane's chrome stays mounted while the detail is semi-transparent, exactly
+  // like the review handoff keeps pane chrome alive during its flights.
+  const [collectionDetailEntering, setCollectionDetailEntering] = useState(false);
+  const collectionDetailClosingRef = useRef(false);
+  const selectedCollectionRef = useRef<Collection | null>(null);
   const latestNoteRef = useRef("");
   const capturesRef = useRef<Capture[]>([]);
   const activeCapturesFetchedAtRef = useRef(0);
@@ -603,6 +695,10 @@ export default function App() {
   // crossfade) lives in shared values so it never re-renders the tree
   // mid-transition; React commits only at handoff start and finish.
   const reviewHandoffProgress = useSharedValue(1);
+  // The collection detail pane transition's clock. Lives here (not in the
+  // frame) so the open→closing branch swap keeps the value — the exit picks
+  // up from wherever the enter left it.
+  const collectionDetailProgress = useSharedValue(0);
   const reviewHandoffTarget = useSharedValue<ReviewHandoffRect | null>(null);
   const reviewHandoffArrived = useSharedValue(false);
   const reviewHandoffHeroReady = useSharedValue(false);
@@ -619,23 +715,37 @@ export default function App() {
   const collectionRowsFade = useRef(new Animated.Value(0)).current;
   const collectionListFade = useRef(new Animated.Value(0)).current;
 
-  const registerCaptureThumbnailRef = useCallback((captureId: string, node: View | null) => {
+  const registerCaptureThumbnailRef = useCallback((
+    surface: ReviewHandoffSurface,
+    captureId: string,
+    node: View | null
+  ) => {
     // Keep the last node on detach: react-freeze detaches refs when a pane
     // freezes, but the native view stays alive — the closing morph still
     // needs to measure it and restore its opacity. Stale nodes from truly
     // unmounted rows measure as zero and are handled by the origin fallback.
     if (node) {
-      captureThumbnailRefs.current[captureId] = node;
+      captureThumbnailRefs.current[`${surface}:${captureId}`] = node;
     }
   }, []);
+
+  const registerHomeCaptureThumbnailRef = useCallback(
+    (captureId: string, node: View | null) => registerCaptureThumbnailRef("home", captureId, node),
+    [registerCaptureThumbnailRef]
+  );
+
+  const registerCollectionCaptureThumbnailRef = useCallback(
+    (captureId: string, node: View | null) => registerCaptureThumbnailRef("collection", captureId, node),
+    [registerCaptureThumbnailRef]
+  );
 
   useEffect(() => {
     reviewHandoffRef.current = reviewHandoff;
   }, [reviewHandoff]);
 
-  const findHandoffThumbnailNode = useCallback((aliases: string[]) => {
+  const findHandoffThumbnailNode = useCallback((surface: ReviewHandoffSurface, aliases: string[]) => {
     for (const alias of aliases) {
-      const node = captureThumbnailRefs.current[alias];
+      const node = captureThumbnailRefs.current[`${surface}:${alias}`];
       if (node) return node;
     }
     return null;
@@ -724,7 +834,7 @@ export default function App() {
       setReviewHandoff(null);
       selectCaptureRef.current(null);
     };
-    const thumbnailNode = findHandoffThumbnailNode(handoff.captureAliases);
+    const thumbnailNode = findHandoffThumbnailNode(handoff.sourceSurface, handoff.captureAliases);
     if (!thumbnailNode) {
       applyOriginFallback();
       return;
@@ -759,7 +869,11 @@ export default function App() {
     };
   }, [measureClosingHandoffTarget, reviewHandoff, selectedId]);
 
-  const startReviewHandoff = useCallback((capture: Capture, open: () => void) => {
+  const startReviewHandoff = useCallback((
+    capture: Capture,
+    sourceSurface: ReviewHandoffSurface,
+    open: () => void
+  ) => {
     // Fly the source the row thumbnail has actually PAINTED, not the
     // capture's current image url: the thumbnail holds its previous pixels
     // across same-capture source upgrades (recyclingKey design), so after a
@@ -769,7 +883,7 @@ export default function App() {
     // landing. The displayed source is ground truth for both ends.
     const displayed = displayedRowImagesRef.current.get(capture.id);
     const imageUrl = displayed?.url || captureImageUrl(capture);
-    const thumbnailNode = captureThumbnailRefs.current[capture.id];
+    const thumbnailNode = captureThumbnailRefs.current[`${sourceSurface}:${capture.id}`];
     if (!imageUrl || !thumbnailNode) {
       open();
       return;
@@ -794,7 +908,8 @@ export default function App() {
           heroScale: reviewHeroExpandedScale,
           imageUrl,
           key,
-          returnCollectionId: null
+          returnCollectionId: null,
+          sourceSurface
         };
         reviewOriginRectRef.current = { captureId: capture.id, rect: from };
         // The morph starts only once the review screen has mounted and
@@ -1034,7 +1149,9 @@ export default function App() {
     setCaptureRowRevealStates({});
     setHomeFeedReadyKey("");
     setCollectionFeedReadyKey("");
-    setCollectionDetailCaptureMotionEnabled(true);
+    collectionDetailClosingRef.current = false;
+    setClosingCollectionDetail(null);
+    setCollectionDetailEntering(false);
     setCollectionCaptures([]);
     setCollectionCapturesForId(null);
     setCollectionCapturesNextCursor(null);
@@ -1475,6 +1592,9 @@ export default function App() {
     setCollectionPickerOpen(false);
     setCollectionPickerQuery("");
     setCollectionSelectionIds([]);
+    // Deselecting ends the review trip; the return marker would otherwise
+    // linger and skew the collection-captures lifecycle effect.
+    if (!captureId) setCaptureReturnCollectionId(null);
     setSelectedId(captureId);
   }, []);
 
@@ -1482,8 +1602,12 @@ export default function App() {
 
   const selectCollection = useCallback((collectionId: string | null) => {
     setCollectionFeedReadyKey("");
+    // Selecting a collection (or instant-clearing the selection) supersedes
+    // any in-flight animated close; the frame animates up from wherever the
+    // interrupted exit left it.
+    collectionDetailClosingRef.current = false;
+    setClosingCollectionDetail(null);
     if (collectionId) {
-      setCollectionDetailCaptureMotionEnabled(true);
       const collection = [...collectionsCacheRef.current.active, ...collectionsCacheRef.current.archived]
         .find((item) => item.id === collectionId);
       const hasNoCaptures = collection?.captureCount === 0;
@@ -1495,33 +1619,37 @@ export default function App() {
       );
       setCollectionCapturesError("");
     }
+    setCollectionDetailEntering(Boolean(collectionId));
     setSelectedCollectionId(collectionId);
     setCaptureReturnCollectionId(null);
     setCollectionDraftDirty(false);
     setShowCollectionForm(false);
   }, []);
 
+  // Animated close: one commit swaps the detail to the closing branch (frame
+  // direction flips, screen content frozen via the snapshot), the pane fades
+  // out on the UI thread, and finishCloseCollectionDetail unmounts it while
+  // fully invisible. Idempotent under repeated back presses mid-flight.
   const closeCollectionDetail = useCallback(() => {
-    setCollectionDetailCaptureMotionEnabled(false);
-    requestAnimationFrame(() => {
-      selectCollection(null);
-    });
+    const collection = selectedCollectionRef.current;
+    if (!collection || collectionDetailClosingRef.current) return;
+    selectCollection(null);
+    collectionDetailClosingRef.current = true;
+    setClosingCollectionDetail(collection);
   }, [selectCollection]);
 
-  const resetCollectionDetailScroll = useCallback(() => {
-    requestAnimationFrame(() => {
-      collectionDetailListRef.current?.scrollToOffset({ animated: false, offset: 0 });
-    });
-    setTimeout(() => {
-      collectionDetailListRef.current?.scrollToOffset({ animated: false, offset: 0 });
-    }, 80);
+  const finishCloseCollectionDetail = useCallback(() => {
+    if (!collectionDetailClosingRef.current) return;
+    collectionDetailClosingRef.current = false;
+    setClosingCollectionDetail(null);
+    setCollectionDetailEntering(false);
   }, []);
 
-  const returnToCollectionDetail = useCallback((collectionId: string) => {
-    selectCapture(null);
-    selectCollection(collectionId);
-    resetCollectionDetailScroll();
-  }, [resetCollectionDetailScroll, selectCapture, selectCollection]);
+  // The enter flight landed: the detail fully covers the collections pane, so
+  // its chrome can leave the tree (one commit, invisible to the user).
+  const finishOpenCollectionDetail = useCallback(() => {
+    setCollectionDetailEntering(false);
+  }, []);
 
   const finishReviewHandoff = useCallback((key: number) => {
     const current = reviewHandoffRef.current;
@@ -1530,13 +1658,12 @@ export default function App() {
     setReviewHandoff(null);
     if (current.direction === "closing") {
       setClosingReviewCapture(null);
-      if (current.returnCollectionId) {
-        returnToCollectionDetail(current.returnCollectionId);
-        return;
-      }
+      // Collection-origin reviews need no special return path: the detail
+      // screen stayed mounted beneath the review, so deselecting the capture
+      // simply uncovers it.
       selectCapture(null);
     }
-  }, [findHandoffThumbnailNode, returnToCollectionDetail, selectCapture]);
+  }, [selectCapture]);
 
   const openCapture = useCallback(
     (captureId: string | null) => {
@@ -1564,7 +1691,7 @@ export default function App() {
 
   const openRecentCapture = useCallback(
     (capture: Capture) => {
-      startReviewHandoff(capture, () => {
+      startReviewHandoff(capture, "home", () => {
         openCapture(capture.id);
         setCaptureReviewOrigin("recent");
       });
@@ -1573,17 +1700,20 @@ export default function App() {
   );
 
   const openCaptureFromCollection = useCallback((capture: Capture, collectionId: string) => {
-    setSearchOpen(false);
-    setCollectionSearchOpen(false);
-    setCollectionsOpen(false);
-    setSelectedCollectionId(null);
-    setCaptureReturnCollectionId(collectionId);
-    setCaptureReviewOrigin("collection");
-    setDraftTitle(capture.title);
-    setDraftNote(capture.note);
-    setDraftIntent(normalizeIntent(capture.defaultIntent));
-    selectCapture(capture.id);
-  }, [selectCapture]);
+    startReviewHandoff(capture, "collection", () => {
+      setSearchOpen(false);
+      setCollectionSearchOpen(false);
+      // The collection stays selected: the detail remains mounted beneath
+      // the review, so the close morph lands on the live row and the list
+      // keeps its scroll position across the round trip.
+      setCaptureReturnCollectionId(collectionId);
+      setCaptureReviewOrigin("collection");
+      setDraftTitle(capture.title);
+      setDraftNote(capture.note);
+      setDraftIntent(normalizeIntent(capture.defaultIntent));
+      selectCapture(capture.id);
+    });
+  }, [selectCapture, startReviewHandoff]);
 
   const startReviewCloseHandoff = useCallback((
     capture: Capture,
@@ -1592,6 +1722,7 @@ export default function App() {
       heroScale?: number;
       imageCacheKey?: string;
       imageUrl?: string;
+      returnCollectionId?: string | null;
     }
   ) => {
     const fromRect = options?.fromRect;
@@ -1616,7 +1747,8 @@ export default function App() {
         heroScale,
         imageUrl,
         key,
-        returnCollectionId: null
+        returnCollectionId: options?.returnCollectionId ?? null,
+        sourceSurface: options?.returnCollectionId ? "collection" : "home"
       };
       reviewHandoffProgress.value = 0;
       reviewHandoffArrived.value = false;
@@ -2030,6 +2162,9 @@ export default function App() {
   const selectedCollection = selectedCollectionId
     ? collections.find((collection) => collection.id === selectedCollectionId) ?? null
     : null;
+  // The animated close (declared earlier) snapshots the collection through
+  // this ref; assigned every render like selectCaptureRef.
+  selectedCollectionRef.current = selectedCollection;
 
   // The review screen registers its hero-measured close here so hardware/
   // gesture back runs the same scroll-aware return morph as the back button.
@@ -2074,14 +2209,17 @@ export default function App() {
       if (reviewHandoff.direction === "opening") cancelReviewOpeningHandoff(reviewHandoff);
       return;
     }
-    if (captureReturnCollectionId) {
-      returnToCollectionDetail(captureReturnCollectionId);
-      return;
-    }
+    // Collection-origin reviews morph back only while their detail screen is
+    // still mounted beneath (it carries the live row the copy lands on).
+    const closesToCollection =
+      captureReviewOrigin === "collection" && Boolean(selectedCollectionRef.current);
     if (
-      captureReviewOrigin === "recent" &&
+      (captureReviewOrigin === "recent" || closesToCollection) &&
       options?.allowHandoff !== false &&
-      startReviewCloseHandoff(selected, options)
+      startReviewCloseHandoff(selected, {
+        ...options,
+        returnCollectionId: closesToCollection ? captureReturnCollectionId : null
+      })
     ) {
       return;
     }
@@ -2090,7 +2228,6 @@ export default function App() {
     cancelReviewOpeningHandoff,
     captureReturnCollectionId,
     captureReviewOrigin,
-    returnToCollectionDetail,
     reviewHandoff,
     selectCapture,
     selected,
@@ -2187,6 +2324,7 @@ export default function App() {
     captures,
     closeCaptureComposer,
     closeCollectionComposer,
+    closeCollectionDetail,
     closeCollectionPicker,
     closeNoteSheet,
     closeSelectedCapture: requestCloseSelectedCapture,
@@ -2391,7 +2529,9 @@ export default function App() {
 
   useEffect(() => {
     if (!selectedCollectionId) {
-      if (!captureReturnCollectionId) {
+      // Keep the rows while the detail is animating out (or parked beneath a
+      // review trip) — clearing them mid-fade blanks the closing screen.
+      if (!captureReturnCollectionId && !closingCollectionDetail) {
         setCollectionCaptures([]);
         setCollectionCapturesForId(null);
         setCollectionCapturesNextCursor(null);
@@ -2438,7 +2578,7 @@ export default function App() {
         setCollectionCapturesError(text);
       }
     });
-  }, [captureReturnCollectionId, loadCollectionCaptures, selectedCollection?.captureCount, selectedCollection?.status, selectedCollectionId]);
+  }, [captureReturnCollectionId, closingCollectionDetail, loadCollectionCaptures, selectedCollection?.captureCount, selectedCollection?.status, selectedCollectionId]);
 
   function applyUpdatedCapture(updatedCapture: Capture, previousId: string) {
     const matchesCapture = (item: Capture) =>
@@ -2852,13 +2992,9 @@ export default function App() {
       active: collectionsCacheRef.current.active,
       archived: collectionsCacheRef.current.archived
     };
-    setCollectionDetailCaptureMotionEnabled(false);
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => {
-        selectCollection(null);
-        requestAnimationFrame(() => resolve());
-      });
-    });
+    // Animated close; the frozen closingCollectionDetail snapshot keeps the
+    // fading screen pixel-stable while the caches mutate beneath it.
+    closeCollectionDetail();
     collectionsCacheRef.current.active = collectionsCacheRef.current.active.filter((item) => item.id !== collection.id);
     collectionsCacheRef.current.archived = collectionsCacheRef.current.archived.filter((item) => item.id !== collection.id);
     setCollections((current) => current.filter((item) => item.id !== collection.id));
@@ -3204,11 +3340,9 @@ export default function App() {
       }
     };
     removeCaptureFromVisibleLists(capture);
-    if (returnCollectionId) {
-      returnToCollectionDetail(returnCollectionId);
-    } else {
-      selectCapture(null);
-    }
+    // The collection detail (when this review came from one) stayed mounted
+    // beneath the review, so deselecting simply uncovers it.
+    selectCapture(null);
     setToast(null);
     showToast({
       text: "Capture deleted.",
@@ -3337,9 +3471,10 @@ export default function App() {
     captureImageLoadStates,
     captureRowRevealStates,
     capturesLoading,
-    collectionCaptureMotionEnabled: Boolean(selectedCollectionId && collectionDetailCaptureMotionEnabled && !reviewHandoff),
     collectionFeedRevealPending,
-    collectionItemMotionEnabled: Boolean(collectionsOpen && !selected && !selectedCollection && !collectionSearchOpen && !reviewHandoff),
+    collectionItemMotionEnabled: Boolean(
+      collectionsOpen && !selected && !selectedCollection && !closingCollectionDetail && !collectionSearchOpen && !reviewHandoff
+    ),
     collectionListFade,
     collectionRowsFade,
     failedFavicons: faviconFailures,
@@ -3352,7 +3487,8 @@ export default function App() {
     onCollectionDescriptionChange: setCollectionDescription,
     onCollectionPress: handleCollectionPress,
     onCollectionTitleChange: setCollectionTitle,
-    onCaptureThumbnailRef: registerCaptureThumbnailRef,
+    onCaptureThumbnailRef: registerHomeCaptureThumbnailRef,
+    onCollectionCaptureThumbnailRef: registerCollectionCaptureThumbnailRef,
     onCollectionsScreenOpen: (mode) => void openCollectionsScreen(mode),
     onFaviconFailure: markFaviconFailed,
     onOpenCapture: openCapture,
@@ -3362,10 +3498,12 @@ export default function App() {
     onRecentHomePress: openRecentHome,
     onUnlinkCaptureFromCollection: (collectionId, capture) => void unlinkCaptureFromCollection(collectionId, capture),
     searchQuery,
-    selectedCollection,
-    handoffHiddenCaptureAliases:
+    // The closing snapshot keeps detail rows functional while the pane fades
+    // out (selectedCollection is already null by then).
+    selectedCollection: selectedCollection ?? closingCollectionDetail,
+    handoffHiddenCapture:
       reviewHandoff && reviewHandoffCopyShownKey === reviewHandoff.key
-        ? reviewHandoff.captureAliases
+        ? { aliases: reviewHandoff.captureAliases, surface: reviewHandoff.sourceSurface }
         : null,
     screenHandoffActive: Boolean(reviewHandoff),
     skeletonPulse,
@@ -3610,19 +3748,27 @@ export default function App() {
 
   function renderTopLevelStack({
     active = "recent",
+    collectionDetailUnderlay = null,
     overlay = null,
     overlayHandoff = null
   }: {
     active?: "recent" | "collections";
+    collectionDetailUnderlay?: ReactNode;
     overlay?: ReactNode;
     overlayHandoff?: ReviewHandoffState | null;
   } = {}) {
-    const overlayVisible = Boolean(overlay);
+    const overlayVisible = Boolean(overlay) || Boolean(collectionDetailUnderlay);
     // The tab bar / gradient / FAB only change while the pane is fully
     // covered — never during a flight. Unmounting them at the open tap
     // popped the bottom of the screen mid-morph (the review is still mostly
     // transparent); on close they must already be there for the landing.
-    const paneChromeVisible = !overlayVisible || Boolean(reviewHandoff);
+    // The collection detail's pane transition gets the same treatment via
+    // its entering/closing flags.
+    const paneChromeVisible =
+      !overlayVisible ||
+      Boolean(reviewHandoff) ||
+      collectionDetailEntering ||
+      Boolean(closingCollectionDetail);
     return (
       <View collapsable={false} ref={handoffRootRef} style={styles.screenStack}>
         <TopLevelPane active={active === "recent"} direction={-1}>
@@ -3631,6 +3777,7 @@ export default function App() {
         <TopLevelPane active={active === "collections"} direction={1}>
           {renderCollectionsScreen({ includeChrome: active === "collections" && paneChromeVisible })}
         </TopLevelPane>
+        {collectionDetailUnderlay}
         {overlay ? (
           <ScreenOverlayFrame handoff={overlayHandoff} progress={reviewHandoffProgress}>
             {overlay}
@@ -3661,19 +3808,25 @@ export default function App() {
     );
   }
 
-  if (!authReady) {
-    return renderBootScreen();
-  }
-
-
-  if (selectedCollection) {
-    return renderTopLevelStack({
-      active: "collections",
-      overlay: (
+  // The collection detail pane. Rendered for the open detail, for the frozen
+  // snapshot animating out, and (chrome suppressed) beneath a capture review
+  // opened from the collection — the same mounted frame in all three, so the
+  // list keeps its scroll position across the review round trip.
+  function renderCollectionDetailOverlay(
+    collection: Collection,
+    { direction, includeChrome = true }: { direction: "opening" | "closing"; includeChrome?: boolean }
+  ) {
+    return (
+      <CollectionDetailFrame
+        direction={direction}
+        onClosed={finishCloseCollectionDetail}
+        onOpened={finishOpenCollectionDetail}
+        progress={collectionDetailProgress}
+      >
         <CollectionDetailScreen
           actions={{
             closeCollectionDetail,
-            deleteCollection: (collection) => void deleteCollection(collection),
+            deleteCollection: (target) => void deleteCollection(target),
             loadMoreCollectionCaptures,
             renderCollectionCapture,
             renderCollectionCaptureSkeletonRows,
@@ -3686,7 +3839,7 @@ export default function App() {
             setCollectionTitle
           }}
           data={{
-            appSheets: renderAppSheets(),
+            appSheets: includeChrome ? renderAppSheets() : null,
             collectionCaptures,
             collectionCapturesColdSkeletonVisible,
             collectionCapturesError,
@@ -3696,15 +3849,48 @@ export default function App() {
             collectionDetailListRef,
             keyboardHeight,
             listPerfProps: COLLECTION_CAPTURE_LIST_PERF_PROPS,
-            selectedCollection,
-            toast: renderToast("footer")
+            selectedCollection: collection,
+            toast: includeChrome ? renderToast("footer") : null
           }}
           state={{
             collectionDescription,
             collectionTitle
           }}
         />
-      )
+      </CollectionDetailFrame>
+    );
+  }
+
+  if (!authReady) {
+    return renderBootScreen();
+  }
+
+  // Review opened from a collection: the detail stays mounted beneath the
+  // review overlay so the close morph lands on the live row and the list
+  // keeps its scroll position. Checked before the plain detail branch.
+  if (selected && captureReviewOrigin === "collection" && selectedCollection) {
+    return renderTopLevelStack({
+      active: "collections",
+      collectionDetailUnderlay: renderCollectionDetailOverlay(selectedCollection, {
+        direction: "opening",
+        includeChrome: false
+      }),
+      overlay: renderCaptureReviewScreen(selected),
+      overlayHandoff: reviewHandoff?.captureId === selected.id ? reviewHandoff : null
+    });
+  }
+
+  if (selectedCollection) {
+    return renderTopLevelStack({
+      active: "collections",
+      collectionDetailUnderlay: renderCollectionDetailOverlay(selectedCollection, { direction: "opening" })
+    });
+  }
+
+  if (closingCollectionDetail) {
+    return renderTopLevelStack({
+      active: "collections",
+      collectionDetailUnderlay: renderCollectionDetailOverlay(closingCollectionDetail, { direction: "closing" })
     });
   }
 

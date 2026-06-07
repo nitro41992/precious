@@ -1,6 +1,5 @@
 import type { ReactElement } from "react";
 import { Animated, View } from "react-native";
-import { FolderMinus } from "phosphor-react-native";
 import Reanimated from "react-native-reanimated";
 
 import { matchReasonForCapture } from "../capturePresentation";
@@ -15,11 +14,11 @@ import type {
 } from "../types";
 import {
   BottomAppBar,
-  MotionPressable,
   ToastHost
 } from "./components";
 import {
   CollectionCard,
+  CollectionCaptureRowItem,
   CaptureRow,
   CaptureRowInlineSkeleton,
   CaptureSkeletonRows,
@@ -27,7 +26,6 @@ import {
   HomeCaptureRowItem
 } from "./rows";
 import { styles } from "./styles";
-import { colors } from "./theme";
 import { rowEntering, rowExiting, rowLayout } from "./motion";
 import { Text } from "./typography";
 
@@ -36,7 +34,6 @@ export type AppRenderHelpersInput = {
   captureImageLoadStates: Record<string, CaptureImageLoadState>;
   captureRowRevealStates: Record<string, boolean>;
   capturesLoading: boolean;
-  collectionCaptureMotionEnabled: boolean;
   collectionFeedRevealPending: boolean;
   collectionItemMotionEnabled: boolean;
   collectionListFade: Animated.Value;
@@ -53,6 +50,7 @@ export type AppRenderHelpersInput = {
   onCollectionPress: (collectionId: string) => void;
   onCollectionTitleChange: (value: string) => void;
   onCaptureThumbnailRef: (captureId: string, node: View | null) => void;
+  onCollectionCaptureThumbnailRef: (captureId: string, node: View | null) => void;
   onFaviconFailure: (host: string) => void;
   onOpenCapture: (captureId: string) => void;
   onOpenCaptureFromCollection: (capture: Capture, collectionId: string) => void;
@@ -62,7 +60,7 @@ export type AppRenderHelpersInput = {
   onUnlinkCaptureFromCollection: (collectionId: string, capture: Capture) => void;
   searchQuery: string;
   selectedCollection: Collection | null;
-  handoffHiddenCaptureAliases: string[] | null;
+  handoffHiddenCapture: { aliases: string[]; surface: "home" | "collection" } | null;
   screenHandoffActive: boolean;
   skeletonPulse: Animated.Value;
   toast: ToastState | null;
@@ -169,37 +167,40 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     );
   }
 
-  function renderCollectionCapture({ item, index = 0 }: { item: Capture; index?: number }) {
-    const removeAction = (
-      <MotionPressable
-        accessibilityLabel="Remove from collection"
-        accessibilityRole="button"
-        hitSlop={8}
-        onPress={() => {
-          if (input.selectedCollection) input.onUnlinkCaptureFromCollection(input.selectedCollection.id, item);
-        }}
-        style={({ pressed }) => [styles.collectionRemoveIconButton, pressed && styles.collectionRemoveIconButtonPressed]}
-      >
-        <FolderMinus color={colors.danger} size={22} weight="regular" />
-      </MotionPressable>
-    );
-
+  // No per-row entering/exiting here: the detail screen animates as one pane,
+  // and row exit animations that outlive the unmounting screen leave orphaned
+  // Reanimated snapshots floating over the list behind it. Layout transitions
+  // are safe (they never outlive an unmount) and keep remove-from-collection
+  // reflows smooth.
+  function renderCollectionCapture({ item }: { item: Capture; index?: number }) {
+    const collection = input.selectedCollection;
+    if (!collection) return null;
     return (
       <Reanimated.View
-        entering={input.collectionCaptureMotionEnabled ? rowEntering(index) : undefined}
-        exiting={input.collectionCaptureMotionEnabled ? rowExiting : undefined}
-        layout={input.collectionCaptureMotionEnabled ? rowLayout : undefined}
+        layout={input.screenHandoffActive ? undefined : rowLayout}
         style={styles.collectionCaptureRow}
       >
         <Animated.View style={{ opacity: input.collectionRowsFade }}>
-          {renderCaptureRow({
-            showCollectionToken: false,
-            item,
-            onPress: () => {
-              if (input.selectedCollection) input.onOpenCaptureFromCollection(item, input.selectedCollection.id);
-            },
-            trailingAction: removeAction
-          })}
+          <CollectionCaptureRowItem
+            capture={item}
+            captureImageLoadStates={input.captureImageLoadStates}
+            captureRowRevealStates={input.captureRowRevealStates}
+            collectionId={collection.id}
+            failedFavicons={input.failedFavicons}
+            forceSkeleton={input.collectionFeedRevealPending}
+            thumbnailHidden={Boolean(
+              input.handoffHiddenCapture?.surface === "collection" &&
+                input.handoffHiddenCapture.aliases.includes(item.id)
+            )}
+            onCaptureRowImageDisplayed={input.onCaptureRowImageDisplayed}
+            onCaptureThumbnailRef={input.onCollectionCaptureThumbnailRef}
+            onFaviconFailure={input.onFaviconFailure}
+            onImageLoadState={input.onCaptureImageLoadState}
+            onOpenCaptureFromCollection={input.onOpenCaptureFromCollection}
+            onUnlinkCaptureFromCollection={input.onUnlinkCaptureFromCollection}
+            SkeletonBlock={SkeletonBlock}
+            testID={`pc.collection.capture.row.${item.id}`}
+          />
         </Animated.View>
       </Reanimated.View>
     );
@@ -243,7 +244,10 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
             deferFallbackIcon={input.capturesLoading && !input.activeCapturesLoadedOnce}
             failedFavicons={input.failedFavicons}
             forceSkeleton={input.homeFeedRevealPending}
-            thumbnailHidden={Boolean(input.handoffHiddenCaptureAliases?.includes(item.capture.id))}
+            thumbnailHidden={Boolean(
+            input.handoffHiddenCapture?.surface === "home" &&
+              input.handoffHiddenCapture.aliases.includes(item.capture.id)
+          )}
             onCaptureRowImageDisplayed={input.onCaptureRowImageDisplayed}
             onCaptureThumbnailRef={input.onCaptureThumbnailRef}
             onFaviconFailure={input.onFaviconFailure}
