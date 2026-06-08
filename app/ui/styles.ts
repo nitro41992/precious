@@ -2642,8 +2642,46 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: 9,
+    justifyContent: "space-between",
     minHeight: 34,
     paddingBottom: 4
+  },
+  reminderFieldSectionHeaderLead: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 9
+  },
+  reminderAllDayToggle: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8
+  },
+  reminderAllDayLabel: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 17
+  },
+  toggleSwitchTrack: {
+    borderRadius: 14,
+    height: 28,
+    justifyContent: "center",
+    paddingHorizontal: 3,
+    width: 46
+  },
+  toggleSwitchTrackDisabled: {
+    opacity: 0.5
+  },
+  toggleSwitchThumb: {
+    backgroundColor: colors.surface,
+    borderRadius: 11,
+    elevation: 2,
+    height: 22,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.18,
+    shadowRadius: 2,
+    width: 22
   },
   reminderFieldRow: {
     alignItems: "center",

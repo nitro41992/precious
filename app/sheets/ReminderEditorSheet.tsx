@@ -14,7 +14,7 @@ import {
   reminderScheduleDraftForSuggestion,
   reminderTimeLabel
 } from "../capturePresentation";
-import { AiFieldInsight, AnimatedBottomSheet, MotionPressable, SheetHeader } from "../ui/components";
+import { AiFieldInsight, AnimatedBottomSheet, MotionPressable, SheetHeader, ToggleSwitch } from "../ui/components";
 import { RangeCalendar } from "../ui/RangeCalendar";
 import { styles } from "../ui/styles";
 import { Text } from "../ui/typography";
@@ -55,14 +55,11 @@ function timePrecision(startTime: string, endTime: string): ReminderTimePrecisio
   return "unknown";
 }
 
-// Every reminder needs a fire time, so empty times default to a sensible morning
-// window. A single-day reminder is just tapping one day on the calendar — there
-// is no separate all-day mode.
-function withDefaultTimes(draft: ReminderScheduleDraft): ReminderScheduleDraft {
-  const startTime = draft.startTime || DEFAULT_REMINDER_START_TIME;
-  const endTime = draft.endTime || DEFAULT_REMINDER_END_TIME;
-  return { ...draft, startTime, endTime, timePrecision: timePrecision(startTime, endTime) };
-}
+// A reminder can be all-day (no clock time, just the day or range of days) or
+// timed. We keep the draft's times exactly as they come in — empty means all-day
+// — and only stamp the sensible morning window when the user turns the all-day
+// switch off.
+const DEFAULT_TIMES = { start: DEFAULT_REMINDER_START_TIME, end: DEFAULT_REMINDER_END_TIME };
 
 function summaryDate(dateText: string) {
   if (!dateText) return "";
@@ -176,15 +173,27 @@ export function ReminderEditorSheet({
   reminderIndex: number | null;
   visible: boolean;
 }) {
-  const initialDraft = useMemo(() => withDefaultTimes(reminderScheduleDraftForSuggestion(reminder)), [reminder]);
+  const initialDraft = useMemo(() => reminderScheduleDraftForSuggestion(reminder), [reminder]);
   const [draft, setDraft] = useState<ReminderScheduleDraft>(initialDraft);
+  // A reminder opens all-day when it arrives without a start time: a brand-new
+  // manual reminder, or an AI suggestion that's about a day rather than a clock
+  // time. An AI suggestion that carries a time opens timed, with its sliders.
+  const [isAllDay, setIsAllDay] = useState(() => !initialDraft.startTime);
   // Suppress the out-of-order warning while a slider is being dragged so it can't
   // flicker as the value snaps across the boundary; it settles in on release.
   const [sliderActive, setSliderActive] = useState(false);
+  // Remember the last timed values so a round-trip through the all-day switch
+  // restores the user's chosen time instead of always snapping back to 9:00.
+  const lastTimesRef = useRef(
+    initialDraft.startTime ? { start: initialDraft.startTime, end: initialDraft.endTime } : DEFAULT_TIMES
+  );
 
   useEffect(() => {
     if (!visible) return;
-    setDraft(withDefaultTimes(reminderScheduleDraftForSuggestion(reminder)));
+    const next = reminderScheduleDraftForSuggestion(reminder);
+    setDraft(next);
+    setIsAllDay(!next.startTime);
+    lastTimesRef.current = next.startTime ? { start: next.startTime, end: next.endTime } : DEFAULT_TIMES;
   }, [reminder, visible]);
 
   const today = useMemo(() => dateStringFromDate(new Date()), []);
@@ -233,6 +242,19 @@ export function ReminderEditorSheet({
       timePrecision: timePrecision(startTime, endTime),
       timezone: current.timezone || deviceTimeZone()
     }));
+  }
+
+  function toggleAllDay(next: boolean) {
+    setIsAllDay(next);
+    if (next) {
+      if (draft.startTime) lastTimesRef.current = { start: draft.startTime, end: draft.endTime };
+      setTimeRange("", "");
+    } else {
+      setTimeRange(
+        draft.startTime || lastTimesRef.current.start || DEFAULT_REMINDER_START_TIME,
+        draft.endTime || lastTimesRef.current.end || DEFAULT_REMINDER_END_TIME
+      );
+    }
   }
 
   // Start and end move independently; an out-of-order same-day range is caught
@@ -292,10 +314,12 @@ export function ReminderEditorSheet({
               <Text adjustsFontSizeToFit minimumFontScale={0.8} numberOfLines={1} style={styles.reminderSummaryDate}>
                 {summaryDate(draft.startDate)}
               </Text>
-              <Text style={styles.reminderSummaryTime}>
-                {startTimeLabel}
-                {endTimeLabel && endTimeLabel !== startTimeLabel ? ` – ${endTimeLabel}` : ""}
-              </Text>
+              {!isAllDay && startTimeLabel ? (
+                <Text style={styles.reminderSummaryTime}>
+                  {startTimeLabel}
+                  {endTimeLabel && endTimeLabel !== startTimeLabel ? ` – ${endTimeLabel}` : ""}
+                </Text>
+              ) : null}
             </View>
           </View>
         ) : (
@@ -304,7 +328,7 @@ export function ReminderEditorSheet({
               <Text adjustsFontSizeToFit minimumFontScale={0.7} numberOfLines={1} style={styles.reminderSummaryDate}>
                 {summaryDate(draft.startDate)}
               </Text>
-              <Text style={styles.reminderSummaryTime}>{startTimeLabel}</Text>
+              {!isAllDay && startTimeLabel ? <Text style={styles.reminderSummaryTime}>{startTimeLabel}</Text> : null}
             </View>
             <View style={styles.reminderSummaryArrow}>
               <ArrowRight color={colors.ink} size={20} weight="bold" />
@@ -313,7 +337,7 @@ export function ReminderEditorSheet({
               <Text adjustsFontSizeToFit minimumFontScale={0.7} numberOfLines={1} style={styles.reminderSummaryDate}>
                 {summaryDate(draft.endDate)}
               </Text>
-              <Text style={styles.reminderSummaryTime}>{endTimeLabel}</Text>
+              {!isAllDay && endTimeLabel ? <Text style={styles.reminderSummaryTime}>{endTimeLabel}</Text> : null}
             </View>
           </View>
         )}
@@ -325,36 +349,51 @@ export function ReminderEditorSheet({
         />
         <View style={styles.reminderFieldGroup}>
           <View style={styles.reminderFieldSectionHeader}>
-            <Clock color={colors.muted} size={18} weight="regular" />
-            <Text style={styles.reminderFieldSectionTitle}>Time</Text>
+            <View style={styles.reminderFieldSectionHeaderLead}>
+              <Clock color={colors.muted} size={18} weight="regular" />
+              <Text style={styles.reminderFieldSectionTitle}>Time</Text>
+            </View>
+            <View style={styles.reminderAllDayToggle}>
+              <Text style={styles.reminderAllDayLabel}>All day</Text>
+              <ToggleSwitch
+                accessibilityLabel="All day, no specific time"
+                onValueChange={toggleAllDay}
+                testID="pc.reminder.all-day"
+                value={isAllDay}
+              />
+            </View>
           </View>
-          <TimeSlider
-            dateText={draft.startDate}
-            fillSide="right"
-            label="Start"
-            onActiveChange={setSliderActive}
-            onChange={handleStartTime}
-            testID="pc.reminder.start-time"
-            value={draft.startTime}
-          />
-          <TimeSlider
-            dateText={draft.endDate}
-            fillSide="left"
-            label="End"
-            onActiveChange={setSliderActive}
-            onChange={handleEndTime}
-            testID="pc.reminder.end-time"
-            value={draft.endTime}
-          />
-          <View style={styles.reminderWarningSlot}>
-            {invalidTimeRange && !sliderActive ? (
-              <View style={styles.reminderWarning}>
-                <Text numberOfLines={1} style={styles.reminderWarningText}>
-                  End time must be after the start time.
-                </Text>
+          {!isAllDay ? (
+            <>
+              <TimeSlider
+                dateText={draft.startDate}
+                fillSide="right"
+                label="Start"
+                onActiveChange={setSliderActive}
+                onChange={handleStartTime}
+                testID="pc.reminder.start-time"
+                value={draft.startTime}
+              />
+              <TimeSlider
+                dateText={draft.endDate}
+                fillSide="left"
+                label="End"
+                onActiveChange={setSliderActive}
+                onChange={handleEndTime}
+                testID="pc.reminder.end-time"
+                value={draft.endTime}
+              />
+              <View style={styles.reminderWarningSlot}>
+                {invalidTimeRange && !sliderActive ? (
+                  <View style={styles.reminderWarning}>
+                    <Text numberOfLines={1} style={styles.reminderWarningText}>
+                      End time must be after the start time.
+                    </Text>
+                  </View>
+                ) : null}
               </View>
-            ) : null}
-          </View>
+            </>
+          ) : null}
         </View>
       </ScrollView>
       {typeof reminderIndex === "number" && onRemove ? (

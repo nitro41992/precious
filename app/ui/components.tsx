@@ -6,6 +6,8 @@ import { Image } from "expo-image";
 import { Check, ClockClockwise, Folder, Folders, Gear, HouseSimple, Info, Plus, Sparkle, Warning, X } from "phosphor-react-native";
 import Reanimated, {
   cancelAnimation,
+  interpolate,
+  interpolateColor,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
@@ -121,6 +123,58 @@ export const MotionPressable = forwardRef<View, MotionPressableProps>(function M
     />
   );
 });
+
+// Borderless pill switch built on the app's motion system: the thumb slides and
+// the track tints with withTiming so it reads as a soft toggle, not a hairline
+// control. Reusable wherever a binary on/off is needed.
+const TOGGLE_THUMB_TRAVEL = 18;
+
+export function ToggleSwitch({
+  value,
+  onValueChange,
+  accessibilityLabel,
+  disabled = false,
+  testID
+}: {
+  value: boolean;
+  onValueChange: (next: boolean) => void;
+  accessibilityLabel?: string;
+  disabled?: boolean;
+  testID?: string;
+}) {
+  const progress = useSharedValue(value ? 1 : 0);
+
+  useEffect(() => {
+    progress.value = withTiming(value ? 1 : 0, {
+      duration: motionDuration.quick,
+      easing: motionEasing.standard,
+      reduceMotion: motionReduceMotion
+    });
+  }, [value, progress]);
+
+  const trackStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(progress.value, [0, 1], [colors.surfaceContainerHigh, colors.accent])
+  }));
+  const thumbStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: interpolate(progress.value, [0, 1], [0, TOGGLE_THUMB_TRAVEL]) }]
+  }));
+
+  return (
+    <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: value, disabled }}
+      disabled={disabled}
+      hitSlop={8}
+      onPress={() => onValueChange(!value)}
+      testID={testID}
+    >
+      <Reanimated.View style={[styles.toggleSwitchTrack, disabled && styles.toggleSwitchTrackDisabled, trackStyle]}>
+        <Reanimated.View style={[styles.toggleSwitchThumb, thumbStyle]} />
+      </Reanimated.View>
+    </Pressable>
+  );
+}
 
 export function AnimatedBottomSheet({
   children,

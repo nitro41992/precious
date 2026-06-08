@@ -357,3 +357,33 @@ test("reminderScheduleDraftForSuggestion prefills all-day and same-day suggestio
   assert.equal(sameDay.startDate, "2026-06-05");
   assert.equal(sameDay.endDate, "2026-06-05");
 });
+
+test("reminderSuggestionFromSchedule serializes an all-day draft as a timeless reminder", () => {
+  const { reminderSuggestionFromSchedule, reminderLabelParts } = loadCapturePresentation();
+
+  // This is what the editor produces once the user flips on "All day": empty
+  // times across a date range. It must serialize with null times and an
+  // unknown time precision so the date-only reminder round-trips.
+  const suggestion = reminderSuggestionFromSchedule({
+    startDate: "2026-06-05",
+    endDate: "2026-06-08",
+    startTime: "",
+    endTime: "",
+    timezone: "America/New_York",
+    datePrecision: "date_range",
+    timePrecision: "unknown",
+    duration: 4,
+    durationUnit: "days",
+    source: "manual"
+  });
+
+  assert.equal(suggestion.start_time, null);
+  assert.equal(suggestion.end_time, null);
+  assert.equal(suggestion.time_precision, "unknown");
+  assert.equal(suggestion.trigger_value, "Jun 5-Jun 8");
+
+  // And the chip renders date-only, with no stray time label.
+  const parts = reminderLabelParts(suggestion);
+  assert.equal(parts.dateLabel, "Jun 5-Jun 8");
+  assert.equal(parts.timeLabel, "");
+});
