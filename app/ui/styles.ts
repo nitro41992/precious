@@ -2270,6 +2270,22 @@ export const styles = StyleSheet.create({
     fontWeight: "500",
     lineHeight: 32
   },
+  inlineMeaningLineTop: {
+    alignItems: "flex-start"
+  },
+  inlineMeaningForReminder: {
+    marginTop: 6
+  },
+  inlineMeaningPillColumn: {
+    gap: 1
+  },
+  inlineMeaningPillSubtext: {
+    color: colors.muted,
+    ...typefaces.medium,
+    fontSize: 15,
+    fontWeight: "600",
+    lineHeight: 20
+  },
   inlineMeaningChipTextPending: {
     color: colors.review
   },
@@ -2932,6 +2948,18 @@ export const styles = StyleSheet.create({
     color: colors.accentTextStrong,
     fontSize: 14,
     fontWeight: "800"
+  },
+  reminderWarning: {
+    backgroundColor: colors.dangerSoft,
+    borderRadius: 8,
+    marginTop: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 8
+  },
+  reminderWarningText: {
+    color: colors.danger,
+    fontSize: 14,
+    fontWeight: "700"
   },
   rationaleSheetHeader: {
     alignItems: "center",

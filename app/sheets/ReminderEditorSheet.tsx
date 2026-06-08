@@ -44,14 +44,6 @@ function timeMinutes(value: string) {
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
-function addMinutes(value: string, minutes: number) {
-  const current = timeMinutes(value);
-  if (current === null) return "";
-  const next = current + minutes;
-  if (next >= 24 * 60) return "";
-  return `${pad(Math.floor(next / 60))}:${pad(next % 60)}`;
-}
-
 function datePrecision(startDate: string, endDate: string): ReminderDatePrecision {
   if (!startDate) return "unknown";
   return startDate === endDate ? "exact" : "date_range";
@@ -146,8 +138,8 @@ function TimeSlider({
         style={styles.timeSliderTrackWrap}
         {...responder.panHandlers}
       >
-        <View style={styles.timeSliderTrack} />
-        {trackWidth ? <View style={[styles.timeSliderFill, fillStyle]} /> : null}
+        <View pointerEvents="none" style={styles.timeSliderTrack} />
+        {trackWidth ? <View pointerEvents="none" style={[styles.timeSliderFill, fillStyle]} /> : null}
         <View pointerEvents="none" style={[styles.timeSliderThumb, { left: thumbLeft }]}>
           <Text style={styles.timeSliderThumbText}>{reminderTimeLabel(dateText, value)}</Text>
         </View>
@@ -224,12 +216,10 @@ export function ReminderEditorSheet({
     }));
   }
 
+  // Start and end move independently; an out-of-order same-day range is caught
+  // by the warning + disabled Save below rather than auto-corrected.
   function handleStartTime(next: string) {
-    // Keep the end after the start on a same-day range.
-    const keepEnd = draft.endTime &&
-      (draft.startDate !== draft.endDate || timeMinutes(draft.endTime)! > timeMinutes(next)!);
-    const nextEnd = keepEnd ? draft.endTime : addMinutes(next, 30) || next;
-    setTimeRange(next, nextEnd);
+    setTimeRange(next, draft.endTime);
   }
 
   function handleEndTime(next: string) {
@@ -335,6 +325,11 @@ export function ReminderEditorSheet({
             testID="pc.reminder.end-time"
             value={draft.endTime}
           />
+          {invalidTimeRange ? (
+            <View style={styles.reminderWarning}>
+              <Text style={styles.reminderWarningText}>End time must be after the start time.</Text>
+            </View>
+          ) : null}
         </View>
       </ScrollView>
       {typeof reminderIndex === "number" && onRemove ? (

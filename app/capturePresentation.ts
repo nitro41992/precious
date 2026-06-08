@@ -688,6 +688,33 @@ export function reminderLabel(reminder: ReminderSuggestion | undefined) {
   return reminder.trigger_value || reminder.trigger_text || humanize(reminder.trigger_type);
 }
 
+// Date and time of a reminder as separate labels so a chip can show the date
+// prominently with the time as a styled subline, instead of one long string
+// that wraps awkwardly.
+export function reminderLabelParts(reminder: ReminderSuggestion | undefined): {
+  dateLabel: string;
+  timeLabel: string;
+} {
+  if (!reminder) return { dateLabel: "", timeLabel: "" };
+  const startDate = reminderStartDateValue(reminder);
+  const endDate = reminderEndDateValue(reminder, startDate);
+  const startTime = reminderStartTimeValue(reminder);
+  const endTime = reminderEndTimeValue(reminder, startTime);
+  if (reminder.date_precision === "month_window" && !startTime && reminder.trigger_value) {
+    return { dateLabel: reminder.trigger_value, timeLabel: "" };
+  }
+  const dateLabel = reminderIntervalLabel(startDate, endDate, "", "") ||
+    reminder.trigger_value ||
+    reminder.trigger_text ||
+    humanize(reminder.trigger_type);
+  const startTimeLabel = reminderTimeLabel(startDate, startTime);
+  const endTimeLabel = reminderTimeLabel(endDate || startDate, endTime);
+  const timeLabel = startTimeLabel && endTimeLabel && endTimeLabel !== startTimeLabel
+    ? `${startTimeLabel} – ${endTimeLabel}`
+    : startTimeLabel;
+  return { dateLabel, timeLabel };
+}
+
 export function reminderScheduleDraftForSuggestion(reminder?: ReminderSuggestion): ReminderScheduleDraft {
   const inferredParts = inferredReminderParts(reminder);
   const startDate = reminderStartDateValue(reminder) ||

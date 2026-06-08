@@ -62,6 +62,7 @@ import {
   isImageCapture,
   reminderDraftKey,
   reminderLabel,
+  reminderLabelParts,
   reviewStatusCue,
   urlEvidenceMessage
 } from "../capturePresentation";
@@ -541,6 +542,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const purposeField = meaningFields.find((field) => field.kind === "purpose");
   const collectionField = meaningFields.find((field) => field.kind === "collection");
   const laterField = meaningFields.find((field) => field.kind === "later");
+  const laterParts = laterField?.hasValue ? reminderLabelParts(reminderRows[0]) : null;
   const purposeRationale = captureFieldRationale(selected, "purpose");
   const reminderRationale = captureFieldRationale(selected, "later");
   const urlEvidenceNotice = urlEvidenceMessage(selected.urlEvidence);
@@ -1185,8 +1187,10 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                           </View>
                         ) : null}
                         {laterField ? (
-                          <View style={styles.inlineMeaningLine}>
-                            <Text style={styles.inlineMeaningText}>for </Text>
+                          <View style={[styles.inlineMeaningLine, laterParts?.timeLabel && styles.inlineMeaningLineTop]}>
+                            <Text style={[styles.inlineMeaningText, laterParts?.timeLabel && styles.inlineMeaningForReminder]}>
+                              for{" "}
+                            </Text>
                             <MotionPressable
                               accessibilityLabel={`Later: ${laterField.displayValue}`}
                               accessibilityRole="button"
@@ -1194,14 +1198,21 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                               style={({ pressed }) => [styles.inlineMeaningPill, pressed && styles.subtlePressed]}
                               testID="pc.review.reminder.open"
                             >
-                              <Text
-                                style={[
-                                  styles.inlineMeaningPillText,
-                                  !laterField.hasValue && styles.inlineMeaningChipTextPending
-                                ]}
-                              >
-                                {laterField.displayValue}
-                              </Text>
+                              {laterParts?.timeLabel ? (
+                                <View style={styles.inlineMeaningPillColumn}>
+                                  <Text style={styles.inlineMeaningPillText}>{laterParts.dateLabel}</Text>
+                                  <Text style={styles.inlineMeaningPillSubtext}>{laterParts.timeLabel}</Text>
+                                </View>
+                              ) : (
+                                <Text
+                                  style={[
+                                    styles.inlineMeaningPillText,
+                                    !laterField.hasValue && styles.inlineMeaningChipTextPending
+                                  ]}
+                                >
+                                  {laterParts?.dateLabel || laterField.displayValue}
+                                </Text>
+                              )}
                             </MotionPressable>
                           </View>
                         ) : null}

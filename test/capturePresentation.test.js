@@ -268,6 +268,33 @@ test("isAllDayDraft is true only when both times are empty", () => {
   assert.equal(isAllDayDraft("09:00", "09:30"), false);
 });
 
+test("reminderLabelParts splits date and time into separate labels", () => {
+  const { reminderLabelParts } = loadCapturePresentation();
+
+  const range = reminderLabelParts({
+    trigger_type: "time",
+    start_date: "2026-06-08",
+    end_date: "2026-06-09",
+    start_time: "10:00",
+    end_time: "17:00",
+    rationale: "",
+    confidence: 0.9
+  });
+  assert.equal(range.dateLabel, "Jun 8-Jun 9");
+  assert.equal(range.timeLabel, "10:00 AM – 5:00 PM");
+
+  const singleNoTime = reminderLabelParts({
+    trigger_type: "time",
+    start_date: "2026-06-08",
+    rationale: "",
+    confidence: 0.9
+  });
+  assert.equal(singleNoTime.dateLabel, "Jun 8");
+  assert.equal(singleNoTime.timeLabel, "");
+
+  assert.deepEqual(reminderLabelParts(undefined), { dateLabel: "", timeLabel: "" });
+});
+
 test("reminderScheduleDraftForSuggestion prefills all-day and same-day suggestions", () => {
   const { reminderScheduleDraftForSuggestion, isAllDayDraft } = loadCapturePresentation();
 
