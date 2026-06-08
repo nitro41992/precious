@@ -83,6 +83,7 @@ export function CollectionComposerSheet({
         ]}
       >
         <TextInput
+          maxLength={50}
           onChangeText={onCollectionTitleChange}
           placeholder="Title"
           placeholderTextColor={colors.placeholder}
@@ -93,6 +94,7 @@ export function CollectionComposerSheet({
           value={collectionTitle}
         />
         <TextInput
+          maxLength={160}
           multiline
           onChangeText={onCollectionDescriptionChange}
           placeholder="What belongs here"

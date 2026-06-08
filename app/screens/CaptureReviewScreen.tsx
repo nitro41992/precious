@@ -1150,7 +1150,8 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                           accessibilityLabel={`Purpose: ${purposeField.displayValue}`}
                           accessibilityRole="button"
                           onPress={() => openInlineField("purpose")}
-                          style={({ pressed }) => [styles.propertyRow, pressed && styles.subtlePressed]}
+                          pressScale={1}
+                          style={({ pressed }) => [styles.propertyRow, pressed && styles.propertyRowPressed]}
                           testID="pc.review.intent.open"
                         >
                           <Text style={styles.propertyRowLabel}>Purpose</Text>
@@ -1163,7 +1164,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                           >
                             {purposeField.displayValue}
                           </Text>
-                          <CaretRight color={colors.muted} size={18} weight="bold" />
+                          <CaretRight color={colors.placeholder} size={17} weight="bold" />
                         </MotionPressable>
                       ) : null}
                       {collectionField ? (
@@ -1171,7 +1172,8 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                           accessibilityLabel={`Collection: ${collectionField.displayValue}`}
                           accessibilityRole="button"
                           onPress={() => openInlineField("collection")}
-                          style={({ pressed }) => [styles.propertyRow, pressed && styles.subtlePressed]}
+                          pressScale={1}
+                          style={({ pressed }) => [styles.propertyRow, pressed && styles.propertyRowPressed]}
                           testID="pc.review.collections.open"
                         >
                           <Text style={styles.propertyRowLabel}>Collection</Text>
@@ -1184,18 +1186,19 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                           >
                             {collectionField.displayValue}
                           </Text>
-                          <CaretRight color={colors.muted} size={18} weight="bold" />
+                          <CaretRight color={colors.placeholder} size={17} weight="bold" />
                         </MotionPressable>
                       ) : null}
                       {laterField ? (
                         <MotionPressable
-                          accessibilityLabel={`Reminder: ${laterField.displayValue}`}
+                          accessibilityLabel={`When: ${laterField.displayValue}`}
                           accessibilityRole="button"
                           onPress={() => openInlineField("later")}
-                          style={({ pressed }) => [styles.propertyRow, pressed && styles.subtlePressed]}
+                          pressScale={1}
+                          style={({ pressed }) => [styles.propertyRow, pressed && styles.propertyRowPressed]}
                           testID="pc.review.reminder.open"
                         >
-                          <Text style={styles.propertyRowLabel}>Reminder</Text>
+                          <Text style={styles.propertyRowLabel}>When</Text>
                           {laterParts?.timeLabel ? (
                             <View style={styles.propertyRowValueColumn}>
                               <Text numberOfLines={1} style={styles.propertyRowValue}>
@@ -1216,7 +1219,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                               {laterParts?.dateLabel || laterField.displayValue}
                             </Text>
                           )}
-                          <CaretRight color={colors.muted} size={18} weight="bold" />
+                          <CaretRight color={colors.placeholder} size={17} weight="bold" />
                         </MotionPressable>
                       ) : null}
                       {showLocationInline ? (
@@ -1224,14 +1227,15 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                           accessibilityLabel={resolvedPlace ? `Open ${locationInlineValue} in Maps` : `Search Maps for ${locationInlineValue}`}
                           accessibilityRole={primaryMapCandidate ? "button" : undefined}
                           onPress={primaryMapCandidate ? () => void openVisitTargetMaps(primaryMapCandidate) : undefined}
-                          style={({ pressed }) => [styles.propertyRow, pressed && primaryMapCandidate && styles.subtlePressed]}
+                          pressScale={1}
+                          style={({ pressed }) => [styles.propertyRow, pressed && primaryMapCandidate && styles.propertyRowPressed]}
                         >
                           <Text style={styles.propertyRowLabel}>Location</Text>
                           <Text numberOfLines={1} style={styles.propertyRowValue}>
                             {locationInlineValue}
                           </Text>
                           {primaryMapCandidate ? (
-                            <MapPin color={colors.muted} size={18} weight="regular" />
+                            <MapPin color={colors.placeholder} size={17} weight="regular" />
                           ) : null}
                         </MotionPressable>
                       ) : null}

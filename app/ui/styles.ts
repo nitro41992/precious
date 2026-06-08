@@ -4,14 +4,14 @@ import { colors, typefaces } from "./theme";
 
 const bottomControlShadow = Platform.OS === "android"
   ? {
-      boxShadow: "0px 0px 44px 6px rgba(23, 33, 27, 0.105)",
+      boxShadow: "0px 4px 34px 2px rgba(23, 33, 27, 0.2)",
       elevation: 0
     }
   : {
       shadowColor: colors.shadow,
-      shadowOffset: { width: 0, height: 0 },
-      shadowOpacity: 0.075,
-      shadowRadius: 34
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.16,
+      shadowRadius: 30
     };
 
 const softCardEdgeColor = "rgba(207, 198, 180, 0.35)";
@@ -2248,22 +2248,26 @@ export const styles = StyleSheet.create({
     borderRadius: softCardRadius,
     borderWidth: 2,
     overflow: "hidden",
-    paddingHorizontal: 16,
     ...softCardShadow
   },
   propertyRow: {
     alignItems: "center",
     flexDirection: "row",
     gap: 12,
-    minHeight: 56,
-    paddingVertical: 12
+    minHeight: 58,
+    paddingHorizontal: 18,
+    paddingVertical: 13
+  },
+  propertyRowPressed: {
+    backgroundColor: colors.surfaceContainer
   },
   propertyRowLabel: {
     color: colors.muted,
     ...typefaces.medium,
     fontSize: 13,
+    letterSpacing: 0.1,
     lineHeight: 18,
-    width: 92
+    width: 96
   },
   propertyRowValue: {
     color: colors.ink,
@@ -3124,10 +3128,12 @@ export const styles = StyleSheet.create({
   reviewActionLabel: {
     color: colors.muted,
     ...typefaces.medium,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "500",
-    lineHeight: 18,
-    paddingLeft: 1
+    letterSpacing: 0.7,
+    lineHeight: 16,
+    paddingLeft: 2,
+    textTransform: "uppercase"
   },
   reviewActionGroup: {
     backgroundColor: colors.surfaceContainer,
