@@ -341,11 +341,15 @@ export function ReminderEditorSheet({
             testID="pc.reminder.end-time"
             value={draft.endTime}
           />
-          {invalidTimeRange && !sliderActive ? (
-            <View style={styles.reminderWarning}>
-              <Text style={styles.reminderWarningText}>End time must be after the start time.</Text>
-            </View>
-          ) : null}
+          <View style={styles.reminderWarningSlot}>
+            {invalidTimeRange && !sliderActive ? (
+              <View style={styles.reminderWarning}>
+                <Text numberOfLines={1} style={styles.reminderWarningText}>
+                  End time must be after the start time.
+                </Text>
+              </View>
+            ) : null}
+          </View>
         </View>
       </ScrollView>
       {typeof reminderIndex === "number" && onRemove ? (

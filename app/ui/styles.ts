@@ -2949,10 +2949,14 @@ export const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800"
   },
+  reminderWarningSlot: {
+    justifyContent: "center",
+    marginTop: 2,
+    minHeight: 38
+  },
   reminderWarning: {
     backgroundColor: colors.dangerSoft,
     borderRadius: 8,
-    marginTop: 2,
     paddingHorizontal: 12,
     paddingVertical: 8
   },
