@@ -2773,16 +2773,14 @@ export const styles = StyleSheet.create({
   reminderSummary: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 14,
+    gap: 18,
     justifyContent: "center",
     paddingBottom: 4,
     paddingTop: 2
   },
   reminderSummaryCol: {
     alignItems: "center",
-    flex: 1,
-    gap: 3,
-    minWidth: 0
+    gap: 3
   },
   reminderSummaryColSingle: {
     alignItems: "center",
@@ -2791,7 +2789,7 @@ export const styles = StyleSheet.create({
   reminderSummaryDate: {
     color: colors.ink,
     fontSize: 20,
-    ...typefaces.displaySemibold
+    ...typefaces.cardTitle
   },
   reminderSummaryTime: {
     color: colors.muted,
