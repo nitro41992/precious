@@ -2,12 +2,13 @@ import type { ReactElement, ReactNode } from "react";
 import { Pressable, StatusBar, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import type { FlashListProps, ListRenderItemInfo } from "@shopify/flash-list";
-import { Folder, MagnifyingGlass as Search, Plus } from "phosphor-react-native";
+import { Folder, MagnifyingGlass as Search, Plus, Sparkle } from "phosphor-react-native";
 
 import type { Collection, LoadPhase } from "../types";
 import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
 import { HeaderContentGradient, IconButton } from "../ui/components";
+import { CollectionSuggestionGridCard } from "../ui/rows";
 import { Text } from "../ui/typography";
 
 type CollectionsScreenProps = {
@@ -19,17 +20,20 @@ type CollectionsScreenProps = {
     collectionsColdSkeletonVisible: boolean;
     collectionsError: string;
     collectionsListPerfProps: Partial<FlashListProps<Collection>>;
+    suggestions: Collection[];
     toast: ReactNode;
   };
   state: {
     collectionsLoadPhase: LoadPhase;
     collectionsLoading: boolean;
     showCollectionForm: boolean;
+    suggestionBusyId: string | null;
   };
   actions: {
     loadMoreCollections: () => void;
     openCollectionComposer: () => void;
     openCollectionSearch: () => void;
+    persistSuggestion: (collectionId: string) => void;
     renderCollection: (input: ListRenderItemInfo<Collection>) => ReactElement | null;
     renderCollectionSkeletonRows: (
       count?: number,
@@ -49,13 +53,15 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
     collectionsColdSkeletonVisible,
     collectionsError,
     collectionsListPerfProps,
+    suggestions,
     toast
   } = data;
-  const { collectionsLoadPhase, collectionsLoading } = state;
+  const { collectionsLoadPhase, collectionsLoading, suggestionBusyId } = state;
   const {
     loadMoreCollections,
     openCollectionComposer,
     openCollectionSearch,
+    persistSuggestion,
     renderCollection,
     renderCollectionSkeletonRows,
     renderListLoadingFooter
@@ -63,6 +69,24 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
 
   const collectionsBlockingLoading = collectionsLoadPhase === "cold" && collectionsLoading && !collectionsError && !collections.length;
   const visibleManagedCollections = collections;
+  const suggestionsHeader = suggestions.length ? (
+    <View style={styles.suggestionSection}>
+      <View style={styles.suggestionSectionHeader}>
+        <Sparkle color={colors.accentTextStrong} size={14} weight="fill" />
+        <Text style={styles.suggestionSectionTitle}>Suggested</Text>
+      </View>
+      <View style={styles.suggestionSectionGrid}>
+        {suggestions.map((suggestion) => (
+          <CollectionSuggestionGridCard
+            busy={suggestionBusyId === suggestion.id}
+            item={suggestion}
+            key={suggestion.id}
+            onPersist={() => persistSuggestion(suggestion.id)}
+          />
+        ))}
+      </View>
+    </View>
+  ) : null;
 
   return (
     <View style={styles.edgeToEdgeSafe}>
@@ -91,6 +115,7 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
           keyExtractor={(item) => item.id}
           renderItem={renderCollection}
           numColumns={2}
+          ListHeaderComponent={suggestionsHeader}
           ListEmptyComponent={
             collectionsBlockingLoading && collectionsColdSkeletonVisible ? (
               renderCollectionSkeletonRows(collections.length ? Math.min(collections.length, 7) : 7, false, collections)

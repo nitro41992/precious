@@ -57,7 +57,9 @@ import {
   autoLinkCollectionDecisions,
   promptCollectionsForAnalysis,
   refreshCaptureEmbedding,
+  refreshCollectionPreviewFromActiveLinks,
   rerankCollectionsForCapture,
+  resolveNewCollectionSuggestions,
   retrieveCollectionsForCapture,
 } from "./collections.ts";
 import { resolvePlacePatchForAnalysis } from "./places.ts";
@@ -546,12 +548,24 @@ export async function processCapture(captureId: string, userId: string) {
       rerankedCollections,
       promptCollections,
     );
+    const sanitizedAnalysis = sanitizeAnalysisRationales(recoveredAnalysis);
+    // Materialize an AI-proposed new Collection as a cross-capture pending suggestion
+    // before auto-link clears collection_decisions. Never blocks the analysis pipeline.
+    const analysisWithSuggestions = await resolveNewCollectionSuggestions(
+      supabase,
+      userId,
+      captureId,
+      sanitizedAnalysis,
+    ).catch((error) => {
+      console.warn("Collection suggestion failed", errorMessage(error));
+      return sanitizedAnalysis;
+    });
     const analysisBeforePlaceResolution = normalizedReviewAnalysis(
       await autoLinkCollectionDecisions(
         supabase,
         userId,
         captureId,
-        sanitizeAnalysisRationales(recoveredAnalysis),
+        analysisWithSuggestions,
         rerankedCollections,
       ),
     );
@@ -646,6 +660,24 @@ export async function processCapture(captureId: string, userId: string) {
         console.warn("Capture embedding refresh failed", errorMessage(error));
       },
     );
+    // The suggestion's collage snapshot was taken before this capture's analysis was
+    // persisted; refresh it now so link-only captures contribute their preview image.
+    const pendingSuggestion = analysis.pending_collection_suggestion;
+    const pendingSuggestionId = pendingSuggestion &&
+        typeof pendingSuggestion === "object" &&
+        typeof (pendingSuggestion as Record<string, unknown>).collection_id ===
+          "string"
+      ? String((pendingSuggestion as Record<string, unknown>).collection_id)
+      : "";
+    if (pendingSuggestionId) {
+      runInBackground(
+        refreshCollectionPreviewFromActiveLinks(
+          supabase,
+          userId,
+          pendingSuggestionId,
+        ),
+      );
+    }
   } catch (error) {
     const message = error instanceof Error
       ? error.message

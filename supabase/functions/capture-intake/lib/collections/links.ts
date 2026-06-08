@@ -1,5 +1,9 @@
 import { adminClient } from "../supabase.ts";
-import { CAPTURE_LIST_SELECT } from "../config.ts";
+import {
+  CAPTURE_LIST_SELECT,
+  COLLECTION_DESCRIPTION_MAX_LENGTH,
+  COLLECTION_TITLE_MAX_LENGTH,
+} from "../config.ts";
 import { SOURCE_PREVIEW_ROLE } from "../source-previews.ts";
 import {
   analysisRequiresReview,
@@ -17,19 +21,33 @@ export {
   undoCollectionChoice,
 } from "./responses.ts";
 
+function clampText(value: string, maxLength: number) {
+  const trimmed = value.trim();
+  return trimmed.length > maxLength ? trimmed.slice(0, maxLength).trim() : trimmed;
+}
+
 export function normalizeCollectionDecision(decision: Record<string, unknown>) {
-  const type = decision.type === "existing" ? "existing" : "";
+  const type = decision.type === "existing"
+    ? "existing"
+    : decision.type === "new"
+    ? "new"
+    : "";
   const confidence = Number(decision.confidence);
+  const title = typeof decision.title === "string"
+    ? clampText(decision.title, COLLECTION_TITLE_MAX_LENGTH)
+    : "";
+  const description = typeof decision.description === "string" &&
+      decision.description.trim()
+    ? clampText(decision.description, COLLECTION_DESCRIPTION_MAX_LENGTH)
+    : null;
   return {
     type,
     collection_id: typeof decision.collection_id === "string" &&
         decision.collection_id.trim()
       ? decision.collection_id.trim()
       : null,
-    title: typeof decision.title === "string" ? decision.title.trim() : "",
-    description: typeof decision.description === "string"
-      ? decision.description.trim()
-      : null,
+    title,
+    description,
     rationale: typeof decision.rationale === "string"
       ? decision.rationale.trim()
       : "",
@@ -541,7 +559,10 @@ export async function attachLinkedCollections(
   for (const link of data ?? []) {
     const record = link as Record<string, unknown>;
     const collection = record.collections as Record<string, unknown> | null;
-    if (!collection || collection.status === "archived" || collection.deleted_at) continue;
+    if (
+      !collection || collection.status === "archived" ||
+      collection.status === "suggested" || collection.deleted_at
+    ) continue;
     const captureId = String(record.capture_id);
     const collectionId = String(collection.id);
     const item = {
@@ -590,7 +611,10 @@ export async function attachLinkedCollections(
         )
       ) continue;
       const collection = record.collections as Record<string, unknown> | null;
-      if (!collection || collection.status === "archived" || collection.deleted_at) continue;
+      if (
+      !collection || collection.status === "archived" ||
+      collection.status === "suggested" || collection.deleted_at
+    ) continue;
       overridesByCapture.set(captureId, [
         ...(overridesByCapture.get(captureId) || []),
         {

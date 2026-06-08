@@ -7,6 +7,7 @@ import { handleCapturesResource } from "./captures.ts";
 import { handleCollectionCapturesResource } from "./collection-captures.ts";
 import { handleCollectionLinksResource } from "./collection-links.ts";
 import { handleCollectionsResource } from "./collections.ts";
+import { handleCollectionSuggestionsResource } from "./collection-suggestions.ts";
 import { handlePurgeDeletedResource } from "./purge-deleted.ts";
 import { handleSearchResource } from "./search.ts";
 import { handlePlacePhotoRequest } from "../places.ts";
@@ -40,6 +41,14 @@ export async function handleCaptureIntakeRequest(request: Request) {
 
     if (resource === "collection-links") {
       return await handleCollectionLinksResource(request, supabase, user.id);
+    }
+
+    if (resource === "collection-suggestions") {
+      return await handleCollectionSuggestionsResource(
+        request,
+        supabase,
+        user.id,
+      );
     }
 
     if (resource === "collection-captures") {

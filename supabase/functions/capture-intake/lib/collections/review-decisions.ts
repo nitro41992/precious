@@ -2,8 +2,10 @@ import { adminClient } from "../supabase.ts";
 import {
   COLLECTION_AUTO_LINK_CONFIDENCE,
   COLLECTION_AUTO_LINK_LIMIT,
+  COLLECTION_SUGGESTION_DEDUP_SIMILARITY,
+  COLLECTION_SUGGESTION_MIN_CONFIDENCE,
 } from "../config.ts";
-import { finiteNumber, stringValue } from "../common.ts";
+import { errorMessage, finiteNumber, stringValue } from "../common.ts";
 import {
   analysisRequiresReview,
   normalizedReviewAnalysis,
@@ -11,7 +13,13 @@ import {
 } from "../analysis/review-normalization.ts";
 import { rationaleForAnalysis } from "../analysis/rationales.ts";
 import type { AnalysisOutput, RetrievedCollection } from "../types.ts";
-import { scheduleCaptureEmbeddingRefresh } from "./embeddings.ts";
+import {
+  collectionEmbeddingContent,
+  createEmbedding,
+  embeddingLiteral,
+  scheduleCaptureEmbeddingRefresh,
+  upsertCollectionEmbedding,
+} from "./embeddings.ts";
 import {
   activeCollectionDecisionRows,
   collectionDecisionKey,
@@ -397,6 +405,181 @@ export async function autoLinkCollectionDecisions(
         decision.collection_id
       ),
       auto_link_cap_blocked_decisions: capBlocked,
+    },
+  };
+}
+
+// Materializes an AI-proposed new Collection as a persistent status='suggested' row,
+// deduplicated across captures so several captures that fit the same idea accrue under
+// one suggestion. Runs BEFORE autoLinkCollectionDecisions (which clears collection_decisions).
+// Writes a `pending_collection_suggestion` block onto the analysis for the UI to bind to.
+export async function resolveNewCollectionSuggestions(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  captureId: string,
+  analysis: AnalysisOutput,
+): Promise<AnalysisOutput> {
+  const rawDecisions = Array.isArray(analysis.collection_decisions)
+    ? analysis.collection_decisions as Array<Record<string, unknown>>
+    : [];
+  const newDecisions = rawDecisions
+    .map((decision) => normalizeCollectionDecision(decision))
+    .filter((decision) =>
+      decision.type === "new" &&
+      Boolean(decision.title) &&
+      Boolean(decision.description) &&
+      decision.confidence >= COLLECTION_SUGGESTION_MIN_CONFIDENCE
+    );
+  // The prompt allows at most one new Collection; keep the most confident if more slip through.
+  const decision = newDecisions
+    .sort((left, right) => right.confidence - left.confidence)[0];
+  // Strip any new-type decisions from collection_decisions; existing ones flow to auto-link.
+  const remainingDecisions = rawDecisions.filter((raw) =>
+    normalizeCollectionDecision(raw).type !== "new"
+  );
+  if (!decision) {
+    return rawDecisions.length === remainingDecisions.length
+      ? analysis
+      : { ...analysis, collection_decisions: remainingDecisions };
+  }
+
+  const description = decision.description || "";
+  const normalizedTitle = decision.title.toLowerCase();
+  const content = collectionEmbeddingContent(decision.title, description);
+  let embedding: number[] | null = null;
+  try {
+    embedding = await createEmbedding(content);
+  } catch (error) {
+    console.warn("Suggestion embedding failed", errorMessage(error));
+  }
+
+  let suggestionId = "";
+  let suggestionTitle = decision.title;
+  let suggestionDescription = description;
+
+  // 1. Exact normalized-title match against existing pending suggestions.
+  const byTitle = await supabase
+    .from("collections")
+    .select("id,title,description")
+    .eq("user_id", userId)
+    .eq("status", "suggested")
+    .is("deleted_at", null)
+    .eq("normalized_title", normalizedTitle)
+    .maybeSingle();
+  if (!byTitle.error && byTitle.data) {
+    suggestionId = String(byTitle.data.id);
+    suggestionTitle = String(byTitle.data.title || suggestionTitle);
+    suggestionDescription = String(byTitle.data.description || suggestionDescription);
+  }
+
+  // 2. Semantic dedup against existing pending suggestions.
+  if (!suggestionId && embedding) {
+    const matches = await supabase.rpc(
+      "match_collection_suggestions_for_capture",
+      {
+        p_user_id: userId,
+        p_query_text: content,
+        p_query_embedding: embeddingLiteral(embedding),
+        p_match_count: 3,
+      },
+    );
+    if (!matches.error) {
+      const best = ((matches.data ?? []) as Array<Record<string, unknown>>)
+        .find((row) =>
+          Number(row.semantic_score) >= COLLECTION_SUGGESTION_DEDUP_SIMILARITY
+        );
+      if (best) {
+        suggestionId = String(best.id);
+        suggestionTitle = String(best.title || suggestionTitle);
+        suggestionDescription = String(best.description || suggestionDescription);
+      }
+    }
+  }
+
+  // 3. No dedup match — create a new suggested row. Handle the unique(normalized_title)
+  //    race by re-fetching the row another concurrent capture just created.
+  if (!suggestionId) {
+    const insert = await supabase
+      .from("collections")
+      .insert({
+        user_id: userId,
+        title: decision.title,
+        description,
+        status: "suggested",
+        created_by: "analysis",
+      })
+      .select("id")
+      .single();
+    if (insert.error) {
+      const retry = await supabase
+        .from("collections")
+        .select("id,title,description,status")
+        .eq("user_id", userId)
+        .eq("normalized_title", normalizedTitle)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (retry.error || !retry.data) throw insert.error;
+      // The proposed title collides with a real (active/archived) Collection — the model
+      // should have linked it instead. Drop the suggestion rather than mislabel a real
+      // Collection as pending.
+      if (retry.data.status !== "suggested") {
+        return { ...analysis, collection_decisions: remainingDecisions };
+      }
+      suggestionId = String(retry.data.id);
+      suggestionTitle = String(retry.data.title || suggestionTitle);
+      suggestionDescription = String(retry.data.description || suggestionDescription);
+    } else {
+      suggestionId = String(insert.data.id);
+      if (embedding) {
+        const { error } = await supabase.from("collection_embeddings").upsert({
+          user_id: userId,
+          collection_id: suggestionId,
+          content,
+          embedding: embeddingLiteral(embedding),
+        }, { onConflict: "collection_id" });
+        if (error) console.warn("Suggestion embedding upsert failed", error.message);
+      } else {
+        await upsertCollectionEmbedding(
+          supabase,
+          userId,
+          suggestionId,
+          decision.title,
+          description,
+        ).catch((error) =>
+          console.warn("Suggestion embedding upsert failed", errorMessage(error))
+        );
+      }
+    }
+  }
+
+  // 4. Respect dismissals — never re-suggest a capture the user already removed from this group.
+  const dismissed = await supabase
+    .from("collection_suggestion_dismissals")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("collection_id", suggestionId)
+    .eq("capture_id", captureId)
+    .maybeSingle();
+  if (!dismissed.error && dismissed.data) {
+    return { ...analysis, collection_decisions: remainingDecisions };
+  }
+
+  // 5. Link the capture into the suggestion and surface a pending_collection_suggestion block.
+  await linkCaptureToCollection(supabase, userId, suggestionId, captureId, {
+    createdBy: "analysis",
+    rationale: decision.rationale || null,
+    confidence: decision.confidence,
+  });
+
+  return {
+    ...analysis,
+    collection_decisions: remainingDecisions,
+    pending_collection_suggestion: {
+      collection_id: suggestionId,
+      title: suggestionTitle,
+      description: suggestionDescription,
+      rationale: decision.rationale || "",
+      confidence: decision.confidence,
     },
   };
 }

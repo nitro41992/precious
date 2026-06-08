@@ -857,6 +857,10 @@ export default function App() {
   const [collectionPickerQuery, setCollectionPickerQuery] = useState("");
   const [collectionSelectionIds, setCollectionSelectionIds] = useState<string[]>([]);
   const [collectionChoiceSaving, setCollectionChoiceSaving] = useState<string | null>(null);
+  // Pending AI collection suggestions (status='suggested' rows), shown in the Collections tab.
+  const [suggestions, setSuggestions] = useState<Collection[]>([]);
+  const [suggestionBusyId, setSuggestionBusyId] = useState<string | null>(null);
+  const [pickerCreating, setPickerCreating] = useState(false);
   const [reviewDraftsByCapture, setReviewDraftsByCapture] = useState<Record<string, CaptureReviewDraft>>({});
   const [reviewDraftsLoaded, setReviewDraftsLoaded] = useState(false);
   const [noteSaveState, setNoteSaveState] = useState<NoteSaveState>("idle");
@@ -2466,6 +2470,7 @@ export default function App() {
     setCollectionsMode(mode);
     setCollectionsOpen(true);
     setSelectedCollectionId(null);
+    if (mode === "active") void loadSuggestions();
     const cached = collectionsCacheRef.current[mode];
     if (cached.length || collectionsLoadedOnceRef.current[mode]) setCollections(cached);
     else setCollections([]);
@@ -3350,7 +3355,7 @@ export default function App() {
   }
 
   async function collectionRequest<T>(
-    resource: "collections" | "collection-links",
+    resource: "collections" | "collection-links" | "collection-suggestions",
     input: { method: string; body?: unknown }
   ) {
     if (!config?.apiUrl || !session) throw new Error("Sign in to manage collections.");
@@ -3585,6 +3590,138 @@ export default function App() {
     }
   }
 
+  async function loadSuggestions() {
+    if (!config?.apiUrl || !session) {
+      setSuggestions([]);
+      return;
+    }
+    try {
+      const json = await withFreshAccessToken((accessToken) =>
+        requestJson(
+          edgeResourceUrl(config.apiUrl, "collections", { status: "suggested", limit: "50" }),
+          {
+            headers: {
+              accept: "application/json",
+              apikey: config.supabaseAnonKey,
+              authorization: `Bearer ${accessToken}`
+            }
+          }
+        )
+      ) as RemoteCollectionPage;
+      setSuggestions((json.collections ?? []).map(collectionFromRemote));
+    } catch {
+      // A failed refresh keeps the prior suggestions; the next load retries.
+    }
+  }
+
+  // Confirm an AI suggestion: persist the whole group into a real Collection and link every
+  // grouped capture. Callable from the selector sheet, the review banner, and the Collections tab.
+  async function persistSuggestion(collectionId: string) {
+    if (!collectionId || suggestionBusyId) return;
+    if (!config?.apiUrl || !session) {
+      showToast("Sign in to manage collections.", "error");
+      return;
+    }
+    setSuggestionBusyId(collectionId);
+    try {
+      const json = await collectionRequest<{ collection: Record<string, any> }>("collection-suggestions", {
+        method: "PATCH",
+        body: { action: "persist", collectionId }
+      });
+      const created = collectionFromRemote(json.collection);
+      setSuggestions((current) => current.filter((item) => item.id !== collectionId));
+      collectionsCacheRef.current.active = uniqueCollections([
+        created,
+        ...collectionsCacheRef.current.active.filter((item) => item.id !== created.id)
+      ]);
+      if (collectionsModeRef.current === "active") {
+        setCollections((current) => uniqueCollections([created, ...current.filter((item) => item.id !== created.id)]));
+      }
+      if (selected?.pendingSuggestion?.collectionId === collectionId) {
+        const linked: LinkedCollection = {
+          id: created.id,
+          title: created.title,
+          description: created.description,
+          createdBy: "analysis",
+          rationale: selected.pendingSuggestion.rationale || null,
+          confidence: selected.pendingSuggestion.confidence ?? null,
+          linkedAt: Date.now()
+        };
+        applyUpdatedCapture({
+          ...selected,
+          pendingSuggestion: null,
+          linkedCollections: [
+            ...(selected.linkedCollections || []).filter((item) => item.id !== created.id),
+            linked
+          ]
+        }, selected.id);
+      }
+      closeCollectionPicker();
+      showToast(`Saved “${created.title}”.`, "success");
+      void loadSuggestions();
+    } catch (error) {
+      showErrorToast(error, "Could not create the collection.");
+    } finally {
+      setSuggestionBusyId(null);
+    }
+  }
+
+  // Create a new Collection inline from the selector sheet and pre-select it so the user's
+  // Save links it. Only reachable once any AI suggestion has been dismissed (gated in the sheet).
+  async function createCollectionFromPicker(title: string, description: string) {
+    const trimmedTitle = title.trim();
+    const trimmedDescription = description.trim();
+    if (!trimmedTitle || !trimmedDescription || !selected || pickerCreating) return;
+    if (!config?.apiUrl || !session) {
+      showToast("Sign in to manage collections.", "error");
+      return;
+    }
+    setPickerCreating(true);
+    try {
+      const json = await collectionRequest<{ collection: Record<string, any> }>("collections", {
+        method: "POST",
+        body: { title: trimmedTitle, description: trimmedDescription }
+      });
+      const created = collectionFromRemote(json.collection);
+      collectionsCacheRef.current.active = uniqueCollections([
+        created,
+        ...collectionsCacheRef.current.active.filter((item) => item.id !== created.id)
+      ]);
+      setCollections((current) => uniqueCollections([created, ...current.filter((item) => item.id !== created.id)]));
+      setCollectionSelectionIds((current) => (current.includes(created.id) ? current : [...current, created.id]));
+      showToast(`Created “${created.title}”.`, "success");
+    } catch (error) {
+      showErrorToast(error, "Could not create the collection.");
+    } finally {
+      setPickerCreating(false);
+    }
+  }
+
+  // Dismiss a suggestion for a single capture (this-capture-only). The suggestion survives
+  // for other captures; the backend auto-deletes it once no captures remain.
+  async function dismissSuggestion(collectionId: string, captureId: string) {
+    if (!collectionId || !captureId || suggestionBusyId) return;
+    if (!config?.apiUrl || !session) {
+      showToast("Sign in to manage collections.", "error");
+      return;
+    }
+    setSuggestionBusyId(collectionId);
+    try {
+      const json = await collectionRequest<{ capture: Record<string, any> }>("collection-suggestions", {
+        method: "PATCH",
+        body: { action: "dismiss_for_capture", collectionId, captureId }
+      });
+      const updated = captureFromRemote(json.capture);
+      applyUpdatedCapture(updated, updated.id);
+      showToast("Suggestion dismissed.", "neutral");
+      void loadSuggestions();
+    } catch (error) {
+      showErrorToast(error, "Could not dismiss the suggestion.");
+    } finally {
+      setSuggestionBusyId(null);
+    }
+  }
+
   async function saveCollection() {
     const title = collectionTitle.trim();
     const description = collectionDescription.trim();
@@ -3599,7 +3736,8 @@ export default function App() {
           ...collectionFromRemote(json.collection),
           captureCount: selectedCollection.captureCount
         };
-        collectionsCacheRef.current[updated.status] = collectionsCacheRef.current[updated.status].map((item) =>
+        const updatedMode: CollectionListMode = updated.status === "archived" ? "archived" : "active";
+        collectionsCacheRef.current[updatedMode] = collectionsCacheRef.current[updatedMode].map((item) =>
           item.id === updated.id ? updated : item
         );
         setCollections((current) => current.map((item) => (item.id === updated.id ? updated : item)));
@@ -4593,6 +4731,9 @@ export default function App() {
           <CollectionSelectorSheet
             actions={{
               closeCollectionPicker,
+              confirmSuggestion: (collectionId) => void persistSuggestion(collectionId),
+              createCollection: (title, description) => void createCollectionFromPicker(title, description),
+              dismissSuggestion: (collectionId, captureId) => void dismissSuggestion(collectionId, captureId),
               renderCollectionSkeletonRows,
               saveCollectionSelection: () => void saveCollectionSelection(),
               setCollectionPickerQuery,
@@ -4614,7 +4755,9 @@ export default function App() {
               collectionPickerQuery,
               collectionSelectionIds,
               collectionsLoadPhase,
-              collectionsLoading
+              collectionsLoading,
+              pickerCreating,
+              suggestionBusy: suggestionBusyId === (selected.pendingSuggestion?.collectionId || "")
             }}
           />
         ) : null}
@@ -4651,6 +4794,8 @@ export default function App() {
           markReviewHandoffReady,
           markReviewHandoffTarget,
           markFaviconFailed,
+          confirmSuggestion: (collectionId) => void persistSuggestion(collectionId),
+          dismissSuggestion: (collectionId, captureId) => void dismissSuggestion(collectionId, captureId),
           openCaptureUrl,
           openCollectionPicker: () => void openCollectionPicker(),
           openExternalUrl: (url) => void Linking.openURL(url),
@@ -4698,6 +4843,8 @@ export default function App() {
         }}
         state={{
           collectionChoiceSaving,
+          suggestionBusy: Boolean(capture.pendingSuggestion) &&
+            suggestionBusyId === capture.pendingSuggestion?.collectionId,
           draftIntent,
           draftIntentDirty,
           draftNote,
@@ -4775,6 +4922,7 @@ export default function App() {
           loadMoreCollections,
           openCollectionComposer,
           openCollectionSearch,
+          persistSuggestion: (collectionId) => void persistSuggestion(collectionId),
           renderCollection,
           renderCollectionSkeletonRows,
           renderListLoadingFooter
@@ -4790,11 +4938,13 @@ export default function App() {
           collectionsColdSkeletonVisible,
           collectionsError,
           collectionsListPerfProps: COLLECTION_LIST_PERF_PROPS,
+          suggestions,
           toast: null
         }}
         state={{
           collectionsLoadPhase,
           collectionsLoading,
+          suggestionBusyId,
           showCollectionForm
         }}
       />

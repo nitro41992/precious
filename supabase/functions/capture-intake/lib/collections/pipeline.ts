@@ -24,7 +24,12 @@ export {
   confirmedReminderSuggestions,
   dismissReminderSuggestion,
   markCollectionDecisionAccepted,
+  resolveNewCollectionSuggestions,
   reviewCollectionDecisions,
   reviewReminderSuggestions,
 } from "./review-decisions.ts";
+export {
+  refreshCollectionPreviewAfterCaptureRemoval,
+  refreshCollectionPreviewFromActiveLinks,
+} from "./links.ts";
 export * from "./starter-collections.ts";

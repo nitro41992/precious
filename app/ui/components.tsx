@@ -25,6 +25,7 @@ import type {
   LinkedCollection,
   NavIconComponent,
   NavIconProps,
+  PendingCollectionSuggestion,
   ToastPlacement,
   ToastState,
   ToastTone
@@ -471,6 +472,81 @@ export function AiFieldInsight({ insight }: { insight: CaptureFieldRationale }) 
       <View style={styles.aiInsightCopy}>
         <Text style={styles.aiInsightTitle}>{insight.title || "AI insight"}</Text>
         <Text style={styles.aiInsightText}>{insight.text}</Text>
+      </View>
+    </View>
+  );
+}
+
+// The AI-suggested new Collection, shown in the selector sheet and the review screen.
+// Calm, dismissible, and transparent: it shows the proposed name, what belongs in it, and
+// the plain-language reason, with Confirm (persist the whole group) / Dismiss (this capture).
+export function CollectionSuggestionCard({
+  suggestion,
+  onConfirm,
+  onDismiss,
+  busy = false,
+  confirmLabel = "Add collection",
+  testID
+}: {
+  suggestion: PendingCollectionSuggestion;
+  onConfirm: () => void;
+  onDismiss: () => void;
+  busy?: boolean;
+  confirmLabel?: string;
+  testID?: string;
+}) {
+  return (
+    <View style={styles.suggestionCard} testID={testID}>
+      <View style={styles.suggestionCardHeader}>
+        <View style={styles.suggestionCardIcon}>
+          <Sparkle color={colors.accentTextStrong} size={16} weight="fill" />
+        </View>
+        <Text style={styles.suggestionCardLabel}>Suggested collection</Text>
+      </View>
+      <Text numberOfLines={2} style={styles.suggestionCardTitle}>
+        {suggestion.title}
+      </Text>
+      {suggestion.description ? (
+        <Text numberOfLines={3} style={styles.suggestionCardDescription}>
+          {suggestion.description}
+        </Text>
+      ) : null}
+      {suggestion.rationale ? (
+        <Text numberOfLines={3} style={styles.suggestionCardRationale}>
+          {suggestion.rationale}
+        </Text>
+      ) : null}
+      <View style={styles.suggestionCardActions}>
+        <MotionPressable
+          accessibilityLabel={`${confirmLabel}: ${suggestion.title}`}
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={onConfirm}
+          style={({ pressed }) => [
+            styles.suggestionConfirmButton,
+            busy && styles.suggestionDisabled,
+            pressed && styles.subtlePressed
+          ]}
+          testID={testID ? `${testID}.confirm` : undefined}
+        >
+          <Check color={colors.onAccent} size={16} weight="bold" />
+          <Text style={styles.suggestionConfirmText}>{confirmLabel}</Text>
+        </MotionPressable>
+        <MotionPressable
+          accessibilityLabel={`Dismiss suggestion: ${suggestion.title}`}
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={onDismiss}
+          style={({ pressed }) => [
+            styles.suggestionDismissButton,
+            busy && styles.suggestionDisabled,
+            pressed && styles.subtlePressed
+          ]}
+          testID={testID ? `${testID}.dismiss` : undefined}
+        >
+          <X color={colors.muted} size={16} weight="bold" />
+          <Text style={styles.suggestionDismissText}>Dismiss</Text>
+        </MotionPressable>
       </View>
     </View>
   );

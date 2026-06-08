@@ -576,6 +576,159 @@ export const styles = StyleSheet.create({
     fontWeight: "600",
     lineHeight: 18
   },
+  // AI collection suggestion card — used in the selector sheet and the review screen.
+  // Tonal accent fill, no border (CLAUDE.md), Sparkle marker, confirm/dismiss actions.
+  suggestionCard: {
+    backgroundColor: colors.accentSoft,
+    borderRadius: softCardInnerRadius,
+    gap: 10,
+    padding: 14
+  },
+  suggestionCardHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8
+  },
+  suggestionCardIcon: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: 9,
+    height: 28,
+    justifyContent: "center",
+    width: 28
+  },
+  suggestionCardLabel: {
+    ...typefaces.displaySemibold,
+    color: colors.accentTextStrong,
+    fontSize: 11,
+    letterSpacing: 0.6,
+    textTransform: "uppercase"
+  },
+  suggestionCardTitle: {
+    ...typefaces.displayMedium,
+    color: colors.ink,
+    fontSize: 18,
+    lineHeight: 22
+  },
+  suggestionCardDescription: {
+    ...typefaces.regular,
+    color: colors.ink,
+    fontSize: 14,
+    lineHeight: 19
+  },
+  suggestionCardRationale: {
+    ...typefaces.medium,
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18
+  },
+  suggestionCardActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 2
+  },
+  suggestionConfirmButton: {
+    alignItems: "center",
+    backgroundColor: colors.accentText,
+    borderRadius: 12,
+    flex: 1,
+    flexDirection: "row",
+    gap: 6,
+    justifyContent: "center",
+    paddingVertical: 12
+  },
+  suggestionConfirmText: {
+    ...typefaces.displaySemibold,
+    color: colors.onAccent,
+    fontSize: 14
+  },
+  suggestionDismissButton: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 6,
+    justifyContent: "center",
+    paddingHorizontal: 18,
+    paddingVertical: 12
+  },
+  suggestionDismissText: {
+    ...typefaces.displaySemibold,
+    color: colors.muted,
+    fontSize: 14
+  },
+  suggestionDisabled: {
+    opacity: 0.5
+  },
+  collectionSelectorSuggestion: {
+    paddingBottom: 12
+  },
+  // Inline "New collection" creation inside the selector sheet.
+  collectionCreateRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 4,
+    paddingVertical: 12
+  },
+  collectionCreateIcon: {
+    alignItems: "center",
+    backgroundColor: colors.accentSoft,
+    borderRadius: 11,
+    height: 38,
+    justifyContent: "center",
+    width: 38
+  },
+  collectionCreateLabel: {
+    ...typefaces.displayMedium,
+    color: colors.ink,
+    fontSize: 15
+  },
+  collectionCreateForm: {
+    gap: 8,
+    paddingBottom: 6,
+    paddingHorizontal: 2,
+    paddingTop: 2
+  },
+  collectionCreateInput: {
+    ...typefaces.regular,
+    backgroundColor: colors.surfaceContainerHigh,
+    borderRadius: 12,
+    color: colors.ink,
+    fontSize: 15,
+    paddingHorizontal: 14,
+    paddingVertical: 12
+  },
+  collectionCreateActions: {
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "flex-end"
+  },
+  collectionCreateCancel: {
+    alignItems: "center",
+    borderRadius: 12,
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 11
+  },
+  collectionCreateCancelText: {
+    ...typefaces.displaySemibold,
+    color: colors.muted,
+    fontSize: 14
+  },
+  collectionCreateSubmit: {
+    alignItems: "center",
+    backgroundColor: colors.accentText,
+    borderRadius: 12,
+    justifyContent: "center",
+    paddingHorizontal: 18,
+    paddingVertical: 11
+  },
+  collectionCreateSubmitText: {
+    ...typefaces.displaySemibold,
+    color: colors.onAccent,
+    fontSize: 14
+  },
   purposeOptionGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1572,6 +1725,67 @@ export const styles = StyleSheet.create({
   collectionCardPressed: {
     backgroundColor: colors.collectionAccentSoft,
     transform: [{ scale: 0.99 }]
+  },
+  // Collections-tab "Suggested" section: a labelled group of pending AI suggestions.
+  suggestionSection: {
+    paddingBottom: 8
+  },
+  suggestionSectionHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    paddingBottom: 4,
+    paddingHorizontal: 12
+  },
+  suggestionSectionTitle: {
+    ...typefaces.displaySemibold,
+    color: colors.accentTextStrong,
+    fontSize: 12,
+    letterSpacing: 0.6,
+    textTransform: "uppercase"
+  },
+  suggestionSectionGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap"
+  },
+  suggestionGridWrap: {
+    padding: 8,
+    width: "50%"
+  },
+  suggestionGridCard: {
+    backgroundColor: colors.accentSoft,
+    borderWidth: 0
+  },
+  suggestionGridBadge: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: 999,
+    flexDirection: "row",
+    gap: 4,
+    left: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    position: "absolute",
+    top: 8
+  },
+  suggestionGridBadgeText: {
+    ...typefaces.displaySemibold,
+    color: colors.accentTextStrong,
+    fontSize: 11
+  },
+  suggestionGridAdd: {
+    alignItems: "center",
+    backgroundColor: colors.accentText,
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 6,
+    justifyContent: "center",
+    paddingVertical: 10
+  },
+  suggestionGridAddText: {
+    ...typefaces.displaySemibold,
+    color: colors.onAccent,
+    fontSize: 13
   },
   collectionCollageFrame: {
     aspectRatio: 1,
@@ -3162,6 +3376,9 @@ export const styles = StyleSheet.create({
   reviewActionBlock: {
     gap: 10,
     paddingTop: 6
+  },
+  reviewSuggestionBlock: {
+    paddingTop: 16
   },
   reviewActionLabel: {
     color: colors.muted,

@@ -1,12 +1,19 @@
+import { useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { Animated, FlatList, Platform, View } from "react-native";
 import type { FlatListProps } from "react-native";
-import { Check, Folder, MagnifyingGlass as Search, X } from "phosphor-react-native";
+import { Check, Folder, Plus, MagnifyingGlass as Search } from "phosphor-react-native";
 
 import type { Capture, Collection, LoadPhase } from "../types";
 import { collectionSelectionActionState } from "../captureLogic";
 import { captureFieldRationale, collectionCountLabel } from "../capturePresentation";
-import { AiFieldInsight, AnimatedBottomSheet, MotionPressable, SheetHeader } from "../ui/components";
+import {
+  AiFieldInsight,
+  AnimatedBottomSheet,
+  CollectionSuggestionCard,
+  MotionPressable,
+  SheetHeader
+} from "../ui/components";
 import { styles } from "../ui/styles";
 import { colors } from "../ui/theme";
 import { Text, TextInput } from "../ui/typography";
@@ -28,9 +35,14 @@ type CollectionSelectorSheetProps = {
     collectionSelectionIds: string[];
     collectionsLoadPhase: LoadPhase;
     collectionsLoading: boolean;
+    pickerCreating: boolean;
+    suggestionBusy: boolean;
   };
   actions: {
     closeCollectionPicker: () => void;
+    confirmSuggestion: (collectionId: string) => void;
+    createCollection: (title: string, description: string) => void;
+    dismissSuggestion: (collectionId: string, captureId: string) => void;
     renderCollectionSkeletonRows: (
       count?: number,
       withSelectionControl?: boolean,
@@ -59,16 +71,25 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
     collectionPickerQuery,
     collectionSelectionIds,
     collectionsLoadPhase,
-    collectionsLoading
+    collectionsLoading,
+    pickerCreating,
+    suggestionBusy
   } = state;
   const {
     closeCollectionPicker,
+    confirmSuggestion,
+    createCollection,
+    dismissSuggestion,
     renderCollectionSkeletonRows,
     saveCollectionSelection,
     setCollectionPickerQuery,
     setCollectionSelectionIds,
     toggleCollectionSelection
   } = actions;
+
+  const [creating, setCreating] = useState(false);
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftDescription, setDraftDescription] = useState("");
 
   const currentCollectionIds = (selected.linkedCollections || []).map((collection) => collection.id);
   const selectedCollectionIds = new Set(collectionSelectionIds);
@@ -88,10 +109,105 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
         );
   const selectionCountText = collectionSelectionIds.length ? `${collectionSelectionIds.length} selected` : "No collection";
   const rationale = captureFieldRationale(selected, "collection", { collectionSelectionIds });
+  const pendingSuggestion = selected.pendingSuggestion || null;
+  // The AI suggestion must be resolved before adding a collection by hand.
+  const canCreate = !pendingSuggestion && !selectionTerm;
+  const draftReady = Boolean(draftTitle.trim() && draftDescription.trim());
+
   const completeSelection = () => {
     if (selectionAction.shouldSave) saveCollectionSelection();
     else closeCollectionPicker();
   };
+
+  const resetCreate = () => {
+    setCreating(false);
+    setDraftTitle("");
+    setDraftDescription("");
+  };
+
+  const submitCreate = () => {
+    if (!draftReady || pickerCreating) return;
+    createCollection(draftTitle, draftDescription);
+    resetCreate();
+  };
+
+  const listHeader = (
+    <View>
+      {pendingSuggestion ? (
+        <View style={styles.collectionSelectorSuggestion}>
+          <CollectionSuggestionCard
+            busy={suggestionBusy}
+            onConfirm={() => confirmSuggestion(pendingSuggestion.collectionId)}
+            onDismiss={() =>
+              dismissSuggestion(pendingSuggestion.collectionId, selected.remoteId || selected.id)
+            }
+            suggestion={pendingSuggestion}
+            testID="pc.collection.suggestion"
+          />
+        </View>
+      ) : null}
+      {canCreate ? (
+        creating ? (
+          <View style={styles.collectionCreateForm}>
+            <TextInput
+              autoFocus
+              maxLength={50}
+              onChangeText={setDraftTitle}
+              placeholder="Collection name"
+              placeholderTextColor={colors.placeholder}
+              style={styles.collectionCreateInput}
+              testID="pc.collection.create.title"
+              value={draftTitle}
+            />
+            <TextInput
+              maxLength={160}
+              multiline
+              onChangeText={setDraftDescription}
+              placeholder="What belongs here"
+              placeholderTextColor={colors.placeholder}
+              style={styles.collectionCreateInput}
+              testID="pc.collection.create.description"
+              value={draftDescription}
+            />
+            <View style={styles.collectionCreateActions}>
+              <MotionPressable
+                accessibilityRole="button"
+                onPress={resetCreate}
+                style={({ pressed }) => [styles.collectionCreateCancel, pressed && styles.subtlePressed]}
+              >
+                <Text style={styles.collectionCreateCancelText}>Cancel</Text>
+              </MotionPressable>
+              <MotionPressable
+                accessibilityRole="button"
+                disabled={!draftReady || pickerCreating}
+                onPress={submitCreate}
+                style={({ pressed }) => [
+                  styles.collectionCreateSubmit,
+                  (!draftReady || pickerCreating) && styles.suggestionDisabled,
+                  pressed && styles.subtlePressed
+                ]}
+                testID="pc.collection.create.submit"
+              >
+                <Text style={styles.collectionCreateSubmitText}>{pickerCreating ? "Creating" : "Create"}</Text>
+              </MotionPressable>
+            </View>
+          </View>
+        ) : (
+          <MotionPressable
+            accessibilityRole="button"
+            onPress={() => setCreating(true)}
+            style={({ pressed }) => [styles.collectionCreateRow, pressed && styles.captureRowPressed]}
+            testID="pc.collection.create.open"
+          >
+            <View style={styles.collectionCreateIcon}>
+              <Plus color={colors.accentTextStrong} size={18} weight="bold" />
+            </View>
+            <Text style={styles.collectionCreateLabel}>New collection</Text>
+          </MotionPressable>
+        )
+      ) : null}
+    </View>
+  );
 
   return (
     <AnimatedBottomSheet
@@ -122,7 +238,7 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
             value={collectionPickerQuery}
           />
         </View>
-        {rationale.visible ? (
+        {rationale.visible && !pendingSuggestion ? (
           <AiFieldInsight insight={rationale} />
         ) : null}
         <FlatList
@@ -172,48 +288,7 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
             );
           }}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
-          ListHeaderComponent={
-            <MotionPressable
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: collectionSelectionIds.length === 0 }}
-              onPress={() => setCollectionSelectionIds([])}
-              style={({ pressed }) => [
-                styles.collectionChoiceRow,
-                styles.collectionChoiceRowSheet,
-                pressed && styles.captureRowPressed
-              ]}
-              testID="pc.collection.select.none"
-            >
-              <View style={styles.collectionChoiceBody}>
-                <View style={styles.collectionRowTop}>
-                  <View
-                    style={[
-                      styles.collectionNoCollectionIconMark,
-                      collectionSelectionIds.length === 0 && styles.collectionNoCollectionIconMarkSelected
-                    ]}
-                  >
-                    <X
-                      color={collectionSelectionIds.length === 0 ? colors.accentText : colors.muted}
-                      size={18}
-                      weight={collectionSelectionIds.length === 0 ? "bold" : "regular"}
-                    />
-                  </View>
-                  <View style={styles.collectionRowCopy}>
-                    <Text numberOfLines={1} style={styles.collectionChoiceTitle}>No collection</Text>
-                    <Text style={styles.meta}>Leave this capture ungrouped.</Text>
-                  </View>
-                </View>
-              </View>
-              <View
-                style={[
-                  styles.collectionSelectionControl,
-                  collectionSelectionIds.length === 0 && styles.collectionSelectionControlSelected
-                ]}
-              >
-                {collectionSelectionIds.length === 0 ? <Check color={colors.onAccent} size={15} weight="bold" /> : null}
-              </View>
-            </MotionPressable>
-          }
+          ListHeaderComponent={listHeader}
           ListEmptyComponent={
             collectionSelectorColdLoading && collectionsColdSkeletonVisible ? (
               renderCollectionSkeletonRows(4, true, collections.filter((collection) => collection.status === "active"))
@@ -222,9 +297,13 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
             ) : (
               <View style={styles.collectionEmpty}>
                 <Text style={styles.emptyTitle}>
-                  {selectionTerm ? "No matching collections." : "No active collections yet."}
+                  {selectionTerm ? "No matching collections." : "No collections yet."}
                 </Text>
-                <Text style={styles.emptyText}>Create collections from the Collections tab.</Text>
+                <Text style={styles.emptyText}>
+                  {pendingSuggestion
+                    ? "Confirm or dismiss the suggestion above, then add your own."
+                    : "Tap New collection to make your first one."}
+                </Text>
               </View>
             )
           }

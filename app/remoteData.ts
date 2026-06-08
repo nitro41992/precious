@@ -117,6 +117,19 @@ export function captureFromRemote(row: Record<string, any>): Capture {
   const manualCollectionOverrides = Array.isArray(analysis.collection_choice_overrides)
     ? analysis.collection_choice_overrides.map(collectionChoiceOverrideFromRemote).filter(Boolean) as CollectionChoiceOverride[]
     : [];
+  const pendingSuggestionRaw = analysis.pending_collection_suggestion;
+  const pendingSuggestion = pendingSuggestionRaw &&
+      typeof pendingSuggestionRaw === "object" &&
+      typeof pendingSuggestionRaw.collection_id === "string" &&
+      pendingSuggestionRaw.collection_id
+    ? {
+        collectionId: String(pendingSuggestionRaw.collection_id),
+        title: String(pendingSuggestionRaw.title || ""),
+        description: String(pendingSuggestionRaw.description || ""),
+        rationale: String(pendingSuggestionRaw.rationale || ""),
+        confidence: Number(pendingSuggestionRaw.confidence) || 0
+      }
+    : null;
   const reviewTargets = Array.isArray(analysis.review_targets)
     ? normalizeReviewTargets(analysis.review_targets)
     : analysis.needs_review || row.analysis_state === "needs_review"
@@ -190,6 +203,7 @@ export function captureFromRemote(row: Record<string, any>): Capture {
         : [],
     collectionDecisions,
     suggestedCollections: collectionDecisions,
+    pendingSuggestion,
     manualCollectionOverrides,
     searchPhrases: analysis.search_phrases || [],
     note: String(row.context_note || ""),
@@ -452,12 +466,16 @@ export function edgeResourceUrl(apiUrl: string, resource: string, params: Record
   return url.toString();
 }
 
+export function normalizeCollectionStatus(value: unknown): Collection["status"] {
+  return value === "archived" ? "archived" : value === "suggested" ? "suggested" : "active";
+}
+
 export function collectionFromRemote(row: Record<string, any>): Collection {
   return {
     id: String(row.id),
     title: String(row.title || ""),
     description: String(row.description || ""),
-    status: row.status === "archived" ? "archived" : "active",
+    status: normalizeCollectionStatus(row.status),
     captureCount: Number(row.capture_count || row.captureCount || 0),
     previewCaptures: collectionPreviewCapturesFromRemote(row.preview_captures || row.previewCaptures),
     archivedAt: nullableValue(row.archived_at),
@@ -574,7 +592,7 @@ export function cachedCollectionPageFromRaw(raw: string | null | undefined) {
           .map((collection): Collection => ({
             ...collection,
             description: String(collection.description || ""),
-            status: collection.status === "archived" ? "archived" : "active",
+            status: normalizeCollectionStatus(collection.status),
             captureCount: Number(collection.captureCount || 0),
             previewCaptures: collectionPreviewCapturesFromRemote(collection.previewCaptures)
           }))

@@ -423,3 +423,58 @@ test("captureFromRemote maps the full-res asset url and versioned cache keys", (
   assert.equal(capture.imageAssetFullCacheKey, "user/capture/uploaded.png:viewer:v2");
   assert.notEqual(capture.imageAssetCacheKey, capture.imageAssetFullCacheKey);
 });
+
+test("captureFromRemote maps a pending collection suggestion", () => {
+  const { captureFromRemote } = loadRemoteData();
+  const capture = captureFromRemote({
+    id: "capture-1",
+    source_text: "Trail running route near Boulder",
+    analysis: {
+      summary: "A trail run",
+      pending_collection_suggestion: {
+        collection_id: "11111111-1111-1111-1111-111111111111",
+        title: "Trail Runs",
+        description: "Routes and gear for trail running.",
+        rationale: "Repeated trail-running saves.",
+        confidence: 0.74
+      }
+    }
+  });
+  assert.ok(capture.pendingSuggestion);
+  assert.equal(capture.pendingSuggestion.collectionId, "11111111-1111-1111-1111-111111111111");
+  assert.equal(capture.pendingSuggestion.title, "Trail Runs");
+  assert.equal(capture.pendingSuggestion.description, "Routes and gear for trail running.");
+  assert.equal(capture.pendingSuggestion.confidence, 0.74);
+});
+
+test("captureFromRemote leaves pendingSuggestion null without a suggestion", () => {
+  const { captureFromRemote } = loadRemoteData();
+  const capture = captureFromRemote({ id: "capture-2", analysis: { summary: "x" } });
+  assert.equal(capture.pendingSuggestion, null);
+});
+
+test("collectionFromRemote preserves the suggested status", () => {
+  const { collectionFromRemote } = loadRemoteData();
+  const collection = collectionFromRemote({
+    id: "c1",
+    title: "Trail Runs",
+    description: "Routes and gear.",
+    status: "suggested",
+    capture_count: 2
+  });
+  assert.equal(collection.status, "suggested");
+  assert.equal(collection.captureCount, 2);
+});
+
+test("cachedCollectionPageFromRaw round-trips the suggested status", () => {
+  const { cachedCollectionPageFromRaw } = loadRemoteData();
+  const raw = JSON.stringify({
+    collections: [
+      { id: "c1", title: "Trail Runs", description: "Routes.", status: "suggested", captureCount: 1, previewCaptures: [] }
+    ],
+    next_cursor: null
+  });
+  const page = cachedCollectionPageFromRaw(raw);
+  assert.equal(page.present, true);
+  assert.equal(page.collections[0].status, "suggested");
+});

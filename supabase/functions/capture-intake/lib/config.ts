@@ -82,6 +82,19 @@ export const COLLECTION_AUTO_LINK_CONFIDENCE = Number(
   Deno.env.get("COLLECTION_AUTO_LINK_CONFIDENCE") || "0.82",
 );
 export const COLLECTION_AUTO_LINK_LIMIT = 2;
+// AI-suggested new collections. Lean conservative: only materialize a suggestion when
+// the model is reasonably confident, and treat a near-duplicate of an existing pending
+// suggestion (cosine similarity at/above this threshold) as the same group.
+export const COLLECTION_SUGGESTION_MIN_CONFIDENCE = Number(
+  Deno.env.get("COLLECTION_SUGGESTION_MIN_CONFIDENCE") || "0.6",
+);
+export const COLLECTION_SUGGESTION_DEDUP_SIMILARITY = Number(
+  Deno.env.get("COLLECTION_SUGGESTION_DEDUP_SIMILARITY") || "0.85",
+);
+// Title/description limits mirror the manual composer (CollectionComposerSheet.tsx).
+// Single source of truth: stated to the model in the prompt and clamped in normalization.
+export const COLLECTION_TITLE_MAX_LENGTH = 50;
+export const COLLECTION_DESCRIPTION_MAX_LENGTH = 160;
 export const USER_AGENT =
   "Mozilla/5.0 (compatible; PreciousCaptures/0.1; +https://sharebook.local)";
 export const METADATA_TIMEOUT_MS = 8000;
@@ -307,10 +320,18 @@ export const analysisSchema = {
           "confidence",
         ],
         properties: {
-          type: { type: "string", enum: ["existing"] },
+          type: { type: "string", enum: ["existing", "new"] },
           collection_id: { type: ["string", "null"] },
-          title: { type: "string" },
-          description: { type: ["string", "null"] },
+          title: {
+            type: "string",
+            description:
+              "For type new, a concise mid-level Collection name future captures could also join, at most 50 characters. For type existing, the exact retrieved Collection title.",
+          },
+          description: {
+            type: ["string", "null"],
+            description:
+              "For type new, a one-sentence description of what belongs in the Collection, at most 160 characters. Required and non-empty when type is new.",
+          },
           rationale: { type: "string" },
           confidence: { type: "number" },
         },

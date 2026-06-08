@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 import { Animated, View } from "react-native";
 import { Image } from "expo-image";
-import { CalendarBlank, Folder, ImageSquare, Lightbulb, MinusCircle } from "phosphor-react-native";
+import { CalendarBlank, Folder, ImageSquare, Lightbulb, MinusCircle, Plus, Sparkle } from "phosphor-react-native";
 import Reanimated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 
 import { collectionCollageSlots, hostFromUrl } from "../captureLogic";
@@ -88,9 +88,11 @@ export function CaptureRow({
   const reminderText = reminderLabel(
     (item.suggestedReminders || []).find((reminder) => reminder.status !== "removed")
   );
+  const suggestionLabel = item.pendingSuggestion?.title?.trim() || "";
   const hasMeaningTokens = Boolean(
     intentLabel ||
       reminderText ||
+      suggestionLabel ||
       collectionTokens.some((collection) => collection.title.trim())
   );
   const ghostSourceMark = deferFallbackIcon || shouldGhostSourceMark(item);
@@ -169,6 +171,9 @@ export function CaptureRow({
               <MeaningToken Icon={Lightbulb} text={intentLabel} />
             ) : null}
             <CollectionMeaningToken collections={collectionTokens} />
+            {suggestionLabel ? (
+              <MeaningToken Icon={Sparkle} iconColor={colors.accentTextStrong} text={suggestionLabel} />
+            ) : null}
             {reminderText ? (
               <MeaningToken Icon={CalendarBlank} text={reminderText} />
             ) : null}
@@ -897,5 +902,54 @@ export function CollectionCard({
         </View>
       </MotionPressable>
     </Reanimated.View>
+  );
+}
+
+// A pending AI suggestion in the Collections tab. Marked as not-yet-real with a tonal accent
+// fill and a Sparkle "Suggested" pill (no borders), with a single action to make it real.
+export function CollectionSuggestionGridCard({
+  item,
+  busy = false,
+  onPersist
+}: {
+  item: Collection;
+  busy?: boolean;
+  onPersist: () => void;
+}) {
+  return (
+    <View style={styles.suggestionGridWrap}>
+      <View style={[styles.collectionCard, styles.suggestionGridCard]}>
+        <View>
+          <CollectionCollage collection={item} />
+          <View style={styles.suggestionGridBadge}>
+            <Sparkle color={colors.accentTextStrong} size={12} weight="fill" />
+            <Text style={styles.suggestionGridBadgeText}>Suggested</Text>
+          </View>
+        </View>
+        <View style={styles.collectionCardCopy}>
+          <Text numberOfLines={2} style={styles.collectionCardTitle}>
+            {item.title}
+          </Text>
+          <Text numberOfLines={1} style={styles.collectionCardMeta}>
+            {item.captureCount} {item.captureCount === 1 ? "capture" : "captures"}
+          </Text>
+        </View>
+        <MotionPressable
+          accessibilityLabel={`Add collection: ${item.title}`}
+          accessibilityRole="button"
+          disabled={busy}
+          onPress={onPersist}
+          style={({ pressed }) => [
+            styles.suggestionGridAdd,
+            busy && styles.suggestionDisabled,
+            pressed && styles.subtlePressed
+          ]}
+          testID={`pc.collection.suggestion.persist.${item.id}`}
+        >
+          <Plus color={colors.onAccent} size={15} weight="bold" />
+          <Text style={styles.suggestionGridAddText}>Add to collections</Text>
+        </MotionPressable>
+      </View>
+    </View>
   );
 }

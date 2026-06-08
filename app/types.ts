@@ -152,6 +152,7 @@ export type Capture = {
   linkedCollections?: LinkedCollection[];
   collectionDecisions?: CollectionDecision[];
   suggestedCollections?: CollectionDecision[];
+  pendingSuggestion?: PendingCollectionSuggestion | null;
   manualCollectionOverrides?: CollectionChoiceOverride[];
   searchPhrases?: string[];
   note: string;
@@ -191,6 +192,16 @@ export type CollectionChoiceOverride = {
   restoredDecisions: CollectionDecision[];
 };
 
+// An AI-proposed new Collection that does not exist yet. Bound to a real (status='suggested')
+// collection row so the user can confirm (persist) or dismiss it.
+export type PendingCollectionSuggestion = {
+  collectionId: string;
+  title: string;
+  description: string;
+  rationale: string;
+  confidence: number;
+};
+
 export type VisitTarget = {
   name: string;
   query: string;
@@ -204,7 +215,7 @@ export type Collection = {
   id: string;
   title: string;
   description: string;
-  status: "active" | "archived";
+  status: "active" | "archived" | "suggested";
   captureCount: number;
   previewCaptures: CollectionPreviewCapture[];
   archivedAt?: string | null;

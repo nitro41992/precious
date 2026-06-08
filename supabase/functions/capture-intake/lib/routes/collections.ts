@@ -7,6 +7,7 @@ import { SOURCE_PREVIEW_ROLE } from "../source-previews.ts";
 import { activeCollectionCounts, collectionFromRow, linkCaptureToCollection } from "../collections/links.ts";
 import { scheduleCaptureEmbeddingRefresh, scheduleCollectionCaptureEmbeddingsRefresh, upsertCollectionEmbedding } from "../collections/embeddings.ts";
 import { markCollectionDecisionAccepted } from "../collections/review-decisions.ts";
+import { persistCollectionSuggestion } from "./collection-suggestions.ts";
 import { cleanRequiredText } from "../collections/responses.ts";
 import { seedStarterCollectionsIfNeeded } from "../collections/starter-collections.ts";
 
@@ -135,15 +136,17 @@ export async function handleCollectionsResource(
   url: URL,
 ) {
   if (request.method === "GET") {
-    await seedStarterCollectionsIfNeeded(supabase, userId);
+    const suggested = url.searchParams.get("status") === "suggested";
     const archived = url.searchParams.get("archived") === "true";
+    const status = suggested ? "suggested" : archived ? "archived" : "active";
+    if (status === "active") await seedStarterCollectionsIfNeeded(supabase, userId);
     const limit = boundedLimit(url.searchParams.get("limit"), 50, 100);
     const before = url.searchParams.get("before");
     let query = supabase
       .from("collections")
       .select(COLLECTION_LIST_SELECT)
       .eq("user_id", userId)
-      .eq("status", archived ? "archived" : "active")
+      .eq("status", status)
       .is("deleted_at", null)
       .order("created_at", { ascending: false })
       .limit(limit + 1);
@@ -186,7 +189,46 @@ export async function handleCollectionsResource(
       })
       .select("*")
       .single();
-    if (error) throw error;
+    if (error) {
+      // The new title may collide with a pending AI suggestion (same normalized title).
+      // Adopt it: persist the suggestion into a real Collection and attach this capture,
+      // rather than failing the manual create.
+      const conflict = await supabase
+        .from("collections")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("normalized_title", title.toLowerCase())
+        .eq("status", "suggested")
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (conflict.error || !conflict.data) throw error;
+      const adoptedId = String(conflict.data.id);
+      await persistCollectionSuggestion(supabase, userId, adoptedId);
+      if (typeof body.captureId === "string" && body.captureId) {
+        await linkCaptureToCollection(supabase, userId, adoptedId, body.captureId, {
+          createdBy: "user",
+          rationale: typeof body.rationale === "string" ? body.rationale : null,
+          confidence: Number.isFinite(Number(body.confidence))
+            ? Number(body.confidence)
+            : null,
+        });
+        await markCollectionDecisionAccepted(supabase, userId, body.captureId, {
+          type: "new",
+          title,
+          collectionId: adoptedId,
+        });
+      }
+      const adopted = await supabase
+        .from("collections")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("id", adoptedId)
+        .single();
+      if (adopted.error) throw adopted.error;
+      return json({
+        collection: collectionFromRow(adopted.data as Record<string, unknown>),
+      }, 201);
+    }
     await upsertCollectionEmbedding(
       supabase,
       userId,

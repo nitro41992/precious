@@ -5,9 +5,14 @@ import {
 } from "./places.ts";
 import {
   activeSaveIntentKeys,
+  analysisSchema,
   analysisSchemaForCollections,
   COLLECTION_AUTO_LINK_CONFIDENCE,
   COLLECTION_AUTO_LINK_LIMIT,
+  COLLECTION_DESCRIPTION_MAX_LENGTH,
+  COLLECTION_SUGGESTION_DEDUP_SIMILARITY,
+  COLLECTION_SUGGESTION_MIN_CONFIDENCE,
+  COLLECTION_TITLE_MAX_LENGTH,
   STARTER_COLLECTIONS,
 } from "./config.ts";
 import { capturePayloadExpectsAsset } from "./capture-records.ts";
@@ -66,6 +71,7 @@ import {
   COLLECTION_PROMPT_CANDIDATE_COUNT,
   COLLECTION_RETRIEVAL_MATCH_COUNT,
   collectionFacets,
+  normalizeCollectionDecision,
   promptCollectionsForAnalysis,
   retrievalQueryForCapture,
   shouldSeedStarterCollections,
@@ -85,6 +91,7 @@ import {
 
 export const __urlEvidenceTest = {
   activeSaveIntentKeys,
+  analysisSchema,
   analysisSchemaForCollections,
   applySecondaryCollectionRecovery,
   bestEvidence,
@@ -104,7 +111,11 @@ export const __urlEvidenceTest = {
   collectionFacets,
   COLLECTION_AUTO_LINK_CONFIDENCE,
   COLLECTION_AUTO_LINK_LIMIT,
+  COLLECTION_DESCRIPTION_MAX_LENGTH,
   COLLECTION_PROMPT_CANDIDATE_COUNT,
+  COLLECTION_SUGGESTION_DEDUP_SIMILARITY,
+  COLLECTION_SUGGESTION_MIN_CONFIDENCE,
+  COLLECTION_TITLE_MAX_LENGTH,
   emptyUrlEvidence,
   evidenceQuality,
   evidenceSources,
@@ -118,6 +129,7 @@ export const __urlEvidenceTest = {
   isVisualDownloadFailure,
   metaOembedEndpoint,
   mirrorSourcePreviewAsset,
+  normalizeCollectionDecision,
   normalizeExaContentsEvidence,
   normalizedLocationContext,
   normalizeVisitTargetFields,
