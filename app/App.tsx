@@ -4734,14 +4734,17 @@ export default function App() {
           takeCapturePhoto: () => void takeCapturePhoto()
         }}
         data={{
-          appSheets: includeChrome ? renderAppSheets() : null,
-          bottomAppBar: includeChrome && !showCaptureComposer ? renderBottomAppBar("recent") : null,
+          // App sheets, bottom app bar, and toast are mounted once at the stack
+          // level (see renderTopLevelStack) so they stay fixed during the
+          // tab-switch animation instead of sliding with this pane.
+          appSheets: null,
+          bottomAppBar: null,
           captureComposerMotion,
           captureKeyboardInset,
           homeCaptureTotalCount: activeCaptureTotalCount,
           homeCaptures: homeRows,
           listPerfProps: CAPTURE_LIST_PERF_PROPS,
-          toast: includeChrome ? renderToast(showCaptureComposer ? "footer" : "bottomNav") : null,
+          toast: null,
           sourceInputRef,
           visibleHomeRows,
           windowHeight
@@ -4777,14 +4780,17 @@ export default function App() {
           renderListLoadingFooter
         }}
         data={{
-          appSheets: includeChrome ? renderAppSheets() : null,
-          bottomAppBar: includeChrome && !showCollectionForm ? renderBottomAppBar("collections") : null,
+          // App sheets, bottom app bar, and toast are mounted once at the stack
+          // level (see renderTopLevelStack) so they stay fixed during the
+          // tab-switch animation instead of sliding with this pane.
+          appSheets: null,
+          bottomAppBar: null,
           collectionComposerSheet: includeChrome ? renderCollectionComposerSheet() : null,
           collections,
           collectionsColdSkeletonVisible,
           collectionsError,
           collectionsListPerfProps: COLLECTION_LIST_PERF_PROPS,
-          toast: includeChrome ? renderToast(showCollectionForm ? "footer" : "bottomNav") : null
+          toast: null
         }}
         state={{
           collectionsLoadPhase,
@@ -4869,6 +4875,14 @@ export default function App() {
       Boolean(reviewHandoff) ||
       collectionDetailEntering ||
       Boolean(closingCollectionDetail);
+    // The fixed bottom chrome (nav + FAB, toast, app sheets) is hoisted out of
+    // the panes and mounted once at the stack level so it stays put while the
+    // panes slide/fade on a tab switch — only the underlying lists animate.
+    // Keeping the sheets and toast here too preserves their stacking above the
+    // bar (a bar hoisted above the panes would otherwise paint over in-pane
+    // sheets/toast). Order matters: bar, then toast, then sheets — last on top.
+    const composerOpen = active === "recent" ? showCaptureComposer : showCollectionForm;
+    const bottomBarVisible = paneChromeVisible && !composerOpen;
     return (
       <View collapsable={false} ref={handoffRootRef} style={styles.screenStack}>
         <TopLevelPane active={active === "recent"} direction={-1}>
@@ -4877,6 +4891,9 @@ export default function App() {
         <TopLevelPane active={active === "collections"} direction={1}>
           {renderCollectionsScreen({ includeChrome: active === "collections" && paneChromeVisible })}
         </TopLevelPane>
+        {bottomBarVisible ? renderBottomAppBar(active) : null}
+        {paneChromeVisible ? renderToast(composerOpen ? "footer" : "bottomNav") : null}
+        {paneChromeVisible ? renderAppSheets() : null}
         {underlay}
         {overlay ? (
           <ScreenOverlayFrame handoff={overlayHandoff} progress={reviewHandoffProgress}>
