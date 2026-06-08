@@ -170,6 +170,11 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
           keyExtractor={(item) => item.id}
           renderItem={renderHomeRow}
           getItemType={(item) => item.type}
+          // FlashList v2 enables maintain-visible-content-position by default,
+          // which strands the rows above the scroll anchor when an item is
+          // deleted mid-scroll (blank feed, can't scroll up until remount).
+          // Disable it so an optimistic in-place deletion reflows cleanly.
+          maintainVisibleContentPosition={{ disabled: true }}
           style={styles.homeList}
           onEndReached={loadMoreActiveCaptures}
           onEndReachedThreshold={0.35}

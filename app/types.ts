@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import type { Icon as PhosphorIcon } from "phosphor-react-native";
+import type { DeleteTraceToken } from "./deleteTrace";
 
 export type CaptureStatus = "processing" | "ready" | "needs_review" | "failed";
 export type ReviewTarget = "intent" | "collections" | "reminder" | "analysis";
@@ -372,11 +373,17 @@ export type HomeListRow =
 export type ToastTone = "neutral" | "success" | "error" | "destructive" | "processing";
 export type ToastPlacement = "base" | "bottomNav" | "footer";
 export type ToastState = {
+  // Stable identity for a toast that updates in place (e.g. a batch counter):
+  // ToastHost keys its animated view on `id` when present, so re-showing with
+  // the same id updates the text without an exit/enter remount. Falls back to
+  // text+tone+action when omitted.
+  id?: string;
   text: string;
   tone?: ToastTone;
   durationMs?: number;
   actionLabel?: string;
   action?: () => void;
+  trace?: DeleteTraceToken;
 };
 
 export type AuthScreenMode = "signin" | "check-email";

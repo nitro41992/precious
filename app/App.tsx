@@ -107,6 +107,12 @@ import { CollectionSearchScreen } from "./screens/CollectionSearchScreen";
 import { CollectionsScreen } from "./screens/CollectionsScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { SearchScreen } from "./screens/SearchScreen";
+import {
+  createDeleteTrace,
+  markDeleteTrace,
+  markDeleteTraceNextFrame
+} from "./deleteTrace";
+import type { DeleteTraceToken } from "./deleteTrace";
 
 import type { MapSearchCandidate } from "./captureLogic";
 import {
@@ -125,7 +131,14 @@ import {
 } from "./captureLogic";
 
 const TOAST_DEFAULT_MS = 2500;
-const DELETE_UNDO_MS = 6000;
+// Any toast carrying an action (undo) stays up long enough to reach for. The
+// short default is for fire-and-forget status toasts only — an undo affordance
+// that auto-dismisses before the user can tap it reads as a dead button.
+const TOAST_ACTION_MS = 6000;
+// Stable id for the consolidated "removed from collection" toast so successive
+// removals update one toast (a climbing count) in place instead of churning a
+// fresh toast each time, and a single Undo can restore the whole burst.
+const COLLECTION_UNLINK_TOAST_ID = "collection-unlink-batch";
 const CAPTURES_FRESH_MS = 30_000;
 const REVIEW_HANDOFF_OPEN_MS = 220;
 const REVIEW_HANDOFF_CLOSE_MS = 180;
@@ -142,6 +155,7 @@ type ReviewHandoffRect = {
 // show the same capture at once, so thumbnail refs are registered per surface
 // and the handoff resolves its source through its own surface only.
 type ReviewHandoffSurface = "home" | "collection" | "search";
+type CaptureReviewOrigin = "recent" | "collection" | "search" | "other";
 
 type ReviewHandoffState = {
   cacheKey: string;
@@ -348,6 +362,52 @@ function ScreenOverlayFrame({
     >
       {children}
     </Reanimated.View>
+  );
+}
+
+function ReviewDeleteDismissFrame({
+  children,
+  onDismissed,
+  trace
+}: {
+  children: ReactNode;
+  onDismissed: () => void;
+  trace?: DeleteTraceToken | null;
+}) {
+  const progress = useSharedValue(1);
+
+  useEffect(() => {
+    const token = trace;
+    markDeleteTrace(token, "review_delete_close_start");
+    progress.value = withTiming(
+      0,
+      {
+        duration: 140,
+        easing: motionEasing.accelerate,
+        reduceMotion: motionReduceMotion
+      },
+      (finished) => {
+        if (!finished) return;
+        runOnJS(markDeleteTrace)(token, "review_delete_close_end");
+        runOnJS(onDismissed)();
+      }
+    );
+  }, [onDismissed, progress, trace]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, 1], [0.98, 1]),
+    transform: [
+      { translateY: interpolate(progress.value, [0, 1], [18, 0]) },
+      { scale: interpolate(progress.value, [0, 1], [0.985, 1]) }
+    ]
+  }));
+
+  return (
+    <View pointerEvents="none" style={styles.screenOverlay}>
+      <Reanimated.View style={[styles.screenOverlay, animatedStyle]}>
+        {children}
+      </Reanimated.View>
+    </View>
   );
 }
 
@@ -622,15 +682,134 @@ function confirmedLinkedCollectionsForCapture(capture: Capture): LinkedCollectio
   return (capture.linkedCollections || []).filter((collection) => collection.createdBy !== "analysis");
 }
 
+type DeletionStateSnapshot = {
+  activeCaptureTotalCount: number | null;
+  archivedCaptures: Capture[];
+  captures: Capture[];
+  capturesNextCursor: string | null;
+  archivedCapturesNextCursor: string | null;
+  collectionCaptures: Capture[];
+  collectionCapturesCache: Record<string, Capture[]>;
+  collectionCapturesForId: string | null;
+  collectionCapturesNextCursor: string | null;
+  collectionCapturesCursorCache: Record<string, string | null>;
+  collections: Collection[];
+  collectionsCache: Record<CollectionListMode, Collection[]>;
+  collectionsNextCursor: Record<CollectionListMode, string | null>;
+  collectionsCursorCache: Record<CollectionListMode, string | null>;
+};
+
+type PendingDeleteOperation = {
+  commitDone: boolean;
+  commitFailed: boolean;
+  id: string;
+  kind: DeleteTraceToken["kind"];
+  snapshot: DeletionStateSnapshot;
+  trace: DeleteTraceToken;
+  undoRequested: boolean;
+};
+
+type PendingCaptureDeleteClose = {
+  capture: Capture;
+  operationId: string;
+  trace: DeleteTraceToken;
+};
+
+type UnlinkBatchItem = {
+  capture: Capture;
+  collection: LinkedCollection;
+  captureId: string;
+  index: number;
+};
+
+type UnlinkBatchState = {
+  collectionId: string;
+  flushTimer: ReturnType<typeof setTimeout> | null;
+  items: UnlinkBatchItem[];
+  networkDone: boolean;
+  networkFailed: boolean;
+  networkStarted: boolean;
+  trace: DeleteTraceToken | null;
+  undoRequested: boolean;
+};
+
+function cloneCollectionCache(cache: Record<CollectionListMode, Collection[]>) {
+  return {
+    active: [...cache.active],
+    archived: [...cache.archived]
+  };
+}
+
+function cloneCollectionCursorCache(cache: Record<CollectionListMode, string | null>) {
+  return {
+    active: cache.active,
+    archived: cache.archived
+  };
+}
+
+function cloneCollectionCaptureCache(cache: Record<string, Capture[]>) {
+  return Object.fromEntries(
+    Object.entries(cache).map(([collectionId, rows]) => [collectionId, [...rows]])
+  );
+}
+
+function cloneCollectionCaptureCursorCache(cache: Record<string, string | null>) {
+  return { ...cache };
+}
+
+function emptyUnlinkBatch(): UnlinkBatchState {
+  return {
+    collectionId: "",
+    flushTimer: null,
+    items: [],
+    networkDone: false,
+    networkFailed: false,
+    networkStarted: false,
+    trace: null,
+    undoRequested: false
+  };
+}
+
+function captureMatchesReference(item: Capture, capture: Capture) {
+  return (
+    item.id === capture.id ||
+    item.remoteId === capture.id ||
+    item.id === capture.remoteId ||
+    Boolean(capture.remoteId && item.remoteId === capture.remoteId)
+  );
+}
+
+function activeLinkedCollectionsForIds(
+  collectionIds: string[],
+  collectionsById: Map<string, Collection>,
+  existing: LinkedCollection[] = []
+) {
+  const existingById = new Map(existing.map((collection) => [collection.id, collection]));
+  return collectionIds.flatMap((collectionId) => {
+    const existingCollection = existingById.get(collectionId);
+    if (existingCollection) return [existingCollection];
+    const collection = collectionsById.get(collectionId);
+    if (!collection || collection.status !== "active") return [];
+    return [{
+      id: collection.id,
+      title: collection.title,
+      description: collection.description,
+      createdBy: "user",
+      linkedAt: Date.now()
+    } satisfies LinkedCollection];
+  });
+}
+
 export default function App() {
   const { height: windowHeight } = useWindowDimensions();
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [archivedCaptures, setArchivedCaptures] = useState<Capture[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedCaptureSnapshot, setSelectedCaptureSnapshot] = useState<Capture | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [captureReturnCollectionId, setCaptureReturnCollectionId] = useState<string | null>(null);
-  const [captureReviewOrigin, setCaptureReviewOrigin] = useState<"recent" | "collection" | "search" | "other" | null>(null);
+  const [captureReviewOrigin, setCaptureReviewOrigin] = useState<CaptureReviewOrigin | null>(null);
   const [capturesLoading, setCapturesLoading] = useState(false);
   const [capturesLoadPhase, setCapturesLoadPhase] = useState<LoadPhase>("idle");
   const [capturesError, setCapturesError] = useState("");
@@ -707,6 +886,11 @@ export default function App() {
   // hiding earlier flashes the slot empty while the copy is still blank.
   const [reviewHandoffCopyShownKey, setReviewHandoffCopyShownKey] = useState<number | null>(null);
   const [closingReviewCapture, setClosingReviewCapture] = useState<Capture | null>(null);
+  const [deleteDismissCapture, setDeleteDismissCapture] = useState<Capture | null>(null);
+  const [deleteDismissCollection, setDeleteDismissCollection] = useState<Collection | null>(null);
+  const [deleteDismissOrigin, setDeleteDismissOrigin] = useState<CaptureReviewOrigin | null>(null);
+  const [deleteDismissSearchOpen, setDeleteDismissSearchOpen] = useState(false);
+  const [deleteDismissTrace, setDeleteDismissTrace] = useState<DeleteTraceToken | null>(null);
   // Frozen snapshot of the collection whose detail screen is animating out.
   // Keeps the screen mounted (and pixel-stable) through the exit flight;
   // cleared in one commit once the pane lands at opacity 0.
@@ -735,6 +919,14 @@ export default function App() {
   const collectionsLoadedOnceRef = useRef<Record<CollectionListMode, boolean>>({ active: false, archived: false });
   const collectionsModeRef = useRef<CollectionListMode>("active");
   const collectionCapturesCacheRef = useRef<Record<string, Capture[]>>({});
+  const pendingDeleteOperationsRef = useRef<Record<string, PendingDeleteOperation>>({});
+  const pendingCaptureDeleteCloseRef = useRef<PendingCaptureDeleteClose | null>(null);
+  const cancelledCaptureDeleteClosesRef = useRef<Set<string>>(new Set());
+  // Pending removals for the current collection so one Undo restores the whole
+  // burst. The ref (not state) is the source of truth for batch continuity, so
+  // rapid taps before a re-render still accumulate into one batch; lifecycle
+  // events (restore, toast timeout, leaving the detail) clear it.
+  const unlinkBatchRef = useRef<UnlinkBatchState>(emptyUnlinkBatch());
   const collectionCapturesCursorCacheRef = useRef<Record<string, string | null>>({});
   const collectionCapturePrefetchStartedRef = useRef<Set<string>>(new Set());
   const captureDetailHydrationRef = useRef<Set<string>>(new Set());
@@ -1232,6 +1424,11 @@ export default function App() {
     setCollectionCapturesNextCursor(null);
     setCollectionCapturesLoadPhase("idle");
     setCollectionCapturesError("");
+    setDeleteDismissCapture(null);
+    setDeleteDismissCollection(null);
+    setDeleteDismissOrigin(null);
+    setDeleteDismissSearchOpen(false);
+    setDeleteDismissTrace(null);
     captureDetailHydrationRef.current.clear();
     placeResolutionRef.current.clear();
     collectionsPrefetchStartedRef.current = false;
@@ -1266,6 +1463,64 @@ export default function App() {
   const showErrorToast = useCallback((error: unknown, fallback: string) => {
     showToast({ text: friendlyError(error, fallback), tone: "error" });
   }, [showToast]);
+
+  function showTracedToast(next: ToastState, trace: DeleteTraceToken) {
+    markDeleteTrace(trace, "toast_set", { text: next.text });
+    showToast({ ...next, trace });
+  }
+
+  function snapshotDeletionState(): DeletionStateSnapshot {
+    return {
+      activeCaptureTotalCount,
+      archivedCaptures: [...archivedCapturesRef.current],
+      captures: [...capturesRef.current],
+      capturesNextCursor,
+      archivedCapturesNextCursor,
+      collectionCaptures: [...collectionCaptures],
+      collectionCapturesCache: cloneCollectionCaptureCache(collectionCapturesCacheRef.current),
+      collectionCapturesForId,
+      collectionCapturesNextCursor,
+      collectionCapturesCursorCache: cloneCollectionCaptureCursorCache(collectionCapturesCursorCacheRef.current),
+      collections: [...collections],
+      collectionsCache: cloneCollectionCache(collectionsCacheRef.current),
+      collectionsNextCursor: cloneCollectionCursorCache(collectionsNextCursor),
+      collectionsCursorCache: cloneCollectionCursorCache(collectionsCursorCacheRef.current)
+    };
+  }
+
+  function restoreDeletionState(snapshot: DeletionStateSnapshot) {
+    capturesRef.current = snapshot.captures;
+    archivedCapturesRef.current = snapshot.archivedCaptures;
+    collectionsCacheRef.current = cloneCollectionCache(snapshot.collectionsCache);
+    collectionsCursorCacheRef.current = cloneCollectionCursorCache(snapshot.collectionsCursorCache);
+    collectionCapturesCacheRef.current = cloneCollectionCaptureCache(snapshot.collectionCapturesCache);
+    collectionCapturesCursorCacheRef.current = cloneCollectionCaptureCursorCache(snapshot.collectionCapturesCursorCache);
+    setCaptures(snapshot.captures);
+    setArchivedCaptures(snapshot.archivedCaptures);
+    setActiveCaptureTotalCount(snapshot.activeCaptureTotalCount);
+    setCapturesNextCursor(snapshot.capturesNextCursor);
+    setArchivedCapturesNextCursor(snapshot.archivedCapturesNextCursor);
+    setCollections(snapshot.collections);
+    setCollectionsNextCursor(snapshot.collectionsNextCursor);
+    setCollectionCaptures(snapshot.collectionCaptures);
+    setCollectionCapturesForId(snapshot.collectionCapturesForId);
+    setCollectionCapturesNextCursor(snapshot.collectionCapturesNextCursor);
+  }
+
+  function registerPendingDeleteOperation(operation: PendingDeleteOperation) {
+    pendingDeleteOperationsRef.current[operation.id] = operation;
+  }
+
+  function finishPendingDeleteOperation(operationId: string) {
+    delete pendingDeleteOperationsRef.current[operationId];
+  }
+
+  function cancelPendingCaptureDeleteClose(operationId: string) {
+    cancelledCaptureDeleteClosesRef.current.add(operationId);
+    if (pendingCaptureDeleteCloseRef.current?.operationId === operationId) {
+      pendingCaptureDeleteCloseRef.current = null;
+    }
+  }
 
   const {
     authEmail,
@@ -1493,6 +1748,44 @@ export default function App() {
     }
   }, [config, session, withFreshAccessToken]);
 
+  const reconcileCollectionsSilently = useCallback(async (
+    mode: CollectionListMode = "active",
+    trace?: DeleteTraceToken
+  ) => {
+    if (!config?.apiUrl || !session) return;
+    markDeleteTrace(trace, "reconcile_start", { target: "collections" });
+    try {
+      const json = await withFreshAccessToken(async (accessToken) => {
+        return await requestJson(
+          edgeResourceUrl(config.apiUrl, "collections", {
+            archived: mode === "archived" ? "true" : "false",
+            limit: "50"
+          }),
+          {
+            headers: {
+              accept: "application/json",
+              apikey: config.supabaseAnonKey,
+              authorization: `Bearer ${accessToken}`
+            }
+          }
+        ) as RemoteCollectionPage;
+      });
+      const rows = (json.collections ?? []).map(collectionFromRemote);
+      collectionsCacheRef.current[mode] = rows;
+      collectionsCursorCacheRef.current[mode] = json.next_cursor || null;
+      setCollectionsNextCursor((current) => ({ ...current, [mode]: json.next_cursor || null }));
+      setCollectionsLoadedOnce((current) => ({ ...current, [mode]: true }));
+      if (collectionsModeRef.current === mode) setCollections(rows);
+      writeCachedCollectionPage(mode, rows, json.next_cursor || null);
+      markDeleteTrace(trace, "reconcile_done", { target: "collections" });
+    } catch (error) {
+      markDeleteTrace(trace, "reconcile_error", {
+        target: "collections",
+        error: friendlyError(error, "Could not reconcile collections")
+      });
+    }
+  }, [config, session, withFreshAccessToken]);
+
   const loadMoreCollections = useCallback(() => {
     const cursor = collectionsNextCursor[collectionsMode];
     if (!cursor || collectionsLoading) return;
@@ -1671,9 +1964,23 @@ export default function App() {
     setCollectionSelectionIds([]);
     // Deselecting ends the review trip; the return marker would otherwise
     // linger and skew the collection-captures lifecycle effect.
-    if (!captureId) setCaptureReturnCollectionId(null);
+    if (!captureId) {
+      setCaptureReturnCollectionId(null);
+      setSelectedCaptureSnapshot(null);
+    } else {
+      const capture =
+        capturesRef.current.find((item) => item.id === captureId || item.remoteId === captureId) ??
+        archivedCapturesRef.current.find((item) => item.id === captureId || item.remoteId === captureId) ??
+        collectionCapturesCacheRef.current[selectedCollectionIdRef.current || ""]?.find(
+          (item) => item.id === captureId || item.remoteId === captureId
+        ) ??
+        collectionCaptures.find((item) => item.id === captureId || item.remoteId === captureId) ??
+        remoteSearchResults.find((item) => item.id === captureId || item.remoteId === captureId) ??
+        null;
+      setSelectedCaptureSnapshot(capture);
+    }
     setSelectedId(captureId);
-  }, []);
+  }, [collectionCaptures, remoteSearchResults]);
 
   selectCaptureRef.current = selectCapture;
 
@@ -1710,6 +2017,9 @@ export default function App() {
   const closeCollectionDetail = useCallback(() => {
     const collection = selectedCollectionRef.current;
     if (!collection || collectionDetailClosingRef.current) return;
+    // Leaving the detail commits any pending removals before the undo affordance
+    // is no longer attached to this screen.
+    commitUnlinkBatchNow();
     selectCollection(null);
     collectionDetailClosingRef.current = true;
     setClosingCollectionDetail(collection);
@@ -1741,6 +2051,46 @@ export default function App() {
       selectCapture(null);
     }
   }, [selectCapture]);
+
+  const finishDeleteReviewDismiss = useCallback(() => {
+    markDeleteTrace(deleteDismissTrace, "review_delete_overlay_unmounted");
+    const operation = deleteDismissTrace
+      ? pendingDeleteOperationsRef.current[deleteDismissTrace.operationId]
+      : null;
+    if (deleteDismissCapture && !operation?.undoRequested && !operation?.commitFailed) {
+      markDeleteTrace(deleteDismissTrace, "visible_state_remove_start");
+      removeCaptureFromVisibleLists(deleteDismissCapture);
+      setActiveCaptureTotalCount((current) => (current == null ? current : Math.max(0, current - 1)));
+      markDeleteTrace(deleteDismissTrace, "visible_state_remove_done");
+      markDeleteTraceNextFrame(deleteDismissTrace, "post_close_visible_frame");
+    }
+    selectCapture(null);
+    setDeleteDismissCapture(null);
+    setDeleteDismissCollection(null);
+    setDeleteDismissOrigin(null);
+    setDeleteDismissSearchOpen(false);
+    setDeleteDismissTrace(null);
+  }, [deleteDismissCapture, deleteDismissTrace, selectCapture]);
+
+  useEffect(() => {
+    if (selectedId) return;
+    const pending = pendingCaptureDeleteCloseRef.current;
+    if (!pending) return;
+    pendingCaptureDeleteCloseRef.current = null;
+    const operation = pendingDeleteOperationsRef.current[pending.operationId];
+    const wasCancelled =
+      cancelledCaptureDeleteClosesRef.current.has(pending.operationId) ||
+      operation?.undoRequested ||
+      operation?.commitFailed;
+    cancelledCaptureDeleteClosesRef.current.delete(pending.operationId);
+    markDeleteTrace(pending.trace, "review_delete_close_finished", { cancelled: Boolean(wasCancelled) });
+    if (wasCancelled) return;
+    markDeleteTrace(pending.trace, "visible_state_remove_start");
+    removeCaptureFromVisibleLists(pending.capture);
+    setActiveCaptureTotalCount((current) => (current == null ? current : Math.max(0, current - 1)));
+    markDeleteTrace(pending.trace, "visible_state_remove_done");
+    markDeleteTraceNextFrame(pending.trace, "post_close_visible_frame");
+  }, [selectedId]);
 
   const openCapture = useCallback(
     (captureId: string | null) => {
@@ -2171,8 +2521,8 @@ export default function App() {
   }, [archivedCapturesLoaded]);
 
   useEffect(() => {
-    if (!selectedId) setCaptureReviewOrigin(null);
-  }, [selectedId]);
+    if (!selectedId && !deleteDismissCapture) setCaptureReviewOrigin(null);
+  }, [deleteDismissCapture, selectedId]);
 
   useEffect(() => {
     collectionsLoadedOnceRef.current = collectionsLoadedOnce;
@@ -2285,6 +2635,10 @@ export default function App() {
       archivedCaptures.find((capture) => capture.id === selectedId) ??
       collectionCaptures.find((capture) => capture.id === selectedId) ??
       remoteSearchResults.find((capture) => capture.id === selectedId) ??
+      (selectedCaptureSnapshot &&
+      (selectedCaptureSnapshot.id === selectedId || selectedCaptureSnapshot.remoteId === selectedId)
+        ? selectedCaptureSnapshot
+        : null) ??
       null
     : null;
   const selectedCollection = selectedCollectionId
@@ -2532,7 +2886,15 @@ export default function App() {
 
   useEffect(() => {
     if (!toast) return;
-    const timer = setTimeout(() => setToast(null), toast.durationMs ?? TOAST_DEFAULT_MS);
+    const timer = setTimeout(
+      () => {
+        // When the consolidated removal toast times out, commit the burst:
+        // drop the pending batch so a later removal starts a fresh count.
+        if (toast.id === COLLECTION_UNLINK_TOAST_ID) clearUnlinkBatch();
+        setToast(null);
+      },
+      toast.durationMs ?? (toast.action ? TOAST_ACTION_MS : TOAST_DEFAULT_MS)
+    );
     return () => clearTimeout(timer);
   }, [toast]);
 
@@ -2775,14 +3137,17 @@ export default function App() {
         "active"
       );
     }
-    setCaptures((current) => {
+    commitCaptureRows("active", (current) => {
       if (!current.some(matchesCapture)) return current;
-      return capturesForListMode(current.map((item) => (matchesCapture(item) ? preserveKnownImageFields(item) : item)), "active");
+      return current.map((item) => (matchesCapture(item) ? preserveKnownImageFields(item) : item));
     });
-    setArchivedCaptures((current) => {
+    commitCaptureRows("archived", (current) => {
       if (!current.some(matchesCapture)) return current;
-      return capturesForListMode(current.map((item) => (matchesCapture(item) ? preserveKnownImageFields(item) : item)), "archived");
+      return current.map((item) => (matchesCapture(item) ? preserveKnownImageFields(item) : item));
     });
+    setSelectedCaptureSnapshot((current) =>
+      current && matchesCapture(current) ? preserveKnownImageFields(current) : current
+    );
     setCollectionCaptures((current) =>
       capturesForListMode(current.map((item) => (matchesCapture(item) ? preserveKnownImageFields(item) : item)), "active")
     );
@@ -3000,6 +3365,122 @@ export default function App() {
     );
   }
 
+  function allKnownCollectionsById() {
+    const map = new Map<string, Collection>();
+    [
+      ...collectionsCacheRef.current.active,
+      ...collectionsCacheRef.current.archived,
+      ...collections
+    ].forEach((collection) => {
+      map.set(collection.id, collection);
+    });
+    return map;
+  }
+
+  function adjustCollectionCounts(previousIds: string[], nextIds: string[]) {
+    const previous = new Set(previousIds);
+    const next = new Set(nextIds);
+    const deltas = new Map<string, number>();
+    previous.forEach((collectionId) => {
+      if (!next.has(collectionId)) deltas.set(collectionId, (deltas.get(collectionId) || 0) - 1);
+    });
+    next.forEach((collectionId) => {
+      if (!previous.has(collectionId)) deltas.set(collectionId, (deltas.get(collectionId) || 0) + 1);
+    });
+    if (!deltas.size) return;
+    const applyDelta = (collection: Collection) => {
+      const delta = deltas.get(collection.id) || 0;
+      if (!delta) return collection;
+      return { ...collection, captureCount: Math.max(0, collection.captureCount + delta) };
+    };
+    (["active", "archived"] as const).forEach((mode) => {
+      collectionsCacheRef.current[mode] = collectionsCacheRef.current[mode].map(applyDelta);
+    });
+    setCollections((current) => current.map(applyDelta));
+  }
+
+  function applyCaptureCollectionSetLocal(
+    capture: Capture,
+    previousId: string,
+    collectionIds: string[]
+  ) {
+    const previousIds = (capture.linkedCollections || []).map((collection) => collection.id);
+    const nextLinkedCollections = activeLinkedCollectionsForIds(
+      collectionIds,
+      allKnownCollectionsById(),
+      capture.linkedCollections || []
+    );
+    const updatedCapture = { ...capture, linkedCollections: nextLinkedCollections };
+    const previousSet = new Set(previousIds);
+    const nextSet = new Set(collectionIds);
+    const affectedIds = new Set([...previousIds, ...collectionIds]);
+    for (const collectionId of affectedIds) {
+      const rows = collectionCapturesCacheRef.current[collectionId];
+      if (!rows) continue;
+      const withoutCapture = rows.filter((item) => !captureMatchesReference(item, capture));
+      collectionCapturesCacheRef.current[collectionId] = nextSet.has(collectionId)
+        ? [updatedCapture, ...withoutCapture].filter((item, index, list) =>
+            list.findIndex((candidate) => captureMatchesReference(candidate, item)) === index
+          )
+        : withoutCapture;
+    }
+    if (collectionCapturesForId && affectedIds.has(collectionCapturesForId)) {
+      setCollectionCaptures((current) => {
+        const withoutCapture = current.filter((item) => !captureMatchesReference(item, capture));
+        return nextSet.has(collectionCapturesForId)
+          ? [updatedCapture, ...withoutCapture].filter((item, index, list) =>
+              list.findIndex((candidate) => captureMatchesReference(candidate, item)) === index
+            )
+          : withoutCapture;
+      });
+    }
+    applyUpdatedCapture(updatedCapture, previousId);
+    adjustCollectionCounts([...previousSet], [...nextSet]);
+  }
+
+  async function syncCaptureCollectionsNetwork(
+    capture: Capture,
+    collectionIds: string[],
+    trace?: DeleteTraceToken,
+    phase = "network"
+  ) {
+    markDeleteTrace(trace, `${phase}_start`, { collectionCount: collectionIds.length });
+    const json = await collectionRequest<{ capture: Record<string, any> }>("collection-links", {
+      method: "PATCH",
+      body: {
+        action: "set_capture_collections",
+        captureId: capture.remoteId || capture.id,
+        collectionIds
+      }
+    });
+    markDeleteTrace(trace, `${phase}_done`, { collectionCount: collectionIds.length });
+    return captureFromRemote(json.capture);
+  }
+
+  function undoCaptureCollectionSet(operationId: string, capture: Capture, previousIds: string[]) {
+    const operation = pendingDeleteOperationsRef.current[operationId];
+    if (!operation) return;
+    markDeleteTrace(operation.trace, "undo_tap");
+    operation.undoRequested = true;
+    markDeleteTrace(operation.trace, "restore_state_start");
+    restoreDeletionState(operation.snapshot);
+    markDeleteTrace(operation.trace, "restore_state_done");
+    setToast(null);
+    showToast("Collections restored.", "success");
+    const undoNetwork = async () => {
+      try {
+        const restored = await syncCaptureCollectionsNetwork(capture, previousIds, operation.trace, "undo_network");
+        applyUpdatedCapture(restored, capture.id);
+        await reconcileCollectionsSilently("active", operation.trace);
+      } catch (error) {
+        showErrorToast(error, "Could not undo collections.");
+      } finally {
+        finishPendingDeleteOperation(operationId);
+      }
+    };
+    if (operation.commitDone && !operation.commitFailed) void undoNetwork();
+  }
+
   async function updateCaptureCollections(
     collectionIds: string[],
     options: { closePicker?: boolean; toastMessage?: string } = {}
@@ -3009,36 +3490,60 @@ export default function App() {
       showToast("Sign in to manage collections.", "error");
       return;
     }
+    const capture = selected;
     const previousId = selected.id;
-    setCollectionChoiceSaving("set-collections");
-    try {
-      const json = await collectionRequest<{ capture: Record<string, any> }>("collection-links", {
-        method: "PATCH",
-        body: {
-          action: "set_capture_collections",
-          captureId: selected.remoteId || selected.id,
-          collectionIds
+    const previousIds = (selected.linkedCollections || []).map((collection) => collection.id);
+    const trace = createDeleteTrace("collection-set", {
+      captureId: selected.remoteId || selected.id,
+      nextCount: collectionIds.length,
+      previousCount: previousIds.length
+    });
+    const snapshot = snapshotDeletionState();
+    const operation: PendingDeleteOperation = {
+      commitDone: false,
+      commitFailed: false,
+      id: trace.operationId,
+      kind: "collection-set",
+      snapshot,
+      trace,
+      undoRequested: false
+    };
+    registerPendingDeleteOperation(operation);
+    markDeleteTrace(trace, "optimistic_state_start");
+    applyCaptureCollectionSetLocal(capture, previousId, collectionIds);
+    if (options.closePicker !== false) closeCollectionPicker();
+    setCollectionChoiceSaving(null);
+    markDeleteTrace(trace, "optimistic_state_done");
+    markDeleteTraceNextFrame(trace, "first_visible_frame");
+    showTracedToast({
+      text: options.toastMessage || "Collections updated.",
+      tone: "success",
+      actionLabel: "Undo",
+      action: () => undoCaptureCollectionSet(trace.operationId, capture, previousIds)
+    }, trace);
+    void (async () => {
+      try {
+        const updatedCapture = await syncCaptureCollectionsNetwork(capture, collectionIds, trace);
+        operation.commitDone = true;
+        if (operation.undoRequested) {
+          const restored = await syncCaptureCollectionsNetwork(capture, previousIds, trace, "undo_network");
+          applyUpdatedCapture(restored, previousId);
+          await reconcileCollectionsSilently("active", trace);
+          finishPendingDeleteOperation(operation.id);
+          return;
         }
-      });
-      const updatedCapture = captureFromRemote(json.capture);
-      applyUpdatedCapture(updatedCapture, previousId);
-      collectionCapturesCacheRef.current = {};
-      setCollectionCaptures((current) =>
-        capturesForListMode(
-          current.map((item) =>
-            item.id === previousId || item.remoteId === previousId ? updatedCapture : item
-          ),
-          "active"
-        )
-      );
-      if (options.closePicker !== false) closeCollectionPicker();
-      await loadCollections("active");
-      showToast(options.toastMessage || "Collections updated.", "success");
-    } catch (error) {
-      showErrorToast(error, "Could not update collections.");
-    } finally {
-      setCollectionChoiceSaving(null);
-    }
+        applyUpdatedCapture(updatedCapture, previousId);
+        await reconcileCollectionsSilently("active", trace);
+        finishPendingDeleteOperation(operation.id);
+      } catch (error) {
+        operation.commitFailed = true;
+        if (!operation.undoRequested) {
+          restoreDeletionState(snapshot);
+          showErrorToast(error, "Could not update collections.");
+        }
+        finishPendingDeleteOperation(operation.id);
+      }
+    })();
   }
 
   async function saveCollectionSelection() {
@@ -3103,30 +3608,76 @@ export default function App() {
     }
   }
 
-  async function undoDeleteCollection(collection: Collection) {
-    try {
-      const json = await collectionRequest<{ collection: Record<string, any> }>("collections", {
-        method: "PATCH",
-        body: { collectionId: collection.id, action: "undo_delete" }
-      });
-      const restored = collectionFromRemote(json.collection);
-      collectionsCacheRef.current.active = uniqueCollections([restored, ...collectionsCacheRef.current.active]);
-      setCollections((current) => uniqueCollections([restored, ...current]));
-      setToast(null);
-      showToast("Collection restored.", "success");
-      await loadCollections("active");
-      await loadCaptures();
-    } catch (error) {
-      showErrorToast(error, "Could not undo delete.");
+  async function syncCollectionDeleteNetwork(
+    collection: Collection,
+    action: "delete" | "undo_delete",
+    trace?: DeleteTraceToken,
+    phase = "network"
+  ) {
+    markDeleteTrace(trace, `${phase}_start`, { action, collectionId: collection.id });
+    const json = await collectionRequest<{ collection: Record<string, any> }>("collections", {
+      method: "PATCH",
+      body: { collectionId: collection.id, action }
+    });
+    markDeleteTrace(trace, `${phase}_done`, { action, collectionId: collection.id });
+    return collectionFromRemote(json.collection);
+  }
+
+  function undoDeleteCollection(collection: Collection, operationId?: string) {
+    const operation = operationId ? pendingDeleteOperationsRef.current[operationId] : null;
+    if (!operation) {
+      void (async () => {
+        const trace = createDeleteTrace("collection-delete", {
+          collectionId: collection.id,
+          fallback: true
+        });
+        try {
+          const restored = await syncCollectionDeleteNetwork(collection, "undo_delete", trace, "undo_network");
+          collectionsCacheRef.current.active = uniqueCollections([restored, ...collectionsCacheRef.current.active]);
+          setCollections((current) => uniqueCollections([restored, ...current]));
+          setToast(null);
+          showToast("Collection restored.", "success");
+          await reconcileCollectionsSilently("active", trace);
+        } catch (error) {
+          showErrorToast(error, "Could not undo delete.");
+        }
+      })();
+      return;
     }
+    markDeleteTrace(operation.trace, "undo_tap");
+    operation.undoRequested = true;
+    markDeleteTrace(operation.trace, "restore_state_start");
+    restoreDeletionState(operation.snapshot);
+    markDeleteTrace(operation.trace, "restore_state_done");
+    setToast(null);
+    showToast("Collection restored.", "success");
+    const undoNetwork = async () => {
+      try {
+        await syncCollectionDeleteNetwork(collection, "undo_delete", operation.trace, "undo_network");
+        await reconcileCollectionsSilently("active", operation.trace);
+      } catch (error) {
+        showErrorToast(error, "Could not undo delete.");
+      } finally {
+        finishPendingDeleteOperation(operation.id);
+      }
+    };
+    if (operation.commitDone && !operation.commitFailed) void undoNetwork();
   }
 
   async function deleteCollection(collection: Collection) {
-    const previousCollections = collections;
-    const previousCache = {
-      active: collectionsCacheRef.current.active,
-      archived: collectionsCacheRef.current.archived
+    const trace = createDeleteTrace("collection-delete", { collectionId: collection.id });
+    const snapshot = snapshotDeletionState();
+    const operation: PendingDeleteOperation = {
+      commitDone: false,
+      commitFailed: false,
+      id: trace.operationId,
+      kind: "collection-delete",
+      snapshot,
+      trace,
+      undoRequested: false
     };
+    registerPendingDeleteOperation(operation);
+    markDeleteTrace(trace, "optimistic_state_start");
     // Animated close; the frozen closingCollectionDetail snapshot keeps the
     // fading screen pixel-stable while the caches mutate beneath it.
     closeCollectionDetail();
@@ -3135,126 +3686,350 @@ export default function App() {
     setCollections((current) => current.filter((item) => item.id !== collection.id));
     collectionCapturesCacheRef.current[collection.id] = [];
     removeCollectionFromKnownCaptures(collection.id);
+    markDeleteTrace(trace, "optimistic_state_done");
+    markDeleteTraceNextFrame(trace, "first_visible_frame");
     setToast(null);
-    showToast({
+    showTracedToast({
       text: "Collection deleted.",
       tone: "destructive",
-      durationMs: DELETE_UNDO_MS,
       actionLabel: "Undo",
-      action: () => void undoDeleteCollection(collection)
+      action: () => undoDeleteCollection(collection, trace.operationId)
+    }, trace);
+    void (async () => {
+      try {
+        await syncCollectionDeleteNetwork(collection, "delete", trace);
+        operation.commitDone = true;
+        if (operation.undoRequested) {
+          await syncCollectionDeleteNetwork(collection, "undo_delete", trace, "undo_network");
+          await reconcileCollectionsSilently("active", trace);
+          finishPendingDeleteOperation(operation.id);
+          return;
+        }
+        await reconcileCollectionsSilently("active", trace);
+        finishPendingDeleteOperation(operation.id);
+      } catch (error) {
+        operation.commitFailed = true;
+        if (!operation.undoRequested) {
+          restoreDeletionState(snapshot);
+          showErrorToast(error, "Could not delete collection.");
+        }
+        finishPendingDeleteOperation(operation.id);
+      }
+    })();
+  }
+
+  // Local-only state mutations for the unlink/restore pair, factored out so the
+  // optimistic apply and the on-failure rollback share one code path (and so the
+  // undo toast can re-run the restore without re-deriving it). No network here.
+  function applyCollectionLinkRemoval(collectionId: string, capture: Capture, captureId: string) {
+    collectionCapturesCacheRef.current[collectionId] = (collectionCapturesCacheRef.current[collectionId] || [])
+      .filter((item) => item.id !== capture.id);
+    setCollectionCaptures((current) => current.filter((item) => item.id !== capture.id));
+    (["active", "archived"] as const).forEach((mode) => {
+      collectionsCacheRef.current[mode] = collectionsCacheRef.current[mode].map((collection) =>
+        collection.id === collectionId
+          ? { ...collection, captureCount: Math.max(0, collection.captureCount - 1) }
+          : collection
+      );
     });
-    try {
-      await collectionRequest<{ collection: Record<string, any> }>("collections", {
-        method: "PATCH",
-        body: { collectionId: collection.id, action: "delete" }
-      });
-      await loadCollections("active");
-      await loadCaptures();
-    } catch (error) {
-      collectionsCacheRef.current = previousCache;
-      setCollections(previousCollections);
-      showErrorToast(error, "Could not delete collection.");
+    setCollections((current) =>
+      current.map((collection) =>
+        collection.id === collectionId
+          ? { ...collection, captureCount: Math.max(0, collection.captureCount - 1) }
+          : collection
+      )
+    );
+    commitCaptureRows("active", (current) =>
+      current.map((item) =>
+        item.id === captureId || item.remoteId === captureId
+          ? {
+              ...item,
+              linkedCollections: (item.linkedCollections || []).filter((collection) => collection.id !== collectionId)
+            }
+          : item
+      )
+    );
+  }
+
+  function applyCollectionLinkRestore(
+    collectionId: string,
+    capture: Capture,
+    captureId: string,
+    collection: LinkedCollection,
+    restoreIndex: number
+  ) {
+    const restoredCollection = { ...collection, linkedAt: Date.now() };
+    const addCollection = (item: Capture) =>
+      item.id === capture.id || item.remoteId === captureId
+        ? {
+            ...item,
+            linkedCollections: (item.linkedCollections || []).some((linked) => linked.id === collectionId)
+              ? item.linkedCollections
+              : [...(item.linkedCollections || []), restoredCollection]
+          }
+        : item;
+    // Drop any stale copy, then slot the restored capture back at its old index
+    // (clamped) so undo returns it where it was rather than jumping it to the top.
+    const reinsert = (list: Capture[]) => {
+      const rest = list.filter((item) => item.id !== capture.id);
+      const at = Math.max(0, Math.min(restoreIndex < 0 ? rest.length : restoreIndex, rest.length));
+      rest.splice(at, 0, addCollection(capture));
+      return rest.filter((item) => !isDeleted(item));
+    };
+    collectionCapturesCacheRef.current[collectionId] = reinsert(
+      collectionCapturesCacheRef.current[collectionId] || []
+    );
+    collectionsCacheRef.current.active = collectionsCacheRef.current.active.map((item) =>
+      item.id === collectionId ? { ...item, captureCount: item.captureCount + 1 } : item
+    );
+    setCollections((current) =>
+      current.map((item) => item.id === collectionId ? { ...item, captureCount: item.captureCount + 1 } : item)
+    );
+    commitCaptureRows("active", (current) => current.map(addCollection));
+    setCollectionCaptures((current) => reinsert(current));
+  }
+
+  function clearUnlinkBatch(operationId?: string) {
+    const current = unlinkBatchRef.current;
+    if (operationId && current.trace?.operationId !== operationId) return;
+    if (current.flushTimer) clearTimeout(current.flushTimer);
+    unlinkBatchRef.current = emptyUnlinkBatch();
+  }
+
+  function commitUnlinkBatchNow() {
+    const batch = unlinkBatchRef.current;
+    if (!batch.trace || !batch.items.length || batch.networkStarted || batch.undoRequested) return;
+    if (batch.flushTimer) {
+      clearTimeout(batch.flushTimer);
+      batch.flushTimer = null;
     }
+    flushUnlinkBatch(batch.trace.operationId);
+  }
+
+  async function syncUnlinkManyNetwork(
+    collectionId: string,
+    items: UnlinkBatchItem[],
+    trace?: DeleteTraceToken,
+    phase = "network"
+  ) {
+    if (!items.length) return;
+    markDeleteTrace(trace, `${phase}_start`, { collectionId, count: items.length });
+    await collectionRequest<{ ok: boolean }>("collection-links", {
+      method: "PATCH",
+      body: {
+        action: "unlink_many",
+        collectionId,
+        captureIds: [...new Set(items.map((item) => item.captureId))]
+      }
+    });
+    markDeleteTrace(trace, `${phase}_done`, { collectionId, count: items.length });
+  }
+
+  async function syncLinkManyNetwork(
+    collectionId: string,
+    items: UnlinkBatchItem[],
+    trace?: DeleteTraceToken,
+    phase = "undo_network"
+  ) {
+    if (!items.length) return;
+    markDeleteTrace(trace, `${phase}_start`, { collectionId, count: items.length });
+    await collectionRequest<{ ok: boolean }>("collection-links", {
+      method: "POST",
+      body: {
+        action: "link_many",
+        collectionId,
+        items: items.map((item) => ({
+          captureId: item.captureId,
+          createdBy: item.collection.createdBy === "analysis" ? "analysis" : "user",
+          rationale: item.collection.rationale,
+          confidence: item.collection.confidence,
+          title: item.collection.title
+        }))
+      }
+    });
+    markDeleteTrace(trace, `${phase}_done`, { collectionId, count: items.length });
+  }
+
+  function restoreUnlinkItems(collectionId: string, items: UnlinkBatchItem[], trace?: DeleteTraceToken) {
+    markDeleteTrace(trace, "restore_state_start", { collectionId, count: items.length });
+    for (let i = items.length - 1; i >= 0; i--) {
+      const item = items[i];
+      applyCollectionLinkRestore(collectionId, item.capture, item.captureId, item.collection, item.index);
+    }
+    markDeleteTrace(trace, "restore_state_done", { collectionId, count: items.length });
+    markDeleteTraceNextFrame(trace, "restore_first_visible_frame", { collectionId, count: items.length });
+  }
+
+  function rollbackUnlinkItems(collectionId: string, items: UnlinkBatchItem[], trace?: DeleteTraceToken) {
+    markDeleteTrace(trace, "rollback_state_start", { collectionId, count: items.length });
+    for (let i = items.length - 1; i >= 0; i--) {
+      const item = items[i];
+      applyCollectionLinkRestore(collectionId, item.capture, item.captureId, item.collection, item.index);
+    }
+    markDeleteTrace(trace, "rollback_state_done", { collectionId, count: items.length });
+    markDeleteTraceNextFrame(trace, "rollback_first_visible_frame", { collectionId, count: items.length });
+  }
+
+  function completeUnlinkUndoNetwork(batch: UnlinkBatchState) {
+    const trace = batch.trace || undefined;
+    void (async () => {
+      try {
+        await syncLinkManyNetwork(batch.collectionId, batch.items, trace);
+        await reconcileCollectionsSilently("active", trace);
+      } catch (error) {
+        for (const item of batch.items) {
+          applyCollectionLinkRemoval(batch.collectionId, item.capture, item.captureId);
+        }
+        showErrorToast(error, "Could not restore collection.");
+      } finally {
+        clearUnlinkBatch(trace?.operationId);
+      }
+    })();
+  }
+
+  function flushUnlinkBatch(operationId: string) {
+    const batch = unlinkBatchRef.current;
+    if (!batch.trace || batch.trace.operationId !== operationId || batch.networkStarted) return;
+    if (batch.flushTimer) {
+      clearTimeout(batch.flushTimer);
+      batch.flushTimer = null;
+    }
+    if (!batch.items.length) {
+      clearUnlinkBatch(operationId);
+      return;
+    }
+    if (batch.undoRequested) {
+      clearUnlinkBatch(operationId);
+      return;
+    }
+    batch.networkStarted = true;
+    const items = [...batch.items];
+    void (async () => {
+      try {
+        await syncUnlinkManyNetwork(batch.collectionId, items, batch.trace || undefined);
+        batch.networkDone = true;
+        await reconcileCollectionsSilently("active", batch.trace || undefined);
+        if (batch.undoRequested) completeUnlinkUndoNetwork(batch);
+      } catch (error) {
+        batch.networkFailed = true;
+        if (!batch.undoRequested) {
+          rollbackUnlinkItems(batch.collectionId, items, batch.trace || undefined);
+          if (unlinkBatchRef.current.trace?.operationId === operationId) setToast(null);
+          showErrorToast(error, "Could not remove collection.");
+          clearUnlinkBatch(operationId);
+        } else {
+          clearUnlinkBatch(operationId);
+        }
+      }
+    })();
+  }
+
+  function scheduleUnlinkBatchFlush(batch: UnlinkBatchState) {
+    if (!batch.trace) return;
+    if (batch.flushTimer) clearTimeout(batch.flushTimer);
+    const operationId = batch.trace.operationId;
+    batch.flushTimer = setTimeout(() => flushUnlinkBatch(operationId), 120);
   }
 
   async function unlinkCaptureFromCollection(collectionId: string, capture: Capture) {
+    if (!config?.apiUrl || !session) {
+      showToast("Sign in to manage collections.", "error");
+      return;
+    }
     const captureId = capture.remoteId || capture.id;
     const removedCollection = (capture.linkedCollections || []).find((collection) => collection.id === collectionId);
-    try {
-      await collectionRequest<{ ok: boolean }>("collection-links", {
-        method: "PATCH",
-        body: { action: "unlink", collectionId, captureId }
-      });
-      collectionCapturesCacheRef.current[collectionId] = (collectionCapturesCacheRef.current[collectionId] || [])
-        .filter((item) => item.id !== capture.id);
-      setCollectionCaptures((current) => current.filter((item) => item.id !== capture.id));
-      (["active", "archived"] as const).forEach((mode) => {
-        collectionsCacheRef.current[mode] = collectionsCacheRef.current[mode].map((collection) =>
-          collection.id === collectionId
-            ? { ...collection, captureCount: Math.max(0, collection.captureCount - 1) }
-            : collection
-        );
-      });
-      setCollections((current) =>
-        current.map((collection) =>
-          collection.id === collectionId
-            ? { ...collection, captureCount: Math.max(0, collection.captureCount - 1) }
-            : collection
-        )
-      );
-      setCaptures((current) =>
-        capturesForListMode(
-          current.map((capture) =>
-            capture.id === captureId || capture.remoteId === captureId
-              ? {
-                  ...capture,
-                  linkedCollections: (capture.linkedCollections || []).filter((collection) => collection.id !== collectionId)
-                }
-              : capture
-          ),
-          "active"
-        )
-      );
+    // Where the row sat before removal, so undo (and rollback) can return it to
+    // the same spot instead of jumping it to the top of the list.
+    const removedIndex = collectionCaptures.findIndex((item) => item.id === capture.id);
+    if (!removedCollection) {
+      // No collection metadata to restore from — remove without an undo offer.
+      const trace = createDeleteTrace("collection-unlink", { collectionId, captureId, count: 1 });
+      markDeleteTrace(trace, "optimistic_state_start", { collectionId, captureId, count: 1 });
+      applyCollectionLinkRemoval(collectionId, capture, captureId);
+      markDeleteTrace(trace, "optimistic_state_done", { collectionId, captureId, count: 1 });
+      markDeleteTraceNextFrame(trace, "first_visible_frame", { collectionId, count: 1 });
       setToast(null);
-      if (removedCollection) {
-        showToast({
-          text: "Removed from collection.",
-          actionLabel: "Undo",
-          action: () => void restoreCollectionLink(collectionId, capture, removedCollection)
-        });
-      } else {
-        showToast({ text: "Removed from collection." });
-      }
-      await loadCaptures();
-    } catch (error) {
-      showErrorToast(error, "Could not remove collection.");
+      showTracedToast({ text: "Removed from collection." }, trace);
+      const item: UnlinkBatchItem = {
+        capture,
+        captureId,
+        collection: { id: collectionId, title: "", createdBy: "user" },
+        index: removedIndex
+      };
+      void (async () => {
+        try {
+          await syncUnlinkManyNetwork(collectionId, [item], trace);
+          await reconcileCollectionsSilently("active", trace);
+        } catch (error) {
+          rollbackUnlinkItems(collectionId, [item], trace);
+          showErrorToast(error, "Could not remove collection.");
+        }
+      })();
+      return;
     }
+    // Accumulate into the current collection's batch so one Undo restores the
+    // whole burst. A different collection (or a committed/cleared batch) starts
+    // a fresh count.
+    if (
+      unlinkBatchRef.current.collectionId !== collectionId ||
+      unlinkBatchRef.current.networkStarted ||
+      unlinkBatchRef.current.undoRequested
+    ) {
+      clearUnlinkBatch();
+      unlinkBatchRef.current = {
+        ...emptyUnlinkBatch(),
+        collectionId,
+        trace: createDeleteTrace("collection-unlink", { collectionId, captureId, count: 1 })
+      };
+    } else {
+      markDeleteTrace(unlinkBatchRef.current.trace, "tap", {
+        collectionId,
+        captureId,
+        count: unlinkBatchRef.current.items.length + 1
+      });
+    }
+    const item: UnlinkBatchItem = { capture, collection: removedCollection, captureId, index: removedIndex };
+    const batch = unlinkBatchRef.current;
+    const count = batch.items.length + 1;
+    markDeleteTrace(batch.trace, "optimistic_state_start", { collectionId, captureId, count });
+    // Optimistic: drop the row immediately, before the round-trip, so the tap
+    // feels instant. The batched PATCH runs in the background.
+    applyCollectionLinkRemoval(collectionId, capture, captureId);
+    batch.items.push(item);
+    markDeleteTrace(batch.trace, "optimistic_state_done", { collectionId, captureId, count });
+    markDeleteTraceNextFrame(batch.trace, "first_visible_frame", { collectionId, count });
+    // Stable id → the toast updates its count in place instead of remounting.
+    showTracedToast({
+      id: COLLECTION_UNLINK_TOAST_ID,
+      text: count <= 1 ? "Removed from collection." : `${count} removed from collection.`,
+      actionLabel: "Undo",
+      action: restorePendingUnlinks
+    }, batch.trace || createDeleteTrace("collection-unlink", { collectionId, count }));
+    scheduleUnlinkBatchFlush(batch);
   }
 
-  async function restoreCollectionLink(collectionId: string, capture: Capture, collection: LinkedCollection) {
-    const captureId = capture.remoteId || capture.id;
-    try {
-      await collectionRequest<{ ok: boolean }>("collection-links", {
-        method: "POST",
-        body: {
-          collectionId,
-          captureId,
-          createdBy: collection.createdBy === "analysis" ? "analysis" : "user",
-          rationale: collection.rationale,
-          confidence: collection.confidence,
-          title: collection.title
-        }
-      });
-      const restoredCollection = { ...collection, linkedAt: Date.now() };
-      const addCollection = (item: Capture) =>
-        item.id === capture.id || item.remoteId === captureId
-          ? {
-              ...item,
-              linkedCollections: (item.linkedCollections || []).some((linked) => linked.id === collectionId)
-                ? item.linkedCollections
-                : [...(item.linkedCollections || []), restoredCollection]
-            }
-          : item;
-      collectionCapturesCacheRef.current[collectionId] = [
-        addCollection(capture),
-        ...(collectionCapturesCacheRef.current[collectionId] || []).filter((item) => item.id !== capture.id)
-      ].filter((item) => !isDeleted(item));
-      collectionsCacheRef.current.active = collectionsCacheRef.current.active.map((item) =>
-        item.id === collectionId ? { ...item, captureCount: item.captureCount + 1 } : item
-      );
-      setCollections((current) =>
-        current.map((item) => item.id === collectionId ? { ...item, captureCount: item.captureCount + 1 } : item)
-      );
-      setCaptures((current) => capturesForListMode(current.map(addCollection), "active"));
-      setCollectionCaptures((current) => [
-        addCollection(capture),
-        ...current.filter((item) => item.id !== capture.id)
-      ].filter((item) => !isDeleted(item)));
-      setToast(null);
-      showToast("Collection restored.", "success");
-      await loadCaptures();
-    } catch (error) {
-      showErrorToast(error, "Could not restore collection.");
+  function restorePendingUnlinks() {
+    const batch = unlinkBatchRef.current;
+    const { collectionId, items, trace } = batch;
+    if (!items.length) return;
+    markDeleteTrace(trace, "undo_tap", { collectionId, count: items.length });
+    batch.undoRequested = true;
+    if (batch.flushTimer) {
+      clearTimeout(batch.flushTimer);
+      batch.flushTimer = null;
+    }
+    restoreUnlinkItems(collectionId, items, trace || undefined);
+    setToast(null);
+    showTracedToast({
+      text: items.length <= 1 ? "Collection restored." : `${items.length} restored.`,
+      tone: "success"
+    }, trace || createDeleteTrace("collection-unlink", { collectionId, count: items.length }));
+    if (batch.networkDone && !batch.networkFailed) {
+      completeUnlinkUndoNetwork(batch);
+      return;
+    }
+    if (!batch.networkStarted) {
+      clearUnlinkBatch(trace?.operationId);
     }
   }
 
@@ -3413,111 +4188,217 @@ export default function App() {
     }
   }
 
-  async function undoDeleteCapture(capture: Capture, returnCollectionId: string | null = null) {
+  async function syncCaptureDeleteNetwork(
+    capture: Capture,
+    action: "delete" | "undo_delete",
+    trace?: DeleteTraceToken,
+    phase = "network"
+  ) {
     const captureRef = capture.remoteId || capture.id;
-    if (config?.apiUrl && session && capture.remoteId) {
-      try {
-        const json = await withFreshAccessToken((accessToken) =>
-          requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
-            method: "PATCH",
-            headers: {
-              apikey: config.supabaseAnonKey,
-              authorization: `Bearer ${accessToken}`,
-              "content-type": "application/json"
-            },
-            body: {
-              captureId: captureRef,
-              action: "undo_delete"
-            }
-          })
-        );
-        const restoredCapture = captureFromRemote(json.capture);
-        upsertActiveCapture(restoredCapture);
-        if (returnCollectionId) {
-          collectionCapturesCacheRef.current[returnCollectionId] = [];
-          void loadCollectionCaptures(returnCollectionId, { phase: "refresh" }).catch(() => {});
+    if (!config?.apiUrl || !session || !capture.remoteId) throw new Error("Capture sync is unavailable.");
+    markDeleteTrace(trace, `${phase}_start`, { action, captureId: captureRef });
+    const json = await withFreshAccessToken((accessToken) =>
+      requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
+        method: "PATCH",
+        headers: {
+          apikey: config.supabaseAnonKey,
+          authorization: `Bearer ${accessToken}`,
+          "content-type": "application/json"
+        },
+        body: {
+          captureId: captureRef,
+          action
         }
-        setToast(null);
-        showToast("Capture restored.", "success");
-        collectionCapturesCacheRef.current = {};
-        collectionCapturesCursorCacheRef.current = {};
-        collectionCapturePrefetchStartedRef.current = new Set();
-        await loadCaptures();
-        if (collectionsOpen || selectedCollectionId || returnCollectionId) await loadCollections("active");
-      } catch (error) {
-        showErrorToast(error, "Could not undo delete.");
-      }
+      })
+    );
+    markDeleteTrace(trace, `${phase}_done`, { action, captureId: captureRef });
+    return captureFromRemote(json.capture);
+  }
+
+  function undoDeleteCapture(capture: Capture, returnCollectionId: string | null = null, operationId?: string) {
+    const operation = operationId ? pendingDeleteOperationsRef.current[operationId] : null;
+    if (!operation) {
+      if (operationId) cancelPendingCaptureDeleteClose(operationId);
+      void (async () => {
+        const trace = createDeleteTrace("capture-delete", {
+          captureId: capture.remoteId || capture.id,
+          fallback: true
+        });
+        if (config?.apiUrl && session && capture.remoteId) {
+          markDeleteTrace(trace, "restore_state_start");
+          upsertActiveCapture(capture);
+          setActiveCaptureTotalCount((current) => (current == null ? current : current + 1));
+          markDeleteTrace(trace, "restore_state_done");
+          setToast(null);
+          showToast("Capture restored.", "success");
+          try {
+            const restored = await syncCaptureDeleteNetwork(capture, "undo_delete", trace, "undo_network");
+            upsertActiveCapture(restored);
+            await reconcileCollectionsSilently("active", trace);
+          } catch (error) {
+            removeCaptureFromVisibleLists(capture);
+            setActiveCaptureTotalCount((current) => (current == null ? current : Math.max(0, current - 1)));
+            showErrorToast(error, "Could not undo delete.");
+          }
+          return;
+        }
+        if (!nativeStore) return;
+        try {
+          const raw = nativeStore.undoDeleteCapture
+            ? await nativeStore.undoDeleteCapture(capture.id)
+            : await nativeStore.restoreCapture(capture.id);
+          replaceLocalCaptureLists(JSON.parse(raw || "[]") as Capture[]);
+          setToast(null);
+          showToast("Capture restored.", "success");
+        } catch (error) {
+          showErrorToast(error, "Could not undo delete.");
+        }
+      })();
       return;
     }
-    if (!nativeStore) return;
-    const raw = nativeStore.undoDeleteCapture
-      ? await nativeStore.undoDeleteCapture(capture.id)
-      : await nativeStore.restoreCapture(capture.id);
-    replaceLocalCaptureLists(JSON.parse(raw || "[]") as Capture[]);
+    markDeleteTrace(operation.trace, "undo_tap");
+    operation.undoRequested = true;
+    cancelPendingCaptureDeleteClose(operation.id);
+    markDeleteTrace(operation.trace, "restore_state_start");
+    restoreDeletionState(operation.snapshot);
+    markDeleteTrace(operation.trace, "restore_state_done");
     setToast(null);
     showToast("Capture restored.", "success");
+    const undoNetwork = async () => {
+      try {
+        if (config?.apiUrl && session && capture.remoteId) {
+          const restored = await syncCaptureDeleteNetwork(capture, "undo_delete", operation.trace, "undo_network");
+          applyUpdatedCapture(restored, capture.id);
+          await reconcileCollectionsSilently("active", operation.trace);
+        } else if (nativeStore) {
+          const raw = nativeStore.undoDeleteCapture
+            ? await nativeStore.undoDeleteCapture(capture.id)
+            : await nativeStore.restoreCapture(capture.id);
+          replaceLocalCaptureLists(JSON.parse(raw || "[]") as Capture[]);
+        }
+      } catch (error) {
+        showErrorToast(error, "Could not undo delete.");
+      } finally {
+        finishPendingDeleteOperation(operation.id);
+      }
+    };
+    if (operation.commitDone && !operation.commitFailed) void undoNetwork();
   }
 
   async function deleteSelectedCapture() {
     if (!selected) return;
     const capture = selected;
     const returnCollectionId = captureReturnCollectionId;
-    const clearLocalCapture = async () => {
+    const origin: CaptureReviewOrigin = captureReviewOrigin || "recent";
+    const originCollection = origin === "collection" ? selectedCollectionRef.current : null;
+    const originSearchOpen = origin === "search" && searchOpenRef.current;
+    const trace = createDeleteTrace("capture-delete", {
+      captureId: capture.remoteId || capture.id,
+      origin
+    });
+    const snapshot = snapshotDeletionState();
+    const operation: PendingDeleteOperation = {
+      commitDone: false,
+      commitFailed: false,
+      id: trace.operationId,
+      kind: "capture-delete",
+      snapshot,
+      trace,
+      undoRequested: false
+    };
+    registerPendingDeleteOperation(operation);
+    const clearLocalCapture = async (applyVisibleState: boolean) => {
       if (!nativeStore) return false;
       try {
         const raw = nativeStore.deleteCapture
           ? await nativeStore.deleteCapture(capture.id)
           : await nativeStore.archiveCapture(capture.id);
-        replaceLocalCaptureLists(JSON.parse(raw || "[]") as Capture[]);
+        if (applyVisibleState) replaceLocalCaptureLists(JSON.parse(raw || "[]") as Capture[]);
         return true;
       } catch {
         return false;
       }
     };
-    removeCaptureFromVisibleLists(capture);
-    // The collection detail (when this review came from one) stayed mounted
-    // beneath the review, so deselecting simply uncovers it.
-    selectCapture(null);
+    markDeleteTrace(trace, "optimistic_state_start");
+    pendingCaptureDeleteCloseRef.current = {
+      capture,
+      operationId: trace.operationId,
+      trace
+    };
+    cancelledCaptureDeleteClosesRef.current.delete(trace.operationId);
+    markDeleteTrace(trace, "review_close_request", {
+      origin,
+      hasCollectionUnderlay: Boolean(originCollection),
+      hasSearchUnderlay: originSearchOpen
+    });
+    closeSelectedCapture();
+    markDeleteTrace(trace, "optimistic_state_done");
+    markDeleteTraceNextFrame(trace, "first_visible_frame");
     setToast(null);
-    showToast({
+    showTracedToast({
       text: "Capture deleted.",
       tone: "destructive",
-      durationMs: DELETE_UNDO_MS,
       actionLabel: "Undo",
-      action: () => void undoDeleteCapture(capture, returnCollectionId)
-    });
+      action: () => undoDeleteCapture(capture, returnCollectionId, trace.operationId)
+    }, trace);
     if (config?.apiUrl && session && capture.remoteId) {
-      try {
-        await withFreshAccessToken((accessToken) =>
-          requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
-            method: "PATCH",
-            headers: {
-              apikey: config.supabaseAnonKey,
-              authorization: `Bearer ${accessToken}`,
-              "content-type": "application/json"
-            },
-            body: {
-              captureId: capture.remoteId || capture.id,
-              action: "delete"
-            }
-          })
-        );
-        await clearLocalCapture();
-        collectionCapturesCacheRef.current = {};
-        collectionCapturesCursorCacheRef.current = {};
-        await loadCaptures();
-        if (collectionsOpen || selectedCollectionId || returnCollectionId) await loadCollections("active");
-      } catch (error) {
-        upsertActiveCapture(capture);
-        showErrorToast(error, "Could not delete.");
-      }
+      void (async () => {
+        try {
+          await syncCaptureDeleteNetwork(capture, "delete", trace);
+          operation.commitDone = true;
+          await clearLocalCapture(false);
+          if (operation.undoRequested) {
+            const restored = await syncCaptureDeleteNetwork(capture, "undo_delete", trace, "undo_network");
+            applyUpdatedCapture(restored, capture.id);
+            await reconcileCollectionsSilently("active", trace);
+            finishPendingDeleteOperation(operation.id);
+            return;
+          }
+          await reconcileCollectionsSilently("active", trace);
+          finishPendingDeleteOperation(operation.id);
+        } catch (error) {
+          operation.commitFailed = true;
+          if (!operation.undoRequested) {
+            cancelPendingCaptureDeleteClose(operation.id);
+            restoreDeletionState(snapshot);
+            setDeleteDismissCapture(null);
+            setDeleteDismissCollection(null);
+            setDeleteDismissOrigin(null);
+            setDeleteDismissSearchOpen(false);
+            setDeleteDismissTrace(null);
+            showErrorToast(error, "Could not delete.");
+          }
+          finishPendingDeleteOperation(operation.id);
+        }
+      })();
       return;
     }
-    const deletedLocal = await clearLocalCapture();
-    if (!deletedLocal) {
-      upsertActiveCapture(capture);
-      showErrorToast(new Error("Local capture store unavailable."), "Could not delete.");
-    }
+    void (async () => {
+      const deletedLocal = await clearLocalCapture(false);
+      operation.commitDone = deletedLocal;
+      if (operation.undoRequested) {
+        if (nativeStore) {
+          const raw = nativeStore.undoDeleteCapture
+            ? await nativeStore.undoDeleteCapture(capture.id)
+            : await nativeStore.restoreCapture(capture.id);
+          replaceLocalCaptureLists(JSON.parse(raw || "[]") as Capture[]);
+        }
+        finishPendingDeleteOperation(operation.id);
+        return;
+      }
+      if (!deletedLocal) {
+        operation.commitFailed = true;
+        cancelPendingCaptureDeleteClose(operation.id);
+        restoreDeletionState(snapshot);
+        setDeleteDismissCapture(null);
+        setDeleteDismissCollection(null);
+        setDeleteDismissOrigin(null);
+        setDeleteDismissSearchOpen(false);
+        setDeleteDismissTrace(null);
+        showErrorToast(new Error("Local capture store unavailable."), "Could not delete.");
+      }
+      finishPendingDeleteOperation(operation.id);
+    })();
   }
 
   async function saveCaptureSource() {
@@ -4053,6 +4934,40 @@ export default function App() {
 
   if (!authReady) {
     return renderBootScreen();
+  }
+
+  if (deleteDismissCapture) {
+    const deleteOrigin = deleteDismissOrigin || captureReviewOrigin || "recent";
+    const deleteCollection = deleteDismissCollection || selectedCollection;
+    const deleteDismissOverlay = (
+      <ReviewDeleteDismissFrame
+        onDismissed={finishDeleteReviewDismiss}
+        trace={deleteDismissTrace}
+      >
+        {renderCaptureReviewScreen(deleteDismissCapture)}
+      </ReviewDeleteDismissFrame>
+    );
+    if (deleteOrigin === "collection" && deleteCollection) {
+      return renderTopLevelStack({
+        active: "collections",
+        underlay: renderCollectionDetailOverlay(deleteCollection, {
+          direction: "opening",
+          includeChrome: false
+        }),
+        overlay: deleteDismissOverlay
+      });
+    }
+    if (deleteOrigin === "search" && (deleteDismissSearchOpen || searchOpen)) {
+      return renderTopLevelStack({
+        active: "recent",
+        underlay: renderSearchOverlay({ includeChrome: false }),
+        overlay: deleteDismissOverlay
+      });
+    }
+    return renderTopLevelStack({
+      active: deleteOrigin === "collection" ? "collections" : collectionsOpen ? "collections" : "recent",
+      overlay: deleteDismissOverlay
+    });
   }
 
   // Review opened from a collection: the detail stays mounted beneath the

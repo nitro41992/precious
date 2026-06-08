@@ -20,6 +20,116 @@ export function collectionIdList(value: unknown) {
   ];
 }
 
+type LinkManyItem = {
+  captureId: string;
+  confidence: number | null;
+  createdBy: "analysis" | "user";
+  rationale: string | null;
+  title: string;
+};
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function linkManyItems(value: unknown) {
+  if (!Array.isArray(value)) return null;
+  const items: LinkManyItem[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const captureId = typeof record.captureId === "string"
+      ? record.captureId.trim()
+      : "";
+    if (!captureId || seen.has(captureId)) continue;
+    seen.add(captureId);
+    const confidence = Number(record.confidence);
+    items.push({
+      captureId,
+      confidence: Number.isFinite(confidence) ? confidence : null,
+      createdBy: record.createdBy === "analysis" ? "analysis" : "user",
+      rationale: typeof record.rationale === "string" ? record.rationale : null,
+      title: typeof record.title === "string" ? record.title : "",
+    });
+  }
+  return items;
+}
+
+async function resolveCaptureRef(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  captureRef: string,
+  options: { requireActive?: boolean } = {},
+) {
+  const select = "id, archived_at, deleted_at";
+  let row: Record<string, unknown> | null = null;
+
+  if (UUID_RE.test(captureRef)) {
+    const byId = await supabase
+      .from("captures")
+      .select(select)
+      .eq("user_id", userId)
+      .eq("id", captureRef)
+      .maybeSingle();
+    if (byId.error) throw byId.error;
+    row = byId.data as Record<string, unknown> | null;
+  }
+
+  if (!row) {
+    const byClientKey = await supabase
+      .from("captures")
+      .select(select)
+      .eq("user_id", userId)
+      .eq("client_capture_key", captureRef)
+      .maybeSingle();
+    if (byClientKey.error) throw byClientKey.error;
+    row = byClientKey.data as Record<string, unknown> | null;
+  }
+
+  if (!row) return { response: json({ error: "Capture not found" }, 404) };
+  if (options.requireActive && (row.archived_at || row.deleted_at)) {
+    return { response: json({ error: "Deleted captures cannot be linked" }, 400) };
+  }
+  return { captureId: String(row.id) };
+}
+
+async function resolveCaptureRefs(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  captureRefs: string[],
+  options: { requireActive?: boolean } = {},
+) {
+  const captureIds: string[] = [];
+  const seen = new Set<string>();
+  for (const captureRef of captureRefs) {
+    const resolved = await resolveCaptureRef(supabase, userId, captureRef, options);
+    if ("response" in resolved) return resolved;
+    if (!resolved.captureId || seen.has(resolved.captureId)) continue;
+    seen.add(resolved.captureId);
+    captureIds.push(resolved.captureId);
+  }
+  return { captureIds };
+}
+
+async function resolveLinkManyItems(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  items: LinkManyItem[],
+) {
+  const resolvedItems: Array<LinkManyItem & { resolvedCaptureId: string }> = [];
+  for (const item of items) {
+    const resolved = await resolveCaptureRef(
+      supabase,
+      userId,
+      item.captureId,
+      { requireActive: true },
+    );
+    if ("response" in resolved) return resolved;
+    resolvedItems.push({ ...item, resolvedCaptureId: resolved.captureId });
+  }
+  return { items: resolvedItems };
+}
+
 export async function setCaptureCollections(
   supabase: ReturnType<typeof adminClient>,
   userId: string,
@@ -161,9 +271,8 @@ export async function handleCollectionLinksResource(
   const collectionId = typeof body.collectionId === "string"
     ? body.collectionId
     : "";
-  const captureId = typeof body.captureId === "string" ? body.captureId : "";
-  if (!collectionId || !captureId) {
-    return json({ error: "collectionId and captureId are required" }, 400);
+  if (!collectionId) {
+    return json({ error: "collectionId is required" }, 400);
   }
 
   const collection = await supabase
@@ -174,6 +283,68 @@ export async function handleCollectionLinksResource(
     .maybeSingle();
   if (collection.error) throw collection.error;
   if (!collection.data) return json({ error: "Collection not found" }, 404);
+
+  if (request.method === "PATCH" && action === "unlink_many") {
+    const captureRefs = collectionIdList(body.captureIds);
+    if (!captureRefs) {
+      return json({ error: "captureIds must be an array" }, 400);
+    }
+    const resolved = await resolveCaptureRefs(supabase, userId, captureRefs);
+    if ("response" in resolved) return resolved.response;
+    if (!resolved.captureIds.length) return json({ ok: true, count: 0 });
+    const unlink = await supabase
+      .from("collection_capture_links")
+      .update({ unlinked_at: new Date().toISOString(), unlink_reason: "user" })
+      .eq("user_id", userId)
+      .eq("collection_id", collectionId)
+      .in("capture_id", resolved.captureIds)
+      .is("unlinked_at", null);
+    if (unlink.error) throw unlink.error;
+    await refreshCollectionPreviewAfterCaptureRemoval(
+      supabase,
+      userId,
+      collectionId,
+      resolved.captureIds,
+    );
+    for (const captureId of resolved.captureIds) {
+      scheduleCaptureEmbeddingRefresh(supabase, userId, captureId);
+    }
+    return json({ ok: true, count: resolved.captureIds.length });
+  }
+
+  if (request.method === "POST" && action === "link_many") {
+    if (collection.data.status === "archived" || collection.data.deleted_at) {
+      return json({ error: "Deleted collections cannot be linked" }, 400);
+    }
+    const items = linkManyItems(body.items);
+    if (!items) return json({ error: "items must be an array" }, 400);
+    const resolved = await resolveLinkManyItems(supabase, userId, items);
+    if ("response" in resolved) return resolved.response;
+    for (const item of resolved.items) {
+      await linkCaptureToCollection(
+        supabase,
+        userId,
+        collectionId,
+        item.resolvedCaptureId,
+        {
+          createdBy: item.createdBy,
+          rationale: item.rationale,
+          confidence: item.confidence,
+        },
+      );
+      await markCollectionDecisionAccepted(supabase, userId, item.resolvedCaptureId, {
+        type: "existing",
+        title: item.title,
+        collectionId,
+      });
+    }
+    return json({ ok: true, count: resolved.items.length });
+  }
+
+  const captureId = typeof body.captureId === "string" ? body.captureId : "";
+  if (!captureId) {
+    return json({ error: "captureId is required" }, 400);
+  }
 
   if (request.method === "POST") {
     if (collection.data.status === "archived" || collection.data.deleted_at) {
@@ -190,14 +361,18 @@ export async function handleCollectionLinksResource(
     if (capture.data.archived_at || capture.data.deleted_at) {
       return json({ error: "Deleted captures cannot be linked" }, 400);
     }
-    await linkCaptureToCollection(supabase, userId, collectionId, captureId, {
+    // The request may identify the capture by its client_capture_key (a
+    // not-yet-synced capture has no remote id), so always link with the
+    // resolved DB uuid — the links table's capture_id column is a uuid.
+    const resolvedCaptureId = String(capture.data.id);
+    await linkCaptureToCollection(supabase, userId, collectionId, resolvedCaptureId, {
       createdBy: body.createdBy === "analysis" ? "analysis" : "user",
       rationale: typeof body.rationale === "string" ? body.rationale : null,
       confidence: Number.isFinite(Number(body.confidence))
         ? Number(body.confidence)
         : null,
     });
-    await markCollectionDecisionAccepted(supabase, userId, captureId, {
+    await markCollectionDecisionAccepted(supabase, userId, resolvedCaptureId, {
       type: "existing",
       title: typeof body.title === "string" ? body.title : "",
       collectionId,

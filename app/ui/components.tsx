@@ -26,6 +26,7 @@ import type {
   ToastState,
   ToastTone
 } from "../types";
+import { markDeleteTraceNextFrame } from "../deleteTrace";
 import { displayStatus, hostFromUrl } from "../captureLogic";
 import {
   captureFaviconHost,
@@ -765,11 +766,18 @@ export function ToastHost({
     setVisibleToast(null);
   }, [toast]);
 
+  useEffect(() => {
+    if (!visibleToast?.trace) return;
+    markDeleteTraceNextFrame(visibleToast.trace, "toast_paint", {
+      text: visibleToast.text
+    });
+  }, [visibleToast]);
+
   if (!visibleToast) return null;
   const tone = visibleToast.tone || "neutral";
   const Icon = toastIconForTone(tone);
   const iconColor = toastColorForTone(tone);
-  const toastKey = [
+  const toastKey = visibleToast.id ?? [
     visibleToast.text,
     visibleToast.tone || "neutral",
     visibleToast.actionLabel || ""
