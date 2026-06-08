@@ -387,3 +387,47 @@ test("reminderSuggestionFromSchedule serializes an all-day draft as a timeless r
   assert.equal(parts.dateLabel, "Jun 5-Jun 8");
   assert.equal(parts.timeLabel, "");
 });
+
+test("captureFieldStates surfaces a pending collection suggestion on the collection field", () => {
+  const { captureFieldStates } = loadCapturePresentation();
+  const fields = captureFieldStates({
+    linkedCollections: [],
+    pendingSuggestion: {
+      collectionId: "11111111-1111-1111-1111-111111111111",
+      title: "Restaurants to try",
+      description: "Restaurants you'd like to visit.",
+      rationale: "NYC restaurant.",
+      confidence: 0.7
+    }
+  });
+  const collection = fields.find((field) => field.kind === "collection");
+  assert.equal(collection.suggested, true);
+  assert.equal(collection.displayValue, "Restaurants to try");
+  assert.equal(collection.hasValue, true);
+});
+
+test("captureFieldStates prefers a linked collection over a pending suggestion", () => {
+  const { captureFieldStates } = loadCapturePresentation();
+  const fields = captureFieldStates({
+    linkedCollections: [{ id: "c1", title: "Food" }],
+    pendingSuggestion: {
+      collectionId: "c2",
+      title: "Restaurants to try",
+      description: "x",
+      rationale: "y",
+      confidence: 0.7
+    }
+  });
+  const collection = fields.find((field) => field.kind === "collection");
+  assert.equal(collection.suggested, false);
+  assert.equal(collection.displayValue, "Food");
+});
+
+test("captureFieldStates leaves the collection field empty with no link or suggestion", () => {
+  const { captureFieldStates } = loadCapturePresentation();
+  const fields = captureFieldStates({ linkedCollections: [] });
+  const collection = fields.find((field) => field.kind === "collection");
+  assert.equal(collection.suggested, false);
+  assert.equal(collection.hasValue, false);
+  assert.equal(collection.displayValue, "Add collection");
+});

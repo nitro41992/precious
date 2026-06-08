@@ -30,6 +30,7 @@ import {
   MapPin,
   Note as StickyNote,
   PencilSimple,
+  Sparkle,
   Trash as Trash2,
   X
 } from "phosphor-react-native";
@@ -71,7 +72,7 @@ import { ReminderEditorSheet } from "../sheets/ReminderEditorSheet";
 import { motionDuration, motionEasing, motionReduceMotion, reviewHeroExpandedScale } from "../ui/motion";
 import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
-import { AiFieldInsight, AnimatedBottomSheet, CollectionSuggestionCard, KeyboardSheet, MotionPressable, ProcessingStatusPill, SheetHeader, SourceMark, keyboardSheetMetrics } from "../ui/components";
+import { AiFieldInsight, AnimatedBottomSheet, KeyboardSheet, MotionPressable, ProcessingStatusPill, SheetHeader, SourceMark, keyboardSheetMetrics } from "../ui/components";
 import { Text, TextInput } from "../ui/typography";
 
 type ReviewHandoffRect = {
@@ -104,7 +105,6 @@ type CaptureReviewScreenProps = {
   };
   state: {
     collectionChoiceSaving: string | null;
-    suggestionBusy: boolean;
     draftIntent: string;
     draftIntentDirty: boolean;
     draftNote: string;
@@ -133,8 +133,6 @@ type CaptureReviewScreenProps = {
     markFaviconFailed: (host: string) => void;
     markReviewHandoffReady: (key: number | null) => void;
     markReviewHandoffTarget: (key: number | null, rect: ReviewHandoffRect) => void;
-    confirmSuggestion: (collectionId: string) => void;
-    dismissSuggestion: (collectionId: string, captureId: string) => void;
     openCaptureUrl: (url: string) => void;
     openCollectionPicker: () => void;
     openExternalUrl: (url: string) => void;
@@ -363,7 +361,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   } = data;
   const {
     collectionChoiceSaving,
-    suggestionBusy,
     draftIntent,
     draftIntentDirty,
     draftNote,
@@ -385,8 +382,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     markFaviconFailed,
     markReviewHandoffReady,
     markReviewHandoffTarget,
-    confirmSuggestion,
-    dismissSuggestion,
     openCaptureUrl,
     openCollectionPicker,
     openExternalUrl,
@@ -1183,15 +1178,24 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                           testID="pc.review.collections.open"
                         >
                           <Text style={styles.propertyRowLabel}>Collection</Text>
-                          <Text
-                            numberOfLines={1}
-                            style={[
-                              styles.propertyRowValue,
-                              !collectionField.hasValue && styles.propertyRowValuePending
-                            ]}
-                          >
-                            {collectionField.displayValue}
-                          </Text>
+                          {collectionField.suggested ? (
+                            <View style={styles.propertyRowSuggested}>
+                              <Sparkle color={colors.accentTextStrong} size={15} weight="fill" />
+                              <Text numberOfLines={1} style={styles.propertyRowSuggestedValue}>
+                                {collectionField.displayValue}
+                              </Text>
+                            </View>
+                          ) : (
+                            <Text
+                              numberOfLines={1}
+                              style={[
+                                styles.propertyRowValue,
+                                !collectionField.hasValue && styles.propertyRowValuePending
+                              ]}
+                            >
+                              {collectionField.displayValue}
+                            </Text>
+                          )}
                           <CaretRight color={colors.placeholder} size={17} weight="bold" />
                         </MotionPressable>
                       ) : null}
@@ -1247,23 +1251,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                       ) : null}
                     </View>
                   </View>
-                  {selected.pendingSuggestion ? (
-                    <View style={styles.reviewSuggestionBlock}>
-                      <CollectionSuggestionCard
-                        busy={suggestionBusy}
-                        confirmLabel="Create collection"
-                        onConfirm={() => confirmSuggestion(selected.pendingSuggestion!.collectionId)}
-                        onDismiss={() =>
-                          dismissSuggestion(
-                            selected.pendingSuggestion!.collectionId,
-                            selected.remoteId || selected.id
-                          )
-                        }
-                        suggestion={selected.pendingSuggestion}
-                        testID="pc.review.suggestion"
-                      />
-                    </View>
-                  ) : null}
                   {urlEvidenceNotice ? (
                     <View style={styles.sourceBlock}>
                       <Text style={styles.sectionTitle}>Link evidence</Text>

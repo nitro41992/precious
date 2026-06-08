@@ -1317,7 +1317,12 @@ function collectionDecisionsLabel(decisions: CollectionDecision[]) {
 
 export function captureFieldStates(capture: Capture): CaptureFieldState[] {
   const linkedCollectionLabel = linkedCollectionsLabel(capture.linkedCollections || []);
-  const collectionValue = linkedCollectionLabel === "Add collections" ? "" : linkedCollectionLabel;
+  const linkedCollectionValue = linkedCollectionLabel === "Add collections" ? "" : linkedCollectionLabel;
+  // With no confirmed collection but a pending AI suggestion, surface the suggestion title on
+  // the row (the user confirms/dismisses it in the selector sheet, not here).
+  const pendingSuggestionTitle = (capture.pendingSuggestion?.title || "").trim();
+  const collectionSuggested = !linkedCollectionValue && Boolean(pendingSuggestionTitle);
+  const collectionValue = collectionSuggested ? pendingSuggestionTitle : linkedCollectionValue;
   const reminder = (capture.suggestedReminders || [])[0];
   const intentValue = activeIntentLabel(capture.defaultIntent);
   return [
@@ -1339,7 +1344,8 @@ export function captureFieldStates(capture: Capture): CaptureFieldState[] {
       }),
       kind: "collection" as const,
       label: "Collection",
-      emptyLabel: "Add collection"
+      emptyLabel: "Add collection",
+      suggested: collectionSuggested
     },
     {
       ...captureFieldState({

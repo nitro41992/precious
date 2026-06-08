@@ -2656,7 +2656,9 @@ export default function App() {
       null
     : null;
   const selectedCollection = selectedCollectionId
-    ? collections.find((collection) => collection.id === selectedCollectionId) ?? null
+    ? collections.find((collection) => collection.id === selectedCollectionId) ??
+      suggestions.find((collection) => collection.id === selectedCollectionId) ??
+      null
     : null;
   // The animated close (declared earlier) snapshots the collection through
   // this ref; assigned every render like selectCaptureRef.
@@ -4794,8 +4796,6 @@ export default function App() {
           markReviewHandoffReady,
           markReviewHandoffTarget,
           markFaviconFailed,
-          confirmSuggestion: (collectionId) => void persistSuggestion(collectionId),
-          dismissSuggestion: (collectionId, captureId) => void dismissSuggestion(collectionId, captureId),
           openCaptureUrl,
           openCollectionPicker: () => void openCollectionPicker(),
           openExternalUrl: (url) => void Linking.openURL(url),
@@ -4843,8 +4843,6 @@ export default function App() {
         }}
         state={{
           collectionChoiceSaving,
-          suggestionBusy: Boolean(capture.pendingSuggestion) &&
-            suggestionBusyId === capture.pendingSuggestion?.collectionId,
           draftIntent,
           draftIntentDirty,
           draftNote,
@@ -4922,6 +4920,7 @@ export default function App() {
           loadMoreCollections,
           openCollectionComposer,
           openCollectionSearch,
+          openSuggestion: (collectionId) => selectCollection(collectionId),
           persistSuggestion: (collectionId) => void persistSuggestion(collectionId),
           renderCollection,
           renderCollectionSkeletonRows,
@@ -5098,6 +5097,10 @@ export default function App() {
               const collection = selectedCollectionRef.current;
               if (collection) void deleteCollection(collection);
             },
+            onPersistSuggestion: () => {
+              const collection = selectedCollectionRef.current;
+              if (collection) void persistSuggestion(collection.id);
+            },
             openCollectionEditor,
             renderCollectionCapture,
             renderCollectionCaptureSkeletonRows,
@@ -5120,6 +5123,7 @@ export default function App() {
             collectionDetailListRef,
             listPerfProps: COLLECTION_CAPTURE_LIST_PERF_PROPS,
             selectedCollection: collection,
+            suggestionBusy: suggestionBusyId === collection.id,
             toast: includeChrome ? renderToast("footer") : null
           }}
         />

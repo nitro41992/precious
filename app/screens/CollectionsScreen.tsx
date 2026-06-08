@@ -33,6 +33,7 @@ type CollectionsScreenProps = {
     loadMoreCollections: () => void;
     openCollectionComposer: () => void;
     openCollectionSearch: () => void;
+    openSuggestion: (collectionId: string) => void;
     persistSuggestion: (collectionId: string) => void;
     renderCollection: (input: ListRenderItemInfo<Collection>) => ReactElement | null;
     renderCollectionSkeletonRows: (
@@ -61,6 +62,7 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
     loadMoreCollections,
     openCollectionComposer,
     openCollectionSearch,
+    openSuggestion,
     persistSuggestion,
     renderCollection,
     renderCollectionSkeletonRows,
@@ -82,6 +84,7 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
             item={suggestion}
             key={suggestion.id}
             onPersist={() => persistSuggestion(suggestion.id)}
+            onPress={() => openSuggestion(suggestion.id)}
           />
         ))}
       </View>

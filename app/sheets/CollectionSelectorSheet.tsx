@@ -200,7 +200,7 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
             testID="pc.collection.create.open"
           >
             <View style={styles.collectionCreateIcon}>
-              <Plus color={colors.accentTextStrong} size={18} weight="bold" />
+              <Plus color={colors.collectionAccentText} size={18} weight="bold" />
             </View>
             <Text style={styles.collectionCreateLabel}>New collection</Text>
           </MotionPressable>
@@ -258,7 +258,8 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
                   style={({ pressed }) => [
                     styles.collectionChoiceRow,
                     styles.collectionChoiceRowSheet,
-                    pressed && styles.captureRowPressed
+                    selectedRow && styles.collectionChoiceRowSelected,
+                    pressed && styles.collectionChoiceRowPressedSheet
                   ]}
                   testID={`pc.collection.select.${item.id}`}
                 >
@@ -281,13 +282,13 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
                     ) : null}
                   </View>
                   <View style={[styles.collectionSelectionControl, selectedRow && styles.collectionSelectionControlSelected]}>
-                    {selectedRow ? <Check color={colors.onAccent} size={15} weight="bold" /> : null}
+                    {selectedRow ? <Check color={colors.onCollectionAccent} size={15} weight="bold" /> : null}
                   </View>
                 </MotionPressable>
               </Animated.View>
             );
           }}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ItemSeparatorComponent={() => <View style={styles.collectionChoiceSeparatorSheet} />}
           ListHeaderComponent={listHeader}
           ListEmptyComponent={
             collectionSelectorColdLoading && collectionsColdSkeletonVisible ? (

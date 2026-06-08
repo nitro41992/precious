@@ -910,15 +910,23 @@ export function CollectionCard({
 export function CollectionSuggestionGridCard({
   item,
   busy = false,
-  onPersist
+  onPersist,
+  onPress
 }: {
   item: Collection;
   busy?: boolean;
   onPersist: () => void;
+  onPress: () => void;
 }) {
   return (
     <View style={styles.suggestionGridWrap}>
-      <View style={[styles.collectionCard, styles.suggestionGridCard]}>
+      <MotionPressable
+        accessibilityLabel={`Open suggestion: ${item.title}`}
+        accessibilityRole="button"
+        onPress={onPress}
+        style={({ pressed }) => [styles.collectionCard, styles.suggestionGridCard, pressed && styles.collectionCardPressed]}
+        testID={`pc.collection.suggestion.open.${item.id}`}
+      >
         <View>
           <CollectionCollage collection={item} />
           <View style={styles.suggestionGridBadge}>
@@ -949,7 +957,7 @@ export function CollectionSuggestionGridCard({
           <Plus color={colors.onAccent} size={15} weight="bold" />
           <Text style={styles.suggestionGridAddText}>Add to collections</Text>
         </MotionPressable>
-      </View>
+      </MotionPressable>
     </View>
   );
 }

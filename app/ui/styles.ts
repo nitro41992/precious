@@ -673,7 +673,7 @@ export const styles = StyleSheet.create({
   },
   collectionCreateIcon: {
     alignItems: "center",
-    backgroundColor: colors.accentSoft,
+    backgroundColor: colors.collectionAccentSoft,
     borderRadius: 11,
     height: 38,
     justifyContent: "center",
@@ -827,10 +827,10 @@ export const styles = StyleSheet.create({
   },
   sheetGrabber: {
     alignSelf: "center",
-    backgroundColor: colors.line,
+    backgroundColor: colors.surfaceContainerHigh,
     borderRadius: 3,
     height: 5,
-    width: 44
+    width: 40
   },
   captureSheetHeader: {
     alignItems: "flex-start",
@@ -1787,6 +1787,36 @@ export const styles = StyleSheet.create({
     color: colors.onAccent,
     fontSize: 13
   },
+  // Suggested-collection detail (preview before persisting).
+  detailSuggestedTag: {
+    alignItems: "center",
+    backgroundColor: colors.accentSoft,
+    borderRadius: 999,
+    flexDirection: "row",
+    gap: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 6
+  },
+  detailSuggestedTagText: {
+    ...typefaces.displaySemibold,
+    color: colors.accentTextStrong,
+    fontSize: 12
+  },
+  detailPersistButton: {
+    alignItems: "center",
+    backgroundColor: colors.accentText,
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    marginTop: 16,
+    paddingVertical: 14
+  },
+  detailPersistText: {
+    ...typefaces.displaySemibold,
+    color: colors.onAccent,
+    fontSize: 15
+  },
   collectionCollageFrame: {
     aspectRatio: 1,
     backgroundColor: colors.surfaceContainer,
@@ -2044,7 +2074,8 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 12
   },
   collectionSelectorSearchInputSheet: {
-    backgroundColor: colors.paper,
+    backgroundColor: colors.surfaceContainer,
+    borderRadius: 14,
     minHeight: 48
   },
   collectionSelectorList: {
@@ -2062,8 +2093,21 @@ export const styles = StyleSheet.create({
     paddingVertical: 15
   },
   collectionChoiceRowSheet: {
-    minHeight: 62,
-    paddingVertical: 10
+    borderRadius: 16,
+    minHeight: 64,
+    paddingHorizontal: 12,
+    paddingVertical: 11
+  },
+  collectionChoiceSeparatorSheet: {
+    height: 4
+  },
+  // Selected = a soft orange tonal card (collection identity), not a harsh lime fill.
+  collectionChoiceRowSelected: {
+    backgroundColor: colors.collectionAccentSoft
+  },
+  // Press feedback stays calm and neutral so it never flashes a loud accent.
+  collectionChoiceRowPressedSheet: {
+    backgroundColor: colors.surfaceContainer
   },
   collectionChoiceTitle: {
     color: colors.ink,
@@ -2081,7 +2125,7 @@ export const styles = StyleSheet.create({
   collectionSelectionControl: {
     alignItems: "center",
     backgroundColor: colors.surfaceContainerHigh,
-    borderRadius: 8,
+    borderRadius: 17,
     flexShrink: 0,
     height: 34,
     justifyContent: "center",
@@ -2089,7 +2133,7 @@ export const styles = StyleSheet.create({
     width: 34
   },
   collectionSelectionControlSelected: {
-    backgroundColor: colors.accent
+    backgroundColor: colors.collectionAccent
   },
   collectionSelectionFooter: {
     backgroundColor: colors.paper,
@@ -2493,6 +2537,19 @@ export const styles = StyleSheet.create({
   propertyRowValuePending: {
     color: colors.placeholder,
     ...typefaces.medium
+  },
+  propertyRowSuggested: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    gap: 6
+  },
+  propertyRowSuggestedValue: {
+    color: colors.accentTextStrong,
+    flexShrink: 1,
+    ...typefaces.displaySemibold,
+    fontSize: 16,
+    lineHeight: 21
   },
   propertyRowValueColumn: {
     flex: 1,

@@ -61,6 +61,9 @@ export type CaptureFieldState = {
   displayValue: string;
   emptyLabel: string;
   hasValue: boolean;
+  // True for the collection field when the value is an AI suggestion awaiting the
+  // user's confirmation rather than a confirmed linked collection.
+  suggested?: boolean;
 };
 
 export type CaptureFieldRationale = {
