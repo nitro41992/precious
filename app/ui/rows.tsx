@@ -1,8 +1,8 @@
-import { memo, useCallback, useMemo, useState, type ReactElement } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 import { Animated, View } from "react-native";
 import { Image } from "expo-image";
 import { CalendarBlank, Folder, ImageSquare, Lightbulb, MinusCircle } from "phosphor-react-native";
-import Reanimated from "react-native-reanimated";
+import Reanimated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 
 import { collectionCollageSlots, hostFromUrl } from "../captureLogic";
 import type { Capture, CaptureImageLoadState, Collection } from "../types";
@@ -20,7 +20,7 @@ import {
 import { colors } from "./theme";
 import { styles } from "./styles";
 import { CollectionMeaningToken, MeaningToken, MotionPressable, SkeletonRevealFrame, SourceMark, StatusGlyph } from "./components";
-import { cardEntering } from "./motion";
+import { cardEntering, motionDuration, motionEasing, motionReduceMotion } from "./motion";
 import { Text } from "./typography";
 
 type SkeletonBlockRenderer = ({ style }: { style?: any }) => ReactElement;
@@ -840,24 +840,46 @@ export function CollectionCard({
   item,
   motionEnabled,
   motionIndex = 0,
+  justRestored = false,
   onPress
 }: {
   collectionListFade: Animated.Value;
   item: Collection;
   motionEnabled: boolean;
   motionIndex?: number;
+  justRestored?: boolean;
   onPress: () => void;
 }) {
+  // Entrance handling for this recycled FlashList grid:
+  // - Normal mount (initial reveal): declarative `cardEntering` stagger.
+  // - Undo-restore: an inserted card reuses a recycled cell rather than
+  //   mounting, so declarative `entering` never fires and the card would snap
+  //   in with no motion. Drive a fade+scale "pop" imperatively off the
+  //   `justRestored` prop with `withTiming` — FlashList-proof and smooth even
+  //   when the UI thread is idle. No `exiting`/`layout` (they cascaded janky on
+  //   reflow), matching the home and collection-captures feeds.
+  const restorePop = useSharedValue(justRestored ? 0 : 1);
+  useEffect(() => {
+    if (!justRestored) return;
+    restorePop.value = 0;
+    restorePop.value = withTiming(1, {
+      duration: motionDuration.settle,
+      easing: motionEasing.decelerate,
+      reduceMotion: motionReduceMotion
+    });
+  }, [justRestored, restorePop]);
+  const restoreStyle = useAnimatedStyle(() => {
+    if (!justRestored) return {};
+    return {
+      opacity: restorePop.value,
+      transform: [{ scale: 0.9 + restorePop.value * 0.1 }]
+    };
+  });
+
   return (
     <Reanimated.View
-      // Only `entering` — no `exiting`/`layout`. This grid is a recycled
-      // FlashList; declarative `layout` (LinearTransition) and `exiting` re-fire
-      // on cell reuse and stall when the UI thread is idle, which made the
-      // undo-restore reorder cascade janky. The restored card eases in via
-      // `entering`; the rest snap into place. Matches the home and
-      // collection-captures feeds, which dropped the same combo.
-      entering={motionEnabled ? cardEntering(motionIndex) : undefined}
-      style={styles.collectionCardWrap}
+      entering={!justRestored && motionEnabled ? cardEntering(motionIndex) : undefined}
+      style={[styles.collectionCardWrap, restoreStyle]}
     >
       <MotionPressable
         onPress={onPress}

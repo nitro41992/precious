@@ -77,6 +77,7 @@ import {
   cleanedReviewDraft,
   friendlyError,
   isCaptureImageCancel,
+  mergeCollectionsPreservingOrder,
   normalizeIntent,
   reminderSuggestionFromSchedule,
   uniqueCaptures,
@@ -842,6 +843,10 @@ export default function App() {
   const [collectionCapturesLoadPhase, setCollectionCapturesLoadPhase] = useState<CollectionCapturesLoadPhase>("idle");
   const [collectionCapturesError, setCollectionCapturesError] = useState("");
   const [collectionCapturesNextCursor, setCollectionCapturesNextCursor] = useState<string | null>(null);
+  // The collection just brought back by an undo; drives a one-shot entrance pop
+  // on its grid card (FlashList re-inserts the cell without remounting, so a
+  // declarative entering animation would not fire). Cleared after it plays.
+  const [restoredCollectionId, setRestoredCollectionId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftNote, setDraftNote] = useState("");
   const [draftIntent, setDraftIntent] = useState("");
@@ -1771,12 +1776,16 @@ export default function App() {
         ) as RemoteCollectionPage;
       });
       const rows = (json.collections ?? []).map(collectionFromRemote);
-      collectionsCacheRef.current[mode] = rows;
+      // Preserve the order the user is currently looking at; a silent reconcile
+      // should refresh content/membership, not reshuffle the grid (e.g. after an
+      // undo the server bumps the restored collection's recency).
+      const ordered = mergeCollectionsPreservingOrder(collectionsCacheRef.current[mode] || [], rows);
+      collectionsCacheRef.current[mode] = ordered;
       collectionsCursorCacheRef.current[mode] = json.next_cursor || null;
       setCollectionsNextCursor((current) => ({ ...current, [mode]: json.next_cursor || null }));
       setCollectionsLoadedOnce((current) => ({ ...current, [mode]: true }));
-      if (collectionsModeRef.current === mode) setCollections(rows);
-      writeCachedCollectionPage(mode, rows, json.next_cursor || null);
+      if (collectionsModeRef.current === mode) setCollections(ordered);
+      writeCachedCollectionPage(mode, ordered, json.next_cursor || null);
       markDeleteTrace(trace, "reconcile_done", { target: "collections" });
     } catch (error) {
       markDeleteTrace(trace, "reconcile_error", {
@@ -3623,6 +3632,15 @@ export default function App() {
     return collectionFromRemote(json.collection);
   }
 
+  // Flag a restored collection so its grid card plays a one-shot entrance pop,
+  // then clear the flag once the animation has had time to finish.
+  function flagCollectionRestored(collectionId: string) {
+    setRestoredCollectionId(collectionId);
+    setTimeout(() => {
+      setRestoredCollectionId((current) => (current === collectionId ? null : current));
+    }, 500);
+  }
+
   function undoDeleteCollection(collection: Collection, operationId?: string) {
     const operation = operationId ? pendingDeleteOperationsRef.current[operationId] : null;
     if (!operation) {
@@ -3635,6 +3653,7 @@ export default function App() {
           const restored = await syncCollectionDeleteNetwork(collection, "undo_delete", trace, "undo_network");
           collectionsCacheRef.current.active = uniqueCollections([restored, ...collectionsCacheRef.current.active]);
           setCollections((current) => uniqueCollections([restored, ...current]));
+          flagCollectionRestored(restored.id);
           setToast(null);
           showToast("Collection restored.", "success");
           await reconcileCollectionsSilently("active", trace);
@@ -3649,6 +3668,7 @@ export default function App() {
     markDeleteTrace(operation.trace, "restore_state_start");
     restoreDeletionState(operation.snapshot);
     markDeleteTrace(operation.trace, "restore_state_done");
+    flagCollectionRestored(collection.id);
     setToast(null);
     showToast("Collection restored.", "success");
     const undoNetwork = async () => {
@@ -4514,6 +4534,7 @@ export default function App() {
     onRecentComposerOpen: openCaptureComposer,
     onRecentHomePress: openRecentHome,
     onUnlinkCaptureFromCollection: (collectionId, capture) => void unlinkCaptureFromCollection(collectionId, capture),
+    restoredCollectionId,
     searchQuery,
     // The closing snapshot keeps detail rows functional while the pane fades
     // out (selectedCollection is already null by then).

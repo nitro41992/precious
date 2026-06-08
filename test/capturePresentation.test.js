@@ -268,6 +268,43 @@ test("isAllDayDraft is true only when both times are empty", () => {
   assert.equal(isAllDayDraft("09:00", "09:30"), false);
 });
 
+test("mergeCollectionsPreservingOrder keeps visible order after an undo reshuffles the server list", () => {
+  const { mergeCollectionsPreservingOrder } = loadCapturePresentation();
+  // User sees A, B, C. The server returns the same set but reordered (B bumped
+  // to the top by the undo's recency touch) and with fresher content for B.
+  const current = [
+    { id: "a", title: "A", captureCount: 1 },
+    { id: "b", title: "B", captureCount: 2 },
+    { id: "c", title: "C", captureCount: 3 }
+  ];
+  const serverRows = [
+    { id: "b", title: "B renamed", captureCount: 5 },
+    { id: "a", title: "A", captureCount: 1 },
+    { id: "c", title: "C", captureCount: 3 }
+  ];
+  const merged = mergeCollectionsPreservingOrder(current, serverRows);
+  assert.deepEqual(merged.map((c) => c.id), ["a", "b", "c"]);
+  // Content is taken from the server (B's fresh title/count) without moving it.
+  assert.equal(merged[1].title, "B renamed");
+  assert.equal(merged[1].captureCount, 5);
+});
+
+test("mergeCollectionsPreservingOrder drops removed collections and appends new ones in server order", () => {
+  const { mergeCollectionsPreservingOrder } = loadCapturePresentation();
+  const current = [
+    { id: "a", title: "A" },
+    { id: "b", title: "B" }
+  ];
+  // Server no longer has B (deleted elsewhere) and adds D then E.
+  const serverRows = [
+    { id: "a", title: "A" },
+    { id: "d", title: "D" },
+    { id: "e", title: "E" }
+  ];
+  const merged = mergeCollectionsPreservingOrder(current, serverRows);
+  assert.deepEqual(merged.map((c) => c.id), ["a", "d", "e"]);
+});
+
 test("reminderLabelParts splits date and time into separate labels", () => {
   const { reminderLabelParts } = loadCapturePresentation();
 

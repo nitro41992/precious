@@ -59,6 +59,7 @@ export type AppRenderHelpersInput = {
   onRecentHomePress: () => void;
   onRecentComposerOpen: () => void;
   onUnlinkCaptureFromCollection: (collectionId: string, capture: Capture) => void;
+  restoredCollectionId: string | null;
   searchQuery: string;
   selectedCollection: Collection | null;
   handoffHiddenCapture: { aliases: string[]; surface: "home" | "collection" | "search" } | null;
@@ -140,6 +141,7 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
       <CollectionCard
         collectionListFade={input.collectionListFade}
         item={item}
+        justRestored={input.restoredCollectionId === item.id}
         motionEnabled={input.collectionItemMotionEnabled}
         motionIndex={index}
         onPress={() => {

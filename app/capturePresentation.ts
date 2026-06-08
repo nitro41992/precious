@@ -1128,6 +1128,32 @@ export function uniqueCollections(collections: Collection[]) {
   });
 }
 
+// Fold a fresh server list into the order the user is already looking at.
+// Existing on-screen collections keep their position (content updated from the
+// server, dropped if the server no longer has them); genuinely new collections
+// are appended in server order. A silent background reconcile then refreshes
+// content and membership without reshuffling the visible grid under the user
+// (e.g. after an undo, where the server bumps the restored collection's recency).
+export function mergeCollectionsPreservingOrder(current: Collection[], serverRows: Collection[]) {
+  const freshById = new Map(serverRows.map((collection) => [collection.id, collection]));
+  const merged: Collection[] = [];
+  const placed = new Set<string>();
+  for (const item of current) {
+    const fresh = freshById.get(item.id);
+    if (fresh && !placed.has(item.id)) {
+      merged.push(fresh);
+      placed.add(item.id);
+    }
+  }
+  for (const row of serverRows) {
+    if (row.id && !placed.has(row.id)) {
+      merged.push(row);
+      placed.add(row.id);
+    }
+  }
+  return merged;
+}
+
 export function uniqueStrings(values: string[]) {
   return [...new Set(values.filter(Boolean))];
 }

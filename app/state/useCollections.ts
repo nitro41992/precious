@@ -209,13 +209,13 @@ export function useCollectionsState({
       collectionCapturesForId !== selectedCollectionId
   );
 
+  // Show ghost rows immediately on a cold open. `collectionCapturesColdLoading`
+  // is already gated to genuine cold loads (no cache, phase "initial"), so a
+  // warm revisit still skips the skeleton — there's no content to flash against.
+  // The old INITIAL_SKELETON_DELAY_MS just left a blank gap that then popped
+  // into captures abruptly; ghost rows from t=0 read as faster and intentional.
   useEffect(() => {
-    if (!collectionCapturesColdLoading) {
-      setCollectionCapturesColdSkeletonVisible(false);
-      return;
-    }
-    const timer = setTimeout(() => setCollectionCapturesColdSkeletonVisible(true), INITIAL_SKELETON_DELAY_MS);
-    return () => clearTimeout(timer);
+    setCollectionCapturesColdSkeletonVisible(collectionCapturesColdLoading);
   }, [collectionCapturesColdLoading]);
 
   return {
