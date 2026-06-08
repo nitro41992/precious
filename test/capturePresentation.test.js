@@ -159,3 +159,137 @@ test("captureRowSourceLabel keeps real source hosts for link rows", () => {
     "instagram.com"
   );
 });
+
+test("buildMonthGrid returns a stable 42-cell month with correct offsets", () => {
+  const { buildMonthGrid } = loadCapturePresentation();
+
+  // June 2026 starts on a Monday -> 1 leading day from May.
+  const june = buildMonthGrid(2026, 5);
+  assert.equal(june.length, 42);
+  const juneInMonth = june.filter((cell) => cell.inMonth);
+  assert.equal(juneInMonth.length, 30);
+  assert.equal(juneInMonth[0].date, "2026-06-01");
+  assert.equal(juneInMonth[juneInMonth.length - 1].date, "2026-06-30");
+  assert.equal(june[0].inMonth, false); // leading day from May
+  assert.equal(june[0].date, "2026-05-31");
+});
+
+test("buildMonthGrid handles leap and non-leap February", () => {
+  const { buildMonthGrid } = loadCapturePresentation();
+
+  const leap = buildMonthGrid(2024, 1);
+  assert.equal(leap.length, 42);
+  assert.equal(leap.filter((cell) => cell.inMonth).length, 29);
+  assert.ok(leap.some((cell) => cell.date === "2024-02-29" && cell.inMonth));
+
+  const nonLeap = buildMonthGrid(2025, 1);
+  assert.equal(nonLeap.filter((cell) => cell.inMonth).length, 28);
+  assert.ok(!nonLeap.some((cell) => cell.date === "2025-02-29" && cell.inMonth));
+});
+
+test("buildMonthGrid keeps 42 cells for a Sunday-start month with no leading blanks", () => {
+  const { buildMonthGrid } = loadCapturePresentation();
+
+  // March 2026 starts on a Sunday.
+  const march = buildMonthGrid(2026, 2);
+  assert.equal(march.length, 42);
+  assert.equal(march[0].date, "2026-03-01");
+  assert.equal(march[0].inMonth, true);
+});
+
+test("shiftMonth rolls across year boundaries", () => {
+  const { shiftMonth } = loadCapturePresentation();
+  assert.deepEqual(shiftMonth(2026, 11, 1), { year: 2027, month: 0 });
+  assert.deepEqual(shiftMonth(2026, 0, -1), { year: 2025, month: 11 });
+});
+
+test("parseClock and formatClock round-trip across the meridiem boundaries", () => {
+  const { parseClock, formatClock } = loadCapturePresentation();
+
+  assert.deepEqual(parseClock("00:00"), { hour12: 12, minute: 0, meridiem: "AM" });
+  assert.deepEqual(parseClock("12:00"), { hour12: 12, minute: 0, meridiem: "PM" });
+  assert.deepEqual(parseClock("13:05"), { hour12: 1, minute: 5, meridiem: "PM" });
+  assert.deepEqual(parseClock("09:30"), { hour12: 9, minute: 30, meridiem: "AM" });
+
+  assert.equal(formatClock({ hour12: 12, minute: 0, meridiem: "AM" }), "00:00");
+  assert.equal(formatClock({ hour12: 12, minute: 0, meridiem: "PM" }), "12:00");
+  assert.equal(formatClock({ hour12: 1, minute: 5, meridiem: "PM" }), "13:05");
+  assert.equal(formatClock({ hour12: 9, minute: 30, meridiem: "AM" }), "09:30");
+
+  assert.equal(parseClock(""), null);
+  assert.equal(parseClock("9:5"), null);
+  assert.equal(parseClock("24:00"), null);
+  assert.equal(formatClock({ hour12: 13, minute: 0, meridiem: "AM" }), "");
+});
+
+test("nextDateRange implements flight-style range selection", () => {
+  const { nextDateRange } = loadCapturePresentation();
+
+  // First tap: single day (start == end).
+  assert.deepEqual(nextDateRange("", "", "2026-06-05"), {
+    startDate: "2026-06-05",
+    endDate: "2026-06-05"
+  });
+  // Single day set, tap a later day: extend.
+  assert.deepEqual(nextDateRange("2026-06-05", "2026-06-05", "2026-06-08"), {
+    startDate: "2026-06-05",
+    endDate: "2026-06-08"
+  });
+  // Complete range, any tap: reset to single day.
+  assert.deepEqual(nextDateRange("2026-06-05", "2026-06-08", "2026-06-10"), {
+    startDate: "2026-06-10",
+    endDate: "2026-06-10"
+  });
+  // Tap before the start: reset to single day.
+  assert.deepEqual(nextDateRange("2026-06-05", "2026-06-05", "2026-06-02"), {
+    startDate: "2026-06-02",
+    endDate: "2026-06-02"
+  });
+  // Tap exactly the start: stays single day.
+  assert.deepEqual(nextDateRange("2026-06-05", "2026-06-05", "2026-06-05"), {
+    startDate: "2026-06-05",
+    endDate: "2026-06-05"
+  });
+});
+
+test("isWithinRange is inclusive of both endpoints", () => {
+  const { isWithinRange } = loadCapturePresentation();
+  assert.equal(isWithinRange("2026-06-05", "2026-06-05", "2026-06-08"), true);
+  assert.equal(isWithinRange("2026-06-08", "2026-06-05", "2026-06-08"), true);
+  assert.equal(isWithinRange("2026-06-06", "2026-06-05", "2026-06-08"), true);
+  assert.equal(isWithinRange("2026-06-09", "2026-06-05", "2026-06-08"), false);
+  assert.equal(isWithinRange("2026-06-05", "", ""), false);
+});
+
+test("isAllDayDraft is true only when both times are empty", () => {
+  const { isAllDayDraft } = loadCapturePresentation();
+  assert.equal(isAllDayDraft("", ""), true);
+  assert.equal(isAllDayDraft("09:00", ""), false);
+  assert.equal(isAllDayDraft("09:00", "09:30"), false);
+});
+
+test("reminderScheduleDraftForSuggestion prefills all-day and same-day suggestions", () => {
+  const { reminderScheduleDraftForSuggestion, isAllDayDraft } = loadCapturePresentation();
+
+  // Dates only, no time -> all-day.
+  const allDay = reminderScheduleDraftForSuggestion({
+    trigger_type: "time",
+    start_date: "2026-06-05",
+    end_date: "2026-06-08",
+    rationale: "",
+    confidence: 0.9
+  });
+  assert.equal(allDay.startTime, "");
+  assert.equal(allDay.endTime, "");
+  assert.equal(isAllDayDraft(allDay.startTime, allDay.endTime), true);
+
+  // Start date only -> same-day (start == end).
+  const sameDay = reminderScheduleDraftForSuggestion({
+    trigger_type: "time",
+    start_date: "2026-06-05",
+    rationale: "",
+    confidence: 0.9
+  });
+  assert.equal(sameDay.startDate, "2026-06-05");
+  assert.equal(sameDay.endDate, "2026-06-05");
+});

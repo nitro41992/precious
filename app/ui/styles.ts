@@ -2754,6 +2754,185 @@ export const styles = StyleSheet.create({
   reminderUnitTextSelected: {
     color: colors.accentText
   },
+  reminderSummary: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 14,
+    justifyContent: "center",
+    paddingBottom: 4,
+    paddingTop: 2
+  },
+  reminderSummaryCol: {
+    alignItems: "center",
+    flex: 1,
+    gap: 3,
+    minWidth: 0
+  },
+  reminderSummaryColSingle: {
+    alignItems: "center",
+    gap: 3
+  },
+  reminderSummaryDate: {
+    color: colors.ink,
+    fontSize: 20,
+    ...typefaces.displaySemibold
+  },
+  reminderSummaryTime: {
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: "700"
+  },
+  reminderSummaryArrow: {
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  rangeCalendar: {
+    backgroundColor: colors.paper,
+    borderRadius: 8,
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 8
+  },
+  rangeCalendarHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 2
+  },
+  rangeCalendarMonthLabel: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "800",
+    ...typefaces.displaySemibold
+  },
+  rangeWeekRow: {
+    flexDirection: "row"
+  },
+  rangeWeekday: {
+    color: colors.muted,
+    flexBasis: "14.2857%",
+    fontSize: 12,
+    fontWeight: "700",
+    paddingVertical: 4,
+    textAlign: "center"
+  },
+  rangeGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap"
+  },
+  rangeCell: {
+    alignItems: "center",
+    aspectRatio: 1,
+    flexBasis: "14.2857%",
+    justifyContent: "center"
+  },
+  rangeTrack: {
+    backgroundColor: colors.accentSoft,
+    bottom: 4,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 4
+  },
+  rangeTrackStart: {
+    borderBottomLeftRadius: 999,
+    borderTopLeftRadius: 999,
+    left: 4
+  },
+  rangeTrackEnd: {
+    borderBottomRightRadius: 999,
+    borderTopRightRadius: 999,
+    right: 4
+  },
+  rangeTrackSingle: {
+    borderRadius: 999,
+    left: 4,
+    right: 4
+  },
+  rangeEndpoint: {
+    alignItems: "center",
+    backgroundColor: colors.accent,
+    borderRadius: 999,
+    height: 40,
+    justifyContent: "center",
+    width: 40
+  },
+  rangeEndpointText: {
+    color: colors.onAccent,
+    fontSize: 15,
+    fontWeight: "800"
+  },
+  rangeDayText: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "700"
+  },
+  rangeDayOutside: {
+    color: colors.placeholder,
+    fontWeight: "600"
+  },
+  rangeDayToday: {
+    color: colors.accentTextStrong,
+    fontWeight: "800"
+  },
+  rangeDayDisabled: {
+    color: colors.placeholder,
+    opacity: 0.45
+  },
+  timeSlider: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 14,
+    minHeight: 48
+  },
+  timeSliderLabel: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "800",
+    width: 38
+  },
+  timeSliderTrackWrap: {
+    flex: 1,
+    height: 44,
+    justifyContent: "center"
+  },
+  timeSliderTrack: {
+    backgroundColor: colors.surfaceContainerHighest,
+    borderRadius: 999,
+    height: 6,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 19
+  },
+  timeSliderFill: {
+    backgroundColor: colors.accent,
+    borderRadius: 999,
+    height: 6,
+    left: 0,
+    position: "absolute",
+    top: 19
+  },
+  timeSliderThumb: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: 999,
+    elevation: 3,
+    height: 34,
+    justifyContent: "center",
+    position: "absolute",
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.16,
+    shadowRadius: 5,
+    top: 5,
+    width: 92
+  },
+  timeSliderThumbText: {
+    color: colors.accentTextStrong,
+    fontSize: 14,
+    fontWeight: "800"
+  },
   rationaleSheetHeader: {
     alignItems: "center",
     flexDirection: "row",

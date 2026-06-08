@@ -227,6 +227,86 @@ function compareDateText(left: string, right: string) {
   return dateFromReminderParts(left).getTime() - dateFromReminderParts(right).getTime();
 }
 
+export const DEFAULT_REMINDER_START_TIME = "09:00";
+export const DEFAULT_REMINDER_END_TIME = "09:30";
+
+export type MonthGridCell = { date: string; day: number; inMonth: boolean };
+
+// Always 6 rows × 7 columns (Sunday-first) so the calendar height never shifts
+// between months. Leading/trailing days come from the adjacent months.
+export function buildMonthGrid(year: number, month: number): MonthGridCell[] {
+  const leading = new Date(year, month, 1).getDay();
+  const total = daysInMonth(year, month);
+  const cells: MonthGridCell[] = [];
+  for (let i = leading; i > 0; i -= 1) {
+    const date = new Date(year, month, 1 - i);
+    cells.push({ date: dateStringFromDate(date), day: date.getDate(), inMonth: false });
+  }
+  for (let day = 1; day <= total; day += 1) {
+    const date = new Date(year, month, day);
+    cells.push({ date: dateStringFromDate(date), day, inMonth: true });
+  }
+  let trailing = 1;
+  while (cells.length < 42) {
+    const date = new Date(year, month + 1, trailing);
+    cells.push({ date: dateStringFromDate(date), day: date.getDate(), inMonth: false });
+    trailing += 1;
+  }
+  return cells;
+}
+
+export function shiftMonth(year: number, month: number, delta: number) {
+  const base = new Date(year, month + delta, 1);
+  return { year: base.getFullYear(), month: base.getMonth() };
+}
+
+export function monthLabel(year: number, month: number) {
+  return new Date(year, month, 1).toLocaleDateString([], { month: "long", year: "numeric" });
+}
+
+export function monthForDate(dateText: string | null | undefined) {
+  const date = dateFromReminderParts(dateText);
+  return { year: date.getFullYear(), month: date.getMonth() };
+}
+
+// Flight-style range selection. First tap (or a tap that resets) makes a single
+// day with start == end; a forward tap from a single day extends the end.
+export function nextDateRange(startDate: string, endDate: string, tapped: string) {
+  if (!startDate) return { startDate: tapped, endDate: tapped };
+  const rangeComplete = startDate !== endDate;
+  if (rangeComplete || compareDateText(tapped, startDate) < 0) {
+    return { startDate: tapped, endDate: tapped };
+  }
+  return { startDate, endDate: tapped };
+}
+
+export function isWithinRange(date: string, startDate: string, endDate: string) {
+  if (!startDate || !endDate) return false;
+  return compareDateText(date, startDate) >= 0 && compareDateText(date, endDate) <= 0;
+}
+
+export type Clock12 = { hour12: number; minute: number; meridiem: "AM" | "PM" };
+
+// "HH:MM" (24h) -> 12-hour parts. Empty/invalid -> null so callers can fall back.
+export function parseClock(value: string | null | undefined): Clock12 | null {
+  if (!validReminderTimeText(value)) return null;
+  const [hour, minute] = String(value).split(":").map(Number);
+  return {
+    hour12: hour % 12 === 0 ? 12 : hour % 12,
+    minute,
+    meridiem: hour >= 12 ? "PM" : "AM"
+  };
+}
+
+// 12-hour parts -> "HH:MM" (24h). Out-of-range -> "" so callers keep the last valid value.
+export function formatClock(clock: Clock12) {
+  return meridiemTimeText(String(clock.hour12), String(clock.minute), clock.meridiem);
+}
+
+export function isAllDayDraft(startTime: string, endTime: string) {
+  return !startTime && !endTime;
+}
+
 function timeTextMinutes(value: string) {
   const match = /^(\d{2}):(\d{2})$/.exec(value);
   if (!match) return null;
