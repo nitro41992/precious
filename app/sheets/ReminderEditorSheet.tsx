@@ -200,7 +200,12 @@ export function ReminderEditorSheet({
       timeMinutes(draft.startTime) !== null &&
       timeMinutes(draft.endTime)! <= timeMinutes(draft.startTime)!
   );
-  const saveDisabled = !draft.startDate || !draft.endDate || draft.endDate < draft.startDate || invalidTimeRange;
+  const dateInvalid = !draft.startDate || !draft.endDate || draft.endDate < draft.startDate;
+  const saveDisabled = dateInvalid || invalidTimeRange;
+  // While a slider is dragging, don't reflect the time-range error in the Save
+  // button — you can't tap it mid-drag anyway, and toggling it as the value
+  // snaps across the boundary reads as a flicker. It settles in on release.
+  const confirmDisabled = dateInvalid || (invalidTimeRange && !sliderActive);
   const draftChanged = [
     "startDate",
     "endDate",
@@ -267,7 +272,7 @@ export function ReminderEditorSheet({
       <View style={styles.sheetGrabber} />
       <SheetHeader
         closeLabel="Close reminder editor"
-        confirmDisabled={saveDisabled}
+        confirmDisabled={confirmDisabled}
         confirmLabel="Save reminder"
         confirmTestID="pc.reminder.save"
         onClose={onClose}
