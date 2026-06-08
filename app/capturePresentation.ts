@@ -684,10 +684,6 @@ export function reminderLabel(reminder: ReminderSuggestion | undefined) {
     return reminder.trigger_value;
   }
   const intervalLabel = reminderIntervalLabel(startDate, endDate, startTime, endTime);
-  const durationLabel = reminderDurationLabel(reminder.duration, reminder.duration_unit);
-  if (intervalLabel && startTime) {
-    return `${intervalLabel}${durationLabel ? ` · ${durationLabel}` : ""}`;
-  }
   if (intervalLabel) return intervalLabel;
   return reminder.trigger_value || reminder.trigger_text || humanize(reminder.trigger_type);
 }

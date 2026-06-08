@@ -10,7 +10,6 @@ import {
   dateFromReminderParts,
   dateStringFromDate,
   deviceTimeZone,
-  reminderDurationLabel,
   reminderIntervalDuration,
   reminderScheduleDraftForSuggestion,
   reminderTimeLabel
@@ -89,12 +88,14 @@ function TimeSlider({
   label,
   value,
   dateText,
+  fillSide,
   onChange,
   testID
 }: {
   label: string;
   value: string;
   dateText: string;
+  fillSide: "left" | "right";
   onChange: (next: string) => void;
   testID?: string;
 }) {
@@ -112,19 +113,26 @@ function TimeSlider({
     })
   ).current;
 
+  // Map the touch to the thumb centre over the same usable range the thumb is
+  // drawn across, clamped so the ends lock at 12:00 AM and 11:45 PM instead of
+  // running past the visible track.
   function applyTouch(x: number) {
     const width = trackWidthRef.current;
     if (!width) return;
-    const fraction = Math.max(0, Math.min(1, x / width));
-    const minutes = Math.min(SLIDER_MAX, Math.round((fraction * SLIDER_MAX) / SLIDER_STEP) * SLIDER_STEP);
-    onChangeRef.current(minutesToClock(minutes));
+    const usable = Math.max(1, width - THUMB_WIDTH);
+    const center = Math.max(THUMB_WIDTH / 2, Math.min(width - THUMB_WIDTH / 2, x));
+    const fraction = (center - THUMB_WIDTH / 2) / usable;
+    const minutes = Math.round((fraction * SLIDER_MAX) / SLIDER_STEP) * SLIDER_STEP;
+    onChangeRef.current(minutesToClock(Math.max(0, Math.min(SLIDER_MAX, minutes))));
   }
 
+  const usable = Math.max(0, trackWidth - THUMB_WIDTH);
   const fraction = clockToMinutes(value) / SLIDER_MAX;
-  const thumbLeft = trackWidth
-    ? Math.max(0, Math.min(trackWidth - THUMB_WIDTH, fraction * trackWidth - THUMB_WIDTH / 2))
-    : 0;
-  const fillWidth = trackWidth ? Math.max(0, Math.min(trackWidth, fraction * trackWidth)) : 0;
+  const thumbLeft = usable * fraction;
+  const thumbCenter = thumbLeft + THUMB_WIDTH / 2;
+  const fillStyle = fillSide === "right"
+    ? { left: thumbCenter, right: 0 }
+    : { left: 0, width: thumbCenter };
 
   return (
     <View style={styles.timeSlider} testID={testID}>
@@ -139,7 +147,7 @@ function TimeSlider({
         {...responder.panHandlers}
       >
         <View style={styles.timeSliderTrack} />
-        <View style={[styles.timeSliderFill, { width: fillWidth }]} />
+        {trackWidth ? <View style={[styles.timeSliderFill, fillStyle]} /> : null}
         <View pointerEvents="none" style={[styles.timeSliderThumb, { left: thumbLeft }]}>
           <Text style={styles.timeSliderThumbText}>{reminderTimeLabel(dateText, value)}</Text>
         </View>
@@ -180,8 +188,6 @@ export function ReminderEditorSheet({
   const sameDay = draft.startDate === draft.endDate;
   const startTimeLabel = reminderTimeLabel(draft.startDate, draft.startTime);
   const endTimeLabel = reminderTimeLabel(draft.endDate, draft.endTime);
-  const derivedDuration = reminderIntervalDuration(draft.startDate, draft.endDate, draft.startTime, draft.endTime);
-  const previewDuration = reminderDurationLabel(derivedDuration.duration, derivedDuration.durationUnit, false);
   const invalidTimeRange = Boolean(
     sameDay &&
       timeMinutes(draft.endTime) !== null &&
@@ -315,6 +321,7 @@ export function ReminderEditorSheet({
           </View>
           <TimeSlider
             dateText={draft.startDate}
+            fillSide="right"
             label="Start"
             onChange={handleStartTime}
             testID="pc.reminder.start-time"
@@ -322,17 +329,12 @@ export function ReminderEditorSheet({
           />
           <TimeSlider
             dateText={draft.endDate}
+            fillSide="left"
             label="End"
             onChange={handleEndTime}
             testID="pc.reminder.end-time"
             value={draft.endTime}
           />
-        </View>
-        <View style={styles.reminderSummaryBlock}>
-          <Text style={styles.reminderFieldSectionTitle}>Duration</Text>
-          <Text style={styles.reminderSummaryText}>
-            {invalidTimeRange ? "End time must be after start time" : previewDuration}
-          </Text>
         </View>
       </ScrollView>
       {typeof reminderIndex === "number" && onRemove ? (
