@@ -1,4 +1,7 @@
-import { COLLECTION_CONTEXT_REASONING_EFFORT } from "../config.ts";
+import {
+  COLLECTION_CONTEXT_REASONING_EFFORT,
+  OPENAI_MODEL,
+} from "../config.ts";
 import { env } from "../common.ts";
 import { compactUrlEvidence } from "../url-evidence/quality.ts";
 import type { CaptureRow, CollectionContext, UrlEvidence } from "../types.ts";
@@ -161,9 +164,7 @@ export async function runCollectionContextPrepass(
   urlEvidence: UrlEvidence | null,
 ) {
   const started = Date.now();
-  const model = Deno.env.get("OPENAI_COLLECTION_CONTEXT_MODEL") ||
-    Deno.env.get("OPENAI_MODEL") ||
-    "gpt-5-mini";
+  const model = Deno.env.get("OPENAI_COLLECTION_CONTEXT_MODEL") || OPENAI_MODEL;
   const imageUrls = collectionContextImageUrls(capture, urlEvidence);
   const userContent: Array<Record<string, unknown>> = [
     {

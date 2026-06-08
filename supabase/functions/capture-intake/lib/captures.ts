@@ -2,6 +2,7 @@ import { adminClient } from "./supabase.ts";
 import {
   CAPTURE_GATE_PROMPT_VERSION,
   CONTEXTLESS_LINK_REJECTED_MESSAGE,
+  OPENAI_MODEL,
   PREFLIGHT_PROMPT_VERSION,
   PROMPT_VERSION,
   SCHEMA_VERSION,
@@ -771,7 +772,7 @@ export async function processCapture(captureId: string, userId: string) {
       user_id: userId,
       capture_id: captureId,
       provider: "openai",
-      model: Deno.env.get("OPENAI_MODEL") || "gpt-5-mini",
+      model: OPENAI_MODEL,
       status: "failed",
       prompt_version: PROMPT_VERSION,
       schema_version: SCHEMA_VERSION,
@@ -785,7 +786,7 @@ export async function processCapture(captureId: string, userId: string) {
         analysis_error: message,
         analysis_mode: "llm_failed",
         analysis_provider: "openai",
-        analysis_model: Deno.env.get("OPENAI_MODEL") || "gpt-5-mini",
+        analysis_model: OPENAI_MODEL,
         processed_at: new Date().toISOString(),
       })
       .eq("id", captureId)

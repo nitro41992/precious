@@ -1,6 +1,7 @@
 import {
   CLIENT_RESOLUTION_MESSAGE,
   INSUFFICIENT_URL_MESSAGE,
+  OPENAI_MODEL,
   PREFLIGHT_REASONING_EFFORT,
   preflightSchema,
 } from "../config.ts";
@@ -30,8 +31,7 @@ import {
 import { preflightPrompt, responseText } from "./prompts.ts";
 
 export function preflightModel() {
-  return Deno.env.get("OPENAI_PREFLIGHT_MODEL") ||
-    Deno.env.get("OPENAI_MODEL") || "gpt-5-mini";
+  return Deno.env.get("OPENAI_PREFLIGHT_MODEL") || OPENAI_MODEL;
 }
 
 export async function runPreflight(

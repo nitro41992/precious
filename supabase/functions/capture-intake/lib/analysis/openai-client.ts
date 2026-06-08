@@ -1,6 +1,7 @@
 import {
   analysisSchemaForCollections,
   ANALYSIS_REASONING_EFFORT,
+  OPENAI_MODEL,
   PROMPT_VERSION,
 } from "../config.ts";
 import { env } from "../common.ts";
@@ -14,7 +15,7 @@ export async function runOpenAi(
   retrievedCollections: RetrievedCollection[],
 ) {
   const started = Date.now();
-  const model = Deno.env.get("OPENAI_MODEL") || "gpt-5-mini";
+  const model = OPENAI_MODEL;
   const imageUrls = visualInputImageUrls(capture, urlEvidence);
   let requestBody = buildOpenAiRequestBody(
     model,

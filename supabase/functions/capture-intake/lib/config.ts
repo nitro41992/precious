@@ -78,6 +78,12 @@ export const clientDiagnosticNumberFields = new Set([
   "elapsed_ms",
   "app_version_code",
 ]);
+// Default model for the main extraction call, and the OPENAI_MODEL fallback for any stage that
+// doesn't set its own model override. gpt-5.4-mini is ~4x faster than gpt-5-mini at low effort
+// (far fewer reasoning tokens) with equal-or-better extraction quality; overridable via the
+// OPENAI_MODEL secret. Classification/ranking stages override to a cheaper tier via their own
+// OPENAI_*_MODEL secrets.
+export const OPENAI_MODEL = Deno.env.get("OPENAI_MODEL") || "gpt-5.4-mini";
 export const COLLECTION_AUTO_LINK_CONFIDENCE = Number(
   Deno.env.get("COLLECTION_AUTO_LINK_CONFIDENCE") || "0.82",
 );

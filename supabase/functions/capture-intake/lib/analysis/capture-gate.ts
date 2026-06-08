@@ -2,6 +2,7 @@ import {
   CAPTURE_GATE_PROMPT_VERSION,
   CAPTURE_GATE_REASONING_EFFORT,
   captureGateSchema,
+  OPENAI_MODEL,
 } from "../config.ts";
 import { env } from "../common.ts";
 import { titleFallback } from "../capture-records.ts";
@@ -18,8 +19,7 @@ import {
 import { captureGatePrompt, responseText } from "./prompts.ts";
 
 export function captureGateModel() {
-  return Deno.env.get("OPENAI_CAPTURE_GATE_MODEL") ||
-    Deno.env.get("OPENAI_MODEL") || "gpt-5-mini";
+  return Deno.env.get("OPENAI_CAPTURE_GATE_MODEL") || OPENAI_MODEL;
 }
 
 export async function runCaptureGate(capture: CaptureRow) {

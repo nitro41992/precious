@@ -1,4 +1,7 @@
-import { COLLECTION_RERANK_REASONING_EFFORT } from "../config.ts";
+import {
+  COLLECTION_RERANK_REASONING_EFFORT,
+  OPENAI_MODEL,
+} from "../config.ts";
 import { env } from "../common.ts";
 import { compactUrlEvidence } from "../url-evidence/quality.ts";
 import type { CaptureRow, RetrievedCollection, UrlEvidence } from "../types.ts";
@@ -185,9 +188,7 @@ export async function rerankCollectionsForCapture(
   collections: RetrievedCollection[],
 ): Promise<RetrievedCollection[]> {
   if (collections.length <= 1) return collections;
-  const model = Deno.env.get("OPENAI_COLLECTION_RERANK_MODEL") ||
-    Deno.env.get("OPENAI_MODEL") ||
-    "gpt-5-mini";
+  const model = Deno.env.get("OPENAI_COLLECTION_RERANK_MODEL") || OPENAI_MODEL;
   const requestBody = {
     model,
     reasoning: { effort: COLLECTION_RERANK_REASONING_EFFORT },
