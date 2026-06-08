@@ -82,6 +82,7 @@ function TimeSlider({
   dateText,
   fillSide,
   onChange,
+  onActiveChange,
   testID
 }: {
   label: string;
@@ -89,19 +90,29 @@ function TimeSlider({
   dateText: string;
   fillSide: "left" | "right";
   onChange: (next: string) => void;
+  onActiveChange: (active: boolean) => void;
   testID?: string;
 }) {
   const trackWidthRef = useRef(0);
   const [trackWidth, setTrackWidth] = useState(0);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const onActiveChangeRef = useRef(onActiveChange);
+  onActiveChangeRef.current = onActiveChange;
 
   const responder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (event: GestureResponderEvent) => applyTouch(event.nativeEvent.locationX),
-      onPanResponderMove: (event: GestureResponderEvent) => applyTouch(event.nativeEvent.locationX)
+      // Keep the gesture once it starts so the parent ScrollView can't steal it.
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: (event: GestureResponderEvent) => {
+        onActiveChangeRef.current(true);
+        applyTouch(event.nativeEvent.locationX);
+      },
+      onPanResponderMove: (event: GestureResponderEvent) => applyTouch(event.nativeEvent.locationX),
+      onPanResponderRelease: () => onActiveChangeRef.current(false),
+      onPanResponderTerminate: () => onActiveChangeRef.current(false)
     })
   ).current;
 
@@ -167,6 +178,9 @@ export function ReminderEditorSheet({
 }) {
   const initialDraft = useMemo(() => withDefaultTimes(reminderScheduleDraftForSuggestion(reminder)), [reminder]);
   const [draft, setDraft] = useState<ReminderScheduleDraft>(initialDraft);
+  // Suppress the out-of-order warning while a slider is being dragged so it can't
+  // flicker as the value snaps across the boundary; it settles in on release.
+  const [sliderActive, setSliderActive] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -313,6 +327,7 @@ export function ReminderEditorSheet({
             dateText={draft.startDate}
             fillSide="right"
             label="Start"
+            onActiveChange={setSliderActive}
             onChange={handleStartTime}
             testID="pc.reminder.start-time"
             value={draft.startTime}
@@ -321,11 +336,12 @@ export function ReminderEditorSheet({
             dateText={draft.endDate}
             fillSide="left"
             label="End"
+            onActiveChange={setSliderActive}
             onChange={handleEndTime}
             testID="pc.reminder.end-time"
             value={draft.endTime}
           />
-          {invalidTimeRange ? (
+          {invalidTimeRange && !sliderActive ? (
             <View style={styles.reminderWarning}>
               <Text style={styles.reminderWarningText}>End time must be after the start time.</Text>
             </View>
