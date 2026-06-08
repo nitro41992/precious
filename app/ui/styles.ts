@@ -326,43 +326,17 @@ export const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 15
   },
-  searchProgressSlot: {
-    overflow: "hidden"
-  },
-  searchProgressRow: {
-    alignItems: "center",
-    alignSelf: "flex-start",
-    backgroundColor: colors.surfaceContainer,
-    borderRadius: 8,
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 10,
-    minHeight: 34,
-    paddingHorizontal: 10
-  },
-  searchProgressText: {
-    color: colors.muted,
-    ...typefaces.bold,
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 16
-  },
-  searchActivityMark: {
+  searchRefineDots: {
     alignItems: "center",
     flexDirection: "row",
-    height: 18,
-    justifyContent: "center",
-    width: 24
+    gap: 4,
+    paddingHorizontal: 2
   },
-  searchActivityDot: {
-    backgroundColor: colors.accent,
-    borderRadius: 5,
-    height: 10,
-    width: 10
-  },
-  searchActivityDotTrailing: {
-    backgroundColor: colors.secondary,
-    marginLeft: -3
+  searchRefineDot: {
+    backgroundColor: colors.accentText,
+    borderRadius: 3,
+    height: 6,
+    width: 6
   },
   scopeRow: {
     alignItems: "center",

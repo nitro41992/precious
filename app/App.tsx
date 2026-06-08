@@ -1415,8 +1415,10 @@ export default function App() {
   );
 
   const {
+    currentSearchKey,
     remoteSearchActive,
     remoteSearchEnhancing,
+    remoteSearchKey,
     remoteSearchLoading,
     remoteSearchResults,
     searchOpen,
@@ -3596,7 +3598,6 @@ export default function App() {
     renderCollectionSkeletonRows,
     renderHomeRow,
     renderListLoadingFooter,
-    renderSearchProgress,
     renderSearchResult,
     renderToast
   } = createAppRenderHelpers({
@@ -3894,12 +3895,13 @@ export default function App() {
   // frame in both, so the close morph lands on the live row and the query /
   // results / scroll survive the review round trip.
   function renderSearchOverlay({ includeChrome = true }: { includeChrome?: boolean } = {}) {
-    const searchIsLoading = remoteSearchActive && (remoteSearchLoading || remoteSearchEnhancing);
-    const searchProgressLabel = remoteSearchLoading
-      ? "Searching saved things"
-      : remoteSearchEnhancing
-        ? "Refining matches"
-        : "";
+    // A single "a search that could still change results is in flight" flag.
+    // Covers the gap between the query changing and the remote key catching up,
+    // so the empty state never flashes before results land. The screen masks it
+    // for instant/cached responses and only surfaces a steady cue when slow.
+    const searchPending =
+      remoteSearchActive &&
+      (remoteSearchLoading || remoteSearchEnhancing || remoteSearchKey !== currentSearchKey);
     const emptyTitle = searchQuery.trim()
       ? "No matches yet."
       : "What do you remember?";
@@ -3915,7 +3917,6 @@ export default function App() {
         <SearchScreen
           actions={{
             closeSearch: () => setSearchOpen(false),
-            renderSearchProgress,
             renderSearchResult,
             setSearchQuery
           }}
@@ -3924,14 +3925,13 @@ export default function App() {
             emptyText,
             emptyTitle,
             listPerfProps: CAPTURE_LIST_PERF_PROPS,
-            searchIsLoading,
+            renderSkeletonRows: renderCaptureSkeletonRows,
             searchMotion,
-            searchProgressLabel,
+            searchPending,
             searchResults,
             toast: includeChrome ? renderToast() : null
           }}
           state={{
-            remoteSearchActive,
             searchQuery
           }}
         />

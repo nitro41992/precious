@@ -27,7 +27,6 @@ import {
 } from "./rows";
 import { styles } from "./styles";
 import { rowEntering } from "./motion";
-import { Text } from "./typography";
 
 export type AppRenderHelpersInput = {
   activeCapturesLoadedOnce: boolean;
@@ -89,55 +88,6 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
           ]}
         />
       </Animated.View>
-    );
-  }
-
-  const searchActivityScale = input.skeletonPulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.72, 1]
-  });
-  const searchActivityOpacity = input.skeletonPulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.46, 1]
-  });
-
-  function SearchActivityMark() {
-    return (
-      <View
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-        pointerEvents="none"
-        style={styles.searchActivityMark}
-      >
-        <Animated.View
-          style={[
-            styles.searchActivityDot,
-            {
-              opacity: searchActivityOpacity,
-              transform: [{ scale: searchActivityScale }]
-            }
-          ]}
-        />
-        <Animated.View
-          style={[
-            styles.searchActivityDot,
-            styles.searchActivityDotTrailing,
-            {
-              opacity: skeletonOpacity,
-              transform: [{ scale: input.skeletonPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.76] }) }]
-            }
-          ]}
-        />
-      </View>
-    );
-  }
-
-  function renderSearchProgress(label: string) {
-    return (
-      <View accessibilityLiveRegion="polite" style={styles.searchProgressRow}>
-        <SearchActivityMark />
-        <Text style={styles.searchProgressText}>{label}</Text>
-      </View>
     );
   }
 
@@ -329,7 +279,6 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     renderHomeRow,
     renderListLoadingFooter,
     renderLoadingRows,
-    renderSearchProgress,
     renderSearchResult,
     renderToast,
     SkeletonBlock: SkeletonBlock as ({ style }: { style?: any }) => ReactElement
