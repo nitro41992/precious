@@ -62,7 +62,7 @@ import {
   refreshCollectionPreviewFromActiveLinks,
   rerankCollectionsForCapture,
   resolveNewCollectionSuggestions,
-  retrieveCollectionsForCapture,
+  retrieveCollectionCandidatesForCapture,
 } from "./collections.ts";
 import { resolvePlacePatchForAnalysis } from "./places.ts";
 import { mirrorSourcePreviewAssetQuietly } from "./source-previews.ts";
@@ -532,17 +532,19 @@ export async function processCapture(captureId: string, userId: string) {
           })),
       )
       : null;
-    const retrievedCollections = await timeStage(
+    const collectionCandidates = await timeStage(
       "retrievalMs",
-      retrieveCollectionsForCapture(
+      retrieveCollectionCandidatesForCapture(
         supabase,
         userId,
         captureForAnalysis,
         urlEvidence,
         collectionContextResult?.context ?? null,
       )
-        .catch(() => []),
+        .catch(() => ({ active: [], pending: [] })),
     );
+    const retrievedCollections = collectionCandidates.active;
+    const pendingSuggestions = collectionCandidates.pending;
     const rerankedCollections = await timeStage(
       "rerankMs",
       rerankCollectionsForCapture(
@@ -564,6 +566,7 @@ export async function processCapture(captureId: string, userId: string) {
         captureForAnalysis,
         urlEvidence,
         promptCollections,
+        pendingSuggestions,
       ),
     );
     const captureRoleTrace = captureRoleTraceFromCollections(promptCollections);

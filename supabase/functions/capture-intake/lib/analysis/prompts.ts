@@ -15,6 +15,7 @@ export function buildPrompt(
   capture: CaptureRow,
   urlEvidence: UrlEvidence | null,
   retrievedCollections: RetrievedCollection[],
+  pendingSuggestions: RetrievedCollection[] = [],
 ) {
   const llmUrlEvidence = compactUrlEvidence(urlEvidence);
   const profile = contentEvidenceProfile(capture, urlEvidence);
@@ -91,7 +92,12 @@ export function buildPrompt(
     "Collections are dynamic user-owned objects, so reason from their provided titles/descriptions rather than any fixed starter taxonomy.",
     "Return at most 2 Collection decisions, and at most one of them may be a new Collection. Select a secondary Collection only when it represents a separate saved value supported by evidence.",
     "When NO existing Collection is a strong fit, do not force a weak existing match. Instead, if the saved content is a durable, repeatable saved value the user would plausibly collect into again, propose exactly one new Collection: set type to \"new\", collection_id to null, and provide a title, a one-sentence description, a rationale, and a confidence. Otherwise return no Collection.",
-    "Pick a mid-level grouping: not so narrow it would only ever hold this one item (avoid making a single product, one specific recipe, or one event the whole Collection), and not so broad it is a meaningless catch-all (avoid generic buckets like Interesting, Videos, Articles, Things to read, or Stuff). When the only honest grouping is a one-off or a generic bucket, return no new Collection.",
+    "Pick a mid-level grouping at the basic category level: the most natural, everyday name a person would give the kind of thing being saved — as informative as possible while staying broadly reusable. Balance informativeness against economy: specific enough to be meaningful, general enough to hold many future items of the same kind.",
+    "Name the durable category of the content, not this one task or this one item. Avoid subordinate, one-off, or task-phrased titles built around what to do with this single capture (for example a title built around 'to identify', 'to read later', 'to try', or naming one specific song, product, recipe, or event) — they never recur and fragment the user's Collections.",
+    "Also avoid superordinate catch-alls too broad to inform: not so broad it is a meaningless catch-all (avoid generic buckets like Interesting, Videos, Articles, Things to read, Saved, or Stuff). When the only honest grouping is a one-off task label or a generic catch-all, return no new Collection.",
+    "Prefer a reusable noun-phrase category label the user would plausibly file many similar items under again, phrased the same way each time so repeated saves of the same kind land in the same Collection.",
+    "Some Collections listed below may be pending suggested Collections (not yet confirmed by the user). When the new Collection you would propose clearly names the same durable category as one of those pending suggestions, reuse that pending suggestion's title verbatim — the exact same characters — as your new Collection title, so repeated saves consolidate into one suggestion instead of creating near-duplicates.",
+    "Only reuse a pending suggestion's title when the saved value genuinely belongs to that same category. Keep genuinely distinct intents separate: do not merge a clip you want to identify with tutorials about producing that kind of content, and do not collapse two different actions or two different kinds of thing onto one title just because they share a topic. When in doubt, propose a new distinct title rather than wrongly reusing one.",
     "Keep a new Collection title at most 50 characters and a new Collection description at most 160 characters.",
     "Do not propose a new Collection that duplicates a retrieved active Collection that is already a strong fit; link to that one instead. But a weak or possible existing fit does not block a new Collection — prefer the new Collection over the weak existing match.",
     "Return field_rationales as structured user-facing copy for the Capture Review field editor sheets. Each field rationale text must be at most 12 words.",
@@ -166,6 +172,20 @@ export function buildPrompt(
       null,
       2,
     ),
+    ...(pendingSuggestions.length
+      ? [
+        "",
+        "Existing pending suggested Collections for this user (not yet confirmed):",
+        JSON.stringify(
+          pendingSuggestions.map((suggestion) => ({
+            title: suggestion.title,
+            description: suggestion.description,
+          })),
+          null,
+          2,
+        ),
+      ]
+      : []),
   ].join("\n");
 }
 

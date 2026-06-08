@@ -75,28 +75,8 @@ function collectionContextText(collectionContext: CollectionContext | null) {
   ], 2400);
 }
 
-export async function retrieveCollectionsForCapture(
-  supabase: ReturnType<typeof adminClient>,
-  userId: string,
-  capture: CaptureRow,
-  urlEvidence: UrlEvidence | null,
-  collectionContext: CollectionContext | null = null,
-): Promise<RetrievedCollection[]> {
-  const queryText = retrievalQueryForCapture(
-    capture,
-    urlEvidence,
-    collectionContext,
-  );
-  if (!queryText) return [];
-  const embedding = await createEmbedding(queryText);
-  const { data, error } = await supabase.rpc("match_collections_for_capture", {
-    p_user_id: userId,
-    p_query_text: queryText,
-    p_query_embedding: embeddingLiteral(embedding),
-    p_match_count: COLLECTION_RETRIEVAL_MATCH_COUNT,
-  });
-  if (error) throw error;
-  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+function mapRetrievedRow(row: Record<string, unknown>): RetrievedCollection {
+  return {
     id: String(row.id),
     title: String(row.title || ""),
     description: String(row.description || ""),
@@ -113,5 +93,56 @@ export async function retrieveCollectionsForCapture(
       ? row.semantic_score
       : null,
     rrf_score: typeof row.rrf_score === "number" ? row.rrf_score : null,
-  })).slice(0, COLLECTION_RETRIEVAL_MATCH_COUNT);
+  };
+}
+
+// Retrieve active collections (auto-link candidates) and pending suggested collections
+// (reuse candidates the analysis prompt shows the model so repeated saves consolidate)
+// in one pass. The embedding is computed once over the same query and reused for both
+// RPCs so suggestion awareness adds no extra embedding call.
+export async function retrieveCollectionCandidatesForCapture(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  capture: CaptureRow,
+  urlEvidence: UrlEvidence | null,
+  collectionContext: CollectionContext | null = null,
+): Promise<{ active: RetrievedCollection[]; pending: RetrievedCollection[] }> {
+  const queryText = retrievalQueryForCapture(
+    capture,
+    urlEvidence,
+    collectionContext,
+  );
+  if (!queryText) return { active: [], pending: [] };
+  const embedding = await createEmbedding(queryText);
+  const queryEmbedding = embeddingLiteral(embedding);
+  const [activeResult, pendingResult] = await Promise.all([
+    supabase.rpc("match_collections_for_capture", {
+      p_user_id: userId,
+      p_query_text: queryText,
+      p_query_embedding: queryEmbedding,
+      p_match_count: COLLECTION_RETRIEVAL_MATCH_COUNT,
+    }),
+    supabase.rpc("match_collection_suggestions_for_capture", {
+      p_user_id: userId,
+      p_query_text: queryText,
+      p_query_embedding: queryEmbedding,
+      p_match_count: COLLECTION_PROMPT_CANDIDATE_COUNT,
+    }),
+  ]);
+  if (activeResult.error) throw activeResult.error;
+  const active = ((activeResult.data ?? []) as Array<Record<string, unknown>>)
+    .map(mapRetrievedRow)
+    .slice(0, COLLECTION_RETRIEVAL_MATCH_COUNT);
+  // Pending suggestions are awareness-only; never let their failure block analysis.
+  if (pendingResult.error) {
+    console.warn(
+      "Pending suggestion retrieval failed",
+      pendingResult.error.message,
+    );
+    return { active, pending: [] };
+  }
+  const pending = ((pendingResult.data ?? []) as Array<Record<string, unknown>>)
+    .map(mapRetrievedRow)
+    .slice(0, COLLECTION_PROMPT_CANDIDATE_COUNT);
+  return { active, pending };
 }

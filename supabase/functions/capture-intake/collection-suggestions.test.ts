@@ -105,9 +105,69 @@ Deno.test("analysis prompt gates new collections with a granularity balance", ()
     "prompt steers the model away from one-off and generic collections",
   );
   assert(
+    prompt.includes("basic category level") &&
+      prompt.includes("Balance informativeness against economy"),
+    "prompt frames naming at the cognitive basic level",
+  );
+  assert(
+    prompt.includes("Name the durable category of the content, not this one task") &&
+      prompt.includes("reusable noun-phrase category label"),
+    "prompt bans one-off, task-phrased titles and asks for reusable category labels",
+  );
+  assert(
     prompt.includes("at most 50 characters") &&
       prompt.includes("at most 160 characters"),
     "prompt states the title and description length limits",
+  );
+});
+
+Deno.test("analysis prompt omits the pending-suggestion block when none exist", () => {
+  const prompt = urlEvidence.buildPrompt(
+    captureFixture({ source_text: "A great trail running route near Boulder." }),
+    null,
+    [],
+  );
+  assert(
+    !prompt.includes("Existing pending suggested Collections"),
+    "no pending block is rendered when the user has no pending suggestions",
+  );
+});
+
+Deno.test("analysis prompt surfaces pending suggestions as verbatim reuse candidates", () => {
+  const prompt = urlEvidence.buildPrompt(
+    captureFixture({ source_text: "A short clip with a song I want to find." }),
+    null,
+    [],
+    [{
+      id: "s1",
+      title: "Songs to identify",
+      description: "Clips with music I want to name later.",
+      keyword_rank: null,
+      semantic_rank: null,
+      keyword_score: null,
+      semantic_score: null,
+      rrf_score: null,
+    }],
+  );
+  assert(
+    prompt.includes("Existing pending suggested Collections"),
+    "pending suggestions are shown to the model when present",
+  );
+  assert(
+    prompt.includes("Songs to identify"),
+    "the pending suggestion title is included so the model can reuse it",
+  );
+  assert(
+    !prompt.includes("\"s1\""),
+    "pending suggestion ids are withheld so they are not used as link targets",
+  );
+  assert(
+    prompt.includes("reuse that pending suggestion's title verbatim"),
+    "prompt instructs verbatim title reuse to consolidate near-duplicates",
+  );
+  assert(
+    prompt.includes("Keep genuinely distinct intents separate"),
+    "prompt keeps the conservative guard against wrongly merging distinct intents",
   );
 });
 

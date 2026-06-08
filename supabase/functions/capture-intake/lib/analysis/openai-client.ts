@@ -13,6 +13,7 @@ export async function runOpenAi(
   capture: CaptureRow,
   urlEvidence: UrlEvidence | null,
   retrievedCollections: RetrievedCollection[],
+  pendingSuggestions: RetrievedCollection[] = [],
 ) {
   const started = Date.now();
   const model = OPENAI_MODEL;
@@ -23,6 +24,7 @@ export async function runOpenAi(
     urlEvidence,
     retrievedCollections,
     imageUrls,
+    pendingSuggestions,
   );
   let raw = await requestOpenAiAnalysis(requestBody);
   let visualRetry: Record<string, unknown> | null = null;
@@ -37,6 +39,7 @@ export async function runOpenAi(
       urlEvidence,
       retrievedCollections,
       [],
+      pendingSuggestions,
     );
     raw = await requestOpenAiAnalysis(requestBody);
   }
@@ -64,12 +67,14 @@ function buildOpenAiRequestBody(
   urlEvidence: UrlEvidence | null,
   retrievedCollections: RetrievedCollection[],
   imageUrls: string[],
+  pendingSuggestions: RetrievedCollection[] = [],
 ) {
   const userContent = buildOpenAiUserContent(
     capture,
     urlEvidence,
     retrievedCollections,
     imageUrls,
+    pendingSuggestions,
   );
   const requestBody: Record<string, unknown> = {
     model,
@@ -140,11 +145,17 @@ export function buildOpenAiUserContent(
   urlEvidence: UrlEvidence | null,
   retrievedCollections: RetrievedCollection[],
   imageUrls = visualInputImageUrls(capture, urlEvidence),
+  pendingSuggestions: RetrievedCollection[] = [],
 ) {
   const userContent: Array<Record<string, unknown>> = [
     {
       type: "input_text",
-      text: buildPrompt(capture, urlEvidence, retrievedCollections),
+      text: buildPrompt(
+        capture,
+        urlEvidence,
+        retrievedCollections,
+        pendingSuggestions,
+      ),
     },
   ];
   for (const imageUrl of imageUrls) {
