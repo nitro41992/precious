@@ -152,7 +152,7 @@ export const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 30,
     fontWeight: "900",
-    ...typefaces.displayBold,
+    ...typefaces.appBarTitle,
     letterSpacing: 0,
     lineHeight: 35
   },
@@ -2066,10 +2066,10 @@ export const styles = StyleSheet.create({
   },
   titleInput: {
     color: colors.ink,
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: "700",
-    ...typefaces.displayBold,
-    lineHeight: 34,
+    ...typefaces.displaySemibold,
+    lineHeight: 33,
     paddingVertical: 6
   },
   reviewMediaHeader: {
@@ -2242,65 +2242,49 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 2,
     paddingTop: 2
   },
-  inlineMeaningBlock: {
-    gap: 10,
-    paddingHorizontal: 0,
-    paddingVertical: 6
-  },
-  inlineMeaningSentence: {
-    gap: 8
-  },
-  inlineMeaningLine: {
-    alignItems: "center",
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    minHeight: 38
-  },
-  inlineMeaningText: {
-    color: colors.ink,
-    ...typefaces.medium,
-    fontSize: 24,
-    fontWeight: "600",
-    lineHeight: 32
-  },
-  inlineMeaningPill: {
-    alignSelf: "flex-start",
+  propertyRowsCard: {
     backgroundColor: colors.reviewCard,
     borderColor: softCardEdgeColor,
-    borderRadius: softPillRadius,
+    borderRadius: softCardRadius,
     borderWidth: 2,
-    justifyContent: "center",
-    maxWidth: "100%",
-    minHeight: 44,
-    paddingHorizontal: 12,
-    paddingVertical: 4
+    overflow: "hidden",
+    paddingHorizontal: 16,
+    ...softCardShadow
   },
-  inlineMeaningPillText: {
-    color: colors.accentTextStrong,
-    ...typefaces.medium,
-    fontSize: 24,
-    fontWeight: "500",
-    lineHeight: 32
+  propertyRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 56,
+    paddingVertical: 12
   },
-  inlineMeaningLineTop: {
-    alignItems: "flex-start"
-  },
-  inlineMeaningForReminder: {
-    marginTop: 6
-  },
-  inlineMeaningPillColumn: {
-    gap: 1
-  },
-  inlineMeaningPillSubtext: {
+  propertyRowLabel: {
     color: colors.muted,
     ...typefaces.medium,
-    fontSize: 15,
-    fontWeight: "600",
-    lineHeight: 20
+    fontSize: 13,
+    lineHeight: 18,
+    width: 92
   },
-  inlineMeaningChipTextPending: {
-    color: colors.review
+  propertyRowValue: {
+    color: colors.ink,
+    flex: 1,
+    ...typefaces.displaySemibold,
+    fontSize: 16,
+    lineHeight: 21
+  },
+  propertyRowValuePending: {
+    color: colors.placeholder,
+    ...typefaces.medium
+  },
+  propertyRowValueColumn: {
+    flex: 1,
+    gap: 1
+  },
+  propertyRowValueSub: {
+    color: colors.muted,
+    ...typefaces.medium,
+    fontSize: 13,
+    lineHeight: 17
   },
   reviewPrimaryBlock: {
     gap: 12,
@@ -2315,10 +2299,10 @@ export const styles = StyleSheet.create({
   reviewTitleText: {
     color: colors.ink,
     flex: 1,
-    fontSize: 29,
+    fontSize: 26,
     fontWeight: "400",
-    ...typefaces.displayMedium,
-    lineHeight: 36,
+    ...typefaces.displaySemibold,
+    lineHeight: 33,
     paddingTop: 3
   },
   reviewTitleTextEmpty: {
@@ -3139,10 +3123,10 @@ export const styles = StyleSheet.create({
   },
   reviewActionLabel: {
     color: colors.muted,
-    ...typefaces.bold,
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 16,
+    ...typefaces.medium,
+    fontSize: 13,
+    fontWeight: "500",
+    lineHeight: 18,
     paddingLeft: 1
   },
   reviewActionGroup: {

@@ -27,6 +27,7 @@ import {
   Camera,
   CaretRight,
   Copy,
+  MapPin,
   Note as StickyNote,
   PencilSimple,
   Trash as Trash2,
@@ -1142,96 +1143,98 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                     ) : null}
                   </View>
                   <View style={styles.quickEditBlock}>
-                    <View style={styles.inlineMeaningBlock}>
-                      <View style={styles.inlineMeaningSentence}>
-                        {purposeField ? (
-                          <View style={styles.inlineMeaningLine}>
-                            <Text style={styles.inlineMeaningText}>Saved as </Text>
-                            <MotionPressable
-                              accessibilityLabel={`Purpose: ${purposeField.displayValue}`}
-                              accessibilityRole="button"
-                              onPress={() => openInlineField("purpose")}
-                              style={({ pressed }) => [styles.inlineMeaningPill, pressed && styles.subtlePressed]}
-                              testID="pc.review.intent.open"
-                            >
-                              <Text
-                                style={[
-                                  styles.inlineMeaningPillText,
-                                  !purposeField.hasValue && styles.inlineMeaningChipTextPending
-                                ]}
-                              >
-                                {purposeField.displayValue}
+                    <Text style={styles.reviewActionLabel}>Saved as</Text>
+                    <View style={styles.propertyRowsCard}>
+                      {purposeField ? (
+                        <MotionPressable
+                          accessibilityLabel={`Purpose: ${purposeField.displayValue}`}
+                          accessibilityRole="button"
+                          onPress={() => openInlineField("purpose")}
+                          style={({ pressed }) => [styles.propertyRow, pressed && styles.subtlePressed]}
+                          testID="pc.review.intent.open"
+                        >
+                          <Text style={styles.propertyRowLabel}>Purpose</Text>
+                          <Text
+                            numberOfLines={1}
+                            style={[
+                              styles.propertyRowValue,
+                              !purposeField.hasValue && styles.propertyRowValuePending
+                            ]}
+                          >
+                            {purposeField.displayValue}
+                          </Text>
+                          <CaretRight color={colors.muted} size={18} weight="bold" />
+                        </MotionPressable>
+                      ) : null}
+                      {collectionField ? (
+                        <MotionPressable
+                          accessibilityLabel={`Collection: ${collectionField.displayValue}`}
+                          accessibilityRole="button"
+                          onPress={() => openInlineField("collection")}
+                          style={({ pressed }) => [styles.propertyRow, pressed && styles.subtlePressed]}
+                          testID="pc.review.collections.open"
+                        >
+                          <Text style={styles.propertyRowLabel}>Collection</Text>
+                          <Text
+                            numberOfLines={1}
+                            style={[
+                              styles.propertyRowValue,
+                              !collectionField.hasValue && styles.propertyRowValuePending
+                            ]}
+                          >
+                            {collectionField.displayValue}
+                          </Text>
+                          <CaretRight color={colors.muted} size={18} weight="bold" />
+                        </MotionPressable>
+                      ) : null}
+                      {laterField ? (
+                        <MotionPressable
+                          accessibilityLabel={`Reminder: ${laterField.displayValue}`}
+                          accessibilityRole="button"
+                          onPress={() => openInlineField("later")}
+                          style={({ pressed }) => [styles.propertyRow, pressed && styles.subtlePressed]}
+                          testID="pc.review.reminder.open"
+                        >
+                          <Text style={styles.propertyRowLabel}>Reminder</Text>
+                          {laterParts?.timeLabel ? (
+                            <View style={styles.propertyRowValueColumn}>
+                              <Text numberOfLines={1} style={styles.propertyRowValue}>
+                                {laterParts.dateLabel}
                               </Text>
-                            </MotionPressable>
-                          </View>
-                        ) : null}
-                        {collectionField ? (
-                          <View style={styles.inlineMeaningLine}>
-                            <Text style={styles.inlineMeaningText}>in </Text>
-                            <MotionPressable
-                              accessibilityLabel={`Collection: ${collectionField.displayValue}`}
-                              accessibilityRole="button"
-                              onPress={() => openInlineField("collection")}
-                              style={({ pressed }) => [styles.inlineMeaningPill, pressed && styles.subtlePressed]}
-                              testID="pc.review.collections.open"
-                            >
-                              <Text
-                                style={[
-                                  styles.inlineMeaningPillText,
-                                  !collectionField.hasValue && styles.inlineMeaningChipTextPending
-                                ]}
-                              >
-                                {collectionField.displayValue}
+                              <Text numberOfLines={1} style={styles.propertyRowValueSub}>
+                                {laterParts.timeLabel}
                               </Text>
-                            </MotionPressable>
-                          </View>
-                        ) : null}
-                        {laterField ? (
-                          <View style={[styles.inlineMeaningLine, laterParts?.timeLabel && styles.inlineMeaningLineTop]}>
-                            <Text style={[styles.inlineMeaningText, laterParts?.timeLabel && styles.inlineMeaningForReminder]}>
-                              for{" "}
+                            </View>
+                          ) : (
+                            <Text
+                              numberOfLines={1}
+                              style={[
+                                styles.propertyRowValue,
+                                !laterField.hasValue && styles.propertyRowValuePending
+                              ]}
+                            >
+                              {laterParts?.dateLabel || laterField.displayValue}
                             </Text>
-                            <MotionPressable
-                              accessibilityLabel={`Later: ${laterField.displayValue}`}
-                              accessibilityRole="button"
-                              onPress={() => openInlineField("later")}
-                              style={({ pressed }) => [styles.inlineMeaningPill, pressed && styles.subtlePressed]}
-                              testID="pc.review.reminder.open"
-                            >
-                              {laterParts?.timeLabel ? (
-                                <View style={styles.inlineMeaningPillColumn}>
-                                  <Text style={styles.inlineMeaningPillText}>{laterParts.dateLabel}</Text>
-                                  <Text style={styles.inlineMeaningPillSubtext}>{laterParts.timeLabel}</Text>
-                                </View>
-                              ) : (
-                                <Text
-                                  style={[
-                                    styles.inlineMeaningPillText,
-                                    !laterField.hasValue && styles.inlineMeaningChipTextPending
-                                  ]}
-                                >
-                                  {laterParts?.dateLabel || laterField.displayValue}
-                                </Text>
-                              )}
-                            </MotionPressable>
-                          </View>
-                        ) : null}
-                        {showLocationInline ? (
-                          <View style={styles.inlineMeaningLine}>
-                            <Text style={styles.inlineMeaningText}>at </Text>
-                            <MotionPressable
-                              accessibilityLabel={resolvedPlace ? `Open ${locationInlineValue} in Maps` : `Search Maps for ${locationInlineValue}`}
-                              accessibilityRole={primaryMapCandidate ? "button" : undefined}
-                              onPress={primaryMapCandidate ? () => void openVisitTargetMaps(primaryMapCandidate) : undefined}
-                              style={({ pressed }) => [styles.inlineMeaningPill, pressed && primaryMapCandidate && styles.subtlePressed]}
-                            >
-                              <Text style={styles.inlineMeaningPillText}>
-                                {locationInlineValue}
-                              </Text>
-                            </MotionPressable>
-                          </View>
-                        ) : null}
-                      </View>
+                          )}
+                          <CaretRight color={colors.muted} size={18} weight="bold" />
+                        </MotionPressable>
+                      ) : null}
+                      {showLocationInline ? (
+                        <MotionPressable
+                          accessibilityLabel={resolvedPlace ? `Open ${locationInlineValue} in Maps` : `Search Maps for ${locationInlineValue}`}
+                          accessibilityRole={primaryMapCandidate ? "button" : undefined}
+                          onPress={primaryMapCandidate ? () => void openVisitTargetMaps(primaryMapCandidate) : undefined}
+                          style={({ pressed }) => [styles.propertyRow, pressed && primaryMapCandidate && styles.subtlePressed]}
+                        >
+                          <Text style={styles.propertyRowLabel}>Location</Text>
+                          <Text numberOfLines={1} style={styles.propertyRowValue}>
+                            {locationInlineValue}
+                          </Text>
+                          {primaryMapCandidate ? (
+                            <MapPin color={colors.muted} size={18} weight="regular" />
+                          ) : null}
+                        </MotionPressable>
+                      ) : null}
                     </View>
                   </View>
                   {urlEvidenceNotice ? (

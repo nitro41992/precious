@@ -131,13 +131,17 @@ function androidExactFont(family: string) {
 }
 
 export const typefaces = {
-  regular: androidFont("Satoshi-Regular"),
-  medium: androidFont("Satoshi-Medium"),
-  bold: androidFont("Satoshi-Bold"),
-  black: androidFont("Satoshi-Black"),
-  displayRegular: androidExactFont("ClashDisplay-Regular"),
-  displayMedium: androidExactFont("ClashDisplay-Medium"),
-  displaySemibold: androidExactFont("ClashDisplay-Semibold"),
-  displayBold: androidExactFont("ClashDisplay-Bold"),
-  cardTitle: androidExactFont("Geist-SemiBold")
+  // Geist everywhere: regular body, medium labels, semibold titles.
+  regular: androidFont("Geist-Regular"),
+  medium: androidFont("Geist-Medium"),
+  bold: androidExactFont("Geist-SemiBold"),
+  black: androidExactFont("Geist-SemiBold"),
+  // Display tokens resolve to Geist so existing `display*` consumers need no edits.
+  displayRegular: androidFont("Geist-Regular"),
+  displayMedium: androidFont("Geist-Medium"),
+  displaySemibold: androidExactFont("Geist-SemiBold"),
+  displayBold: androidExactFont("Geist-SemiBold"),
+  cardTitle: androidExactFont("Geist-SemiBold"),
+  // Clash Display is retained ONLY for the app-bar titles "Recents"/"Collections".
+  appBarTitle: androidExactFont("ClashDisplay-Bold")
 };
