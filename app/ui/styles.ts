@@ -2041,6 +2041,19 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10
   },
+  // Circular danger trashcan, matching the capture review screen's delete
+  // control (reviewMediaIconButton/reviewMediaDangerButton): white surface,
+  // soft shadow, no hairline border.
+  detailHeaderDeleteButton: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: 22,
+    borderWidth: 0,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+    ...bottomControlShadow
+  },
   textButton: {
     alignSelf: "flex-start",
     paddingVertical: 8

@@ -1,13 +1,12 @@
 import type { RefObject } from "react";
 import { Animated, View } from "react-native";
 import type { TextInput as NativeTextInput } from "react-native";
-import { Trash } from "phosphor-react-native";
 
 import type { Collection } from "../types";
-import { KeyboardSheet, MotionPressable, SheetHeader, keyboardSheetMetrics } from "../ui/components";
+import { KeyboardSheet, SheetHeader, keyboardSheetMetrics } from "../ui/components";
 import { styles } from "../ui/styles";
 import { colors } from "../ui/theme";
-import { Text, TextInput } from "../ui/typography";
+import { TextInput } from "../ui/typography";
 
 export function CollectionComposerSheet({
   captureComposerMotion,
@@ -17,7 +16,6 @@ export function CollectionComposerSheet({
   collectionTitleInputRef,
   keyboardHeight,
   onClose,
-  onDelete,
   onSave,
   onCollectionDescriptionChange,
   onCollectionTitleChange,
@@ -32,7 +30,6 @@ export function CollectionComposerSheet({
   collectionTitleInputRef: RefObject<NativeTextInput | null>;
   keyboardHeight: number;
   onClose: () => void;
-  onDelete: (collection: Collection) => void;
   onSave: () => void;
   onCollectionDescriptionChange: (value: string) => void;
   onCollectionTitleChange: (value: string) => void;
@@ -105,17 +102,6 @@ export function CollectionComposerSheet({
           value={collectionDescription}
         />
       </View>
-      {editingCollection ? (
-        <MotionPressable
-          accessibilityRole="button"
-          onPress={() => onDelete(editingCollection)}
-          style={({ pressed }) => [styles.sheetActionRow, pressed && styles.subtlePressed]}
-          testID="pc.collection.delete"
-        >
-          <Trash color={colors.danger} size={20} weight="regular" />
-          <Text style={styles.dangerButtonText}>Delete collection</Text>
-        </MotionPressable>
-      ) : null}
     </KeyboardSheet>
   );
 }

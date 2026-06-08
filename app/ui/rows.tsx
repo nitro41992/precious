@@ -20,7 +20,7 @@ import {
 import { colors } from "./theme";
 import { styles } from "./styles";
 import { CollectionMeaningToken, MeaningToken, MotionPressable, SkeletonRevealFrame, SourceMark, StatusGlyph } from "./components";
-import { cardEntering, cardExiting, cardLayout } from "./motion";
+import { cardEntering } from "./motion";
 import { Text } from "./typography";
 
 type SkeletonBlockRenderer = ({ style }: { style?: any }) => ReactElement;
@@ -850,9 +850,13 @@ export function CollectionCard({
 }) {
   return (
     <Reanimated.View
+      // Only `entering` — no `exiting`/`layout`. This grid is a recycled
+      // FlashList; declarative `layout` (LinearTransition) and `exiting` re-fire
+      // on cell reuse and stall when the UI thread is idle, which made the
+      // undo-restore reorder cascade janky. The restored card eases in via
+      // `entering`; the rest snap into place. Matches the home and
+      // collection-captures feeds, which dropped the same combo.
       entering={motionEnabled ? cardEntering(motionIndex) : undefined}
-      exiting={motionEnabled ? cardExiting : undefined}
-      layout={motionEnabled ? cardLayout : undefined}
       style={styles.collectionCardWrap}
     >
       <MotionPressable

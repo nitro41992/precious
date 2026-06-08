@@ -4537,10 +4537,6 @@ export default function App() {
         collectionTitleInputRef={collectionTitleInputRef}
         keyboardHeight={keyboardHeight}
         onClose={closeCollectionComposer}
-        onDelete={(collection) => {
-          closeCollectionComposer();
-          void deleteCollection(collection);
-        }}
         onCollectionDescriptionChange={(value) => {
           setCollectionDraftDirty(true);
           setCollectionDescription(value);
@@ -4903,6 +4899,10 @@ export default function App() {
           actions={{
             closeCollectionDetail,
             loadMoreCollectionCaptures,
+            onDeleteCollection: () => {
+              const collection = selectedCollectionRef.current;
+              if (collection) void deleteCollection(collection);
+            },
             openCollectionEditor,
             renderCollectionCapture,
             renderCollectionCaptureSkeletonRows,

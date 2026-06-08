@@ -94,12 +94,6 @@ export function cardEntering(index = 0) {
   return subtleEntering(index);
 }
 
-export const cardExiting = subtleExiting();
-export const cardLayout = LinearTransition
-  .duration(motionDuration.settle)
-  .easing(motionEasing.emphasized)
-  .reduceMotion(motionReduceMotion);
-
 export const statusEntering = subtleEntering();
 export const statusExiting = subtleExiting();
 export const statusLayout = LinearTransition

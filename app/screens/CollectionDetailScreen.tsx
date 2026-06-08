@@ -8,12 +8,12 @@ import {
   StatusBar,
   View
 } from "react-native";
-import { ArrowLeft, PencilSimple } from "phosphor-react-native";
+import { ArrowLeft, PencilSimple, Trash } from "phosphor-react-native";
 
 import type { Capture, Collection, CollectionCapturesLoadPhase } from "../types";
-import { appTheme } from "../ui/theme";
+import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
-import { IconButton } from "../ui/components";
+import { IconButton, MotionPressable } from "../ui/components";
 import { Text } from "../ui/typography";
 
 type CollectionDetailScreenProps = {
@@ -33,6 +33,7 @@ type CollectionDetailScreenProps = {
   actions: {
     closeCollectionDetail: () => void;
     loadMoreCollectionCaptures: () => void;
+    onDeleteCollection: () => void;
     openCollectionEditor: () => void;
     renderCollectionCapture: (input: ListRenderItemInfo<Capture>) => ReactElement | null;
     renderCollectionCaptureSkeletonRows: (count?: number) => ReactElement | null;
@@ -58,6 +59,7 @@ export function CollectionDetailScreen({ actions, data }: CollectionDetailScreen
   const {
     closeCollectionDetail,
     loadMoreCollectionCaptures,
+    onDeleteCollection,
     openCollectionEditor,
     renderCollectionCapture,
     renderCollectionCaptureSkeletonRows,
@@ -107,6 +109,19 @@ export function CollectionDetailScreen({ actions, data }: CollectionDetailScreen
                   onPress={openCollectionEditor}
                   testID="pc.collection.detail.edit"
                 />
+                <MotionPressable
+                  accessibilityLabel="Delete collection"
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  onPress={onDeleteCollection}
+                  style={({ pressed }) => [
+                    styles.detailHeaderDeleteButton,
+                    pressed && styles.subtlePressed
+                  ]}
+                  testID="pc.collection.detail.delete"
+                >
+                  <Trash color={colors.danger} size={21} weight="regular" />
+                </MotionPressable>
               </View>
             </View>
             <Text style={styles.title} testID="pc.collection.detail.title">
