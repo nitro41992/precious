@@ -293,6 +293,98 @@ function emptyInlineSkeleton(): ReactElement | null {
   return null;
 }
 
+type SearchCaptureRowItemProps = {
+  capture: Capture;
+  captureImageLoadStates: Record<string, CaptureImageLoadState>;
+  captureRowRevealStates: Record<string, boolean>;
+  failedFavicons: Record<string, boolean>;
+  matchReason?: string;
+  onCaptureRowImageDisplayed: (capture: Capture, url: string, cacheKey: string) => void;
+  onCaptureThumbnailRef: (captureId: string, node: View | null) => void;
+  onFaviconFailure: (host: string) => void;
+  onImageLoadState: (key: string, state: CaptureImageLoadState) => void;
+  onOpenCaptureFromSearch: (capture: Capture) => void;
+  SkeletonBlock: SkeletonBlockRenderer;
+  testID?: string;
+  thumbnailHidden: boolean;
+};
+
+// Memoized search-result row: the same carded design and handoff plumbing as
+// HomeCaptureRowItem, plus the search-only match-reason line. Sharing CaptureRow
+// keeps the card visuals and the review morph identical to Recents; the per-row
+// closures are built inside the memo from stable handlers.
+export const SearchCaptureRowItem = memo(function SearchCaptureRowItem({
+  capture,
+  captureImageLoadStates,
+  captureRowRevealStates,
+  failedFavicons,
+  matchReason,
+  onCaptureRowImageDisplayed,
+  onCaptureThumbnailRef,
+  onFaviconFailure,
+  onImageLoadState,
+  onOpenCaptureFromSearch,
+  SkeletonBlock,
+  testID,
+  thumbnailHidden
+}: SearchCaptureRowItemProps) {
+  const onPress = useCallback(() => onOpenCaptureFromSearch(capture), [onOpenCaptureFromSearch, capture]);
+  const thumbnailRef = useCallback(
+    (node: View | null) => onCaptureThumbnailRef(capture.id, node),
+    [onCaptureThumbnailRef, capture.id]
+  );
+  const onThumbnailImageDisplayed = useCallback(
+    (url: string, cacheKey: string) => onCaptureRowImageDisplayed(capture, url, cacheKey),
+    [onCaptureRowImageDisplayed, capture]
+  );
+  return (
+    <CaptureRow
+      captureImageLoadStates={captureImageLoadStates}
+      captureRowRevealStates={captureRowRevealStates}
+      failedFavicons={failedFavicons}
+      hideThumbnail={thumbnailHidden}
+      item={capture}
+      matchReason={matchReason}
+      onFaviconFailure={onFaviconFailure}
+      onImageLoadState={onImageLoadState}
+      onPress={onPress}
+      onThumbnailImageDisplayed={onThumbnailImageDisplayed}
+      renderInlineSkeleton={emptyInlineSkeleton}
+      showInlineSourceIcon
+      SkeletonBlock={SkeletonBlock}
+      surface="card"
+      testID={testID}
+      thumbnailRef={thumbnailRef}
+    />
+  );
+}, (previous, next) => {
+  // Same bailout contract as HomeCaptureRowItem, plus the match reason (which
+  // changes with the query) and the search open handler.
+  if (
+    previous.capture !== next.capture ||
+    previous.matchReason !== next.matchReason ||
+    previous.thumbnailHidden !== next.thumbnailHidden ||
+    previous.testID !== next.testID ||
+    previous.onOpenCaptureFromSearch !== next.onOpenCaptureFromSearch ||
+    previous.onCaptureRowImageDisplayed !== next.onCaptureRowImageDisplayed ||
+    previous.onCaptureThumbnailRef !== next.onCaptureThumbnailRef ||
+    previous.onFaviconFailure !== next.onFaviconFailure ||
+    previous.onImageLoadState !== next.onImageLoadState
+  ) {
+    return false;
+  }
+  const imageLoadKey = captureImageLoadKey(next.capture);
+  if (imageLoadKey && previous.captureImageLoadStates[imageLoadKey] !== next.captureImageLoadStates[imageLoadKey]) {
+    return false;
+  }
+  const revealKey = captureRowRevealKey(next.capture);
+  if (Boolean(previous.captureRowRevealStates[revealKey]) !== Boolean(next.captureRowRevealStates[revealKey])) {
+    return false;
+  }
+  const host = captureFaviconHost(next.capture);
+  return Boolean(previous.failedFavicons[host]) === Boolean(next.failedFavicons[host]);
+});
+
 type CollectionCaptureRowItemProps = {
   capture: Capture;
   captureImageLoadStates: Record<string, CaptureImageLoadState>;

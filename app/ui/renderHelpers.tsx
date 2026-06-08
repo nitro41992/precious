@@ -19,11 +19,11 @@ import {
 import {
   CollectionCard,
   CollectionCaptureRowItem,
-  CaptureRow,
   CaptureRowInlineSkeleton,
   CaptureSkeletonRows,
   CollectionSkeletonRows,
-  HomeCaptureRowItem
+  HomeCaptureRowItem,
+  SearchCaptureRowItem
 } from "./rows";
 import { styles } from "./styles";
 import { rowEntering } from "./motion";
@@ -51,16 +51,18 @@ export type AppRenderHelpersInput = {
   onCollectionTitleChange: (value: string) => void;
   onCaptureThumbnailRef: (captureId: string, node: View | null) => void;
   onCollectionCaptureThumbnailRef: (captureId: string, node: View | null) => void;
+  onSearchCaptureThumbnailRef: (captureId: string, node: View | null) => void;
   onFaviconFailure: (host: string) => void;
   onOpenCapture: (captureId: string) => void;
   onOpenCaptureFromCollection: (capture: Capture, collectionId: string) => void;
+  onOpenCaptureFromSearch: (capture: Capture) => void;
   onOpenRecentCapture: (capture: Capture) => void;
   onRecentHomePress: () => void;
   onRecentComposerOpen: () => void;
   onUnlinkCaptureFromCollection: (collectionId: string, capture: Capture) => void;
   searchQuery: string;
   selectedCollection: Collection | null;
-  handoffHiddenCapture: { aliases: string[]; surface: "home" | "collection" } | null;
+  handoffHiddenCapture: { aliases: string[]; surface: "home" | "collection" | "search" } | null;
   screenHandoffActive: boolean;
   skeletonPulse: Animated.Value;
   toast: ToastState | null;
@@ -136,34 +138,6 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
         <SearchActivityMark />
         <Text style={styles.searchProgressText}>{label}</Text>
       </View>
-    );
-  }
-
-  function renderCaptureRow(rowInput: {
-    item: Capture;
-    onPress: () => void;
-    testID?: string;
-    matchReason?: string;
-    showCollectionToken?: boolean;
-    showInlineSourceIcon?: boolean;
-    surface?: "plain" | "card";
-    deferFallbackIcon?: boolean;
-    deferMediaUntilLoaded?: boolean;
-    forceSkeleton?: boolean;
-    thumbnailRef?: (node: View | null) => void;
-    trailingAction?: ReactElement | null;
-  }) {
-    return (
-      <CaptureRow
-        {...rowInput}
-        captureImageLoadStates={input.captureImageLoadStates}
-        captureRowRevealStates={input.captureRowRevealStates}
-        failedFavicons={input.failedFavicons}
-        onFaviconFailure={input.onFaviconFailure}
-        onImageLoadState={input.onCaptureImageLoadState}
-        renderInlineSkeleton={() => renderCaptureRowInlineSkeleton()}
-        SkeletonBlock={SkeletonBlock}
-      />
     );
   }
 
@@ -267,12 +241,26 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
   }
 
   function renderSearchResult({ item }: { item: Capture }) {
-    return renderCaptureRow({
-      item,
-      matchReason: matchReasonForCapture(item, input.searchQuery),
-      onPress: () => input.onOpenCapture(item.id),
-      testID: `pc.search.result.${item.id}`
-    });
+    return (
+      <SearchCaptureRowItem
+        capture={item}
+        captureImageLoadStates={input.captureImageLoadStates}
+        captureRowRevealStates={input.captureRowRevealStates}
+        failedFavicons={input.failedFavicons}
+        matchReason={matchReasonForCapture(item, input.searchQuery)}
+        onCaptureRowImageDisplayed={input.onCaptureRowImageDisplayed}
+        onCaptureThumbnailRef={input.onSearchCaptureThumbnailRef}
+        onFaviconFailure={input.onFaviconFailure}
+        onImageLoadState={input.onCaptureImageLoadState}
+        onOpenCaptureFromSearch={input.onOpenCaptureFromSearch}
+        SkeletonBlock={SkeletonBlock}
+        testID={`pc.search.result.${item.id}`}
+        thumbnailHidden={Boolean(
+          input.handoffHiddenCapture?.surface === "search" &&
+            input.handoffHiddenCapture.aliases.includes(item.id)
+        )}
+      />
+    );
   }
 
   function renderCaptureRowInlineSkeleton(withRemoveAction = false) {
@@ -332,7 +320,6 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
 
   return {
     renderBottomAppBar,
-    renderCaptureRow,
     renderCaptureRowInlineSkeleton,
     renderCaptureSkeletonRows,
     renderCollection,

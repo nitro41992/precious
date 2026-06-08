@@ -210,16 +210,19 @@ export function useAppUiEffects({
         closeTitleSheet();
         return true;
       }
+      // A selected capture review always overlays search / collection search
+      // (it stays mounted beneath), so close the review first — otherwise the
+      // first back tears down the search underlay and strands the review.
+      if (selectedId) {
+        closeSelectedCapture();
+        return true;
+      }
       if (searchOpen) {
         setSearchOpen(false);
         return true;
       }
       if (collectionSearchOpen) {
         setCollectionSearchOpen(false);
-        return true;
-      }
-      if (selectedId) {
-        closeSelectedCapture();
         return true;
       }
       if (selectedCollectionId) {

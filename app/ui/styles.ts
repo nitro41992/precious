@@ -280,6 +280,9 @@ export const styles = StyleSheet.create({
   searchScreen: {
     flex: 1
   },
+  searchListWrap: {
+    flex: 1
+  },
   searchTop: {
     paddingHorizontal: 22,
     paddingTop: 14,
@@ -323,10 +326,13 @@ export const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 15
   },
+  searchProgressSlot: {
+    overflow: "hidden"
+  },
   searchProgressRow: {
     alignItems: "center",
     alignSelf: "flex-start",
-    backgroundColor: colors.processingSoft,
+    backgroundColor: colors.surfaceContainer,
     borderRadius: 8,
     flexDirection: "row",
     gap: 8,
@@ -335,7 +341,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 10
   },
   searchProgressText: {
-    color: colors.processing,
+    color: colors.muted,
     ...typefaces.bold,
     fontSize: 12,
     fontWeight: "700",
@@ -349,13 +355,13 @@ export const styles = StyleSheet.create({
     width: 24
   },
   searchActivityDot: {
-    backgroundColor: colors.processing,
+    backgroundColor: colors.accent,
     borderRadius: 5,
     height: 10,
     width: 10
   },
   searchActivityDotTrailing: {
-    backgroundColor: colors.accent,
+    backgroundColor: colors.secondary,
     marginLeft: -3
   },
   scopeRow: {
@@ -756,9 +762,10 @@ export const styles = StyleSheet.create({
     marginHorizontal: -22
   },
   searchResultsContent: {
+    // No horizontal padding: search rows are carded (like Recents) and carry
+    // their own marginHorizontal, which also leaves room for the card shadow.
     paddingBottom: 180,
-    paddingTop: 4,
-    paddingHorizontal: 22
+    paddingTop: 4
   },
   collectionSearchResultsContent: {
     paddingBottom: 180,
@@ -1013,8 +1020,8 @@ export const styles = StyleSheet.create({
     lineHeight: 23
   },
   captureCardTitle: {
-    fontSize: 20,
-    lineHeight: 25
+    fontSize: 18,
+    lineHeight: 23
   },
   status: {
     color: colors.ink,
@@ -1681,10 +1688,10 @@ export const styles = StyleSheet.create({
   },
   collectionCardTitle: {
     color: colors.ink,
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "400",
     ...typefaces.cardTitle,
-    lineHeight: 22
+    lineHeight: 21
   },
   collectionCardMeta: {
     color: colors.muted,

@@ -138,10 +138,10 @@ type ReviewHandoffRect = {
   radius: number;
 };
 
-// Which list the morph flies from/to. Home and collection detail can show the
-// same capture at once, so thumbnail refs are registered per surface and the
-// handoff resolves its source through its own surface only.
-type ReviewHandoffSurface = "home" | "collection";
+// Which list the morph flies from/to. Home, collection detail, and search can
+// show the same capture at once, so thumbnail refs are registered per surface
+// and the handoff resolves its source through its own surface only.
+type ReviewHandoffSurface = "home" | "collection" | "search";
 
 type ReviewHandoffState = {
   cacheKey: string;
@@ -630,7 +630,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [captureReturnCollectionId, setCaptureReturnCollectionId] = useState<string | null>(null);
-  const [captureReviewOrigin, setCaptureReviewOrigin] = useState<"recent" | "collection" | "other" | null>(null);
+  const [captureReviewOrigin, setCaptureReviewOrigin] = useState<"recent" | "collection" | "search" | "other" | null>(null);
   const [capturesLoading, setCapturesLoading] = useState(false);
   const [capturesLoadPhase, setCapturesLoadPhase] = useState<LoadPhase>("idle");
   const [capturesError, setCapturesError] = useState("");
@@ -717,6 +717,10 @@ export default function App() {
   const [collectionDetailEntering, setCollectionDetailEntering] = useState(false);
   const collectionDetailClosingRef = useRef(false);
   const selectedCollectionRef = useRef<Collection | null>(null);
+  // The search screen stays mounted beneath a review opened from search so the
+  // close morph can measure the live row; read imperatively in the close path
+  // to avoid stale-closure churn (mirrors selectedCollectionRef).
+  const searchOpenRef = useRef(false);
   const latestNoteRef = useRef("");
   const capturesRef = useRef<Capture[]>([]);
   const activeCapturesFetchedAtRef = useRef(0);
@@ -800,6 +804,11 @@ export default function App() {
 
   const registerCollectionCaptureThumbnailRef = useCallback(
     (captureId: string, node: View | null) => registerCaptureThumbnailRef("collection", captureId, node),
+    [registerCaptureThumbnailRef]
+  );
+
+  const registerSearchCaptureThumbnailRef = useCallback(
+    (captureId: string, node: View | null) => registerCaptureThumbnailRef("search", captureId, node),
     [registerCaptureThumbnailRef]
   );
 
@@ -1781,6 +1790,20 @@ export default function App() {
     });
   }, [selectCapture, startReviewHandoff]);
 
+  const openCaptureFromSearch = useCallback((capture: Capture) => {
+    startReviewHandoff(capture, "search", () => {
+      // The search screen stays mounted (searchOpen stays true): it remains
+      // beneath the review, so the close morph lands on the live result row
+      // and the query/results/scroll survive the round trip.
+      setCaptureReturnCollectionId(null);
+      setCaptureReviewOrigin("search");
+      setDraftTitle(capture.title);
+      setDraftNote(capture.note);
+      setDraftIntent(normalizeIntent(capture.defaultIntent));
+      selectCapture(capture.id);
+    });
+  }, [selectCapture, startReviewHandoff]);
+
   const startReviewCloseHandoff = useCallback((
     capture: Capture,
     options?: {
@@ -1789,6 +1812,7 @@ export default function App() {
       imageCacheKey?: string;
       imageUrl?: string;
       returnCollectionId?: string | null;
+      returnSurface?: ReviewHandoffSurface;
     }
   ) => {
     const fromRect = options?.fromRect;
@@ -1814,7 +1838,8 @@ export default function App() {
         imageUrl,
         key,
         returnCollectionId: options?.returnCollectionId ?? null,
-        sourceSurface: options?.returnCollectionId ? "collection" : "home"
+        sourceSurface:
+          options?.returnSurface ?? (options?.returnCollectionId ? "collection" : "home")
       };
       reviewHandoffProgress.value = 0;
       reviewHandoffArrived.value = false;
@@ -2266,6 +2291,7 @@ export default function App() {
   // The animated close (declared earlier) snapshots the collection through
   // this ref; assigned every render like selectCaptureRef.
   selectedCollectionRef.current = selectedCollection;
+  searchOpenRef.current = searchOpen;
 
   // The review screen registers its hero-measured close here so hardware/
   // gesture back runs the same scroll-aware return morph as the back button.
@@ -2310,16 +2336,18 @@ export default function App() {
       if (reviewHandoff.direction === "opening") cancelReviewOpeningHandoff(reviewHandoff);
       return;
     }
-    // Collection-origin reviews morph back only while their detail screen is
-    // still mounted beneath (it carries the live row the copy lands on).
+    // Collection- and search-origin reviews morph back only while their source
+    // list is still mounted beneath (it carries the live row the copy lands on).
     const closesToCollection =
       captureReviewOrigin === "collection" && Boolean(selectedCollectionRef.current);
+    const closesToSearch = captureReviewOrigin === "search" && searchOpenRef.current;
     if (
-      (captureReviewOrigin === "recent" || closesToCollection) &&
+      (captureReviewOrigin === "recent" || closesToCollection || closesToSearch) &&
       options?.allowHandoff !== false &&
       startReviewCloseHandoff(selected, {
         ...options,
-        returnCollectionId: closesToCollection ? captureReturnCollectionId : null
+        returnCollectionId: closesToCollection ? captureReturnCollectionId : null,
+        returnSurface: closesToSearch ? "search" : undefined
       })
     ) {
       return;
@@ -3594,10 +3622,12 @@ export default function App() {
     onCollectionTitleChange: setCollectionTitle,
     onCaptureThumbnailRef: registerHomeCaptureThumbnailRef,
     onCollectionCaptureThumbnailRef: registerCollectionCaptureThumbnailRef,
+    onSearchCaptureThumbnailRef: registerSearchCaptureThumbnailRef,
     onCollectionsScreenOpen: (mode) => void openCollectionsScreen(mode),
     onFaviconFailure: markFaviconFailed,
     onOpenCapture: openCapture,
     onOpenCaptureFromCollection: openCaptureFromCollection,
+    onOpenCaptureFromSearch: openCaptureFromSearch,
     onOpenRecentCapture: openRecentCapture,
     onRecentComposerOpen: openCaptureComposer,
     onRecentHomePress: openRecentHome,
@@ -3859,18 +3889,70 @@ export default function App() {
     );
   }
 
+  // The search screen, rendered both as the primary overlay and (chrome
+  // suppressed) beneath a capture review opened from search — the same mounted
+  // frame in both, so the close morph lands on the live row and the query /
+  // results / scroll survive the review round trip.
+  function renderSearchOverlay({ includeChrome = true }: { includeChrome?: boolean } = {}) {
+    const searchIsLoading = remoteSearchActive && (remoteSearchLoading || remoteSearchEnhancing);
+    const searchProgressLabel = remoteSearchLoading
+      ? "Searching saved things"
+      : remoteSearchEnhancing
+        ? "Refining matches"
+        : "";
+    const emptyTitle = searchQuery.trim()
+      ? "No matches yet."
+      : "What do you remember?";
+    const emptyText = searchQuery.trim()
+      ? "Try a place, product, source, collection, note, date, or why you saved it."
+      : "Search looks across titles, notes, sources, collections, reminders, and saved details.";
+    // Absolute-fill wrapper so the search screen keeps the SAME tree position
+    // (the underlay slot) whether or not a review is open over it — a position
+    // change would remount it, refiring autoFocus, popping the keyboard, and
+    // resetting the result list's scroll mid-morph.
+    return (
+      <View style={styles.screenOverlay}>
+        <SearchScreen
+          actions={{
+            closeSearch: () => setSearchOpen(false),
+            renderSearchProgress,
+            renderSearchResult,
+            setSearchQuery
+          }}
+          data={{
+            appSheets: includeChrome ? renderAppSheets() : null,
+            emptyText,
+            emptyTitle,
+            listPerfProps: CAPTURE_LIST_PERF_PROPS,
+            searchIsLoading,
+            searchMotion,
+            searchProgressLabel,
+            searchResults,
+            toast: includeChrome ? renderToast() : null
+          }}
+          state={{
+            remoteSearchActive,
+            searchQuery
+          }}
+        />
+      </View>
+    );
+  }
+
   function renderTopLevelStack({
     active = "recent",
-    collectionDetailUnderlay = null,
+    underlay = null,
     overlay = null,
     overlayHandoff = null
   }: {
     active?: "recent" | "collections";
-    collectionDetailUnderlay?: ReactNode;
+    // The source list kept mounted beneath a review overlay (collection detail
+    // or search), so the close morph lands on the live row.
+    underlay?: ReactNode;
     overlay?: ReactNode;
     overlayHandoff?: ReviewHandoffState | null;
   } = {}) {
-    const overlayVisible = Boolean(overlay) || Boolean(collectionDetailUnderlay);
+    const overlayVisible = Boolean(overlay) || Boolean(underlay);
     // The tab bar / gradient / FAB only change while the pane is fully
     // covered — never during a flight. Unmounting them at the open tap
     // popped the bottom of the screen mid-morph (the review is still mostly
@@ -3890,7 +3972,7 @@ export default function App() {
         <TopLevelPane active={active === "collections"} direction={1}>
           {renderCollectionsScreen({ includeChrome: active === "collections" && paneChromeVisible })}
         </TopLevelPane>
-        {collectionDetailUnderlay}
+        {underlay}
         {overlay ? (
           <ScreenOverlayFrame handoff={overlayHandoff} progress={reviewHandoffProgress}>
             {overlay}
@@ -3979,7 +4061,7 @@ export default function App() {
   if (selected && captureReviewOrigin === "collection" && selectedCollection) {
     return renderTopLevelStack({
       active: "collections",
-      collectionDetailUnderlay: renderCollectionDetailOverlay(selectedCollection, {
+      underlay: renderCollectionDetailOverlay(selectedCollection, {
         direction: "opening",
         includeChrome: false
       }),
@@ -3988,17 +4070,30 @@ export default function App() {
     });
   }
 
+  // Review opened from search: the search screen stays mounted beneath the
+  // review overlay so the close morph lands on the live result row and the
+  // query/results/scroll survive the round trip. Checked before the plain
+  // searchOpen branch.
+  if (selected && captureReviewOrigin === "search" && searchOpen) {
+    return renderTopLevelStack({
+      active: "recent",
+      underlay: renderSearchOverlay({ includeChrome: false }),
+      overlay: renderCaptureReviewScreen(selected),
+      overlayHandoff: reviewHandoff?.captureId === selected.id ? reviewHandoff : null
+    });
+  }
+
   if (selectedCollection) {
     return renderTopLevelStack({
       active: "collections",
-      collectionDetailUnderlay: renderCollectionDetailOverlay(selectedCollection, { direction: "opening" })
+      underlay: renderCollectionDetailOverlay(selectedCollection, { direction: "opening" })
     });
   }
 
   if (closingCollectionDetail) {
     return renderTopLevelStack({
       active: "collections",
-      collectionDetailUnderlay: renderCollectionDetailOverlay(closingCollectionDetail, { direction: "closing" })
+      underlay: renderCollectionDetailOverlay(closingCollectionDetail, { direction: "closing" })
     });
   }
 
@@ -4077,45 +4172,11 @@ export default function App() {
   }
 
   if (searchOpen) {
-    const searchIsLoading = remoteSearchActive && (remoteSearchLoading || remoteSearchEnhancing);
-    const searchProgressLabel = remoteSearchLoading
-      ? "Searching saved things"
-      : remoteSearchEnhancing
-        ? "Refining matches"
-        : "";
-    const emptyTitle = searchQuery.trim()
-      ? "No matches yet."
-      : "What do you remember?";
-    const emptyText = searchQuery.trim()
-      ? "Try a place, product, source, collection, note, date, or why you saved it."
-      : "Search looks across titles, notes, sources, collections, reminders, and saved details.";
+    // Search lives in the underlay slot (not overlay) so it holds the same tree
+    // position when a review opens over it — see renderSearchOverlay.
     return renderTopLevelStack({
       active: "recent",
-      overlay: (
-        <SearchScreen
-          actions={{
-            closeSearch: () => setSearchOpen(false),
-            renderSearchProgress,
-            renderSearchResult,
-            setSearchQuery
-          }}
-          data={{
-            appSheets: renderAppSheets(),
-            emptyText,
-            emptyTitle,
-            listPerfProps: CAPTURE_LIST_PERF_PROPS,
-            searchIsLoading,
-            searchMotion,
-            searchProgressLabel,
-            searchResults,
-            toast: renderToast()
-          }}
-          state={{
-            remoteSearchActive,
-            searchQuery
-          }}
-        />
-      )
+      underlay: renderSearchOverlay()
     });
   }
 
