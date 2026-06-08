@@ -3083,7 +3083,14 @@ export default function App() {
         setCollectionCapturesError(text);
       }
     });
-  }, [captureReturnCollectionId, closingCollectionDetail, loadCollectionCaptures, selectedCollection?.captureCount, selectedCollection?.status, selectedCollectionId]);
+    // Intentionally NOT keyed on selectedCollection?.captureCount: an optimistic
+    // unlink/restore mutates the count immediately, and refetching on that change
+    // would race the in-flight unlink_many/link_many round-trip — the server still
+    // reports the old membership, so the just-removed card snaps back (and undo
+    // reads as inverted). In-session list changes are already applied optimistically
+    // to collectionCaptures; the empty-state guard above still runs on open and on
+    // status change, which is when a server refresh is actually warranted.
+  }, [captureReturnCollectionId, closingCollectionDetail, loadCollectionCaptures, selectedCollection?.status, selectedCollectionId]);
 
   function applyUpdatedCapture(updatedCapture: Capture, previousId: string) {
     const matchesCapture = (item: Capture) =>
