@@ -6,6 +6,7 @@ import { Image } from "expo-image";
 import { Check, ClockClockwise, Folder, Folders, Gear, HouseSimple, Info, Plus, Sparkle, Warning, X } from "phosphor-react-native";
 import Reanimated, {
   cancelAnimation,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -50,8 +51,6 @@ import {
   statusEntering,
   statusExiting,
   statusLayout,
-  toastEntering,
-  toastExiting,
   toastLayout
 } from "./motion";
 import { Text } from "./typography";
@@ -749,6 +748,9 @@ export function CollectionMeaningToken({ collections }: { collections: LinkedCol
   );
 }
 
+// Vertical drift for the toast enter/exit, mirroring the prior Fade*Down feel.
+const TOAST_DRIFT = 12;
+
 export function ToastHost({
   toast,
   placement = "base"
@@ -756,15 +758,64 @@ export function ToastHost({
   toast: ToastState | null;
   placement?: ToastPlacement;
 }) {
+  // `visibleToast` keeps the node mounted through the exit animation. Enter and
+  // exit are driven imperatively with withTiming rather than Reanimated's
+  // declarative entering/exiting layout animations: those stall when the UI
+  // thread is idle (no active gesture/animation), which left timed-out toasts
+  // painted on screen until a scroll woke the thread. withTiming schedules its
+  // own frames and self-unmounts on completion, so dismissal is reliable.
   const [visibleToast, setVisibleToast] = useState<ToastState | null>(toast);
+  const opacity = useSharedValue(toast ? 1 : 0);
+  const translateY = useSharedValue(toast ? 0 : TOAST_DRIFT);
+  // Tracks whether a toast is currently on screen so an in-place content update
+  // (e.g. the batch "N removed" counter) resizes via `layout` instead of
+  // replaying the entrance drift.
+  const shownRef = useRef(Boolean(toast));
 
   useEffect(() => {
     if (toast) {
+      cancelAnimation(opacity);
+      cancelAnimation(translateY);
+      const wasHidden = !shownRef.current;
+      shownRef.current = true;
       setVisibleToast(toast);
+      if (!wasHidden) {
+        opacity.value = 1;
+        translateY.value = 0;
+        return;
+      }
+      // Start just above the resting spot and settle down into place.
+      translateY.value = -TOAST_DRIFT;
+      opacity.value = withTiming(1, {
+        duration: motionDuration.toastIn,
+        easing: motionEasing.emphasized,
+        reduceMotion: motionReduceMotion
+      });
+      translateY.value = withTiming(0, {
+        duration: motionDuration.toastIn,
+        easing: motionEasing.emphasized,
+        reduceMotion: motionReduceMotion
+      });
       return;
     }
-    setVisibleToast(null);
-  }, [toast]);
+    shownRef.current = false;
+    opacity.value = withTiming(0, {
+      duration: motionDuration.toastOut,
+      easing: motionEasing.exit,
+      reduceMotion: motionReduceMotion
+    });
+    translateY.value = withTiming(
+      TOAST_DRIFT,
+      {
+        duration: motionDuration.toastOut,
+        easing: motionEasing.exit,
+        reduceMotion: motionReduceMotion
+      },
+      (finished) => {
+        if (finished) runOnJS(setVisibleToast)(null);
+      }
+    );
+  }, [toast, opacity, translateY]);
 
   useEffect(() => {
     if (!visibleToast?.trace) return;
@@ -772,6 +823,11 @@ export function ToastHost({
       text: visibleToast.text
     });
   }, [visibleToast]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: translateY.value }]
+  }));
 
   if (!visibleToast) return null;
   const tone = visibleToast.tone || "neutral";
@@ -786,14 +842,13 @@ export function ToastHost({
     <Reanimated.View
       accessibilityLiveRegion="polite"
       accessibilityRole={tone === "error" || tone === "destructive" ? "alert" : "text"}
-      entering={toastEntering}
-      exiting={toastExiting}
       key={toastKey}
       layout={toastLayout}
       style={[
         styles.toast,
         placement === "bottomNav" && styles.toastAboveBottomNav,
-        placement === "footer" && styles.toastAboveFooter
+        placement === "footer" && styles.toastAboveFooter,
+        animatedStyle
       ]}
     >
       <View style={[styles.toastIconWell, toastIconWellStyle(tone)]}>
