@@ -346,6 +346,10 @@ export function shouldUseWebSearch(evidence: UrlEvidence | null) {
   ) {
     return false;
   }
+  // High-quality evidence is already strong enough to categorize from directly; skip the
+  // web_search round-trip (a major latency add) and reserve it for genuinely weak/medium
+  // evidence that has specific gaps.
+  if (quality === "high") return false;
   const reasons = weaknessReasons(evidence);
   return (
     reasons.includes("status_failed") ||

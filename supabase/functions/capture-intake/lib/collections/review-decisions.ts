@@ -409,16 +409,12 @@ export async function autoLinkCollectionDecisions(
   };
 }
 
-// Materializes an AI-proposed new Collection as a persistent status='suggested' row,
-// deduplicated across captures so several captures that fit the same idea accrue under
-// one suggestion. Runs BEFORE autoLinkCollectionDecisions (which clears collection_decisions).
-// Writes a `pending_collection_suggestion` block onto the analysis for the UI to bind to.
-export async function resolveNewCollectionSuggestions(
-  supabase: ReturnType<typeof adminClient>,
-  userId: string,
-  captureId: string,
+// Returns the single most-confident AI-proposed *new* Collection decision that clears the
+// suggestion bar, or null. Shared so the pipeline can cheaply decide whether a capture has a
+// suggestion to resolve (and surface a "pending" state) without duplicating the filter logic.
+export function qualifyingNewCollectionDecision(
   analysis: AnalysisOutput,
-): Promise<AnalysisOutput> {
+): ReturnType<typeof normalizeCollectionDecision> | null {
   const rawDecisions = Array.isArray(analysis.collection_decisions)
     ? analysis.collection_decisions as Array<Record<string, unknown>>
     : [];
@@ -431,8 +427,26 @@ export async function resolveNewCollectionSuggestions(
       decision.confidence >= COLLECTION_SUGGESTION_MIN_CONFIDENCE
     );
   // The prompt allows at most one new Collection; keep the most confident if more slip through.
-  const decision = newDecisions
-    .sort((left, right) => right.confidence - left.confidence)[0];
+  return newDecisions.sort((left, right) => right.confidence - left.confidence)[0] ??
+    null;
+}
+
+// Materializes an AI-proposed new Collection as a persistent status='suggested' row,
+// deduplicated across captures so several captures that fit the same idea accrue under
+// one suggestion. Writes a `pending_collection_suggestion` block onto the analysis for the
+// UI to bind to. Runs in the background after the capture is marked ready (its embedding +
+// dedup + DB round-trips are the slowest tail of the pipeline), so the caller consumes only
+// the returned `pending_collection_suggestion`.
+export async function resolveNewCollectionSuggestions(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  captureId: string,
+  analysis: AnalysisOutput,
+): Promise<AnalysisOutput> {
+  const rawDecisions = Array.isArray(analysis.collection_decisions)
+    ? analysis.collection_decisions as Array<Record<string, unknown>>
+    : [];
+  const decision = qualifyingNewCollectionDecision(analysis);
   // Strip any new-type decisions from collection_decisions; existing ones flow to auto-link.
   const remainingDecisions = rawDecisions.filter((raw) =>
     normalizeCollectionDecision(raw).type !== "new"
@@ -682,56 +696,6 @@ export function saveConfirmedReminderSuggestion(
     return reminders;
   }
   return [reminder, ...reminders];
-}
-
-export function reviewReminderSuggestions(
-  analysis: Record<string, unknown>,
-  decisions: unknown,
-) {
-  const removeIndices = new Set(
-    (Array.isArray(decisions) ? decisions : [])
-      .filter((decision) => {
-        return decision && typeof decision === "object" &&
-          (decision as Record<string, unknown>).action === "remove";
-      })
-      .map((decision) => Number((decision as Record<string, unknown>).index))
-      .filter(Number.isInteger),
-  );
-  const reminders = Array.isArray(analysis.suggested_reminders)
-    ? analysis.suggested_reminders
-    : [];
-  return reminders.filter((_, index) => !removeIndices.has(index));
-}
-
-export function reviewCollectionDecisions(
-  analysis: Record<string, unknown>,
-  decisions: unknown,
-) {
-  const acceptedKeys = new Set(
-    (Array.isArray(decisions) ? decisions : [])
-      .filter((decision) => {
-        if (!decision || typeof decision !== "object") return false;
-        const record = decision as Record<string, unknown>;
-        return record.kind === "suggested" &&
-          (record.action === "link" || record.action === "create");
-      })
-      .map((decision) =>
-        collectionDecisionKey(
-          decision as Record<string, unknown>,
-          Number((decision as Record<string, unknown>).index),
-        )
-      ),
-  );
-  const current = Array.isArray(analysis.collection_decisions)
-    ? analysis.collection_decisions
-    : Array.isArray(analysis.suggested_collections)
-    ? analysis.suggested_collections
-    : [];
-  return current.filter((decision, index) => {
-    return !acceptedKeys.has(
-      collectionDecisionKey(decision as Record<string, unknown>, index),
-    );
-  });
 }
 
 export async function applyCollectionReviewDecisions(

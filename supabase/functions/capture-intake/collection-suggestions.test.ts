@@ -4,7 +4,10 @@ import {
   captureFixture,
   urlEvidence,
 } from "./url-evidence.test-support.ts";
-import { resolveNewCollectionSuggestions } from "./lib/collections/review-decisions.ts";
+import {
+  qualifyingNewCollectionDecision,
+  resolveNewCollectionSuggestions,
+} from "./lib/collections/review-decisions.ts";
 
 // Any database access in these guard paths is a bug — fail loudly if it happens.
 const throwingSupabase = new Proxy({}, {
@@ -163,6 +166,74 @@ Deno.test("low-confidence new suggestions are dropped before any write", async (
     result.pending_collection_suggestion,
     undefined,
     "no pending suggestion is surfaced for a weak new decision",
+  );
+});
+
+// qualifyingNewCollectionDecision gates whether processCapture marks the capture
+// collection_suggestion_state='pending' (and runs the background suggestion pass). It must
+// agree with the writes-side filter inside resolveNewCollectionSuggestions: only a confident,
+// fully-formed new decision qualifies, and at most the most-confident one.
+Deno.test("qualifyingNewCollectionDecision selects a confident new decision", () => {
+  const decision = qualifyingNewCollectionDecision({
+    collection_decisions: [
+      {
+        type: "existing",
+        collection_id: "c1",
+        title: "Coffee",
+        description: "Cafes.",
+        rationale: "r",
+        confidence: 0.95,
+      },
+      {
+        type: "new",
+        collection_id: null,
+        title: "Trail Runs",
+        description: "Routes and gear for trail running.",
+        rationale: "r",
+        confidence: 0.72,
+      },
+      {
+        type: "new",
+        collection_id: null,
+        title: "Hiking",
+        description: "Trails and hikes.",
+        rationale: "r",
+        confidence: 0.81,
+      },
+    ],
+  });
+  assert(decision !== null, "a qualifying new decision is returned");
+  assertEqual(decision?.title, "Hiking", "the most confident new decision wins");
+});
+
+Deno.test("qualifyingNewCollectionDecision returns null when nothing qualifies", () => {
+  assertEqual(
+    qualifyingNewCollectionDecision({
+      collection_decisions: [{
+        type: "existing",
+        collection_id: "c1",
+        title: "Coffee",
+        description: "Cafes.",
+        rationale: "r",
+        confidence: 0.95,
+      }],
+    }),
+    null,
+    "existing-only analyses have no pending suggestion",
+  );
+  assertEqual(
+    qualifyingNewCollectionDecision({
+      collection_decisions: [{
+        type: "new",
+        collection_id: null,
+        title: "Trail Runs",
+        description: "Routes and gear.",
+        rationale: "r",
+        confidence: 0.2,
+      }],
+    }),
+    null,
+    "low-confidence new decisions do not qualify",
   );
 });
 

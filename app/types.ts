@@ -156,6 +156,9 @@ export type Capture = {
   collectionDecisions?: CollectionDecision[];
   suggestedCollections?: CollectionDecision[];
   pendingSuggestion?: PendingCollectionSuggestion | null;
+  // "pending" while the analysis is shown but its new-Collection suggestion is still
+  // resolving in the background; flips to "ready" when the suggestion lands (or is dropped).
+  collectionSuggestionState?: "none" | "pending" | "ready";
   manualCollectionOverrides?: CollectionChoiceOverride[];
   searchPhrases?: string[];
   note: string;

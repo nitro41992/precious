@@ -425,66 +425,6 @@ async function main() {
     assert((capture.analysis.collection_decisions || []).length === 0, "Auto analysis selection did not clear pending collection suggestions.");
     assert((capture.analysis.collection_choice_overrides || []).length === 0, "Auto analysis selection should not preserve alternate AI collection ideas.");
 
-    const reviewCapture = await seedCapture({
-      supabaseUrl,
-      serviceRoleKey,
-      userId,
-      prefix,
-      existingCollection: suggested,
-      suffix: "review"
-    });
-    cleanup.captures.push(reviewCapture.id);
-    await patchCapture({
-      apiUrl,
-      anonKey,
-      accessToken,
-      body: {
-        captureId: reviewCapture.id,
-        action: "save_review_decisions",
-        title: `${prefix} reviewed title`,
-        note: "Reviewed note",
-        reminderDecisions: [{ index: 0, action: "remove" }],
-        collectionDecisions: []
-      }
-    });
-    capture = await fetchCapture({ supabaseUrl, serviceRoleKey, captureId: reviewCapture.id });
-    links = await activeLinks({ supabaseUrl, serviceRoleKey, captureId: reviewCapture.id });
-    assert(capture.analysis_state === "ready", `Expected review save to produce ready state, got ${capture.analysis_state}.`);
-    assert((capture.analysis.suggested_reminders || []).length === 0, "Review save did not remove the reminder suggestion.");
-    assert((capture.analysis.collection_decisions || []).length === 0, "Review save did not clear legacy collection decisions.");
-    assert(!links.some((link) => link.collection_id === suggested.id), "Review save should not link hidden legacy collection suggestions.");
-    assert(capture.analysis.entities?.length === 1, "Review save dropped persisted extracted entities.");
-    assert(capture.analysis.search_phrases?.length === 2, "Review save dropped search phrases.");
-
-    const confirmCapture = await seedCapture({
-      supabaseUrl,
-      serviceRoleKey,
-      userId,
-      prefix,
-      existingCollection: suggested,
-      suffix: "confirm"
-    });
-    cleanup.captures.push(confirmCapture.id);
-    await patchCapture({
-      apiUrl,
-      anonKey,
-      accessToken,
-      body: {
-        captureId: confirmCapture.id,
-        action: "confirm_review",
-        title: `${prefix} confirmed title`,
-        note: "Confirmed note"
-      }
-    });
-    capture = await fetchCapture({ supabaseUrl, serviceRoleKey, captureId: confirmCapture.id });
-    links = await activeLinks({ supabaseUrl, serviceRoleKey, captureId: confirmCapture.id });
-    assert(capture.analysis_state === "ready", `Expected confirm_review to produce ready state, got ${capture.analysis_state}.`);
-    assert(capture.review_confirmed_at, "Confirm review did not persist review_confirmed_at.");
-    assert((capture.analysis.collection_decisions || []).length === 0, "Confirm review did not clear pending collection decisions.");
-    assert(!links.some((link) => link.collection_id === suggested.id), "Confirm review should not accept hidden legacy collection decisions.");
-    assert(capture.analysis.entities?.length === 1, "Confirm review dropped persisted extracted entities.");
-    assert(capture.analysis.search_phrases?.length === 2, "Confirm review dropped search phrases.");
-
     console.log(
       JSON.stringify(
         {

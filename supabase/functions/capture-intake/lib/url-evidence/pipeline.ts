@@ -299,38 +299,40 @@ export async function buildUrlEvidence(
       ? "tier1_canonical"
       : "original";
 
-  for (const targetUrl of targetUrls) {
-    const phase = phaseForTargetUrl(targetUrl);
-    const adapter = await extractAdapterEvidenceForUrl(
-      normalized,
-      targetUrl,
-      `${phase}_adapter`,
-    );
-    if (adapter) candidates.push(adapter);
-
-    const oembed = await extractOembedEvidenceForUrl(
-      normalized,
-      targetUrl,
-      phase,
-    );
-    if (oembed) candidates.push(oembed);
-
-    const html = await extractHtmlEvidenceForUrl(
-      normalized,
-      targetUrl,
-      `${phase}_html`,
-    ).catch((error) =>
-      withPipelineRaw(
-        emptyUrlEvidence(
+  // Adapter, oEmbed, and HTML probes for a given URL are independent, as are the probes
+  // across target URLs. Run them all concurrently so the evidence fetch (the pipeline's
+  // biggest sink) costs the single slowest probe rather than the sum of every probe. The
+  // candidate order is preserved (URL order, then adapter → oEmbed → HTML) so bestEvidence
+  // tie-breaking is unchanged, and each HTML probe keeps its own failure fallback.
+  const perUrlCandidates = await Promise.all(
+    targetUrls.map(async (targetUrl) => {
+      const phase = phaseForTargetUrl(targetUrl);
+      const [adapter, oembed, html] = await Promise.all([
+        extractAdapterEvidenceForUrl(normalized, targetUrl, `${phase}_adapter`),
+        extractOembedEvidenceForUrl(normalized, targetUrl, phase),
+        extractHtmlEvidenceForUrl(
           normalized,
-          "failed",
+          targetUrl,
           `${phase}_html`,
-          errorMessage(error, "Metadata fetch failed"),
+        ).catch((error) =>
+          withPipelineRaw(
+            emptyUrlEvidence(
+              normalized,
+              "failed",
+              `${phase}_html`,
+              errorMessage(error, "Metadata fetch failed"),
+            ),
+            { phase: `${phase}_html`, target_url: targetUrl },
+          )
         ),
-        { phase: `${phase}_html`, target_url: targetUrl },
-      )
-    );
-    if (html) candidates.push(html);
+      ]);
+      return [adapter, oembed, html].filter(
+        (candidate): candidate is UrlEvidence => Boolean(candidate),
+      );
+    }),
+  );
+  for (const group of perUrlCandidates) {
+    candidates.push(...group);
   }
 
   let exaTargetUrls: string[] = [];

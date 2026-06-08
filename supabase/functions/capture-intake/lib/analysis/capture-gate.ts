@@ -1,4 +1,8 @@
-import { CAPTURE_GATE_PROMPT_VERSION, captureGateSchema } from "../config.ts";
+import {
+  CAPTURE_GATE_PROMPT_VERSION,
+  CAPTURE_GATE_REASONING_EFFORT,
+  captureGateSchema,
+} from "../config.ts";
 import { env } from "../common.ts";
 import { titleFallback } from "../capture-records.ts";
 import type {
@@ -66,7 +70,7 @@ export function buildCaptureGateRequestBody(capture: CaptureRow, model: string) 
   }
   return {
     model,
-    reasoning: { effort: "low" },
+    reasoning: { effort: CAPTURE_GATE_REASONING_EFFORT },
     max_output_tokens: 700,
     input: [
       {

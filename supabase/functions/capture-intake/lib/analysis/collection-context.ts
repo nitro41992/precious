@@ -1,3 +1,4 @@
+import { COLLECTION_CONTEXT_REASONING_EFFORT } from "../config.ts";
 import { env } from "../common.ts";
 import { compactUrlEvidence } from "../url-evidence/quality.ts";
 import type { CaptureRow, CollectionContext, UrlEvidence } from "../types.ts";
@@ -176,7 +177,7 @@ export async function runCollectionContextPrepass(
   ];
   const requestBody = {
     model,
-    reasoning: { effort: "low" },
+    reasoning: { effort: COLLECTION_CONTEXT_REASONING_EFFORT },
     max_output_tokens: 900,
     input: [
       {

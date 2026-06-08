@@ -82,6 +82,20 @@ export const COLLECTION_AUTO_LINK_CONFIDENCE = Number(
   Deno.env.get("COLLECTION_AUTO_LINK_CONFIDENCE") || "0.82",
 );
 export const COLLECTION_AUTO_LINK_LIMIT = 2;
+// Reasoning effort per LLM stage. The auxiliary classification/ranking calls default to
+// "minimal" (they don't need deep reasoning and it's the dominant latency cost on the
+// reasoning-heavy rerank + collection-context passes); the main extraction keeps "low".
+// Env-overridable per stage so effort can be tuned without a deploy.
+export const PREFLIGHT_REASONING_EFFORT =
+  Deno.env.get("OPENAI_PREFLIGHT_REASONING_EFFORT") || "minimal";
+export const CAPTURE_GATE_REASONING_EFFORT =
+  Deno.env.get("OPENAI_CAPTURE_GATE_REASONING_EFFORT") || "minimal";
+export const COLLECTION_CONTEXT_REASONING_EFFORT =
+  Deno.env.get("OPENAI_COLLECTION_CONTEXT_REASONING_EFFORT") || "minimal";
+export const COLLECTION_RERANK_REASONING_EFFORT =
+  Deno.env.get("OPENAI_COLLECTION_RERANK_REASONING_EFFORT") || "minimal";
+export const ANALYSIS_REASONING_EFFORT =
+  Deno.env.get("OPENAI_ANALYSIS_REASONING_EFFORT") || "low";
 // AI-suggested new collections. Lean conservative: only materialize a suggestion when
 // the model is reasonably confident, and treat a near-duplicate of an existing pending
 // suggestion (cosine similarity at/above this threshold) as the same group.

@@ -1,4 +1,8 @@
-import { analysisSchemaForCollections } from "../config.ts";
+import {
+  analysisSchemaForCollections,
+  ANALYSIS_REASONING_EFFORT,
+  PROMPT_VERSION,
+} from "../config.ts";
 import { env } from "../common.ts";
 import { shouldUseWebSearch } from "../url-evidence/quality.ts";
 import type { CaptureRow, RetrievedCollection, UrlEvidence } from "../types.ts";
@@ -68,8 +72,14 @@ function buildOpenAiRequestBody(
   );
   const requestBody: Record<string, unknown> = {
     model,
-    reasoning: { effort: "low" },
-    max_output_tokens: 2200,
+    reasoning: { effort: ANALYSIS_REASONING_EFFORT },
+    // Output tokens drive generation latency; the analysis JSON fits comfortably under this.
+    max_output_tokens: 1800,
+    // The system message + the static instruction block that leads buildPrompt form a stable
+    // multi-thousand-token prefix. A stable cache key (versioned with the prompt so it rotates
+    // when the prompt changes) routes back-to-back captures to that warm prefix, cutting
+    // time-to-first-token. Capture-specific evidence and collections come last in the prompt.
+    prompt_cache_key: `precious-capture-analysis-${PROMPT_VERSION}`,
     input: [
       {
         role: "system",

@@ -12,7 +12,8 @@ import {
   AnimatedBottomSheet,
   CollectionSuggestionCard,
   MotionPressable,
-  SheetHeader
+  SheetHeader,
+  SuggestionPendingToken
 } from "../ui/components";
 import { styles } from "../ui/styles";
 import { colors } from "../ui/theme";
@@ -110,8 +111,11 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
   const selectionCountText = collectionSelectionIds.length ? `${collectionSelectionIds.length} selected` : "No collection";
   const rationale = captureFieldRationale(selected, "collection", { collectionSelectionIds });
   const pendingSuggestion = selected.pendingSuggestion || null;
-  // The AI suggestion must be resolved before adding a collection by hand.
-  const canCreate = !pendingSuggestion && !selectionTerm;
+  // Analysis is ready but the new-Collection suggestion is still resolving in the background.
+  const suggestionPending = !pendingSuggestion &&
+    selected.collectionSuggestionState === "pending";
+  // The AI suggestion must be resolved (or finish resolving) before adding a collection by hand.
+  const canCreate = !pendingSuggestion && !suggestionPending && !selectionTerm;
   const draftReady = Boolean(draftTitle.trim() && draftDescription.trim());
 
   const completeSelection = () => {
@@ -144,6 +148,10 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
             suggestion={pendingSuggestion}
             testID="pc.collection.suggestion"
           />
+        </View>
+      ) : suggestionPending ? (
+        <View style={styles.collectionSelectorSuggestion}>
+          <SuggestionPendingToken label="Finding a collection" />
         </View>
       ) : null}
       {canCreate ? (
@@ -238,7 +246,7 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
             value={collectionPickerQuery}
           />
         </View>
-        {rationale.visible && !pendingSuggestion ? (
+        {rationale.visible && !pendingSuggestion && !suggestionPending ? (
           <AiFieldInsight insight={rationale} />
         ) : null}
         <FlatList

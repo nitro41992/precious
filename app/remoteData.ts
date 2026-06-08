@@ -130,6 +130,12 @@ export function captureFromRemote(row: Record<string, any>): Capture {
         confidence: Number(pendingSuggestionRaw.confidence) || 0
       }
     : null;
+  const collectionSuggestionState =
+    row.collection_suggestion_state === "pending"
+      ? "pending"
+      : row.collection_suggestion_state === "ready"
+        ? "ready"
+        : "none";
   const reviewTargets = Array.isArray(analysis.review_targets)
     ? normalizeReviewTargets(analysis.review_targets)
     : analysis.needs_review || row.analysis_state === "needs_review"
@@ -204,6 +210,7 @@ export function captureFromRemote(row: Record<string, any>): Capture {
     collectionDecisions,
     suggestedCollections: collectionDecisions,
     pendingSuggestion,
+    collectionSuggestionState,
     manualCollectionOverrides,
     searchPhrases: analysis.search_phrases || [],
     note: String(row.context_note || ""),

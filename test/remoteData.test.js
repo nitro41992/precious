@@ -453,6 +453,30 @@ test("captureFromRemote leaves pendingSuggestion null without a suggestion", () 
   assert.equal(capture.pendingSuggestion, null);
 });
 
+test("captureFromRemote surfaces ready analysis while a suggestion is still pending", () => {
+  const { captureFromRemote } = loadRemoteData();
+  const capture = captureFromRemote({
+    id: "capture-3",
+    analysis_state: "ready",
+    collection_suggestion_state: "pending",
+    analysis: { summary: "A trail run", display_title: "Trail run" }
+  });
+  // The capture's own analysis is shown immediately; the suggestion resolves in the background.
+  assert.equal(capture.status, "ready");
+  assert.equal(capture.collectionSuggestionState, "pending");
+  assert.equal(capture.pendingSuggestion, null);
+});
+
+test("captureFromRemote defaults collectionSuggestionState to none", () => {
+  const { captureFromRemote } = loadRemoteData();
+  const capture = captureFromRemote({
+    id: "capture-4",
+    analysis_state: "ready",
+    analysis: { summary: "x" }
+  });
+  assert.equal(capture.collectionSuggestionState, "none");
+});
+
 test("collectionFromRemote preserves the suggested status", () => {
   const { collectionFromRemote } = loadRemoteData();
   const collection = collectionFromRemote({

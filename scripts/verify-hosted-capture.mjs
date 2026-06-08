@@ -131,6 +131,26 @@ async function pollCapture({ functionUrl, anonKey, accessToken, clientCaptureKey
   return latest;
 }
 
+// The analysis is marked ready before the new-Collection suggestion finishes resolving in the
+// background (two-phase reveal). Poll the column until it leaves "pending" so we prove the flip
+// actually happens and the UI's in-progress cue can never hang.
+async function pollSuggestionState({ supabaseUrl, serviceRoleKey, captureId, timeoutMs }) {
+  const deadline = Date.now() + timeoutMs;
+  let state = null;
+  while (Date.now() < deadline) {
+    const rows = await restRows({
+      supabaseUrl,
+      serviceRoleKey,
+      table: "captures",
+      params: { id: `eq.${captureId}`, select: "collection_suggestion_state" }
+    });
+    state = rows[0]?.collection_suggestion_state ?? "none";
+    if (state !== "pending") return state;
+    await sleep(2000);
+  }
+  return state;
+}
+
 function isEdgeCaptureApi(apiUrl) {
   return apiUrl.includes("/functions/v1/");
 }
@@ -245,7 +265,9 @@ async function main() {
   const password = process.env.PRECIOUS_E2E_PASSWORD;
   if (!password) throw new Error("Missing PRECIOUS_E2E_PASSWORD for hosted verification.");
   const clientCaptureKey = `hosted-e2e-${randomUUID()}`;
-  const sourceUrl = options.url || (options.image ? "" : "https://www.reddit.com/r/reactnative/");
+  // A content-rich, stable, login-free page so the run proves a *real* extraction (strong URL
+  // evidence + a content title), not a degenerate result like example.com would produce.
+  const sourceUrl = options.url || (options.image ? "" : "https://en.wikipedia.org/wiki/React_Native");
   const sourceText =
     options.text ||
     (options.image
@@ -326,7 +348,12 @@ async function main() {
       supabaseUrl,
       serviceRoleKey,
       table: "analysis_runs",
-      params: { capture_id: `eq.${capture.id}`, status: "eq.succeeded", select: "id,model,provider,status" }
+      params: {
+        capture_id: `eq.${capture.id}`,
+        status: "eq.succeeded",
+        select: "id,model,provider,status,latency_ms,raw_model_output,created_at",
+        order: "created_at.desc"
+      }
     }),
     restRows({
       supabaseUrl,
@@ -346,6 +373,54 @@ async function main() {
       throw new Error(`Expected image asset MIME type, got ${assets[0].mime_type || "missing"}.`);
     }
   }
+
+  // Prove a *true* extraction, not a degenerate one (e.g. example.com → empty title, no evidence).
+  const displayTitle = String(capture.display_title || capture.analysis?.display_title || "").trim();
+  if (!displayTitle) throw new Error("Extraction produced no display_title.");
+  if (sourceUrl) {
+    const host = (() => {
+      try {
+        return new URL(sourceUrl).hostname.replace(/^www\./, "").toLowerCase();
+      } catch {
+        return "";
+      }
+    })();
+    const normalizedTitle = displayTitle.toLowerCase();
+    if (normalizedTitle === host || /^saved from /i.test(displayTitle)) {
+      throw new Error(`Extraction fell back to the source instead of the content: "${displayTitle}".`);
+    }
+    // The URL was actually fetched and yielded real evidence (also exercises the parallel fetch).
+    const urlEvidence = capture.analysis?.url_evidence;
+    const quality = urlEvidence?.evidence_quality;
+    const evidenceStatus = urlEvidence?.status;
+    if (!urlEvidence || (evidenceStatus !== "extracted" && quality !== "high" && quality !== "medium")) {
+      throw new Error(
+        `Expected real URL evidence for ${sourceUrl}, got status=${evidenceStatus || "missing"} quality=${quality || "missing"}. ` +
+          "A strong, content-rich URL should not yield weak evidence."
+      );
+    }
+  }
+
+  // The two-phase suggestion flip must reach a terminal state (never stuck "pending").
+  const suggestionState = await pollSuggestionState({
+    supabaseUrl,
+    serviceRoleKey,
+    captureId: capture.id,
+    timeoutMs: 60000
+  });
+  if (suggestionState === "pending") {
+    throw new Error("collection_suggestion_state never left 'pending' — the background suggestion flip hung.");
+  }
+
+  const latestRun = runs[0];
+  const stageTimings = (() => {
+    try {
+      return JSON.parse(latestRun?.raw_model_output || "{}").stage_timings_ms || null;
+    } catch {
+      return null;
+    }
+  })();
+
   console.log(
     JSON.stringify(
       {
@@ -358,7 +433,11 @@ async function main() {
         model: capture.analysis_model || succeededRuns[0]?.model,
         intent: intent || null,
         assets: assets.length,
-        title: capture.display_title
+        title: displayTitle,
+        evidenceQuality: capture.analysis?.url_evidence?.evidence_quality || null,
+        collectionSuggestionState: suggestionState,
+        latencyMs: latestRun?.latency_ms ?? null,
+        stageTimingsMs: stageTimings
       },
       null,
       2

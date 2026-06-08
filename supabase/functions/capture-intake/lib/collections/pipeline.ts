@@ -24,9 +24,8 @@ export {
   confirmedReminderSuggestions,
   dismissReminderSuggestion,
   markCollectionDecisionAccepted,
+  qualifyingNewCollectionDecision,
   resolveNewCollectionSuggestions,
-  reviewCollectionDecisions,
-  reviewReminderSuggestions,
 } from "./review-decisions.ts";
 export {
   refreshCollectionPreviewAfterCaptureRemoval,

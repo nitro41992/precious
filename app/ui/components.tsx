@@ -824,6 +824,27 @@ export function ProcessingStatusPill({
   );
 }
 
+// In-progress cue for a capture whose analysis is shown but whose new-Collection suggestion is
+// still resolving in the background. Reuses the "Analyzing" pill chrome so the two-phase reveal
+// reads as one coherent in-progress language, with a Sparkle to mark it as the collection step.
+export function SuggestionPendingToken({
+  label = "Finding collection"
+}: {
+  label?: string;
+}) {
+  return (
+    <View accessibilityLabel={label} accessible style={styles.processingStatusPill}>
+      <View style={styles.processingStatusIconWell}>
+        <View style={styles.processingStatusDot} />
+        <Sparkle color={colors.processing} size={14} weight="fill" />
+      </View>
+      <Text numberOfLines={1} style={styles.processingStatusText}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 export function MeaningToken({
   Icon,
   iconColor = colors.muted,

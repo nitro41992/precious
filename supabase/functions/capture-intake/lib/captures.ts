@@ -56,6 +56,7 @@ import {
   applySecondaryCollectionRecovery,
   autoLinkCollectionDecisions,
   promptCollectionsForAnalysis,
+  qualifyingNewCollectionDecision,
   refreshCaptureEmbedding,
   refreshCollectionPreviewFromActiveLinks,
   rerankCollectionsForCapture,
@@ -385,6 +386,19 @@ export async function processCapture(captureId: string, userId: string) {
     .eq("user_id", userId);
 
   try {
+    const pipelineStart = Date.now();
+    // Per-stage wall-clock breakdown, persisted into analysis_runs.raw_model_output so we can
+    // measure where the analyzer spends its time on real captures. Each entry is the stage's
+    // own duration even when stages overlap, so the sum can exceed totalMs.
+    const stageTimings: Record<string, number> = {};
+    const timeStage = async <T>(label: string, work: Promise<T>): Promise<T> => {
+      const startedAt = Date.now();
+      try {
+        return await work;
+      } finally {
+        stageTimings[label] = Date.now() - startedAt;
+      }
+    };
     const asset = firstCaptureAsset(capture);
     const signedAsset =
       asset?.storage_path && String(asset.mime_type || "").startsWith("image/")
@@ -400,36 +414,46 @@ export async function processCapture(captureId: string, userId: string) {
         asset_mime_type: asset?.mime_type || null,
       }
       : capture;
-    const urlEvidence = capture.source_url
-      ? await buildUrlEvidence(capture.source_url, supabase, {
-        originalUrl: capture.original_url || capture.source_url,
-        clientResolvedUrl: capture.client_resolved_url || null,
-        clientResolutionSource: capture.client_resolution_source || null,
-        clientResolutionTimestamp: capture.client_resolution_timestamp || null,
-        clientResolutionAttemptCount:
-          typeof capture.client_resolution_attempt_count === "number"
-            ? capture.client_resolution_attempt_count
-            : null,
-      })
-      : null;
+    // The capture gate reads only captureForAnalysis; URL evidence is an independent network
+    // fetch (the pipeline's biggest sink). Run them concurrently so the gate latency hides
+    // under the slower evidence fetch instead of serializing ahead of it.
+    const [captureGateResult, urlEvidence] = await Promise.all([
+      shouldRunCaptureGate(capture, asset)
+        ? timeStage("captureGateMs", runCaptureGate(captureForAnalysis))
+        : Promise.resolve(null),
+      capture.source_url
+        ? timeStage(
+          "urlEvidenceMs",
+          buildUrlEvidence(capture.source_url, supabase, {
+            originalUrl: capture.original_url || capture.source_url,
+            clientResolvedUrl: capture.client_resolved_url || null,
+            clientResolutionSource: capture.client_resolution_source || null,
+            clientResolutionTimestamp: capture.client_resolution_timestamp ||
+              null,
+            clientResolutionAttemptCount:
+              typeof capture.client_resolution_attempt_count === "number"
+                ? capture.client_resolution_attempt_count
+                : null,
+          }),
+        )
+        : Promise.resolve(null),
+    ]);
     runInBackground(
       mirrorSourcePreviewAssetQuietly(supabase, userId, capture, urlEvidence),
     );
     const urlEvidenceStatus = productEvidenceStatus(urlEvidence);
-    let captureGateResult: Awaited<ReturnType<typeof runCaptureGate>> | null =
-      null;
-    if (shouldRunCaptureGate(capture, asset)) {
-      captureGateResult = await runCaptureGate(captureForAnalysis);
-      if (!shouldAnalyzeAfterCaptureGate(captureGateResult.gate)) {
-        await persistCaptureGateNeedsReview(
-          supabase,
-          userId,
-          captureForAnalysis,
-          urlEvidence,
-          captureGateResult,
-        );
-        return;
-      }
+    if (
+      captureGateResult &&
+      !shouldAnalyzeAfterCaptureGate(captureGateResult.gate)
+    ) {
+      await persistCaptureGateNeedsReview(
+        supabase,
+        userId,
+        captureForAnalysis,
+        urlEvidence,
+        captureGateResult,
+      );
+      return;
     }
     if (
       !captureGateResult &&
@@ -448,7 +472,10 @@ export async function processCapture(captureId: string, userId: string) {
     }
     let preflightResult: Awaited<ReturnType<typeof runPreflight>> | null = null;
     if (shouldRunPreflight(capture, asset)) {
-      preflightResult = await runPreflight(capture, urlEvidence);
+      preflightResult = await timeStage(
+        "preflightMs",
+        runPreflight(capture, urlEvidence),
+      );
       preflightResult.preflight = applyPreflightPolicy(
         capture,
         preflightResult.preflight,
@@ -485,46 +512,58 @@ export async function processCapture(captureId: string, userId: string) {
         captureForAnalysis,
         urlEvidence,
       )
-      ? await runCollectionContextPrepass(captureForAnalysis, urlEvidence)
-        .then((result) => ({
-          ok: true as const,
-          context: result.context,
-          model: result.model,
-          requestBody: result.requestBody,
-          raw: result.raw,
-          latencyMs: result.latencyMs,
-          usage: result.usage,
-        }))
-        .catch((error) => ({
-          ok: false as const,
-          context: null,
-          error: errorMessage(error),
-        }))
+      ? await timeStage(
+        "collectionContextMs",
+        runCollectionContextPrepass(captureForAnalysis, urlEvidence)
+          .then((result) => ({
+            ok: true as const,
+            context: result.context,
+            model: result.model,
+            requestBody: result.requestBody,
+            raw: result.raw,
+            latencyMs: result.latencyMs,
+            usage: result.usage,
+          }))
+          .catch((error) => ({
+            ok: false as const,
+            context: null,
+            error: errorMessage(error),
+          })),
+      )
       : null;
-    const retrievedCollections = await retrieveCollectionsForCapture(
-      supabase,
-      userId,
-      captureForAnalysis,
-      urlEvidence,
-      collectionContextResult?.context ?? null,
-    )
-      .catch(() => []);
-    const rerankedCollections = await rerankCollectionsForCapture(
-      captureForAnalysis,
-      urlEvidence,
-      retrievedCollections,
-    )
-      .catch((error) => {
-        console.warn("Collection rerank failed", errorMessage(error));
-        return retrievedCollections;
-      });
+    const retrievedCollections = await timeStage(
+      "retrievalMs",
+      retrieveCollectionsForCapture(
+        supabase,
+        userId,
+        captureForAnalysis,
+        urlEvidence,
+        collectionContextResult?.context ?? null,
+      )
+        .catch(() => []),
+    );
+    const rerankedCollections = await timeStage(
+      "rerankMs",
+      rerankCollectionsForCapture(
+        captureForAnalysis,
+        urlEvidence,
+        retrievedCollections,
+      )
+        .catch((error) => {
+          console.warn("Collection rerank failed", errorMessage(error));
+          return retrievedCollections;
+        }),
+    );
     const promptCollections = promptCollectionsForAnalysis(
       rerankedCollections,
     );
-    const result = await runOpenAi(
-      captureForAnalysis,
-      urlEvidence,
-      promptCollections,
+    const result = await timeStage(
+      "analysisMs",
+      runOpenAi(
+        captureForAnalysis,
+        urlEvidence,
+        promptCollections,
+      ),
     );
     const captureRoleTrace = captureRoleTraceFromCollections(promptCollections);
     const analysisInput: AnalysisOutput = {
@@ -549,29 +588,29 @@ export async function processCapture(captureId: string, userId: string) {
       promptCollections,
     );
     const sanitizedAnalysis = sanitizeAnalysisRationales(recoveredAnalysis);
-    // Materialize an AI-proposed new Collection as a cross-capture pending suggestion
-    // before auto-link clears collection_decisions. Never blocks the analysis pipeline.
-    const analysisWithSuggestions = await resolveNewCollectionSuggestions(
-      supabase,
-      userId,
-      captureId,
-      sanitizedAnalysis,
-    ).catch((error) => {
-      console.warn("Collection suggestion failed", errorMessage(error));
-      return sanitizedAnalysis;
-    });
+    // The cross-capture new-Collection suggestion (embedding + dedup + DB round-trips) is the
+    // slow tail of the pipeline. Decide now whether one is pending, but resolve it in the
+    // background after the capture is marked ready so the user isn't blocked on it. Auto-link
+    // (existing-collection links) and place resolution stay synchronous — they define the
+    // capture's own displayed fields and consume different decisions than the new-collection path.
+    const pendingNewDecision = qualifyingNewCollectionDecision(sanitizedAnalysis);
     const analysisBeforePlaceResolution = normalizedReviewAnalysis(
-      await autoLinkCollectionDecisions(
-        supabase,
-        userId,
-        captureId,
-        analysisWithSuggestions,
-        rerankedCollections,
+      await timeStage(
+        "autolinkMs",
+        autoLinkCollectionDecisions(
+          supabase,
+          userId,
+          captureId,
+          sanitizedAnalysis,
+          rerankedCollections,
+        ),
       ),
     );
-    const placePatch = await resolvePlacePatchForAnalysis(
-      analysisBeforePlaceResolution,
-    ).catch((error) => ({
+    const placePatch = await timeStage(
+      "placeMs",
+      resolvePlacePatchForAnalysis(
+        analysisBeforePlaceResolution,
+      ).catch((error) => ({
       resolved_place: {
         status: "failed",
         provider: "google_places",
@@ -592,11 +631,14 @@ export async function processCapture(captureId: string, userId: string) {
         error: errorMessage(error),
       },
       verified_place: false,
-    }));
+    })),
+    );
     const analysis = normalizedReviewAnalysis({
       ...analysisBeforePlaceResolution,
       ...placePatch,
     });
+    stageTimings.totalMs = Date.now() - pipelineStart;
+    console.log("[timing] capture", captureId, JSON.stringify(stageTimings));
     const { data: run, error: runError } = await supabase
       .from("analysis_runs")
       .insert({
@@ -625,6 +667,7 @@ export async function processCapture(captureId: string, userId: string) {
           retrieved_collections: retrievedCollections,
           reranked_collections: rerankedCollections,
           prompt_collections: promptCollections,
+          stage_timings_ms: stageTimings,
         }),
       })
       .select("id")
@@ -645,6 +688,9 @@ export async function processCapture(captureId: string, userId: string) {
         analysis_provider: "openai",
         analysis_model: result.model,
         analysis_mode: "llm",
+        // The capture's own analysis is shown immediately; the new-Collection suggestion (if any)
+        // resolves in the background and flips this to "ready" when it lands.
+        collection_suggestion_state: pendingNewDecision ? "pending" : "none",
         display_title: analysis.display_title,
         title: titleForAnalysisUpdate(capture, analysis.display_title),
         default_intent: analysis.default_intent.category,
@@ -660,23 +706,62 @@ export async function processCapture(captureId: string, userId: string) {
         console.warn("Capture embedding refresh failed", errorMessage(error));
       },
     );
-    // The suggestion's collage snapshot was taken before this capture's analysis was
-    // persisted; refresh it now so link-only captures contribute their preview image.
-    const pendingSuggestion = analysis.pending_collection_suggestion;
-    const pendingSuggestionId = pendingSuggestion &&
-        typeof pendingSuggestion === "object" &&
-        typeof (pendingSuggestion as Record<string, unknown>).collection_id ===
-          "string"
-      ? String((pendingSuggestion as Record<string, unknown>).collection_id)
-      : "";
-    if (pendingSuggestionId) {
-      runInBackground(
-        refreshCollectionPreviewFromActiveLinks(
-          supabase,
-          userId,
-          pendingSuggestionId,
-        ),
-      );
+    // Resolve the cross-capture pending suggestion off the critical path. It only ever *adds*
+    // a pending_collection_suggestion and links this capture into the suggested group — never
+    // unlinks — and re-reads the current analysis before writing so it can't clobber a
+    // concurrent edit. Flips collection_suggestion_state to "ready" regardless of outcome so
+    // the UI's in-progress state always resolves.
+    if (pendingNewDecision) {
+      runInBackground((async () => {
+        // A failure here must still flip the state to "ready" so the UI's in-progress
+        // suggestion cue resolves instead of spinning forever.
+        let pending: Record<string, unknown> | null = null;
+        try {
+          const resolved = await resolveNewCollectionSuggestions(
+            supabase,
+            userId,
+            captureId,
+            sanitizedAnalysis,
+          );
+          pending = resolved.pending_collection_suggestion ?? null;
+        } catch (error) {
+          console.warn("Collection suggestion failed", errorMessage(error));
+        }
+        const { data: currentRow } = await supabase
+          .from("captures")
+          .select("analysis")
+          .eq("id", captureId)
+          .eq("user_id", userId)
+          .maybeSingle();
+        const currentAnalysis =
+          (currentRow?.analysis as AnalysisOutput | null) ?? analysis;
+        const nextAnalysis = pending
+          ? { ...currentAnalysis, pending_collection_suggestion: pending }
+          : currentAnalysis;
+        await supabase
+          .from("captures")
+          .update({
+            analysis: nextAnalysis,
+            collection_suggestion_state: "ready",
+          })
+          .eq("id", captureId)
+          .eq("user_id", userId);
+        const pendingCollectionId = pending &&
+            typeof pending === "object" &&
+            typeof (pending as Record<string, unknown>).collection_id ===
+              "string"
+          ? String((pending as Record<string, unknown>).collection_id)
+          : "";
+        // The suggestion's collage snapshot was taken before this capture's analysis was
+        // persisted; refresh it so link-only captures contribute their preview image.
+        if (pendingCollectionId) {
+          await refreshCollectionPreviewFromActiveLinks(
+            supabase,
+            userId,
+            pendingCollectionId,
+          );
+        }
+      })());
     }
   } catch (error) {
     const message = error instanceof Error

@@ -14,6 +14,7 @@ export type CaptureRow = {
   context_note?: string | null;
   source_app: string | null;
   created_at?: string | null;
+  collection_suggestion_state?: "none" | "pending" | "ready" | null;
   asset_url?: string;
   asset_mime_type?: string | null;
   capture_assets?: CaptureAssetRow[];
@@ -32,7 +33,7 @@ export type CaptureImageVariant = "thumb" | "detail" | "viewer";
 export const CAPTURE_ASSET_SELECT =
   "id,user_id,capture_id,storage_path,public_url,mime_type,byte_size,asset_role,source_url,created_at";
 export const CAPTURE_LIST_SELECT =
-  "id,user_id,client_capture_key,source_url,source_text,source_app,display_title,title,context_note,analysis_state,analysis_error,analysis,analysis_provider,analysis_mode,default_intent,current_save_intent,intent_rationale,thumbnail_url,capture_type,created_at,updated_at,processed_at,archived_at,deleted_at,delete_purge_after,rejected_at," +
+  "id,user_id,client_capture_key,source_url,source_text,source_app,display_title,title,context_note,analysis_state,analysis_error,analysis,analysis_provider,analysis_mode,collection_suggestion_state,default_intent,current_save_intent,intent_rationale,thumbnail_url,capture_type,created_at,updated_at,processed_at,archived_at,deleted_at,delete_purge_after,rejected_at," +
   `capture_assets(${CAPTURE_ASSET_SELECT})`;
 export const CAPTURE_DETAIL_SELECT = "*,capture_assets(*)";
 export const COLLECTION_LIST_SELECT =

@@ -1,6 +1,7 @@
 import {
   CLIENT_RESOLUTION_MESSAGE,
   INSUFFICIENT_URL_MESSAGE,
+  PREFLIGHT_REASONING_EFFORT,
   preflightSchema,
 } from "../config.ts";
 import { env, hostFromUrl } from "../common.ts";
@@ -41,7 +42,7 @@ export async function runPreflight(
   const model = preflightModel();
   const requestBody: Record<string, unknown> = {
     model,
-    reasoning: { effort: "low" },
+    reasoning: { effort: PREFLIGHT_REASONING_EFFORT },
     max_output_tokens: 900,
     input: [
       {

@@ -19,7 +19,7 @@ import {
 } from "../capturePresentation";
 import { colors } from "./theme";
 import { styles } from "./styles";
-import { CollectionMeaningToken, MeaningToken, MotionPressable, SkeletonRevealFrame, SourceMark, StatusGlyph } from "./components";
+import { CollectionMeaningToken, MeaningToken, MotionPressable, SkeletonRevealFrame, SourceMark, StatusGlyph, SuggestionPendingToken } from "./components";
 import { cardEntering, motionDuration, motionEasing, motionReduceMotion } from "./motion";
 import { Text } from "./typography";
 
@@ -89,10 +89,13 @@ export function CaptureRow({
     (item.suggestedReminders || []).find((reminder) => reminder.status !== "removed")
   );
   const suggestionLabel = item.pendingSuggestion?.title?.trim() || "";
+  // Analysis is ready but its new-Collection suggestion is still resolving in the background.
+  const suggestionPending = !suggestionLabel && item.collectionSuggestionState === "pending";
   const hasMeaningTokens = Boolean(
     intentLabel ||
       reminderText ||
       suggestionLabel ||
+      suggestionPending ||
       collectionTokens.some((collection) => collection.title.trim())
   );
   const ghostSourceMark = deferFallbackIcon || shouldGhostSourceMark(item);
@@ -173,6 +176,8 @@ export function CaptureRow({
             <CollectionMeaningToken collections={collectionTokens} />
             {suggestionLabel ? (
               <MeaningToken Icon={Sparkle} iconColor={colors.accentTextStrong} text={suggestionLabel} />
+            ) : suggestionPending ? (
+              <SuggestionPendingToken />
             ) : null}
             {reminderText ? (
               <MeaningToken Icon={CalendarBlank} text={reminderText} />

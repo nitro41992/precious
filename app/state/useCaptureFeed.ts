@@ -46,8 +46,16 @@ export function useCaptureFeed({
   setHomeFeedReadyKey: (value: string) => void;
 }) {
   const [homeColdSkeletonVisible, setHomeColdSkeletonVisible] = useState(false);
+  // Keep polling while a capture is processing, or while its analysis is shown but the
+  // new-Collection suggestion is still resolving in the background (so the in-progress
+  // suggestion state resolves without the user having to refresh).
   const hasProcessingCapture = useMemo(
-    () => captures.some((capture) => displayStatus(capture) === "processing"),
+    () =>
+      captures.some(
+        (capture) =>
+          displayStatus(capture) === "processing" ||
+          capture.collectionSuggestionState === "pending"
+      ),
     [captures]
   );
 
