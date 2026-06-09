@@ -1711,6 +1711,25 @@ export const styles = StyleSheet.create({
     flex: 1,
     padding: 8
   },
+  collectionGridSkeleton: {
+    flexDirection: "row",
+    flexWrap: "wrap"
+  },
+  collectionGridSkeletonCell: {
+    padding: 8,
+    width: "50%"
+  },
+  collectionCardSkeletonTitle: {
+    borderRadius: 6,
+    height: 18,
+    width: "70%"
+  },
+  collectionCardSkeletonMeta: {
+    borderRadius: 6,
+    height: 13,
+    marginTop: 6,
+    width: "40%"
+  },
   collectionCard: {
     backgroundColor: colors.reviewCard,
     borderColor: softCardEdgeColor,

@@ -10,6 +10,10 @@ private const val STORE_KEY = "captures"
 private const val REVIEW_DRAFTS_KEY = "capture_review_drafts"
 private const val CAPTURE_PAGE_CACHE_PREFIX = "capture_page_cache"
 private const val COLLECTION_PAGE_CACHE_PREFIX = "collection_page_cache"
+private const val COLLECTION_CAPTURE_PAGE_CACHE_PREFIX = "collection_capture_page_cache"
+// Cap the per-collection first-page caches so heavy users don't accumulate
+// unbounded SharedPreferences entries; least-recently-cached pages evict first.
+private const val MAX_CACHED_COLLECTION_CAPTURE_PAGES = 24
 
 object PreciousCaptureStore {
   @Synchronized
@@ -81,6 +85,48 @@ object PreciousCaptureStore {
       .edit()
       .putString(collectionPageCacheKey(userId, safeMode), page.toString())
       .apply()
+  }
+
+  @Synchronized
+  fun cachedCollectionCapturePage(context: Context, userId: String, collectionId: String): String? {
+    if (userId.isBlank() || collectionId.isBlank()) return null
+    return context
+      .getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE)
+      .getString(collectionCapturePageCacheKey(userId, collectionId), null)
+  }
+
+  @Synchronized
+  fun saveCollectionCapturePage(
+    context: Context,
+    userId: String,
+    collectionId: String,
+    capturesJson: String,
+    nextCursor: String?
+  ) {
+    if (userId.isBlank() || collectionId.isBlank()) return
+    val captures = runCatching { JSONArray(capturesJson) }.getOrDefault(JSONArray())
+    val now = System.currentTimeMillis()
+    val page = JSONObject()
+      .put("captures", captures)
+      .put("next_cursor", nextCursor ?: JSONObject.NULL)
+      .put("cached_at", now)
+    val prefs = context.getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE)
+    val thisKey = collectionCapturePageCacheKey(userId, collectionId)
+    val editor = prefs.edit().putString(thisKey, page.toString())
+    // Keep only the most-recently-cached pages for this user; evict the rest.
+    val prefix = "$COLLECTION_CAPTURE_PAGE_CACHE_PREFIX:$userId:"
+    val stamped = prefs.all
+      .filter { it.key.startsWith(prefix) && it.key != thisKey }
+      .map { entry ->
+        val cachedAt = runCatching { JSONObject(entry.value as String).optLong("cached_at", 0L) }
+          .getOrDefault(0L)
+        entry.key to cachedAt
+      }
+      .toMutableList()
+    stamped.add(thisKey to now)
+    stamped.sortByDescending { it.second }
+    stamped.drop(MAX_CACHED_COLLECTION_CAPTURE_PAGES).forEach { editor.remove(it.first) }
+    editor.apply()
   }
 
   @Synchronized
@@ -410,6 +456,10 @@ object PreciousCaptureStore {
 
   private fun collectionPageCacheKey(userId: String, mode: String): String {
     return "$COLLECTION_PAGE_CACHE_PREFIX:$userId:$mode"
+  }
+
+  private fun collectionCapturePageCacheKey(userId: String, collectionId: String): String {
+    return "$COLLECTION_CAPTURE_PAGE_CACHE_PREFIX:$userId:$collectionId"
   }
 
   // The three collection list buckets that get their own cached first-paint page.

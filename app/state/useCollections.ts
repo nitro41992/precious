@@ -14,7 +14,7 @@ import type {
 } from "../types";
 
 const RECENT_FEED_REVEAL_COUNT = 8;
-const INITIAL_SKELETON_DELAY_MS = 180;
+const INITIAL_SKELETON_DELAY_MS = 80;
 const REVEAL_DELAY_MS = 40;
 
 export function useCollectionsState({

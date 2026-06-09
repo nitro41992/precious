@@ -326,6 +326,13 @@ export type CaptureStore = {
     collectionsJson: string,
     nextCursor: string | null
   ) => Promise<boolean>;
+  getCachedCollectionCapturePage?: (userId: string, collectionId: string) => Promise<string | null>;
+  setCachedCollectionCapturePage?: (
+    userId: string,
+    collectionId: string,
+    capturesJson: string,
+    nextCursor: string | null
+  ) => Promise<boolean>;
   updateCapture: (id: string, title: string, note: string, currentSaveIntent: string | null) => Promise<string>;
   confirmCaptureReview?: (id: string, title: string, note: string, currentSaveIntent: string | null) => Promise<string>;
   getReviewDrafts?: () => Promise<string | null>;

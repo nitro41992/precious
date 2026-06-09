@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useState, type ReactElement } fr
 import { Animated, View } from "react-native";
 import { Image } from "expo-image";
 import { CalendarBlank, Folder, ImageSquare, Lightbulb, MinusCircle, Plus, Sparkle } from "phosphor-react-native";
-import Reanimated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Reanimated, { useAnimatedStyle, useSharedValue, withDelay, withTiming } from "react-native-reanimated";
 
 import { collectionCollageSlots, hostFromUrl } from "../captureLogic";
 import type { Capture, CaptureImageLoadState, Collection } from "../types";
@@ -20,7 +20,7 @@ import {
 import { colors } from "./theme";
 import { styles } from "./styles";
 import { CollectionMeaningToken, MeaningToken, MotionPressable, SkeletonRevealFrame, SourceMark, StatusGlyph, SuggestionPendingToken } from "./components";
-import { cardEntering, motionDuration, motionEasing, motionReduceMotion } from "./motion";
+import { motionDuration, motionEasing, motionReduceMotion, motionStaggerDelay } from "./motion";
 import { Text } from "./typography";
 
 type SkeletonBlockRenderer = ({ style }: { style?: any }) => ReactElement;
@@ -643,6 +643,33 @@ export function CollectionSkeletonRows({
   );
 }
 
+// Ghost placeholder for the Collections grid cold load. Mirrors CollectionCard's
+// 2-up geometry (square collage + title/meta) so the real cards fade in over the
+// same layout with no jump. Uses the shimmering SkeletonBlock, tonal fills only.
+export function CollectionGridSkeleton({
+  count = 6,
+  SkeletonBlock
+}: {
+  count?: number;
+  SkeletonBlock: SkeletonBlockRenderer;
+}) {
+  return (
+    <View style={styles.collectionGridSkeleton}>
+      {Array.from({ length: count }).map((_, item) => (
+        <View key={item} style={styles.collectionGridSkeletonCell}>
+          <View style={styles.collectionCard}>
+            <SkeletonBlock style={styles.collectionCollageFrame} />
+            <View style={styles.collectionCardCopy}>
+              <SkeletonBlock style={styles.collectionCardSkeletonTitle} />
+              <SkeletonBlock style={styles.collectionCardSkeletonMeta} />
+            </View>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export function CollectionRow({
   collectionListFade,
   item,
@@ -860,14 +887,31 @@ export function CollectionCard({
   justRestored?: boolean;
   onPress: () => void;
 }) {
-  // Entrance handling for this recycled FlashList grid:
-  // - Normal mount (initial reveal): declarative `cardEntering` stagger.
-  // - Undo-restore: an inserted card reuses a recycled cell rather than
-  //   mounting, so declarative `entering` never fires and the card would snap
-  //   in with no motion. Drive a fade+scale "pop" imperatively off the
-  //   `justRestored` prop with `withTiming` — FlashList-proof and smooth even
-  //   when the UI thread is idle. No `exiting`/`layout` (they cascaded janky on
-  //   reflow), matching the home and collection-captures feeds.
+  // Entrance handling for this recycled FlashList grid is fully imperative
+  // (`withTiming`), never declarative `entering`. Declarative enter stalls on
+  // FlashList's recycled cells and an idle UI thread — cards sit at opacity 0
+  // and then pop in waves. Driving a shared value off mount is FlashList-proof
+  // and smooth even when the UI thread is idle. No `exiting`/`layout` (they
+  // cascaded janky on reflow), matching the home and collection-captures feeds.
+  // - Normal mount (initial reveal): a quick fade + slight rise, lightly
+  //   staggered by grid index.
+  // - Undo-restore: a fade + scale "pop" (an inserted card reuses a recycled
+  //   cell rather than mounting, so this is driven off the `justRestored` prop).
+  const appear = useSharedValue(motionEnabled && !justRestored ? 0 : 1);
+  useEffect(() => {
+    if (justRestored || !motionEnabled) return;
+    appear.value = withDelay(
+      motionStaggerDelay(motionIndex),
+      withTiming(1, {
+        duration: motionDuration.enter,
+        easing: motionEasing.standard,
+        reduceMotion: motionReduceMotion
+      })
+    );
+    // Run once on fresh mount; recycled cells should not re-animate.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const restorePop = useSharedValue(justRestored ? 0 : 1);
   useEffect(() => {
     if (!justRestored) return;
@@ -878,19 +922,22 @@ export function CollectionCard({
       reduceMotion: motionReduceMotion
     });
   }, [justRestored, restorePop]);
-  const restoreStyle = useAnimatedStyle(() => {
-    if (!justRestored) return {};
+
+  const cardMotionStyle = useAnimatedStyle(() => {
+    if (justRestored) {
+      return {
+        opacity: restorePop.value,
+        transform: [{ scale: 0.9 + restorePop.value * 0.1 }]
+      };
+    }
     return {
-      opacity: restorePop.value,
-      transform: [{ scale: 0.9 + restorePop.value * 0.1 }]
+      opacity: appear.value,
+      transform: [{ translateY: (1 - appear.value) * 8 }]
     };
   });
 
   return (
-    <Reanimated.View
-      entering={!justRestored && motionEnabled ? cardEntering(motionIndex) : undefined}
-      style={[styles.collectionCardWrap, restoreStyle]}
-    >
+    <Reanimated.View style={[styles.collectionCardWrap, cardMotionStyle]}>
       <MotionPressable
         onPress={onPress}
         style={({ pressed }) => [styles.collectionCard, pressed && styles.collectionCardPressed]}

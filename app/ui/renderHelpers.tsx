@@ -21,6 +21,7 @@ import {
   CollectionCaptureRowItem,
   CaptureRowInlineSkeleton,
   CaptureSkeletonRows,
+  CollectionGridSkeleton,
   CollectionSkeletonRows,
   HomeCaptureRowItem,
   SearchCaptureRowItem
@@ -234,6 +235,10 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     );
   }
 
+  function renderCollectionGridSkeleton(count = 6) {
+    return <CollectionGridSkeleton count={count} SkeletonBlock={SkeletonBlock} />;
+  }
+
   function renderLoadingRows() {
     return renderCaptureSkeletonRows(3);
   }
@@ -277,6 +282,7 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     renderCollection,
     renderCollectionCapture,
     renderCollectionCaptureSkeletonRows,
+    renderCollectionGridSkeleton,
     renderCollectionSkeletonRows,
     renderHomeRow,
     renderListLoadingFooter,

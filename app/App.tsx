@@ -931,6 +931,9 @@ export default function App() {
   const collectionsLoadedOnceRef = useRef<Record<CollectionListMode, boolean>>({ active: false, archived: false });
   const collectionsModeRef = useRef<CollectionListMode>("active");
   const collectionCapturesCacheRef = useRef<Record<string, Capture[]>>({});
+  // Per-collection disk-cache hydration guard (collectionId -> userId), so each
+  // collection's first page hydrates from disk at most once per session.
+  const collectionCapturesPageCacheHydratedRef = useRef<Record<string, string | null>>({});
   const pendingDeleteOperationsRef = useRef<Record<string, PendingDeleteOperation>>({});
   // Where each in-flight collection delete sat, so a late undo (after the
   // operation has been cleaned up) can drop it back in place, not at the top.
@@ -1353,6 +1356,42 @@ export default function App() {
     return false;
   }
 
+  // Persist just a collection's first page of captures so reopening it (even on a
+  // cold launch) paints instantly, then the network refresh reconciles. Bounded
+  // to the first page; the native side caps how many collections are retained.
+  function writeCachedCollectionCaptures(collectionId: string, rows: Capture[], nextCursor: string | null) {
+    if (!session?.userId || !nativeStore?.setCachedCollectionCapturePage) return;
+    void nativeStore.setCachedCollectionCapturePage(
+      session.userId,
+      collectionId,
+      JSON.stringify(rows.slice(0, COLLECTION_CAPTURE_PAGE_SIZE + 4)),
+      nextCursor
+    ).catch(() => {
+      // First-paint speed aid only; live network data stays authoritative.
+    });
+  }
+
+  async function hydrateCachedCollectionCaptures(collectionId: string) {
+    if (!session?.userId || !nativeStore?.getCachedCollectionCapturePage) return false;
+    if (collectionCapturesPageCacheHydratedRef.current[collectionId] === session.userId) return false;
+    collectionCapturesPageCacheHydratedRef.current[collectionId] = session.userId;
+    const raw = await nativeStore.getCachedCollectionCapturePage(session.userId, collectionId).catch(() => null);
+    const page = cachedCapturePageFromRaw(raw);
+    if (!page.present || !page.captures.length) return false;
+    const rows = capturesForListMode(page.captures, "active");
+    collectionCapturesCacheRef.current[collectionId] = rows;
+    collectionCapturesCursorCacheRef.current[collectionId] = page.nextCursor;
+    // Paint only if this collection is still the one on screen. This runs once
+    // per session per collection, awaited before the network fetch, so it can't
+    // clobber fresher network data.
+    if (selectedCollectionIdRef.current === collectionId) {
+      setCollectionCaptures(rows);
+      setCollectionCapturesForId(collectionId);
+      setCollectionCapturesNextCursor(page.nextCursor);
+    }
+    return true;
+  }
+
   function writeCachedCollectionPage(mode: CollectionListMode, rows: Collection[], nextCursor: string | null) {
     if (!session?.userId || !nativeStore?.setCachedCollectionPage) return;
     void nativeStore.setCachedCollectionPage(
@@ -1447,6 +1486,7 @@ export default function App() {
     activeCapturesLoadedOnceRef.current = false;
     archivedCapturesLoadedRef.current = false;
     capturePageCacheHydratedRef.current = { active: null, archived: null };
+    collectionCapturesPageCacheHydratedRef.current = {};
     setCollections([]);
     collectionsCacheRef.current = { active: [], archived: [] };
     collectionsCursorCacheRef.current = { active: null, archived: null };
@@ -1866,6 +1906,9 @@ export default function App() {
       setCollectionCapturesLoadPhase(phase);
       setCollectionCapturesError("");
     }
+    // Paint the cached first page before the network call so the detail opens
+    // instantly (turns the cold "initial" skeleton into shown rows immediately).
+    if (!prefetch && !options.append) await hydrateCachedCollectionCaptures(collectionId);
     try {
       const json = await withFreshAccessToken(async (accessToken) => {
         return await requestJson(
@@ -1893,6 +1936,7 @@ export default function App() {
         : next;
       collectionCapturesCacheRef.current[collectionId] = merged;
       collectionCapturesCursorCacheRef.current[collectionId] = json.next_cursor || null;
+      if (!options.append) writeCachedCollectionCaptures(collectionId, merged, json.next_cursor || null);
       if (!prefetch || selectedCollectionIdRef.current === collectionId) {
         setCollectionCaptures(merged);
         setCollectionCapturesNextCursor(json.next_cursor || null);
@@ -2645,6 +2689,7 @@ export default function App() {
     activeCapturesLoadedOnceRef.current = false;
     archivedCapturesLoadedRef.current = false;
     capturePageCacheHydratedRef.current = { active: null, archived: null };
+    collectionCapturesPageCacheHydratedRef.current = {};
     collectionsLoadedOnceRef.current = { active: false, archived: false };
     collectionPageCacheHydratedRef.current = { active: null, archived: null };
     suggestionsCacheHydratedRef.current = null;
@@ -3123,12 +3168,15 @@ export default function App() {
     setCollectionCapturesError("");
     void loadCollectionCaptures(selectedCollectionId, { phase: cached.length ? "refresh" : "initial" }).catch((error) => {
       const text = friendlyError(error, "Could not load collection captures");
-      if (!cached.length) {
+      // Don't blank the list on a failed refresh if anything is already shown —
+      // in-memory captures or a disk-cached first page that hydration painted.
+      const hasShownCaptures = Boolean(cached.length || (collectionCapturesCacheRef.current[selectedCollectionId] || []).length);
+      if (!hasShownCaptures) {
         setCollectionCaptures([]);
         setCollectionCapturesForId(selectedCollectionId);
         setCollectionCapturesNextCursor(null);
-        setCollectionCapturesError(text);
       }
+      setCollectionCapturesError(text);
     });
     // Intentionally NOT keyed on selectedCollection?.captureCount: an optimistic
     // unlink/restore mutates the count immediately, and refetching on that change
@@ -4696,6 +4744,7 @@ export default function App() {
     renderCollection,
     renderCollectionCapture,
     renderCollectionCaptureSkeletonRows,
+    renderCollectionGridSkeleton,
     renderCollectionSkeletonRows,
     renderHomeRow,
     renderListLoadingFooter,
@@ -4976,6 +5025,7 @@ export default function App() {
           openSuggestion: (collectionId) => selectCollection(collectionId),
           persistSuggestion: (collectionId) => void persistSuggestion(collectionId),
           renderCollection,
+          renderCollectionGridSkeleton,
           renderCollectionSkeletonRows,
           renderListLoadingFooter
         }}

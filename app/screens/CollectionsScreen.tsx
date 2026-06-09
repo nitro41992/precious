@@ -36,6 +36,7 @@ type CollectionsScreenProps = {
     openSuggestion: (collectionId: string) => void;
     persistSuggestion: (collectionId: string) => void;
     renderCollection: (input: ListRenderItemInfo<Collection>) => ReactElement | null;
+    renderCollectionGridSkeleton: (count?: number) => ReactElement | null;
     renderCollectionSkeletonRows: (
       count?: number,
       withSelectionControl?: boolean,
@@ -65,7 +66,7 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
     openSuggestion,
     persistSuggestion,
     renderCollection,
-    renderCollectionSkeletonRows,
+    renderCollectionGridSkeleton,
     renderListLoadingFooter
   } = actions;
 
@@ -121,7 +122,7 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
           ListHeaderComponent={suggestionsHeader}
           ListEmptyComponent={
             collectionsBlockingLoading && collectionsColdSkeletonVisible ? (
-              renderCollectionSkeletonRows(collections.length ? Math.min(collections.length, 7) : 7, false, collections)
+              renderCollectionGridSkeleton(6)
             ) : collectionsBlockingLoading ? (
               <View style={styles.loadingQuietSpace} />
             ) : (
