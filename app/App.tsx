@@ -2286,6 +2286,12 @@ export default function App() {
     [finishDeepLinkOpen]
   );
 
+  // Latest deep-link opener, read by the run-once launch-URL effect so it can
+  // stay mounted-once without re-calling getInitialURL (which returns the same
+  // launch URL on every call and would otherwise re-open the capture forever).
+  const openCaptureFromDeepLinkRef = useRef(openCaptureFromDeepLink);
+  openCaptureFromDeepLinkRef.current = openCaptureFromDeepLink;
+
   const openCaptureFromCollection = useCallback((capture: Capture, collectionId: string) => {
     startReviewHandoff(capture, "collection", () => {
       setSearchOpen(false);
@@ -2680,13 +2686,17 @@ export default function App() {
 
 
 
+  // Consume the launch URL exactly once per app process. getInitialURL returns
+  // the same URL on every call, so this must NOT re-run on handler-identity
+  // churn — otherwise it re-opens the deep-linked capture even after the user
+  // has navigated away, wedging navigation until the app is restarted.
   useEffect(() => {
-    Linking.getInitialURL().then((url) => {
+    void Linking.getInitialURL().then((url) => {
       if (authCallbackPayload(url)) return;
       const captureId = parseCaptureUrl(url);
-      if (captureId) void openCaptureFromDeepLink(captureId);
+      if (captureId) void openCaptureFromDeepLinkRef.current(captureId);
     });
-  }, [openCaptureFromDeepLink]);
+  }, []);
 
   useEffect(() => {
     capturesRef.current = captures;
