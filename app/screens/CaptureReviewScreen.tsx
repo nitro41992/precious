@@ -546,14 +546,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const laterField = meaningFields.find((field) => field.kind === "later");
   const laterParts = laterField?.hasValue ? reminderLabelParts(reminderRows[0]) : null;
   const purposeRationale = captureFieldRationale(selected, "purpose");
-  const collectionRationale = captureFieldRationale(selected, "collection");
   const reminderRationale = captureFieldRationale(selected, "later");
-  // Surface the "No collection because…" reason on the review screen when the AI
-  // chose no collection and made no suggestion — otherwise it's only visible
-  // inside the collection sheet, leaving the row a bare "Add collection".
-  const showCollectionRationale = Boolean(
-    collectionRationale.visible && collectionField && !collectionField.hasValue && !collectionField.suggested
-  );
   const urlEvidenceNotice = urlEvidenceMessage(selected.urlEvidence);
   const selectedVisitTarget = selected.visitTarget;
   const selectedVisitTargetMapCandidates = selectedVisitTarget ? visitTargetMapCandidates : [];
@@ -1257,9 +1250,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                         </MotionPressable>
                       ) : null}
                     </View>
-                    {showCollectionRationale ? (
-                      <AiFieldInsight insight={collectionRationale} />
-                    ) : null}
                   </View>
                   {urlEvidenceNotice ? (
                     <View style={styles.sourceBlock}>

@@ -6,8 +6,9 @@ import { Check, Folder, Plus, MagnifyingGlass as Search, Sparkle } from "phospho
 
 import type { Capture, Collection, LoadPhase } from "../types";
 import { collectionSelectionActionState } from "../captureLogic";
-import { collectionCountLabel } from "../capturePresentation";
+import { captureFieldRationale, collectionCountLabel } from "../capturePresentation";
 import {
+  AiFieldInsight,
   AnimatedBottomSheet,
   CollectionFormFields,
   CollectionSuggestionCard,
@@ -156,6 +157,12 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
       analysisRationaleById.set(collection.id, rationale);
     }
   });
+  // The field-level collection reason ("No collection because…") lives here, at the top of
+  // the sheet — NOT inline on the capture-edit screen. This sheet is the single home for the
+  // collection insight; do not mirror it back onto CaptureReviewScreen. It only shows when the
+  // AI made no pick (no per-row "why" cards), so it never duplicates analysisRationaleById.
+  const collectionRationale = captureFieldRationale(selected, "collection", { collectionSelectionIds });
+  const showCollectionRationale = collectionRationale.visible && analysisRationaleById.size === 0;
   const visibleCollections = collectionSelectorColdLoading
     ? []
     : collections
@@ -255,6 +262,7 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
         subtitle={selectionCountText}
         title="Collection"
       />
+      {showCollectionRationale ? <AiFieldInsight insight={collectionRationale} /> : null}
       <View style={[styles.collectionSelectorSearchInput, styles.collectionSelectorSearchInputSheet]}>
         <Search color={colors.muted} size={18} weight="bold" />
         <TextInput

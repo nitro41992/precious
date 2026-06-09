@@ -3698,10 +3698,10 @@ export const styles = StyleSheet.create({
   },
   noteActionCardIcon: {
     alignItems: "center",
-    backgroundColor: colors.surfaceContainerHigh,
-    borderColor: colors.accentLine,
-    borderRadius: 8,
-    borderWidth: 0,
+    // Soft-lime accent tint so the green note glyph reads as one mark, matching the
+    // AI-insight icon and the rest of the icon chips — the old gray fill clashed with it.
+    backgroundColor: colors.accentSoft,
+    borderRadius: 10,
     height: 42,
     justifyContent: "center",
     width: 42
