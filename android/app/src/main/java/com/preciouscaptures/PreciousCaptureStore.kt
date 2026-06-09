@@ -55,7 +55,7 @@ object PreciousCaptureStore {
   @Synchronized
   fun cachedCollectionPage(context: Context, userId: String, mode: String): String? {
     if (userId.isBlank()) return null
-    val safeMode = if (mode == "archived") "archived" else "active"
+    val safeMode = collectionCacheMode(mode)
     return context
       .getSharedPreferences(STORE_PREFS, Context.MODE_PRIVATE)
       .getString(collectionPageCacheKey(userId, safeMode), null)
@@ -70,7 +70,7 @@ object PreciousCaptureStore {
     nextCursor: String?
   ) {
     if (userId.isBlank()) return
-    val safeMode = if (mode == "archived") "archived" else "active"
+    val safeMode = collectionCacheMode(mode)
     val collections = runCatching { JSONArray(collectionsJson) }.getOrDefault(JSONArray())
     val page = JSONObject()
       .put("collections", collections)
@@ -410,6 +410,16 @@ object PreciousCaptureStore {
 
   private fun collectionPageCacheKey(userId: String, mode: String): String {
     return "$COLLECTION_PAGE_CACHE_PREFIX:$userId:$mode"
+  }
+
+  // The three collection list buckets that get their own cached first-paint page.
+  // Anything unrecognised falls back to the active grid.
+  private fun collectionCacheMode(mode: String): String {
+    return when (mode) {
+      "archived" -> "archived"
+      "suggested" -> "suggested"
+      else -> "active"
+    }
   }
 
   private fun enrichmentRequiresReview(enrichment: JSONObject): Boolean {

@@ -925,6 +925,7 @@ export default function App() {
   const selectedCollectionIdRef = useRef<string | null>(null);
   const capturePageCacheHydratedRef = useRef<Record<CaptureListMode, string | null>>({ active: null, archived: null });
   const collectionPageCacheHydratedRef = useRef<Record<CollectionListMode, string | null>>({ active: null, archived: null });
+  const suggestionsCacheHydratedRef = useRef<string | null>(null);
   const collectionsCacheRef = useRef<Record<CollectionListMode, Collection[]>>({ active: [], archived: [] });
   const collectionsCursorCacheRef = useRef<Record<CollectionListMode, string | null>>({ active: null, archived: null });
   const collectionsLoadedOnceRef = useRef<Record<CollectionListMode, boolean>>({ active: false, archived: false });
@@ -1379,6 +1380,38 @@ export default function App() {
     return true;
   }
 
+  // Suggestions reuse the same native page cache (mode "suggested") so the
+  // SUGGESTED section paints on first navigation like the regular grid instead
+  // of popping in after the network resolves.
+  function writeCachedSuggestions(rows: Collection[]) {
+    if (!session?.userId || !nativeStore?.setCachedCollectionPage) return;
+    void nativeStore.setCachedCollectionPage(
+      session.userId,
+      "suggested",
+      JSON.stringify(rows.slice(0, 54)),
+      null
+    ).catch(() => {
+      // Cache only improves first paint; network suggestions remain authoritative.
+    });
+  }
+
+  async function hydrateCachedSuggestions() {
+    if (!session?.userId || !nativeStore?.getCachedCollectionPage) return;
+    if (suggestionsCacheHydratedRef.current === session.userId) return;
+    suggestionsCacheHydratedRef.current = session.userId;
+    const raw = await nativeStore.getCachedCollectionPage(session.userId, "suggested").catch(() => null);
+    const page = cachedCollectionPageFromRaw(raw);
+    if (!page.present) return;
+    setSuggestions(page.collections);
+  }
+
+  // Update suggestions and keep the first-paint cache in lockstep, so a persisted
+  // or dismissed suggestion never flashes back on the next cold open.
+  function replaceSuggestions(next: Collection[]) {
+    setSuggestions(next);
+    writeCachedSuggestions(next);
+  }
+
   async function hydrateLocalProcessingCaptures() {
     if (!nativeStore?.getCaptures) return;
     const raw = await nativeStore.getCaptures().catch(() => null);
@@ -1419,6 +1452,7 @@ export default function App() {
     collectionsCursorCacheRef.current = { active: null, archived: null };
     collectionsLoadedOnceRef.current = { active: false, archived: false };
     collectionPageCacheHydratedRef.current = { active: null, archived: null };
+    suggestionsCacheHydratedRef.current = null;
     setCollectionsLoadedOnce({ active: false, archived: false });
     setCollectionsNextCursor({ active: null, archived: null });
     setCollectionsLoadPhase("idle");
@@ -2613,6 +2647,7 @@ export default function App() {
     capturePageCacheHydratedRef.current = { active: null, archived: null };
     collectionsLoadedOnceRef.current = { active: false, archived: false };
     collectionPageCacheHydratedRef.current = { active: null, archived: null };
+    suggestionsCacheHydratedRef.current = null;
     collectionsCursorCacheRef.current = { active: null, archived: null };
   }, [session?.userId]);
 
@@ -3602,6 +3637,9 @@ export default function App() {
       setSuggestions([]);
       return;
     }
+    // Paint cached suggestions first (like the collection grid) so the SUGGESTED
+    // section is present on navigation instead of popping in after the fetch.
+    await hydrateCachedSuggestions();
     try {
       const json = await withFreshAccessToken((accessToken) =>
         requestJson(
@@ -3615,7 +3653,7 @@ export default function App() {
           }
         )
       ) as RemoteCollectionPage;
-      setSuggestions((json.collections ?? []).map(collectionFromRemote));
+      replaceSuggestions((json.collections ?? []).map(collectionFromRemote));
     } catch {
       // A failed refresh keeps the prior suggestions; the next load retries.
     }
@@ -3636,7 +3674,7 @@ export default function App() {
         body: { action: "persist", collectionId }
       });
       const created = collectionFromRemote(json.collection);
-      setSuggestions((current) => current.filter((item) => item.id !== collectionId));
+      replaceSuggestions(suggestions.filter((item) => item.id !== collectionId));
       collectionsCacheRef.current.active = uniqueCollections([
         created,
         ...collectionsCacheRef.current.active.filter((item) => item.id !== created.id)
@@ -3888,7 +3926,6 @@ export default function App() {
           return;
         }
         await reconcileCollectionsSilently("active", trace);
-        delete restoreAnchorsRef.current[collection.id];
         finishPendingDeleteOperation(operation.id);
       } catch (error) {
         operation.commitFailed = true;

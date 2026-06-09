@@ -319,10 +319,10 @@ export type CaptureStore = {
     capturesJson: string,
     nextCursor: string | null
   ) => Promise<boolean>;
-  getCachedCollectionPage?: (userId: string, mode: "active" | "archived") => Promise<string | null>;
+  getCachedCollectionPage?: (userId: string, mode: "active" | "archived" | "suggested") => Promise<string | null>;
   setCachedCollectionPage?: (
     userId: string,
-    mode: "active" | "archived",
+    mode: "active" | "archived" | "suggested",
     collectionsJson: string,
     nextCursor: string | null
   ) => Promise<boolean>;
