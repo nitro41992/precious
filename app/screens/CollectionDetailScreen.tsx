@@ -134,7 +134,7 @@ export function CollectionDetailScreen({ actions, data }: CollectionDetailScreen
                       ]}
                       testID="pc.collection.detail.delete"
                     >
-                      <Trash color={colors.danger} size={21} weight="regular" />
+                      <Trash color={colors.danger} size={21} weight="bold" />
                     </MotionPressable>
                   </>
                 )}

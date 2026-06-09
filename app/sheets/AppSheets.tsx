@@ -36,7 +36,7 @@ export function AppSheets({
             }}
             style={({ pressed }) => [styles.sheetActionRow, pressed && styles.subtlePressed]}
           >
-            <LogOut color={colors.danger} size={20} weight="regular" />
+            <LogOut color={colors.danger} size={20} weight="bold" />
             <View style={styles.sheetActionCopy}>
               <Text style={[styles.sheetActionTitle, styles.sheetActionDanger]}>Sign out</Text>
               <Text style={styles.sheetActionText}>Remove this session from the phone.</Text>

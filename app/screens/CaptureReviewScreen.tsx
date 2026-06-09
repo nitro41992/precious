@@ -936,7 +936,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
           pressed && styles.subtlePressed
         ]}
       >
-        <ArrowLeft color={colors.ink} size={22} weight="regular" />
+        <ArrowLeft color={colors.ink} size={22} weight="bold" />
       </MotionPressable>
       <View style={styles.reviewMediaRightControls}>
         {showStatus ? (
@@ -966,7 +966,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
           ]}
           testID="pc.capture.delete"
         >
-          <Trash2 color={colors.danger} size={21} weight="regular" />
+          <Trash2 color={colors.danger} size={21} weight="bold" />
         </MotionPressable>
       </View>
     </>
@@ -1112,14 +1112,14 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                         {draftTitle.trim() || "Add a title"}
                       </Text>
                       <View style={styles.reviewTitleEditButton}>
-                        <PencilSimple color={colors.muted} size={18} weight="regular" />
+                        <PencilSimple color={colors.muted} size={18} weight="bold" />
                       </View>
                     </MotionPressable>
                     <View style={styles.reviewMetaRow}>
                       <View style={styles.reviewSourceCluster}>
                         {selectedSourceIsSharedImage ? (
                           <View style={styles.reviewSourceImageIconPill}>
-                            <Camera color={colors.accentTextStrong} size={17} weight="regular" />
+                            <Camera color={colors.accentTextStrong} size={17} weight="bold" />
                           </View>
                         ) : (
                           <SourceMark
@@ -1141,7 +1141,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                             onPress={() => void copySource()}
                             style={({ pressed }) => [styles.reviewSourceCopyButton, pressed && styles.subtlePressed]}
                           >
-                            <Copy color={colors.muted} size={18} weight="regular" />
+                            <Copy color={colors.muted} size={18} weight="bold" />
                           </MotionPressable>
                         ) : null}
                       </View>
@@ -1252,7 +1252,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                             {locationInlineValue}
                           </Text>
                           {primaryMapCandidate ? (
-                            <MapPin color={colors.placeholder} size={17} weight="regular" />
+                            <MapPin color={colors.placeholder} size={17} weight="bold" />
                           ) : null}
                         </MotionPressable>
                       ) : null}
@@ -1286,7 +1286,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                       testID="pc.review.note.open"
                     >
                       <View style={styles.noteActionCardIcon}>
-                        <StickyNote color={colors.accentTextStrong} size={21} weight="regular" />
+                        <StickyNote color={colors.accentTextStrong} size={21} weight="bold" />
                       </View>
                       <View style={styles.noteActionCopy}>
                         <View style={styles.noteActionHeader}>

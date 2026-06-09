@@ -196,7 +196,7 @@ export function SearchScreen({ actions, data, state }: SearchScreenProps) {
             <View style={styles.searchBarRow}>
               <IconButton Icon={ArrowLeft} label="Back" onPress={closeSearch} />
               <View style={styles.searchInputWrap}>
-                <Search color={colors.muted} size={19} weight="regular" />
+                <Search color={colors.muted} size={19} weight="bold" />
                 <TextInput
                   autoFocus
                   onChangeText={setSearchQuery}
@@ -243,7 +243,7 @@ export function SearchScreen({ actions, data, state }: SearchScreenProps) {
                           onPress={() => setSearchQuery(query)}
                           style={({ pressed }) => [styles.promptChip, pressed && styles.subtlePressed]}
                         >
-                          <Icon color={colors.muted} size={15} weight="regular" />
+                          <Icon color={colors.muted} size={15} weight="bold" />
                           <Text style={styles.promptChipText}>{label}</Text>
                         </Pressable>
                       ))}

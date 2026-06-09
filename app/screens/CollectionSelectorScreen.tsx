@@ -98,7 +98,7 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
           <Text style={styles.title}>Collections</Text>
           <Text style={styles.sourceText}>Choose from your existing collections for this capture.</Text>
           <View style={styles.collectionSelectorSearchInput}>
-            <Search color={colors.muted} size={18} weight="regular" />
+            <Search color={colors.muted} size={18} weight="bold" />
             <TextInput
               onChangeText={setCollectionPickerQuery}
               placeholder="Search collections"
@@ -129,7 +129,7 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
                   <View style={styles.collectionChoiceBody}>
                     <View style={styles.collectionRowTop}>
                       <View style={styles.collectionIconMark}>
-                        <Folder color={colors.collectionAccentText} size={18} weight="regular" />
+                        <Folder color={colors.collectionAccentText} size={18} weight="bold" />
                       </View>
                       <View style={styles.collectionRowCopy}>
                         <Text numberOfLines={1} style={styles.captureTitle}>
@@ -171,7 +171,7 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
                     <X
                       color={collectionSelectionIds.length === 0 ? colors.accentText : colors.muted}
                       size={18}
-                      weight={collectionSelectionIds.length === 0 ? "bold" : "regular"}
+                      weight={collectionSelectionIds.length === 0 ? "bold" : "bold"}
                     />
                   </View>
                   <View style={styles.collectionRowCopy}>

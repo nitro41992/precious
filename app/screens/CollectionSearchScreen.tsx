@@ -82,7 +82,7 @@ export function CollectionSearchScreen({ actions, data, state }: CollectionSearc
             <View style={styles.searchBarRow}>
               <IconButton Icon={ArrowLeft} label="Back" onPress={closeCollectionSearch} />
               <View style={styles.searchInputWrap}>
-                <Search color={colors.muted} size={19} weight="regular" />
+                <Search color={colors.muted} size={19} weight="bold" />
                 <TextInput
                   autoFocus
                   onChangeText={setCollectionSearchQuery}

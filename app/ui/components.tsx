@@ -368,15 +368,15 @@ export function KeyboardSheet({
 }
 
 export function RecentNavIcon({ color, selected = false, size = 24 }: NavIconProps) {
-  return <HouseSimple color={color} size={size} weight={selected ? "fill" : "regular"} />;
+  return <HouseSimple color={color} size={size} weight={selected ? "fill" : "bold"} />;
 }
 
 export function CollectionsNavIcon({ color, selected = false, size = 24 }: NavIconProps) {
-  return <Folders color={color} size={size} weight={selected ? "fill" : "regular"} />;
+  return <Folders color={color} size={size} weight={selected ? "fill" : "bold"} />;
 }
 
 export function SettingsNavIcon({ color, selected = false, size = 24 }: NavIconProps) {
-  return <Gear color={color} size={size} weight={selected ? "fill" : "regular"} />;
+  return <Gear color={color} size={size} weight={selected ? "fill" : "bold"} />;
 }
 
 export function IconButton({
@@ -419,7 +419,7 @@ export function IconButton({
       ]}
       testID={testID}
     >
-      <Icon color={iconColor} size={20} weight={tone === "primary" || selected ? "bold" : "regular"} />
+      <Icon color={iconColor} size={20} weight={tone === "primary" || selected ? "bold" : "bold"} />
     </MotionPressable>
   );
 }
@@ -806,7 +806,7 @@ export const SourceMark = memo(function SourceMark({
           }
         />
       ) : (
-        <Icon color={iconColor} size={iconSize} weight={itemStatus === "ready" ? "regular" : "bold"} />
+        <Icon color={iconColor} size={iconSize} weight="bold" />
       )}
     </View>
   );
@@ -931,7 +931,7 @@ export function MeaningToken({
 }) {
   return (
     <View style={styles.meaningToken}>
-      <Icon color={iconColor} size={13} weight="regular" />
+      <Icon color={iconColor} size={13} weight="bold" />
       <Text numberOfLines={1} style={styles.meaningTokenText}>
         {text}
       </Text>
@@ -960,7 +960,7 @@ export function CollectionMeaningToken({ collections }: { collections: LinkedCol
       <Folder
         color={colors.muted}
         size={13}
-        weight={overflowCount > 0 ? "fill" : "regular"}
+        weight={overflowCount > 0 ? "fill" : "bold"}
       />
       <Text numberOfLines={1} style={[styles.meaningTokenText, styles.collectionMeaningTokenText]}>
         {primaryCollection}

@@ -579,7 +579,7 @@ export const styles = StyleSheet.create({
   // AI collection suggestion card — used in the selector sheet and the review screen.
   // Tonal accent fill, no border (CLAUDE.md), Sparkle marker, confirm/dismiss actions.
   suggestionCard: {
-    backgroundColor: colors.accentSoft,
+    backgroundColor: colors.surfaceContainer,
     borderRadius: softCardInnerRadius,
     gap: 10,
     padding: 14
@@ -629,7 +629,7 @@ export const styles = StyleSheet.create({
   },
   suggestionConfirmButton: {
     alignItems: "center",
-    backgroundColor: colors.accentText,
+    backgroundColor: colors.accent,
     borderRadius: 12,
     flex: 1,
     flexDirection: "row",
@@ -1688,7 +1688,7 @@ export const styles = StyleSheet.create({
   },
   collectionIconMark: {
     alignItems: "center",
-    backgroundColor: colors.collectionAccentSoft,
+    backgroundColor: colors.surfaceContainer,
     borderRadius: 8,
     height: 36,
     justifyContent: "center",
@@ -1744,7 +1744,7 @@ export const styles = StyleSheet.create({
     ...softCardShadow
   },
   collectionCardPressed: {
-    backgroundColor: colors.collectionAccentSoft,
+    backgroundColor: colors.surfaceContainer,
     transform: [{ scale: 0.99 }]
   },
   // Collections-tab "Suggested" section: a labelled group of pending AI suggestions.
@@ -1774,7 +1774,7 @@ export const styles = StyleSheet.create({
     width: "50%"
   },
   suggestionGridCard: {
-    backgroundColor: colors.accentSoft,
+    backgroundColor: colors.surface,
     borderWidth: 0
   },
   suggestionGridBadge: {
@@ -1796,7 +1796,7 @@ export const styles = StyleSheet.create({
   },
   suggestionGridAdd: {
     alignItems: "center",
-    backgroundColor: colors.accentText,
+    backgroundColor: colors.accent,
     borderRadius: 12,
     flexDirection: "row",
     gap: 6,
@@ -1825,7 +1825,7 @@ export const styles = StyleSheet.create({
   },
   detailPersistButton: {
     alignItems: "center",
-    backgroundColor: colors.accentText,
+    backgroundColor: colors.accent,
     borderRadius: 14,
     flexDirection: "row",
     gap: 8,
@@ -2142,9 +2142,10 @@ export const styles = StyleSheet.create({
   collectionChoiceSeparatorSheet: {
     height: 4
   },
-  // Selected = a soft orange tonal card (collection identity), not a harsh lime fill.
+  // Selected = a calm neutral surface; the bold lime check circle is the accent pop
+  // (white card + sharp accent, never a large pale-color wash).
   collectionChoiceRowSelected: {
-    backgroundColor: colors.collectionAccentSoft
+    backgroundColor: colors.surfaceContainer
   },
   // Press feedback stays calm and neutral so it never flashes a loud accent.
   collectionChoiceRowPressedSheet: {

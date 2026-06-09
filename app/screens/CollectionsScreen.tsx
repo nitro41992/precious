@@ -136,7 +136,7 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
                   <View style={styles.collectionsEmptyFolderBack} />
                   <View style={styles.collectionsEmptyFolder}>
                     <View style={styles.collectionsEmptyFolderTab} />
-                    <Folder color={colors.collectionAccentText} size={28} weight="regular" />
+                    <Folder color={colors.collectionAccentText} size={28} weight="bold" />
                     <View style={styles.collectionsEmptyLines}>
                       <View style={styles.collectionsEmptyLineStrong} />
                       <View style={styles.collectionsEmptyLineSoft} />

@@ -458,7 +458,7 @@ export const CollectionCaptureRowItem = memo(function CollectionCaptureRowItem({
       {/* Muted minus, not a red trash/X: the action unlinks the capture from
           this collection — it does not delete it — and the previous danger
           tint read as an alert badge rather than an affordance. */}
-      <MinusCircle color={colors.muted} size={22} weight="regular" />
+      <MinusCircle color={colors.muted} size={22} weight="bold" />
     </MotionPressable>
   );
   return (
@@ -688,7 +688,7 @@ export function CollectionRow({
       >
         <View style={styles.collectionRowTop}>
           <View style={styles.collectionIconMark}>
-            <Folder color={colors.collectionAccentText} size={18} weight="regular" />
+            <Folder color={colors.collectionAccentText} size={18} weight="bold" />
           </View>
           <View style={styles.collectionRowCopy}>
             <Text numberOfLines={1} style={styles.captureTitle}>
@@ -758,7 +758,7 @@ const CollectionCollageTile = memo(function CollectionCollageTile({
     <View style={[styles.collectionCollageTile, styles.collectionCollageFallbackTile, style]}>
       {item ? (
         <>
-          <ImageSquare color={colors.muted} size={24} weight="regular" />
+          <ImageSquare color={colors.muted} size={24} weight="bold" />
           {host ? (
             <Text numberOfLines={1} style={styles.collectionCollageFallbackHost}>
               {host}

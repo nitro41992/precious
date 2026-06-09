@@ -207,7 +207,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                   <View style={styles.homeEmptyTileStack}>
                     <View style={[styles.homeEmptyTile, styles.homeEmptyTilePrimary]}>
                       <View style={styles.homeEmptyIconMark}>
-                        <Link2 color={colors.accentText} size={19} weight="regular" />
+                        <Link2 color={colors.accentText} size={19} weight="bold" />
                       </View>
                       <View style={styles.homeEmptyLineGroup}>
                         <View style={styles.homeEmptyLineStrong} />
@@ -216,20 +216,20 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                     </View>
                     <View style={styles.homeEmptyTileRow}>
                       <View style={[styles.homeEmptyTile, styles.homeEmptyTileSmall]}>
-                        <Camera color={colors.secondary} size={20} weight="regular" />
+                        <Camera color={colors.secondary} size={20} weight="bold" />
                         <View style={styles.homeEmptyMiniLines}>
                           <View style={styles.homeEmptyMiniLine} />
                           <View style={styles.homeEmptyMiniLineShort} />
                         </View>
                       </View>
                       <View style={[styles.homeEmptyTile, styles.homeEmptyTileSmall, styles.homeEmptyTileImage]}>
-                        <ImageIcon color={colors.processing} size={20} weight="regular" />
+                        <ImageIcon color={colors.processing} size={20} weight="bold" />
                         <View style={styles.homeEmptyImageFrame} />
                       </View>
                     </View>
                   </View>
                   <View style={styles.homeEmptySearchHint}>
-                    <Search color={colors.muted} size={16} weight="regular" />
+                    <Search color={colors.muted} size={16} weight="bold" />
                   </View>
                 </View>
                 <View style={styles.homeEmptyCopy}>
@@ -305,7 +305,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                       ]}
                       testID={`pc.capture.mode.${mode}`}
                     >
-                      <Icon color={selectedMode ? colors.onAccent : colors.muted} size={16} weight={selectedMode ? "fill" : "regular"} />
+                      <Icon color={selectedMode ? colors.onAccent : colors.muted} size={16} weight={selectedMode ? "fill" : "bold"} />
                       <Text
                         numberOfLines={1}
                         style={[

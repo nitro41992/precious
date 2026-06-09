@@ -350,7 +350,7 @@ export function ReminderEditorSheet({
         <View style={styles.reminderFieldGroup}>
           <View style={styles.reminderFieldSectionHeader}>
             <View style={styles.reminderFieldSectionHeaderLead}>
-              <Clock color={colors.muted} size={18} weight="regular" />
+              <Clock color={colors.muted} size={18} weight="bold" />
               <Text style={styles.reminderFieldSectionTitle}>Time</Text>
             </View>
             <View style={styles.reminderAllDayToggle}>
@@ -403,7 +403,7 @@ export function ReminderEditorSheet({
           style={({ pressed }) => [styles.sheetActionRow, pressed && styles.subtlePressed]}
           testID="pc.reminder.remove"
         >
-          <Trash color={colors.danger} size={20} weight="regular" />
+          <Trash color={colors.danger} size={20} weight="bold" />
           <Text style={styles.dangerButtonText}>Remove reminder</Text>
         </MotionPressable>
       ) : null}

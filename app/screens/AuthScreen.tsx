@@ -107,7 +107,7 @@ export function AuthScreen({ actions, data, state }: AuthScreenProps) {
                 style={styles.iconButton}
                 testID="pc.auth.check.back"
               >
-                <ArrowLeft color={colors.ink} size={26} weight="regular" />
+                <ArrowLeft color={colors.ink} size={26} weight="bold" />
               </Pressable>
               <View style={styles.authHeaderCopy}>
                 <Text style={[styles.title, styles.authTitle]}>Check your email</Text>

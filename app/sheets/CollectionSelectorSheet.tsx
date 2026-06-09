@@ -256,7 +256,7 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
         title="Collection"
       />
       <View style={[styles.collectionSelectorSearchInput, styles.collectionSelectorSearchInputSheet]}>
-        <Search color={colors.muted} size={18} weight="regular" />
+        <Search color={colors.muted} size={18} weight="bold" />
         <TextInput
           onChangeText={setCollectionPickerQuery}
           placeholder="Search collections"
@@ -292,7 +292,7 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
                 <View style={styles.collectionChoiceBody}>
                   <View style={styles.collectionRowTop}>
                     <View style={styles.collectionIconMark}>
-                      <Folder color={colors.collectionAccentText} size={18} weight="regular" />
+                      <Folder color={colors.collectionAccentText} size={18} weight="bold" />
                     </View>
                     <View style={styles.collectionRowCopy}>
                       <Text numberOfLines={1} style={styles.collectionChoiceTitle}>

@@ -6,77 +6,83 @@ export const colors = {
 
   /**
    * Core light surfaces
-   * Warm porcelain paper with nearby tonal containers: the warmth of the
-   * prior ivory, desaturated toward a refined bone so it reads as expensive
-   * paper rather than cream.
+   * Crisp, cool-neutral light ground — pure-white cards lifting off a faintly cool
+   * near-white, with clean grey containers. All warmth/yellow is removed: the
+   * references (Wise, Coinbase, Headspace) read vibrant precisely because a bold
+   * accent sits on true-neutral white, not on an off-white that muddies it.
    */
-  paper: "#F7F4EC",
+  paper: "#F6F7F8",
   surface: "#FFFFFF",
-  surfaceContainer: "#F1EDE2",
-  surfaceContainerHigh: "#E9E3D4",
-  surfaceContainerHighest: "#DED5C2",
+  surfaceContainer: "#EDEFF1",
+  surfaceContainerHigh: "#E3E6E9",
+  surfaceContainerHighest: "#D4D8DC",
 
   reviewCard: "#FFFFFF",
-  reviewCardWell: "#F1EDE2",
+  reviewCardWell: "#EDEFF1",
 
   /**
    * Text
-   * High-contrast warm ink and restrained neutral labels.
+   * Near-black green ink for headings/body, restrained cool-neutral labels.
    */
   ink: "#17211B",
-  muted: "#625F51",
-  placeholder: "#817866",
+  muted: "#585C60",
+  placeholder: "#888D92",
 
   /**
    * Lines
-   * Low-contrast warm dividers for light surfaces.
+   * Low-contrast cool-neutral dividers for light surfaces.
    */
-  line: "#E4DECF",
-  lineStrong: "#CFC6B4",
+  line: "#E6E9EC",
+  lineStrong: "#CDD2D7",
 
   /**
    * Primary accent
-   * Lime stays bright for fills and small accents; longer inline text uses a darker green.
-   * Deepened slightly from the candy lime so it reads premium on porcelain.
+   * Vibrant lime — the single high-chroma hero, used sparingly (the 10%) on the
+   * neutral ground so it reads bright and fresh. Bright lime carries fills, FABs,
+   * and selection; dark ink rides on top. Small text/icons use a deep readable
+   * green (not the bright fill) so they keep contrast on light surfaces.
    */
-  accent: "#B6CB57",
-  accentText: "#B6CB57",
-  accentTextStrong: "#556600",
-  accentSoft: "#E8F0CC",
-  accentLine: "#B6CB57",
-  accentPressed: "#98AC45",
+  accent: "#84E72E",
+  accentText: "#0FA94F",
+  accentTextStrong: "#0C8F43",
+  accentSoft: "#E6F8CE",
+  accentLine: "#84E72E",
+  accentPressed: "#6FD41C",
 
   /**
    * Collection / secondary emphasis
-   * Carrot stays bright across secondary accent fills, icons, and labels.
-   * Richened slightly to sit alongside the refined lime.
+   * Single-accent system: collections share the ONE lime accent (no second hue —
+   * the old two-tone forest green read indecisive). Lime carries collection fills
+   * (FAB, selected check) with dark ink on top; small collection labels/icons use
+   * the in-family deep green for contrast on light surfaces.
    */
-  collectionAccent: "#E8820A",
-  collectionAccentText: "#E8820A",
-  collectionAccentSoft: "#F6E2C4",
-  collectionAccentLine: "#E8820A",
-  collectionAccentPressed: "#C06A00",
+  collectionAccent: "#84E72E",
+  collectionAccentText: "#0FA94F",
+  collectionAccentSoft: "#E6F8CE",
+  collectionAccentLine: "#84E72E",
+  collectionAccentPressed: "#6FD41C",
 
   /**
    * Secondary text/action color
-   * Kept as an alias for existing secondary-emphasis call sites.
+   * In-family deep green for secondary-emphasis text — never a competing hue.
    */
-  secondary: "#E8820A",
+  secondary: "#0C8F43",
 
   onAccent: "#17211B",
   onCollectionAccent: "#17211B",
 
   /**
    * Processing / informational state
-   * Vivid blue appears sparingly with pale sky support.
+   * On-brand: a calm neutral pill carries an electric-green spinner/label, so the
+   * live "Analyzing" state never introduces a competing blue hue.
    */
-  processing: "#3525F5",
-  processingSoft: "#C0D6DF",
-  processingLine: "#C0D6DF",
+  processing: "#0C8F43",
+  processingSoft: "#EDEFF1",
+  processingLine: "#EDEFF1",
 
   /**
    * Review / warning-ish state
-   * Darkened carrot for readable review text on light surfaces.
+   * Amber now reads as a genuinely distinct warning hue against the green brand.
    */
   review: "#A05E00",
   reviewSoft: "#FFE6BE",
@@ -94,7 +100,7 @@ export const colors = {
    * Interaction / overlays
    */
   navBorder: "rgba(23, 33, 27, 0.14)",
-  rowRipple: "rgba(182, 203, 87, 0.22)",
+  rowRipple: "rgba(132, 231, 46, 0.22)",
   skeletonSheen: "rgba(255, 255, 255, 0.6)",
 
   shadow: "#000000",
