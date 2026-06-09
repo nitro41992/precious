@@ -38,7 +38,7 @@ export const STARTER_COLLECTIONS = [
   },
 ] as const;
 
-export const PROMPT_VERSION = "precious-capture-analysis-v16";
+export const PROMPT_VERSION = "precious-capture-analysis-v17";
 export const SCHEMA_VERSION = "precious-capture-analysis-v13";
 export const PREFLIGHT_PROMPT_VERSION = "precious-capture-preflight-v1";
 export const CAPTURE_GATE_PROMPT_VERSION = "precious-capture-gate-v1";
@@ -413,7 +413,7 @@ export const analysisSchema = {
               text: {
                 type: "string",
                 description:
-                  "At most 12 words in plain human language, written as one complete sentence with no trailing ellipsis or dangling punctuation, phrased like: I picked [Collection title] because [plain evidence], or No collection because [plain reason it does not clearly fit existing collections]. Never use internal terms such as saved value, durable value, rerank, taxonomy, schema, or field rationale.",
+                  "At most 12 words in plain human language, written as one complete sentence with no trailing ellipsis or dangling punctuation, phrased like: I picked [Collection title] because [plain evidence], or No collection because [a concrete reason grounded in this specific capture]. Substitute a real, capture-specific reason; never echo bracket wording or generic filler such as does not clearly fit existing collections. Never use internal terms such as saved value, durable value, rerank, taxonomy, schema, or field rationale.",
               },
             },
           },

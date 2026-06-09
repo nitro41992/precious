@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { Animated, Dimensions, Easing, FlatList, Keyboard, Platform, View } from "react-native";
 import type { FlatListProps } from "react-native";
-import { CaretDown, CaretUp, Check, Folder, Plus, MagnifyingGlass as Search, Sparkle } from "phosphor-react-native";
+import { Check, Folder, Plus, MagnifyingGlass as Search, Sparkle } from "phosphor-react-native";
 
 import type { Capture, Collection, LoadPhase } from "../types";
 import { collectionSelectionActionState } from "../captureLogic";
@@ -91,8 +91,6 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
   const [step, setStep] = useState<"pick" | "create">("pick");
   const [draftTitle, setDraftTitle] = useState("");
   const [draftDescription, setDraftDescription] = useState("");
-  // Which AI-picked rows have their "Why this?" rationale expanded.
-  const [expandedWhy, setExpandedWhy] = useState<Set<string>>(new Set());
 
   // The create step is a bottom-anchored sheet, so the keyboard would cover it.
   // Lift it by padding the sheet above the keyboard; prime with the last/estimated
@@ -120,7 +118,6 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
       setStep("pick");
       setDraftTitle("");
       setDraftDescription("");
-      setExpandedWhy(new Set());
       setKeyboardHeight(0);
     }
   }, [collectionPickerOpen]);
@@ -150,6 +147,15 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
   const selectionTerm = collectionPickerQuery.trim().toLowerCase();
   const collectionSelectorColdLoading =
     collectionsLoadPhase === "cold" && collectionsLoading && !activeCollectionsLoadedOnce && !collections.length;
+  // Per-collection AI rationale ("I picked PT because…"), keyed by collection id so it can be
+  // shown inline on the row it explains. Built before the list so AI-picked rows can lead.
+  const analysisRationaleById = new Map<string, string>();
+  (selected.linkedCollections || []).forEach((collection) => {
+    const rationale = (collection.rationale || "").trim();
+    if (collection.createdBy === "analysis" && rationale) {
+      analysisRationaleById.set(collection.id, rationale);
+    }
+  });
   const visibleCollections = collectionSelectorColdLoading
     ? []
     : collections
@@ -158,6 +164,12 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
           (collection) =>
             !selectionTerm ||
             [collection.title, collection.description].join(" ").toLowerCase().includes(selectionTerm)
+        )
+        // Pin AI-picked collections to the top so their reason reads without scrolling.
+        // Stable sort: rows without a rationale keep their incoming order.
+        .sort(
+          (a, b) =>
+            (analysisRationaleById.has(b.id) ? 1 : 0) - (analysisRationaleById.has(a.id) ? 1 : 0)
         );
   const selectionCountText = collectionSelectionIds.length ? `${collectionSelectionIds.length} selected` : "No collection";
   const pendingSuggestion = selected.pendingSuggestion || null;
@@ -168,15 +180,6 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
   const canCreate = !pendingSuggestion && !suggestionPending && !selectionTerm;
   const draftReady = Boolean(draftTitle.trim() && draftDescription.trim());
 
-  // Per-collection AI rationale ("I picked PT because…"), keyed by collection id so it can be
-  // shown contextually on the row it explains instead of as one standalone insight block.
-  const analysisRationaleById = new Map<string, string>();
-  (selected.linkedCollections || []).forEach((collection) => {
-    const rationale = (collection.rationale || "").trim();
-    if (collection.createdBy === "analysis" && rationale) {
-      analysisRationaleById.set(collection.id, rationale);
-    }
-  });
 
   const completeSelection = () => {
     if (selectionAction.shouldSave) saveCollectionSelection();
@@ -203,15 +206,6 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
     setDraftTitle("");
     setDraftDescription("");
     setStep("pick");
-  };
-
-  const toggleWhy = (collectionId: string) => {
-    setExpandedWhy((current) => {
-      const next = new Set(current);
-      if (next.has(collectionId)) next.delete(collectionId);
-      else next.add(collectionId);
-      return next;
-    });
   };
 
   const listHeader = (
@@ -281,7 +275,6 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
         renderItem={({ item }) => {
           const selectedRow = selectedCollectionIds.has(item.id);
           const whyText = analysisRationaleById.get(item.id);
-          const whyOpen = expandedWhy.has(item.id);
           return (
             <Animated.View style={{ opacity: collectionListFade }}>
               <MotionPressable
@@ -314,31 +307,12 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
                     </Text>
                   ) : null}
                   {whyText ? (
-                    <>
-                      <MotionPressable
-                        accessibilityLabel={whyOpen ? "Hide AI reason" : "Why this collection"}
-                        accessibilityRole="button"
-                        onPress={() => toggleWhy(item.id)}
-                        style={({ pressed }) => [styles.collectionWhyToggle, pressed && styles.subtlePressed]}
-                        testID={`pc.collection.why.${item.id}`}
-                      >
+                    <View style={styles.collectionWhyCard} testID={`pc.collection.why.${item.id}`}>
+                      <View style={styles.collectionWhyCardIcon}>
                         <Sparkle color={colors.accentTextStrong} size={14} weight="fill" />
-                        <Text style={styles.collectionWhyText}>Why this?</Text>
-                        {whyOpen ? (
-                          <CaretUp color={colors.accentTextStrong} size={12} weight="bold" />
-                        ) : (
-                          <CaretDown color={colors.accentTextStrong} size={12} weight="bold" />
-                        )}
-                      </MotionPressable>
-                      {whyOpen ? (
-                        <View style={styles.collectionWhyCard}>
-                          <View style={styles.collectionWhyCardIcon}>
-                            <Sparkle color={colors.accentTextStrong} size={14} weight="fill" />
-                          </View>
-                          <Text style={styles.collectionWhyCardText}>{whyText}</Text>
-                        </View>
-                      ) : null}
-                    </>
+                      </View>
+                      <Text style={styles.collectionWhyCardText}>{whyText}</Text>
+                    </View>
                   ) : null}
                 </View>
                 <View style={[styles.collectionSelectionControl, selectedRow && styles.collectionSelectionControlSelected]}>

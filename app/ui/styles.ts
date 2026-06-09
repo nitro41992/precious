@@ -702,23 +702,9 @@ export const styles = StyleSheet.create({
     gap: 12,
     paddingTop: 4
   },
-  // Compact, contextual "Why this?" disclosure on an AI-picked collection row.
-  collectionWhyToggle: {
-    alignItems: "center",
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    gap: 6,
-    marginTop: 8,
-    paddingVertical: 2
-  },
-  collectionWhyText: {
-    ...typefaces.displaySemibold,
-    color: colors.accentTextStrong,
-    fontSize: 13,
-    letterSpacing: 0.1
-  },
-  // The expanded rationale reads as a soft AI note: a sparkle glyph in an accent
-  // well beside the reason, on a light card that lifts off the tinted row.
+  // The AI rationale reads as a soft AI note shown inline on an AI-picked row: a
+  // sparkle glyph in an accent well beside the reason, on a light card that lifts
+  // off the tinted row.
   collectionWhyCard: {
     alignItems: "flex-start",
     backgroundColor: colors.surface,
