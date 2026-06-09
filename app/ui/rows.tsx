@@ -943,13 +943,17 @@ export function CollectionCard({
         style={({ pressed }) => [styles.collectionCard, pressed && styles.collectionCardPressed]}
         testID={`pc.collection.card.${item.id}`}
       >
-        <CollectionCollage collection={item} />
+        <View>
+          <CollectionCollage collection={item} />
+          {item.captureCount > 0 ? (
+            <View style={styles.cardCountPill}>
+              <Text style={styles.cardCountText}>{item.captureCount}</Text>
+            </View>
+          ) : null}
+        </View>
         <View style={styles.collectionCardCopy}>
           <Text numberOfLines={2} style={styles.collectionCardTitle}>
             {item.title}
-          </Text>
-          <Text numberOfLines={1} style={styles.collectionCardMeta}>
-            {item.captureCount} {item.captureCount === 1 ? "capture" : "captures"}
           </Text>
         </View>
       </MotionPressable>
@@ -981,35 +985,67 @@ export function CollectionSuggestionGridCard({
       >
         <View>
           <CollectionCollage collection={item} />
-          <View style={styles.suggestionGridBadge}>
-            <Sparkle color={colors.accentTextStrong} size={12} weight="fill" />
-            <Text style={styles.suggestionGridBadgeText}>Suggested</Text>
-          </View>
+          <MotionPressable
+            accessibilityLabel={`Add to collections: ${item.title}`}
+            accessibilityRole="button"
+            disabled={busy}
+            onPress={onPersist}
+            style={({ pressed }) => [
+              styles.suggestionGridAddButton,
+              busy && styles.suggestionDisabled,
+              pressed && styles.suggestionGridAddButtonPressed
+            ]}
+            testID={`pc.collection.suggestion.persist.${item.id}`}
+          >
+            <Plus color={colors.accentText} size={20} weight="bold" />
+          </MotionPressable>
+          {item.captureCount > 0 ? (
+            <View style={styles.cardCountPill}>
+              <Text style={styles.cardCountText}>{item.captureCount}</Text>
+            </View>
+          ) : null}
         </View>
         <View style={styles.collectionCardCopy}>
           <Text numberOfLines={2} style={styles.collectionCardTitle}>
             {item.title}
           </Text>
-          <Text numberOfLines={1} style={styles.collectionCardMeta}>
-            {item.captureCount} {item.captureCount === 1 ? "capture" : "captures"}
-          </Text>
         </View>
-        <MotionPressable
-          accessibilityLabel={`Add collection: ${item.title}`}
-          accessibilityRole="button"
-          disabled={busy}
-          onPress={onPersist}
-          style={({ pressed }) => [
-            styles.suggestionGridAdd,
-            busy && styles.suggestionDisabled,
-            pressed && styles.subtlePressed
-          ]}
-          testID={`pc.collection.suggestion.persist.${item.id}`}
-        >
-          <Plus color={colors.onAccent} size={15} weight="bold" />
-          <Text style={styles.suggestionGridAddText}>Add to collections</Text>
-        </MotionPressable>
       </MotionPressable>
     </View>
+  );
+}
+
+// A slim, horizontally-scrolling variant of the suggestion card for the Recents
+// rail. Reuses the collage + "Suggested" badge, but lays out wide-and-short so
+// the rail stays a compact secondary band; tapping opens the suggestion detail.
+export function CollectionSuggestionRailCard({
+  item,
+  onPress
+}: {
+  item: Collection;
+  onPress: () => void;
+}) {
+  return (
+    <MotionPressable
+      accessibilityLabel={`Open suggestion: ${item.title}`}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [styles.suggestionRailCard, pressed && styles.suggestionRailCardPressed]}
+      testID={`pc.home.suggestion.${item.id}`}
+    >
+      <View style={styles.suggestionRailCollage}>
+        <CollectionCollage collection={item} />
+        {item.captureCount > 0 ? (
+          <View style={styles.cardCountPill}>
+            <Text style={styles.cardCountText}>{item.captureCount}</Text>
+          </View>
+        ) : null}
+      </View>
+      <View style={styles.suggestionRailBody}>
+        <Text numberOfLines={2} style={styles.suggestionRailTitle}>
+          {item.title}
+        </Text>
+      </View>
+    </MotionPressable>
   );
 }

@@ -48,6 +48,11 @@ export const colors = {
   accentSoft: "#EDF6CC",
   accentLine: "#A3E635",
   accentPressed: "#84CC16",
+  // Whisper-soft lime surface for AI-suggestion cards: lighter than accentSoft so
+  // it reads as a calm tint, paired with a soft in-family border for definition.
+  suggestionSurface: "#F4F8E6",
+  suggestionSurfacePressed: "#ECF4D6",
+  suggestionBorder: "#E2EEC0",
 
   /**
    * Collection / secondary emphasis

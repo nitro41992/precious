@@ -52,6 +52,7 @@ export function useAppUiEffects({
   reviewMotion,
   searchMotion,
   searchOpen,
+  suggestionsOpen,
   selectCapture,
   selectCollection,
   selectedCollectionId,
@@ -68,6 +69,7 @@ export function useAppUiEffects({
   setQuickIntentOpen,
   setReminderSheetOpen,
   setSearchOpen,
+  setSuggestionsOpen,
   showCaptureComposer,
   showCollectionForm,
   skeletonPulse,
@@ -108,6 +110,7 @@ export function useAppUiEffects({
   reviewMotion: Animated.Value;
   searchMotion: Animated.Value;
   searchOpen: boolean;
+  suggestionsOpen: boolean;
   selectCapture: (captureId: string | null) => void;
   selectCollection: (collectionId: string | null) => void;
   selectedCollectionId: string | null;
@@ -124,6 +127,7 @@ export function useAppUiEffects({
   setQuickIntentOpen: (value: boolean) => void;
   setReminderSheetOpen: (value: boolean) => void;
   setSearchOpen: (value: boolean) => void;
+  setSuggestionsOpen: (value: boolean) => void;
   showCaptureComposer: boolean;
   showCollectionForm: boolean;
   skeletonPulse: Animated.Value;
@@ -175,6 +179,7 @@ export function useAppUiEffects({
       !quickIntentOpen &&
       !reminderSheetOpen &&
       !collectionsOpen &&
+      !suggestionsOpen &&
       !accountSheetOpen
     ) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -231,6 +236,13 @@ export function useAppUiEffects({
         closeCollectionDetail();
         return true;
       }
+      // After the detail closes, the suggestions overlay (if it was the entry
+      // point) is next. Closing it returns to whichever pane it was opened over
+      // (Collections or Recents), since openSuggestions leaves collectionsOpen as-is.
+      if (suggestionsOpen) {
+        setSuggestionsOpen(false);
+        return true;
+      }
       if (collectionsOpen) {
         setCollectionsOpen(false);
         return true;
@@ -257,6 +269,7 @@ export function useAppUiEffects({
     quickIntentOpen,
     reminderSheetOpen,
     searchOpen,
+    suggestionsOpen,
     selectCapture,
     selectCollection,
     selectedCollectionId,
@@ -267,12 +280,13 @@ export function useAppUiEffects({
     setQuickIntentOpen,
     setReminderSheetOpen,
     setSearchOpen,
+    setSuggestionsOpen,
     showCaptureComposer,
     showCollectionForm
   ]);
 
   useEffect(() => {
-    if (!searchOpen && !collectionSearchOpen) return;
+    if (!searchOpen && !collectionSearchOpen && !suggestionsOpen) return;
     searchMotion.stopAnimation();
     searchMotion.setValue(0);
     Animated.timing(searchMotion, {
@@ -281,7 +295,7 @@ export function useAppUiEffects({
       toValue: 1,
       useNativeDriver: true
     }).start();
-  }, [collectionSearchOpen, searchMotion, searchOpen]);
+  }, [collectionSearchOpen, searchMotion, searchOpen, suggestionsOpen]);
 
   useEffect(() => {
     if (!selectedId) return;

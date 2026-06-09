@@ -2,13 +2,12 @@ import type { ReactElement, ReactNode } from "react";
 import { Pressable, StatusBar, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import type { FlashListProps, ListRenderItemInfo } from "@shopify/flash-list";
-import { Folder, MagnifyingGlass as Search, Plus } from "phosphor-react-native";
+import { Folder, Plus, Sparkle } from "phosphor-react-native";
 
 import type { Collection, LoadPhase } from "../types";
 import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
-import { HeaderContentGradient, IconButton } from "../ui/components";
-import { CollectionSuggestionGridCard } from "../ui/rows";
+import { HeaderContentGradient, MotionPressable, SearchBarTrigger } from "../ui/components";
 import { Text } from "../ui/typography";
 
 type CollectionsScreenProps = {
@@ -27,14 +26,12 @@ type CollectionsScreenProps = {
     collectionsLoadPhase: LoadPhase;
     collectionsLoading: boolean;
     showCollectionForm: boolean;
-    suggestionBusyId: string | null;
   };
   actions: {
     loadMoreCollections: () => void;
     openCollectionComposer: () => void;
     openCollectionSearch: () => void;
-    openSuggestion: (collectionId: string) => void;
-    persistSuggestion: (collectionId: string) => void;
+    openSuggestions: () => void;
     renderCollection: (input: ListRenderItemInfo<Collection>) => ReactElement | null;
     renderCollectionGridSkeleton: (count?: number) => ReactElement | null;
     renderCollectionSkeletonRows: (
@@ -58,13 +55,12 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
     suggestions,
     toast
   } = data;
-  const { collectionsLoadPhase, collectionsLoading, suggestionBusyId } = state;
+  const { collectionsLoadPhase, collectionsLoading } = state;
   const {
     loadMoreCollections,
     openCollectionComposer,
     openCollectionSearch,
-    openSuggestion,
-    persistSuggestion,
+    openSuggestions,
     renderCollection,
     renderCollectionGridSkeleton,
     renderListLoadingFooter
@@ -72,21 +68,35 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
 
   const collectionsBlockingLoading = collectionsLoadPhase === "cold" && collectionsLoading && !collectionsError && !collections.length;
   const visibleManagedCollections = collections;
-  const suggestionsHeader = suggestions.length ? (
-    <View style={styles.suggestionSection}>
-      <View style={styles.suggestionSectionGrid}>
-        {suggestions.map((suggestion) => (
-          <CollectionSuggestionGridCard
-            busy={suggestionBusyId === suggestion.id}
-            item={suggestion}
-            key={suggestion.id}
-            onPersist={() => persistSuggestion(suggestion.id)}
-            onPress={() => openSuggestion(suggestion.id)}
-          />
-        ))}
-      </View>
+  // Banner row above the grid: the primary "Add collection" action (the FAB is
+  // now globally add-capture) plus a "See suggestions" entry into the dedicated
+  // suggestions view, surfaced only when there are suggestions to review.
+  const collectionsHeader = (
+    <View style={styles.collectionsBanner}>
+      <MotionPressable
+        accessibilityLabel="Add collection"
+        accessibilityRole="button"
+        onPress={openCollectionComposer}
+        style={({ pressed }) => [styles.collectionsAddPill, pressed && styles.collectionsAddPillPressed]}
+        testID="pc.collections.add"
+      >
+        <Plus color={colors.onAccent} size={18} weight="bold" />
+        <Text style={styles.collectionsAddPillText}>Add collection</Text>
+      </MotionPressable>
+      {suggestions.length ? (
+        <MotionPressable
+          accessibilityLabel={`See ${suggestions.length} suggested ${suggestions.length === 1 ? "collection" : "collections"}`}
+          accessibilityRole="button"
+          onPress={openSuggestions}
+          style={({ pressed }) => [styles.collectionsSuggestPill, pressed && styles.collectionsSuggestPillPressed]}
+          testID="pc.collections.see-suggestions"
+        >
+          <Sparkle color={colors.accentTextStrong} size={16} weight="fill" />
+          <Text style={styles.collectionsSuggestPillText}>See suggestions ({suggestions.length})</Text>
+        </MotionPressable>
+      ) : null}
     </View>
-  ) : null;
+  );
 
   return (
     <View style={styles.edgeToEdgeSafe}>
@@ -100,13 +110,12 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
                 <Text style={styles.title}>Collections</Text>
               </View>
             </View>
-            <IconButton
-              Icon={Search}
-              label="Search collections"
-              onPress={openCollectionSearch}
-              testID="pc.collections.search"
-            />
           </View>
+          <SearchBarTrigger
+            onPress={openCollectionSearch}
+            placeholder="Search collections"
+            testID="pc.collections.search"
+          />
         </View>
         {collectionsError ? <Text style={styles.errorText}>{collectionsError}</Text> : null}
         <FlashList
@@ -115,7 +124,7 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
           keyExtractor={(item) => item.id}
           renderItem={renderCollection}
           numColumns={2}
-          ListHeaderComponent={suggestionsHeader}
+          ListHeaderComponent={collectionsHeader}
           ListEmptyComponent={
             collectionsBlockingLoading && collectionsColdSkeletonVisible ? (
               renderCollectionGridSkeleton(6)

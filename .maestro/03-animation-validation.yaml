@@ -14,6 +14,10 @@ name: 03 animation validation
     id: "pc.home.captures"
 - tapOn:
     id: "pc.nav.collections"
+# The FAB is globally "add capture"; collection creation now lives in an
+# in-page "Add collection" pill on the Collections list banner.
+- assertVisible:
+    id: "pc.collections.add"
 - assertVisible:
     text: "review-e2e-.*Suggested"
 - tapOn:

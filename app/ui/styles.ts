@@ -29,6 +29,28 @@ const softCardShadow = Platform.OS === "android"
       shadowOpacity: 0.045,
       shadowRadius: 18
     };
+// Softer, more spread-out lift for the suggestion tiles so the shadow reads as a
+// diffuse glow rather than a hard drop.
+const diffuseCardShadow = Platform.OS === "android"
+  ? {
+      boxShadow: "0px 6px 26px 0px rgba(23, 33, 27, 0.10)",
+      elevation: 0
+    }
+  : {
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.10,
+      shadowRadius: 26
+    };
+// Tight shadow so the light count pill separates from light areas of a thumbnail.
+const pillShadow = Platform.OS === "android"
+  ? { boxShadow: "0px 1px 5px 0px rgba(23, 33, 27, 0.20)" }
+  : {
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.2,
+      shadowRadius: 4
+    };
 
 export const styles = StyleSheet.create({
   safe: {
@@ -112,7 +134,7 @@ export const styles = StyleSheet.create({
     zIndex: 2
   },
   headerContentGradient: {
-    height: Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) + 118 : 118,
+    height: Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) + 138 : 138,
     left: -22,
     position: "absolute",
     right: -22,
@@ -146,7 +168,10 @@ export const styles = StyleSheet.create({
     zIndex: 4
   },
   topAppBarListInset: {
-    paddingTop: (Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0) + 60
+    // Clears the absolute header (title + persistent search bar) plus the fade
+    // tail, so the rail/pill banner starts crisp below the gradient (not washed
+    // out by it).
+    paddingTop: (Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0) + 146
   },
   title: {
     color: colors.ink,
@@ -259,9 +284,6 @@ export const styles = StyleSheet.create({
     width: 50,
     ...bottomControlShadow
   },
-  bottomNavFabShadowCollection: {
-    backgroundColor: colors.collectionAccentText
-  },
   bottomNavFab: {
     alignItems: "center",
     backgroundColor: colors.accentText,
@@ -273,12 +295,6 @@ export const styles = StyleSheet.create({
   bottomNavFabPressed: {
     backgroundColor: colors.accentTextStrong,
     transform: [{ scale: 0.965 }]
-  },
-  bottomNavFabCollection: {
-    backgroundColor: colors.collectionAccentText
-  },
-  bottomNavFabCollectionPressed: {
-    backgroundColor: colors.accentTextStrong
   },
   searchScreen: {
     flex: 1
@@ -314,6 +330,29 @@ export const styles = StyleSheet.create({
     fontWeight: "600",
     minHeight: 48,
     paddingVertical: 10
+  },
+  // Persistent in-header search affordance (SearchBarTrigger). Soft filled pill,
+  // no hairline; the pressed fill darkens within the bar's own radius.
+  searchBarTrigger: {
+    alignItems: "center",
+    backgroundColor: colors.surfaceContainer,
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 12,
+    minHeight: 46,
+    paddingHorizontal: 14,
+    zIndex: 2
+  },
+  searchBarTriggerPressed: {
+    backgroundColor: colors.surfaceContainerHigh
+  },
+  searchBarTriggerText: {
+    color: colors.placeholder,
+    ...typefaces.medium,
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "600"
   },
   searchAssistRow: {
     alignItems: "center",
@@ -907,7 +946,7 @@ export const styles = StyleSheet.create({
     lineHeight: 17,
     paddingHorizontal: 22,
     paddingBottom: 10,
-    paddingTop: 24
+    paddingTop: 16
   },
   captureRow: {
     alignItems: "flex-start",
@@ -1741,6 +1780,61 @@ export const styles = StyleSheet.create({
     transform: [{ scale: 0.99 }]
   },
   // Collections-tab "Suggested" section: a labelled group of pending AI suggestions.
+  suggestionsScreenContent: {
+    gap: 10,
+    paddingBottom: 48,
+    paddingHorizontal: 22,
+    paddingTop: 8
+  },
+  // Collections list banner: primary "Add collection" pill + secondary
+  // "See suggestions" entry. Soft pills, no hairline; pressed fills hug each
+  // pill's own rounded footprint.
+  collectionsBanner: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    paddingBottom: 16,
+    paddingTop: 6
+  },
+  collectionsAddPill: {
+    alignItems: "center",
+    backgroundColor: colors.accent,
+    borderRadius: 999,
+    flexDirection: "row",
+    gap: 7,
+    paddingHorizontal: 16,
+    paddingVertical: 11
+  },
+  collectionsAddPillPressed: {
+    backgroundColor: colors.accentPressed,
+    transform: [{ scale: 0.99 }]
+  },
+  collectionsAddPillText: {
+    ...typefaces.bold,
+    color: colors.onAccent,
+    fontSize: 15,
+    fontWeight: "800"
+  },
+  collectionsSuggestPill: {
+    alignItems: "center",
+    backgroundColor: colors.surfaceContainer,
+    borderRadius: 999,
+    flexDirection: "row",
+    gap: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 11
+  },
+  collectionsSuggestPillPressed: {
+    backgroundColor: colors.surfaceContainerHigh,
+    transform: [{ scale: 0.99 }]
+  },
+  collectionsSuggestPillText: {
+    ...typefaces.bold,
+    color: colors.accentTextStrong,
+    fontSize: 15,
+    fontWeight: "700"
+  },
   suggestionSection: {
     paddingBottom: 8
   },
@@ -1753,39 +1847,120 @@ export const styles = StyleSheet.create({
     width: "50%"
   },
   suggestionGridCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 0
+    backgroundColor: colors.suggestionSurface,
+    borderColor: colors.suggestionBorder,
+    borderWidth: 1.5
   },
-  suggestionGridBadge: {
+  // Quick-add affordance on the suggestion tile's image — a compact soft-green
+  // "+" circle with the app green glyph, so the footer stays clean for the title.
+  suggestionGridAddButton: {
+    alignItems: "center",
+    backgroundColor: colors.accentSoft,
+    borderRadius: 18,
+    height: 36,
+    justifyContent: "center",
+    position: "absolute",
+    right: 8,
+    top: 8,
+    width: 36,
+    ...pillShadow
+  },
+  suggestionGridAddButtonPressed: {
+    backgroundColor: colors.suggestionBorder,
+    transform: [{ scale: 0.94 }]
+  },
+  // Recents rail: a compact, horizontally-scrolling band of suggested
+  // collections above the feed. Shown only when suggestions exist.
+  // The home list is full-bleed (homeList marginHorizontal: -22), so the rail
+  // head is inset to 22 to align with the title/cards, while the scroll content
+  // pads both edges so cards rest at 22 and can still scroll past the edge. The
+  // band is balanced top/bottom so the cards sit centered between the section
+  // label and the "Today" group header.
+  homeRail: {
+    paddingBottom: 0,
+    paddingTop: 0
+  },
+  homeRailHead: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    gap: 6,
+    paddingBottom: 10,
+    paddingHorizontal: 22,
+    paddingTop: 2
+  },
+  // Matches the "Today" group header (groupHeader) so the two read as siblings.
+  homeRailTitle: {
+    ...typefaces.displaySemibold,
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 17
+  },
+  // Vertical padding clears the tile's diffuse shadow so the ScrollView doesn't
+  // clip it; horizontal padding aligns the rail with the title/cards.
+  homeRailScroll: {
+    gap: 12,
+    paddingBottom: 26,
+    paddingHorizontal: 22,
+    paddingTop: 10
+  },
+  // Square media tile — collage on top, green footer with the title — so the
+  // suggestion rail reads as distinct from the wide landscape capture rows. A
+  // fixed height keeps the FlashList header measurement exact (no stray gap).
+  suggestionRailCard: {
+    backgroundColor: colors.suggestionSurface,
+    borderColor: colors.suggestionBorder,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    gap: 9,
+    height: 220,
+    padding: 8,
+    width: 168,
+    ...diffuseCardShadow
+  },
+  suggestionRailCardPressed: {
+    backgroundColor: colors.suggestionSurfacePressed,
+    transform: [{ scale: 0.99 }]
+  },
+  suggestionRailCollage: {
+    aspectRatio: 1,
+    borderRadius: 14,
+    overflow: "hidden",
+    position: "relative",
+    width: "100%"
+  },
+  // Shared count badge across collection / suggestion / rail tiles: a small light
+  // pill with just the number, sitting on the thumbnail so the footer stays free
+  // for the title.
+  cardCountPill: {
     alignItems: "center",
     backgroundColor: colors.surface,
     borderRadius: 999,
-    flexDirection: "row",
-    gap: 4,
-    left: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    position: "absolute",
-    top: 8
-  },
-  suggestionGridBadgeText: {
-    ...typefaces.displaySemibold,
-    color: colors.accentTextStrong,
-    fontSize: 11
-  },
-  suggestionGridAdd: {
-    alignItems: "center",
-    backgroundColor: colors.accent,
-    borderRadius: 12,
-    flexDirection: "row",
-    gap: 6,
+    bottom: 8,
+    height: 24,
     justifyContent: "center",
-    paddingVertical: 10
+    minWidth: 24,
+    paddingHorizontal: 8,
+    position: "absolute",
+    right: 8,
+    ...pillShadow
   },
-  suggestionGridAddText: {
+  cardCountText: {
     ...typefaces.displaySemibold,
-    color: colors.onAccent,
-    fontSize: 13
+    color: colors.ink,
+    fontSize: 12
+  },
+  suggestionRailBody: {
+    gap: 2,
+    paddingBottom: 2,
+    paddingHorizontal: 4
+  },
+  suggestionRailTitle: {
+    ...typefaces.cardTitle,
+    color: colors.ink,
+    fontSize: 16,
+    lineHeight: 21
   },
   // Suggested-collection detail (preview before persisting).
   detailSuggestedTag: {
@@ -1930,11 +2105,6 @@ export const styles = StyleSheet.create({
     lineHeight: 21,
     // Reserve two lines so 1- and 2-line titles keep cards in a row equal height.
     height: 42
-  },
-  collectionCardMeta: {
-    color: colors.muted,
-    fontSize: 13,
-    lineHeight: 18
   },
   removeButton: {
     paddingVertical: 4

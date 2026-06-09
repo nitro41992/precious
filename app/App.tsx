@@ -110,6 +110,7 @@ import { CollectionSearchScreen } from "./screens/CollectionSearchScreen";
 import { CollectionsScreen } from "./screens/CollectionsScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { SearchScreen } from "./screens/SearchScreen";
+import { SuggestionsScreen } from "./screens/SuggestionsScreen";
 import {
   createDeleteTrace,
   markDeleteTrace,
@@ -811,6 +812,9 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedCaptureSnapshot, setSelectedCaptureSnapshot] = useState<Capture | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
+  // Which surface the open collection detail was entered from, so the pane behind
+  // it matches and back returns there (Recents rail, suggestions view, or grid).
+  const [collectionDetailOrigin, setCollectionDetailOrigin] = useState<"recent" | "collections" | "suggestions">("collections");
   const [captureReturnCollectionId, setCaptureReturnCollectionId] = useState<string | null>(null);
   const [captureReviewOrigin, setCaptureReviewOrigin] = useState<CaptureReviewOrigin | null>(null);
   const [capturesLoading, setCapturesLoading] = useState(false);
@@ -862,6 +866,8 @@ export default function App() {
   // Pending AI collection suggestions (status='suggested' rows), shown in the Collections tab.
   const [suggestions, setSuggestions] = useState<Collection[]>([]);
   const [suggestionBusyId, setSuggestionBusyId] = useState<string | null>(null);
+  // The dedicated suggestions view, reached from the Collections "See suggestions" entry.
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [pickerCreating, setPickerCreating] = useState(false);
   const [reviewDraftsByCapture, setReviewDraftsByCapture] = useState<Record<string, CaptureReviewDraft>>({});
   const [reviewDraftsLoaded, setReviewDraftsLoaded] = useState(false);
@@ -1447,8 +1453,13 @@ export default function App() {
   // Update suggestions and keep the first-paint cache in lockstep, so a persisted
   // or dismissed suggestion never flashes back on the next cold open.
   function replaceSuggestions(next: Collection[]) {
-    setSuggestions(next);
-    writeCachedSuggestions(next);
+    // Newest suggestion first (by when it came in), so the rail and the
+    // suggestions view both surface the freshest groupings at the front.
+    const ordered = [...next].sort(
+      (a, b) => (b.createdAt ? Date.parse(b.createdAt) : 0) - (a.createdAt ? Date.parse(a.createdAt) : 0)
+    );
+    setSuggestions(ordered);
+    writeCachedSuggestions(ordered);
   }
 
   async function hydrateLocalProcessingCaptures() {
@@ -2080,13 +2091,14 @@ export default function App() {
 
   selectCaptureRef.current = selectCapture;
 
-  const selectCollection = useCallback((collectionId: string | null) => {
+  const selectCollection = useCallback((collectionId: string | null, origin: "recent" | "collections" | "suggestions" = "collections") => {
     setCollectionFeedReadyKey("");
     // Selecting a collection (or instant-clearing the selection) supersedes
     // any in-flight animated close; the frame animates up from wherever the
     // interrupted exit left it.
     collectionDetailClosingRef.current = false;
     setClosingCollectionDetail(null);
+    if (collectionId) setCollectionDetailOrigin(origin);
     if (collectionId) {
       const collection = [...collectionsCacheRef.current.active, ...collectionsCacheRef.current.archived]
         .find((item) => item.id === collectionId);
@@ -2338,6 +2350,7 @@ export default function App() {
     selectCollection(null);
     setCollectionsOpen(false);
     setCollectionSearchOpen(false);
+    setSuggestionsOpen(false);
     setMessage("");
     setSearchOpen(true);
   }
@@ -2347,6 +2360,7 @@ export default function App() {
     selectCollection(null);
     setSearchOpen(false);
     setCollectionSearchOpen(false);
+    setSuggestionsOpen(false);
     setCollectionsOpen(false);
     setAccountSheetOpen(false);
     setMessage("");
@@ -2448,6 +2462,11 @@ export default function App() {
   function openCaptureComposer() {
     setShowCollectionForm(false);
     setMessage("");
+    // The capture composer is the global FAB action and is mounted in the Recents
+    // pane. Switch to Recents so it opens on the visible pane (both panes stay
+    // mounted, so without this it would open behind the Collections tab).
+    setCollectionsOpen(false);
+    setSuggestionsOpen(false);
     setCaptureMode(DEFAULT_CAPTURE_COMPOSER_MODE);
     captureComposerClosingRef.current = false;
     setCaptureComposerClosing(false);
@@ -2460,6 +2479,7 @@ export default function App() {
     selectCollection(null);
     setSearchOpen(false);
     setCollectionSearchOpen(false);
+    setSuggestionsOpen(false);
     setCollectionsOpen(true);
     setAccountSheetOpen(false);
     setMessage("");
@@ -2549,6 +2569,7 @@ export default function App() {
     selectCapture(null);
     setSearchOpen(false);
     setCollectionSearchOpen(false);
+    setSuggestionsOpen(false);
     setAccountSheetOpen(false);
     setCollectionsMode(mode);
     setCollectionsOpen(true);
@@ -2571,6 +2592,7 @@ export default function App() {
     selectCapture(null);
     selectCollection(null);
     setSearchOpen(false);
+    setSuggestionsOpen(false);
     setAccountSheetOpen(false);
     setCollectionSearchQuery("");
     setCollectionSearchOpen(true);
@@ -2579,6 +2601,19 @@ export default function App() {
   function closeCollectionSearch() {
     setCollectionSearchOpen(false);
     setCollectionSearchQuery("");
+  }
+
+  function openSuggestions() {
+    selectCapture(null);
+    selectCollection(null);
+    setSearchOpen(false);
+    setCollectionSearchOpen(false);
+    setAccountSheetOpen(false);
+    setSuggestionsOpen(true);
+  }
+
+  function closeSuggestions() {
+    setSuggestionsOpen(false);
   }
 
   const markFaviconFailed = useCallback((host: string) => {
@@ -2717,6 +2752,9 @@ export default function App() {
     void loadCaptures().catch((error) => {
       setCapturesError((current) => current || friendlyError(error, "Could not load captures"));
     });
+    // Suggestions feed the Recents rail too, so fetch them on launch rather than
+    // waiting for the first visit to the Collections tab.
+    void loadSuggestions();
   }, [authReady, config?.apiUrl, loadCaptures, session?.userId]);
 
   useEffect(() => {
@@ -2933,6 +2971,7 @@ export default function App() {
     reviewMotion,
     searchMotion,
     searchOpen,
+    suggestionsOpen,
     selectCapture,
     selectCollection,
     selectedCollectionId,
@@ -2949,6 +2988,7 @@ export default function App() {
     setQuickIntentOpen,
     setReminderSheetOpen,
     setSearchOpen,
+    setSuggestionsOpen,
     quickIntentOpen,
     reminderSheetOpen,
     showCaptureComposer,
@@ -5082,6 +5122,8 @@ export default function App() {
           loadMoreActiveCaptures: () => loadMoreCaptures("active"),
           openCaptureComposer,
           openSearch,
+          openSuggestion: (collectionId) => selectCollection(collectionId, "recent"),
+          openSuggestions,
           pickCaptureImage: () => void pickCaptureImage(),
           renderCaptureSkeletonRows,
           renderHomeRow,
@@ -5101,6 +5143,7 @@ export default function App() {
           homeCaptureTotalCount: activeCaptureTotalCount,
           homeCaptures: homeRows,
           listPerfProps: CAPTURE_LIST_PERF_PROPS,
+          suggestions,
           toast: null,
           sourceInputRef,
           visibleHomeRows,
@@ -5132,8 +5175,7 @@ export default function App() {
           loadMoreCollections,
           openCollectionComposer,
           openCollectionSearch,
-          openSuggestion: (collectionId) => selectCollection(collectionId),
-          persistSuggestion: (collectionId) => void persistSuggestion(collectionId),
+          openSuggestions,
           renderCollection,
           renderCollectionGridSkeleton,
           renderCollectionSkeletonRows,
@@ -5156,7 +5198,6 @@ export default function App() {
         state={{
           collectionsLoadPhase,
           collectionsLoading,
-          suggestionBusyId,
           showCollectionForm
         }}
       />
@@ -5416,14 +5457,14 @@ export default function App() {
 
   if (selectedCollection) {
     return renderTopLevelStack({
-      active: "collections",
+      active: collectionDetailOrigin === "recent" ? "recent" : "collections",
       underlay: renderCollectionDetailOverlay(selectedCollection, { direction: "opening" })
     });
   }
 
   if (closingCollectionDetail) {
     return renderTopLevelStack({
-      active: "collections",
+      active: collectionDetailOrigin === "recent" ? "recent" : "collections",
       underlay: renderCollectionDetailOverlay(closingCollectionDetail, { direction: "closing" })
     });
   }
@@ -5447,6 +5488,32 @@ export default function App() {
           }}
           state={{
             collectionSearchQuery
+          }}
+        />
+      )
+    });
+  }
+
+  if (suggestionsOpen) {
+    return renderTopLevelStack({
+      // Anchor to the pane the suggestions view was opened over (Collections
+      // pill vs Recents rail) so entering/leaving doesn't flash a tab switch.
+      active: collectionsOpen ? "collections" : "recent",
+      overlay: (
+        <SuggestionsScreen
+          actions={{
+            closeSuggestions,
+            openSuggestion: (collectionId) => selectCollection(collectionId, "suggestions"),
+            persistSuggestion: (collectionId) => void persistSuggestion(collectionId)
+          }}
+          data={{
+            appSheets: renderAppSheets(),
+            suggestions,
+            suggestionsMotion: searchMotion,
+            toast: renderToast()
+          }}
+          state={{
+            suggestionBusyId
           }}
         />
       )

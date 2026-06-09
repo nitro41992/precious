@@ -268,7 +268,8 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
       <BottomAppBar
         active={active}
         onCollectionsPress={() => input.onCollectionsScreenOpen("active")}
-        onFabPress={active === "collections" ? input.onCollectionComposerOpen : input.onRecentComposerOpen}
+        // The FAB is the single global "add capture" action on every tab.
+        onFabPress={input.onRecentComposerOpen}
         onRecentPress={input.onRecentHomePress}
         onSettingsPress={input.onAccountActionsPress}
       />

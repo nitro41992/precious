@@ -2,6 +2,7 @@ import type { ReactElement, ReactNode, RefObject } from "react";
 import {
   Animated,
   Pressable,
+  ScrollView,
   StatusBar,
   View
 } from "react-native";
@@ -10,18 +11,21 @@ import { FlashList } from "@shopify/flash-list";
 import type { FlashListProps, ListRenderItemInfo } from "@shopify/flash-list";
 import {
   Camera,
+  CaretRight,
   Check,
   ImageSquare as ImageIcon,
   Link as Link2,
   MagnifyingGlass as Search,
-  Plus
+  Plus,
+  Sparkle
 } from "phosphor-react-native";
 
-import type { CaptureComposerMode, HomeListRow } from "../types";
+import type { CaptureComposerMode, Collection, HomeListRow } from "../types";
 import { normalizeCaptureLink } from "../captureLogic";
 import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
-import { HeaderContentGradient, IconButton, KeyboardSheet, MotionPressable, SheetHeader, keyboardSheetMetrics } from "../ui/components";
+import { HeaderContentGradient, KeyboardSheet, MotionPressable, SearchBarTrigger, SheetHeader, keyboardSheetMetrics } from "../ui/components";
+import { CollectionSuggestionRailCard } from "../ui/rows";
 import { Text, TextInput } from "../ui/typography";
 
 type HomeScreenProps = {
@@ -33,6 +37,7 @@ type HomeScreenProps = {
     homeCaptureTotalCount: number | null;
     homeCaptures: HomeListRow[];
     listPerfProps: Partial<FlashListProps<HomeListRow>>;
+    suggestions: Collection[];
     toast: ReactNode;
     sourceInputRef: RefObject<NativeTextInput | null>;
     visibleHomeRows: HomeListRow[];
@@ -60,6 +65,8 @@ type HomeScreenProps = {
     loadMoreActiveCaptures: () => void;
     openCaptureComposer: () => void;
     openSearch: () => void;
+    openSuggestion: (collectionId: string) => void;
+    openSuggestions: () => void;
     pickCaptureImage: () => void;
     renderCaptureSkeletonRows: (count?: number, withRemoveAction?: boolean) => ReactElement | null;
     renderHomeRow: (input: ListRenderItemInfo<HomeListRow>) => ReactElement | null;
@@ -79,6 +86,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
     homeCaptureTotalCount,
     homeCaptures,
     listPerfProps,
+    suggestions,
     toast,
     sourceInputRef,
     visibleHomeRows,
@@ -106,6 +114,8 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
     loadMoreActiveCaptures,
     openCaptureComposer,
     openSearch,
+    openSuggestion,
+    openSuggestions,
     pickCaptureImage,
     renderCaptureSkeletonRows,
     renderHomeRow,
@@ -142,6 +152,37 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
   const captureLinkHasText = Boolean(sourceDraft.trim());
   const captureLinkInvalid = captureMode === "link" && captureLinkHasText && !normalizedCaptureLink;
 
+  // A compact, horizontally-scrolling band of suggested collections above the
+  // feed. Secondary, supplementary content — only shown when suggestions exist,
+  // so an empty/onboarding feed keeps its full-screen illustration.
+  const suggestionRail = sessionActive && suggestions.length ? (
+    <View style={styles.homeRail}>
+      <MotionPressable
+        accessibilityLabel="See all suggested collections"
+        accessibilityRole="button"
+        onPress={openSuggestions}
+        style={styles.homeRailHead}
+      >
+        <Sparkle color={colors.accentTextStrong} size={15} weight="fill" />
+        <Text style={styles.homeRailTitle}>Suggested collections</Text>
+        <CaretRight color={colors.muted} size={14} weight="bold" />
+      </MotionPressable>
+      <ScrollView
+        contentContainerStyle={styles.homeRailScroll}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+      >
+        {suggestions.map((suggestion) => (
+          <CollectionSuggestionRailCard
+            item={suggestion}
+            key={suggestion.id}
+            onPress={() => openSuggestion(suggestion.id)}
+          />
+        ))}
+      </ScrollView>
+    </View>
+  ) : null;
+
   return (
     <View style={styles.edgeToEdgeSafe}>
       <StatusBar backgroundColor={colors.transparent} barStyle={appTheme.statusBarStyle} translucent />
@@ -159,10 +200,14 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                 ) : null}
               </View>
             </View>
-            {sessionActive ? (
-              <IconButton Icon={Search} label="Search saved things" onPress={openSearch} testID="pc.home.search" />
-            ) : null}
           </View>
+          {sessionActive ? (
+            <SearchBarTrigger
+              onPress={openSearch}
+              placeholder="Search saved things"
+              testID="pc.home.search"
+            />
+          ) : null}
         </View>
         <FlashList
           {...listPerfProps}
@@ -178,6 +223,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
           style={styles.homeList}
           onEndReached={loadMoreActiveCaptures}
           onEndReachedThreshold={0.35}
+          ListHeaderComponent={suggestionRail}
           ListEmptyComponent={
             homeAwaitingCaptures && (homeInitialLoading || capturesLoading) && homeColdSkeletonVisible ? (
               renderCaptureSkeletonRows(5)

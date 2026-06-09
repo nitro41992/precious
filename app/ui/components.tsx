@@ -10,7 +10,7 @@ import type {
 } from "react-native";
 import { Animated, Dimensions, Easing, KeyboardAvoidingView, Pressable, View } from "react-native";
 import { Image } from "expo-image";
-import { CaretLeft, Check, ClockClockwise, Folder, Folders, Gear, HouseSimple, Info, Plus, Sparkle, Warning, X } from "phosphor-react-native";
+import { CaretLeft, Check, ClockClockwise, Folder, Folders, Gear, HouseSimple, Info, MagnifyingGlass, Plus, Sparkle, Warning, X } from "phosphor-react-native";
 import Reanimated, {
   cancelAnimation,
   interpolate,
@@ -420,6 +420,36 @@ export function IconButton({
       testID={testID}
     >
       <Icon color={iconColor} size={20} weight={tone === "primary" || selected ? "bold" : "bold"} />
+    </MotionPressable>
+  );
+}
+
+// A persistent, full-width search affordance for screen headers. It looks like a
+// filled input but is a button: tapping it opens the dedicated search screen
+// (which owns the real autofocus input + hybrid results), so the bar reads as
+// morphing into search. Pressed fill hugs the bar's own rounded surface.
+export function SearchBarTrigger({
+  placeholder,
+  onPress,
+  testID
+}: {
+  placeholder: string;
+  onPress: () => void;
+  testID?: string;
+}) {
+  return (
+    <MotionPressable
+      accessibilityLabel={placeholder}
+      accessibilityRole="search"
+      onPress={onPress}
+      pressScale={motionPressScale.standard}
+      style={({ pressed }) => [styles.searchBarTrigger, pressed && styles.searchBarTriggerPressed]}
+      testID={testID}
+    >
+      <MagnifyingGlass color={colors.muted} size={19} weight="bold" />
+      <Text numberOfLines={1} style={styles.searchBarTriggerText}>
+        {placeholder}
+      </Text>
     </MotionPressable>
   );
 }
@@ -1119,11 +1149,14 @@ function toastIconWellStyle(tone: ToastTone) {
 export function HeaderContentGradient({ density = "standard" }: { density?: "standard" | "compact" } = {}) {
   const stops = density === "compact"
     ? {
-        middleOffset: "0.5",
-        middleOpacity: "0.87",
-        dropOffset: "0.6",
-        dropOpacity: "0.6",
-        clearOffset: "0.7"
+        // Stays paper-opaque through the title + persistent search bar, then
+        // fades out by the gradient's bottom edge — which sits just above the
+        // rail/pill banner, so those render crisp (not washed out) below it.
+        middleOffset: "0.82",
+        middleOpacity: "0.95",
+        dropOffset: "0.94",
+        dropOpacity: "0.3",
+        clearOffset: "1"
       }
     : {
         middleOffset: "0.58",
@@ -1165,7 +1198,6 @@ export function BottomAppBar({
   onSettingsPress: () => void;
   onFabPress: () => void;
 }) {
-  const collectionAction = active === "collections";
   const navItems: Array<{
     key: "recent" | "collections" | "settings";
     label: string;
@@ -1248,19 +1280,17 @@ export function BottomAppBar({
             );
           })}
         </View>
-        <View style={[styles.bottomNavFabShadow, collectionAction && styles.bottomNavFabShadowCollection]}>
+        <View style={styles.bottomNavFabShadow}>
           <MotionPressable
-            accessibilityLabel={collectionAction ? "New collection" : "New capture"}
+            accessibilityLabel="New capture"
             accessibilityRole="button"
             onPress={onFabPress}
             pressScale={motionPressScale.icon}
             style={({ pressed }) => [
               styles.bottomNavFab,
-              collectionAction && styles.bottomNavFabCollection,
-              pressed && styles.bottomNavFabPressed,
-              pressed && collectionAction && styles.bottomNavFabCollectionPressed
+              pressed && styles.bottomNavFabPressed
             ]}
-            testID={collectionAction ? "pc.nav.collection-create" : "pc.nav.capture"}
+            testID="pc.nav.capture"
           >
             <Plus color={colors.surface} size={28} weight="bold" />
           </MotionPressable>
