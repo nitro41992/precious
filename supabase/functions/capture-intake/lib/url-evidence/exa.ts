@@ -7,8 +7,11 @@ import {
 } from "../common.ts";
 import type { UrlEvidence } from "../types.ts";
 import {
+  bestEvidence,
   emptyUrlEvidence,
   evidenceQuality,
+  evidenceQualityScore,
+  TRANSIENT_BLOCK_PATTERN,
   weaknessReasons,
   withPipelineRaw,
 } from "./quality.ts";
@@ -19,6 +22,8 @@ const EXA_MAX_AGE_HOURS = 24;
 const EXA_LIVECRAWL_TIMEOUT_MS = 12000;
 const EXA_REQUEST_TIMEOUT_MS = 15000;
 const EXA_TARGET_LIMIT = 3;
+const EXA_RETRY_BACKOFF_MS = 300;
+const EXA_NOT_FOUND_PATTERN = /\b(404|410)\b|not[\s_-]?found|\bgone\b/i;
 
 type ExaStatus = {
   id?: string;
@@ -122,14 +127,43 @@ export function exaContentsRequestBody(urls: string[]) {
   };
 }
 
-export async function fetchExaContentsEvidence(
-  sourceUrl: string,
-  targetUrls: string[],
-) {
-  const apiKey = exaApiKey();
-  const urls = exaTargetUrlsForEnrichment(targetUrls);
-  if (!apiKey || !urls.length) return [];
+function isTransientHttpStatus(status: number) {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
 
+function exaHttpStatusCode(evidence: UrlEvidence): number | null {
+  const exa = (evidence.raw?.exa ?? {}) as Record<string, unknown>;
+  const status = (exa.status ?? {}) as { error?: { httpStatusCode?: number } };
+  const fromStatus = status.error?.httpStatusCode;
+  if (typeof fromStatus === "number") return fromStatus;
+  const fromRequest = exa.request_status;
+  return typeof fromRequest === "number" ? fromRequest : null;
+}
+
+// Decide whether a completed Exa attempt is worth one retry. Exa's cold (uncached)
+// live crawl of a JS/Cloudflare-gated page is slow and flaky — a transient/blocked
+// failure often succeeds on a second attempt. Only retry when EVERY produced
+// candidate failed (no usable content) AND at least one failure looks
+// transient/blocked rather than a definitive not-found.
+export function isTransientExaFailure(evidence: UrlEvidence[]) {
+  if (!evidence.length) return false;
+  if (evidence.some((candidate) => candidate.status !== "failed")) return false;
+  return evidence.some((candidate) => {
+    const error = candidate.error || "";
+    if (EXA_NOT_FOUND_PATTERN.test(error)) return false;
+    const code = exaHttpStatusCode(candidate);
+    if (code === 404 || code === 410) return false;
+    if (code === 401 || code === 403) return true;
+    if (code !== null && isTransientHttpStatus(code)) return true;
+    return TRANSIENT_BLOCK_PATTERN.test(error);
+  });
+}
+
+async function attemptExaContents(
+  apiKey: string,
+  sourceUrl: string,
+  urls: string[],
+): Promise<{ evidence: UrlEvidence[]; retryable: boolean }> {
   try {
     const response = await fetch(EXA_CONTENTS_ENDPOINT, {
       method: "POST",
@@ -142,7 +176,7 @@ export async function fetchExaContentsEvidence(
     });
     if (!response.ok) {
       const text = await response.text();
-      return urls.map((url) =>
+      const evidence = urls.map((url) =>
         exaFailureEvidence(
           sourceUrl,
           url,
@@ -150,21 +184,45 @@ export async function fetchExaContentsEvidence(
           { request_status: response.status },
         )
       );
+      return { evidence, retryable: isTransientHttpStatus(response.status) };
     }
-    return normalizeExaContentsEvidence(
+    const evidence = normalizeExaContentsEvidence(
       sourceUrl,
       urls,
       await response.json(),
     );
+    return { evidence, retryable: isTransientExaFailure(evidence) };
   } catch (error) {
-    return urls.map((url) =>
+    // Network error or AbortSignal timeout — always worth one retry.
+    const evidence = urls.map((url) =>
       exaFailureEvidence(
         sourceUrl,
         url,
         errorMessage(error, "Exa contents request failed"),
       )
     );
+    return { evidence, retryable: true };
   }
+}
+
+export async function fetchExaContentsEvidence(
+  sourceUrl: string,
+  targetUrls: string[],
+) {
+  const apiKey = exaApiKey();
+  const urls = exaTargetUrlsForEnrichment(targetUrls);
+  if (!apiKey || !urls.length) return [];
+
+  const first = await attemptExaContents(apiKey, sourceUrl, urls);
+  if (!first.retryable) return first.evidence;
+  await new Promise((resolve) => setTimeout(resolve, EXA_RETRY_BACKOFF_MS));
+  const second = await attemptExaContents(apiKey, sourceUrl, urls);
+  // Keep whichever attempt produced better evidence so a retry that fails again
+  // never overwrites a marginally-better first try.
+  return evidenceQualityScore(bestEvidence(second.evidence)) >=
+      evidenceQualityScore(bestEvidence(first.evidence))
+    ? second.evidence
+    : first.evidence;
 }
 
 function statusForUrl(statuses: ExaStatus[], requestedUrl: string) {

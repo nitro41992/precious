@@ -65,6 +65,17 @@ export function emptyUrlEvidence(
   };
 }
 
+// A block/transient/timeout signature in an extractor error message. Shared by
+// needsClientResolutionForEvidence (opaque-share routing) and
+// isRecoverableExtractionFailure (don't permanently reject a link we never reached).
+export const TRANSIENT_BLOCK_PATTERN =
+  /403|401|429|timeout|blocked|forbidden|access denied|captcha|too many|rate.?limit|temporar/i;
+
+// A definitive "this resource is gone" signature. These are NOT recoverable — a
+// retry won't help and the link should still be rejected.
+const NOT_FOUND_PATTERN =
+  /\b(404|410)\b|not[\s_-]?found|\bgone\b|no longer available|source_not_found/i;
+
 export function blockPageText(value: string | null | undefined) {
   const text = String(value || "").toLowerCase();
   return /captcha|cloudflare|enable javascript|access denied|temporarily blocked|sign in to continue|log in to continue|please wait while we check|content is unavailable|people under \d+ can't see this content|can't see this content|cannot see this content|account has set limits on who can see|limits on who can see this content/i
@@ -186,6 +197,21 @@ export function productEvidenceStatus(
     return "failed";
   }
   return "insufficient_url_evidence";
+}
+
+// True when the product status is "failed" because an extractor ERRORED (we never
+// reached the page) on a transient/block signature — not because the page was
+// genuinely empty (insufficient_url_evidence) or thin (partial_evidence). A
+// definitive not-found (404/410) is treated as non-recoverable so dead links stay
+// rejectable. Callers use this to avoid permanently branding an unreached link as
+// "did not provide enough context".
+export function isRecoverableExtractionFailure(evidence: UrlEvidence | null) {
+  if (!evidence) return false;
+  if (productEvidenceStatus(evidence) !== "failed") return false;
+  const error = evidence.error || "";
+  if (NOT_FOUND_PATTERN.test(error)) return false;
+  if (evidence.status === "blocked") return true;
+  return TRANSIENT_BLOCK_PATTERN.test(error);
 }
 
 export function missingEvidence(evidence: UrlEvidence | null) {
@@ -444,9 +470,7 @@ export function needsClientResolutionForEvidence(
   return candidates.some((candidate) =>
     candidate.status === "blocked" ||
     candidate.status === "failed" ||
-    /403|401|429|blocked|forbidden|access denied|captcha|too many/i.test(
-      candidate.error || "",
-    )
+    TRANSIENT_BLOCK_PATTERN.test(candidate.error || "")
   ) || !candidates.length;
 }
 

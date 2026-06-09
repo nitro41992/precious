@@ -180,6 +180,94 @@ Deno.test("capture routing keeps URL evidence fallback link-only", () => {
   );
 });
 
+Deno.test("transient extraction failures stay recoverable; empty and dead links still reject", () => {
+  const sourceUrl =
+    "https://dexscreener.com/ethereum/0xB771f724C504b329623B0ce9199907137670600E";
+  const linkOnly = captureFixture({
+    capture_type: "link",
+    display_title: "dexscreener.com",
+    source_url: sourceUrl,
+    original_url: sourceUrl,
+    source_text: sourceUrl,
+  });
+
+  // 1) Cloudflare 403 — extractor errored, we never saw the page. NOT rejected.
+  const transientFailed = urlEvidence.emptyUrlEvidence(
+    sourceUrl,
+    "failed",
+    "original_html",
+    "Metadata fetch failed with 403",
+  );
+  assertEqual(
+    urlEvidence.productEvidenceStatus(transientFailed),
+    "failed",
+    "a 403 fetch failure is product status failed",
+  );
+  assert(
+    urlEvidence.isRecoverableExtractionFailure(transientFailed),
+    "a blocked/403 extraction failure should be recoverable",
+  );
+  assert(
+    !urlEvidence.shouldRejectContextlessLinkCapture(linkOnly, null, transientFailed),
+    "a recoverable transient failure must not be rejected as contextless",
+  );
+
+  // 2) Page fetched fine but genuinely empty. STILL rejected.
+  const emptyEvidence = urlEvidence.emptyUrlEvidence(
+    sourceUrl,
+    "empty",
+    "original_html",
+    null,
+  );
+  assertEqual(
+    urlEvidence.productEvidenceStatus(emptyEvidence),
+    "insufficient_url_evidence",
+    "an empty page is insufficient evidence",
+  );
+  assert(
+    !urlEvidence.isRecoverableExtractionFailure(emptyEvidence),
+    "a genuinely empty page is not a recoverable failure",
+  );
+  assert(
+    urlEvidence.shouldRejectContextlessLinkCapture(linkOnly, null, emptyEvidence),
+    "a genuinely empty page should still be rejected",
+  );
+
+  // 3) Definitive 404 dead link. STILL rejected.
+  const notFound = urlEvidence.emptyUrlEvidence(
+    sourceUrl,
+    "failed",
+    "original_html",
+    "Metadata fetch failed with 404",
+  );
+  assert(
+    !urlEvidence.isRecoverableExtractionFailure(notFound),
+    "a definitive 404 is not recoverable",
+  );
+  assert(
+    urlEvidence.shouldRejectContextlessLinkCapture(linkOnly, null, notFound),
+    "a dead 404 link should still be rejected",
+  );
+
+  // 4) Preflight must not mark a recoverable failure invalid (second rejection site).
+  const policy = urlEvidence.applyPreflightPolicy(
+    linkOnly,
+    {
+      decision: "invalid",
+      rationale_code: "ambiguous_insufficient_evidence",
+      confidence: 0.8,
+      user_message: "Weak evidence.",
+      evidence_summary: "Weak.",
+    },
+    transientFailed,
+  );
+  assertEqual(
+    policy.decision,
+    "valid",
+    "preflight should keep a recoverable transient failure valid",
+  );
+});
+
 Deno.test("capture gate review analysis does not invent URL evidence", () => {
   const note = captureFixture({
     capture_type: "text_note",

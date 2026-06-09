@@ -1,5 +1,6 @@
 import {
   blockPageText,
+  isRecoverableExtractionFailure,
   normalizedUrlEvidence,
   productEvidenceStatus,
   weaknessReasons,
@@ -65,12 +66,20 @@ export function shouldRejectContextlessLinkCapture(
   if (!contentEvidenceProfile(capture, urlEvidence).content_limited) {
     return false;
   }
+  const status = productEvidenceStatus(urlEvidence);
+  // A transient/blocked extraction failure means we never reached the page — don't
+  // permanently brand it "not enough context". Let it flow to normal analysis and
+  // save as needs_review instead. Genuine emptiness and definitive not-found still
+  // reject below.
+  if (status === "failed" && isRecoverableExtractionFailure(urlEvidence)) {
+    return false;
+  }
   return [
     "needs_client_resolution",
     "insufficient_url_evidence",
     "partial_evidence",
     "failed",
-  ].includes(productEvidenceStatus(urlEvidence));
+  ].includes(status);
 }
 
 export function shouldRunCaptureGate(

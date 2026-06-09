@@ -9,6 +9,7 @@ import { env, hostFromUrl } from "../common.ts";
 import { titleFallback } from "../capture-records.ts";
 import {
   compactUrlEvidence,
+  isRecoverableExtractionFailure,
   normalizedUrlEvidence,
   weaknessReasons,
 } from "../url-evidence/quality.ts";
@@ -113,6 +114,24 @@ export function applyPreflightPolicy(
   preflight: PreflightDecision,
   urlEvidence: UrlEvidence | null,
 ): PreflightDecision {
+  // A transient/blocked extraction failure means we never reached the page. Don't let
+  // preflight mark it invalid — proceed to best-effort analysis (saved as needs_review)
+  // rather than a permanent rejection. Mirrors the gate bypass in
+  // shouldRejectContextlessLinkCapture so both rejection sites stay consistent.
+  if (isRecoverableExtractionFailure(urlEvidence)) {
+    return {
+      decision: "valid",
+      rationale_code: "url_identifier_sufficient",
+      confidence: Math.max(preflight.confidence || 0, 0.5),
+      user_message:
+        "The link was temporarily unreachable, so extraction should proceed on best-effort evidence rather than reject it.",
+      evidence_summary: [
+        "Extraction failed transiently (blocked or timed out), not because the page lacks content.",
+        `status=${JSON.stringify(urlEvidence?.status || null)}`,
+        `error=${JSON.stringify(urlEvidence?.error || null)}`,
+      ].join(" "),
+    };
+  }
   const validRationales = new Set([
     "public_metadata_sufficient",
     "url_identifier_sufficient",

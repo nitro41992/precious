@@ -289,6 +289,200 @@ Deno.test("Exa per-URL failure records failed evidence without throwing", () => 
   );
 });
 
+function exaJsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function withExaFetch(
+  responder: (call: number) => Response,
+  run: (calls: () => number) => Promise<void>,
+) {
+  const previousKey = Deno.env.get("EXA_API_KEY");
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  Deno.env.set("EXA_API_KEY", "test-exa-key");
+  globalThis.fetch = (() => {
+    calls += 1;
+    return Promise.resolve(responder(calls));
+  }) as typeof fetch;
+  return run(() => calls).finally(() => {
+    globalThis.fetch = originalFetch;
+    if (previousKey) Deno.env.set("EXA_API_KEY", previousKey);
+    else Deno.env.delete("EXA_API_KEY");
+  });
+}
+
+const EXA_RICH_RESULT = {
+  title: "DEX Screener",
+  summary:
+    "DEX Screener listing for the Ethereum token pair SERV/WETH with live price and volume.",
+  text:
+    "SERV/WETH price USD $0.07294, liquidity $64K, FDV $72.9M, market cap $55.0M. " +
+    "24h volume $164K across 655 transactions split into 321 buys and 334 sells. " +
+    "Traders 281. Pair listed on Uniswap v2 on Ethereum via DEX Screener.",
+};
+
+Deno.test("Exa transient per-URL error triggers one retry that succeeds", async () => {
+  const url = "https://dexscreener.com/ethereum/0xB771f724C504b329623B0ce9199907137670600E";
+  await withExaFetch(
+    (call) =>
+      call === 1
+        ? exaJsonResponse({
+          requestId: "r1",
+          results: [],
+          statuses: [{
+            id: url,
+            status: "error",
+            error: {
+              tag: "SOURCE_NOT_AVAILABLE",
+              message: "Access forbidden",
+              httpStatusCode: 403,
+            },
+          }],
+        })
+        : exaJsonResponse({
+          requestId: "r2",
+          results: [{ id: url, url, ...EXA_RICH_RESULT }],
+          statuses: [{ id: url, status: "success" }],
+        }),
+    async (calls) => {
+      const evidence = await urlEvidence.fetchExaContentsEvidence(url, [url]);
+      assertEqual(calls(), 2, "transient failure should retry exactly once");
+      assertEqual(evidence[0].status, "success", "retry should recover content");
+      assertEqual(
+        urlEvidence.productEvidenceStatus(evidence[0]),
+        "extracted",
+        "recovered Exa evidence should be extracted",
+      );
+    },
+  );
+});
+
+Deno.test("Exa clean empty result is not retried", async () => {
+  const url = "https://example.com/empty";
+  await withExaFetch(
+    () =>
+      exaJsonResponse({
+        requestId: "r1",
+        results: [{ id: url, url }],
+        statuses: [{ id: url, status: "success" }],
+      }),
+    async (calls) => {
+      const evidence = await urlEvidence.fetchExaContentsEvidence(url, [url]);
+      assertEqual(calls(), 1, "a clean empty result should not retry");
+      assertEqual(evidence[0].status, "empty", "no content yields empty status");
+    },
+  );
+});
+
+Deno.test("Exa transient HTTP 503 is retried; definitive 404 is not", async () => {
+  const url = "https://example.com/flaky";
+  await withExaFetch(
+    (call) =>
+      call === 1
+        ? exaJsonResponse({ error: "service unavailable" }, 503)
+        : exaJsonResponse({
+          requestId: "r2",
+          results: [{ id: url, url, ...EXA_RICH_RESULT }],
+          statuses: [{ id: url, status: "success" }],
+        }),
+    async (calls) => {
+      const evidence = await urlEvidence.fetchExaContentsEvidence(url, [url]);
+      assertEqual(calls(), 2, "HTTP 503 should retry");
+      assertEqual(evidence[0].status, "success", "retry recovers after 503");
+    },
+  );
+
+  const deadUrl = "https://example.com/gone";
+  await withExaFetch(
+    () =>
+      exaJsonResponse({
+        requestId: "r1",
+        results: [],
+        statuses: [{
+          id: deadUrl,
+          status: "error",
+          error: {
+            tag: "SOURCE_NOT_FOUND",
+            message: "Not found",
+            httpStatusCode: 404,
+          },
+        }],
+      }),
+    async (calls) => {
+      const evidence = await urlEvidence.fetchExaContentsEvidence(deadUrl, [
+        deadUrl,
+      ]);
+      assertEqual(calls(), 1, "a definitive 404 should not retry");
+      assertEqual(evidence[0].status, "failed", "404 stays failed");
+    },
+  );
+});
+
+Deno.test("isTransientExaFailure classifies transient vs definitive failures", () => {
+  const url = "https://example.com/x";
+  const failure = (status: string, error: Record<string, unknown>) =>
+    urlEvidence.normalizeExaContentsEvidence(url, [url], {
+      requestId: "r",
+      results: [],
+      statuses: [{ id: url, status, error }],
+    });
+
+  assert(
+    urlEvidence.isTransientExaFailure(
+      failure("error", { tag: "RATE_LIMIT", message: "Too many", httpStatusCode: 429 }),
+    ),
+    "429 is transient",
+  );
+  assert(
+    urlEvidence.isTransientExaFailure(
+      failure("error", { tag: "CRAWL_FAILED", message: "Upstream error", httpStatusCode: 503 }),
+    ),
+    "503 is transient",
+  );
+  assert(
+    urlEvidence.isTransientExaFailure(
+      failure("error", { tag: "SOURCE_NOT_AVAILABLE", message: "Access forbidden", httpStatusCode: 403 }),
+    ),
+    "403 forbidden is transient",
+  );
+  assert(
+    urlEvidence.isTransientExaFailure(
+      failure("error", { tag: "TIMEOUT", message: "Livecrawl timeout" }),
+    ),
+    "timeout tag is transient",
+  );
+  assert(
+    !urlEvidence.isTransientExaFailure(
+      failure("error", { tag: "SOURCE_NOT_FOUND", message: "Not found", httpStatusCode: 404 }),
+    ),
+    "404 not-found is not transient",
+  );
+  assert(
+    !urlEvidence.isTransientExaFailure(
+      urlEvidence.normalizeExaContentsEvidence(url, [url], {
+        requestId: "r",
+        results: [{ id: url, url }],
+        statuses: [{ id: url, status: "success" }],
+      }),
+    ),
+    "clean empty result is not transient",
+  );
+  assert(
+    !urlEvidence.isTransientExaFailure(
+      urlEvidence.normalizeExaContentsEvidence(url, [url], {
+        requestId: "r",
+        results: [{ id: url, url, ...EXA_RICH_RESULT }],
+        statuses: [{ id: url, status: "success" }],
+      }),
+    ),
+    "successful content is not a failure",
+  );
+});
+
 Deno.test("source preview fetch accepts bounded public images", async () => {
   const originalFetch = globalThis.fetch;
   const pngBytes = new Uint8Array([137, 80, 78, 71]);

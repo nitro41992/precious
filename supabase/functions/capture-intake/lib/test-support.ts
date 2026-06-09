@@ -28,6 +28,8 @@ import {
   fetchExaContentsEvidence,
   fetchExtractusOembedEvidence,
   isExaContentsConfigured,
+  isRecoverableExtractionFailure,
+  isTransientExaFailure,
   metaOembedEndpoint,
   normalizedUrlEvidence,
   normalizeExaContentsEvidence,
@@ -43,6 +45,7 @@ import {
 } from "./url-evidence.ts";
 import {
   applyFieldRationaleCopies,
+  applyPreflightPolicy,
   buildOpenAiUserContent,
   buildCaptureGateRequestBody,
   buildPrompt,
@@ -97,6 +100,7 @@ export const __urlEvidenceTest = {
   analysisSchema,
   analysisSchemaForCollections,
   applyFieldRationaleCopies,
+  applyPreflightPolicy,
   applySecondaryCollectionRecovery,
   bestEvidence,
   buildOpenAiUserContent,
@@ -131,6 +135,8 @@ export const __urlEvidenceTest = {
   fetchSourcePreviewImage,
   gifLooksAnimated,
   isExaContentsConfigured,
+  isRecoverableExtractionFailure,
+  isTransientExaFailure,
   isVisualDownloadFailure,
   metaOembedEndpoint,
   mirrorSourcePreviewAsset,

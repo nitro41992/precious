@@ -133,6 +133,7 @@ export {
   hasItemSpecificUrlSignal,
   hasSubstantiveUrlEvidence,
   isOpaqueOrAppShareUrl,
+  isRecoverableExtractionFailure,
   logUrlIngest,
   missingEvidence,
   needsClientResolutionForEvidence,
@@ -140,6 +141,7 @@ export {
   pathFromUrl,
   productEvidenceStatus,
   shouldUseWebSearch,
+  TRANSIENT_BLOCK_PATTERN,
   uniqueUrls,
   weaknessReasons,
   withPipelineRaw,
@@ -158,6 +160,7 @@ export {
   exaTargetUrlsForEnrichment,
   fetchExaContentsEvidence,
   isExaContentsConfigured,
+  isTransientExaFailure,
   normalizeExaContentsEvidence,
   shouldAttemptExaEnrichment,
 } from "./exa.ts";
