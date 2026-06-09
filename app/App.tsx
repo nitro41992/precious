@@ -29,7 +29,7 @@ import type { SharedValue } from "react-native-reanimated";
 
 import { AppSheets } from "./sheets/AppSheets";
 import { CollectionComposerSheet } from "./sheets/CollectionComposerSheet";
-import { CollectionSelectorSheet } from "./sheets/CollectionSelectorSheet";
+import { CollectionSelectorScreen } from "./screens/CollectionSelectorScreen";
 import { useAppUiEffects } from "./state/useAppUiEffects";
 import { useAuthSession } from "./state/useAuthSession";
 import { useCaptureFeed } from "./state/useCaptureFeed";
@@ -877,6 +877,9 @@ export default function App() {
   const [collectionDescription, setCollectionDescription] = useState("");
   const [collectionDraftDirty, setCollectionDraftDirty] = useState(false);
   const [showCollectionForm, setShowCollectionForm] = useState(false);
+  // True while the shared collection composer was opened from the capture picker,
+  // so its save creates-and-links to the open capture instead of just creating.
+  const [collectionComposerForPicker, setCollectionComposerForPicker] = useState(false);
   const [draftTitleDirty, setDraftTitleDirty] = useState(false);
   const [draftNoteDirty, setDraftNoteDirty] = useState(false);
   const [draftIntentDirty, setDraftIntentDirty] = useState(false);
@@ -2549,6 +2552,18 @@ export default function App() {
     setShowCollectionForm(true);
   }
 
+  // Open the SAME composer the Collections tab uses, but over the capture picker:
+  // the capture stays selected (no nav, no deselect) and the picker-origin flag
+  // makes saveCollection create-and-link the new collection to the capture.
+  function openCollectionComposerForPicker() {
+    setCollectionTitle("");
+    setCollectionDescription("");
+    setCollectionDraftDirty(false);
+    setCollectionComposerForPicker(true);
+    primeSheetSurface({ keyboardUp: true });
+    setShowCollectionForm(true);
+  }
+
   // Edit mode for the collection sheet: the detail pencil opens the same
   // composer prefilled by the useAppUiEffects draft sync (selectedCollection
   // stays set, so the sheet renders its edit header and delete row). No
@@ -2611,6 +2626,7 @@ export default function App() {
       setCollectionTitle("");
       setCollectionDescription("");
       setCollectionDraftDirty(false);
+      setCollectionComposerForPicker(false);
     }, options);
   }
 
@@ -3885,13 +3901,13 @@ export default function App() {
 
   // Create a new Collection inline from the selector sheet and pre-select it so the user's
   // Save links it. Only reachable once any AI suggestion has been dismissed (gated in the sheet).
-  async function createCollectionFromPicker(title: string, description: string) {
+  async function createCollectionFromPicker(title: string, description: string): Promise<Collection | null> {
     const trimmedTitle = title.trim();
     const trimmedDescription = description.trim();
-    if (!trimmedTitle || !trimmedDescription || !selected || pickerCreating) return;
+    if (!trimmedTitle || !trimmedDescription || !selected || pickerCreating) return null;
     if (!config?.apiUrl || !session) {
       showToast("Sign in to manage collections.", "error");
-      return;
+      return null;
     }
     setPickerCreating(true);
     try {
@@ -3907,8 +3923,10 @@ export default function App() {
       setCollections((current) => uniqueCollections([created, ...current.filter((item) => item.id !== created.id)]));
       setCollectionSelectionIds((current) => (current.includes(created.id) ? current : [...current, created.id]));
       showToast(`Created “${created.title}”.`, "success");
+      return created;
     } catch (error) {
       showErrorToast(error, "Could not create the collection.");
+      return null;
     } finally {
       setPickerCreating(false);
     }
@@ -4037,6 +4055,13 @@ export default function App() {
     const title = collectionTitle.trim();
     const description = collectionDescription.trim();
     if (!title || !description) return;
+    // Opened from the capture picker: create the collection and link it to the
+    // open capture (its own toast + selection), then close the composer.
+    if (collectionComposerForPicker && !selectedCollection) {
+      const created = await createCollectionFromPicker(title, description);
+      if (created) closeCollectionComposer();
+      return;
+    }
     try {
       if (selectedCollection) {
         const json = await collectionRequest<{ collection: Record<string, any> }>("collections", {
@@ -5050,12 +5075,12 @@ export default function App() {
           setAccountSheetOpen={setAccountSheetOpen}
         />
         {selected ? (
-          <CollectionSelectorSheet
+          <CollectionSelectorScreen
             actions={{
               closeCollectionPicker,
               confirmSuggestion: (collectionId) => void persistSuggestion(collectionId),
-              createCollection: (title, description) => void createCollectionFromPicker(title, description),
               dismissSuggestion: (collectionId, captureId) => void dismissSuggestion(collectionId, captureId),
+              openCreateCollection: openCollectionComposerForPicker,
               renderCollectionSkeletonRows,
               saveCollectionSelection: () => void saveCollectionSelection(),
               setCollectionPickerQuery,
@@ -5063,6 +5088,7 @@ export default function App() {
               toggleCollectionSelection
             }}
             data={{
+              collectionComposerSheet: renderCollectionComposerSheet(),
               collectionListFade,
               collections,
               collectionsColdSkeletonVisible,
@@ -5078,7 +5104,6 @@ export default function App() {
               collectionSelectionIds,
               collectionsLoadPhase,
               collectionsLoading,
-              pickerCreating,
               suggestionBusy: suggestionBusyId === (selected.pendingSuggestion?.collectionId || "")
             }}
           />

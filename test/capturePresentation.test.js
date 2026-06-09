@@ -491,3 +491,54 @@ test("captureFieldStates leaves the collection field empty with no link or sugge
   assert.equal(collection.hasValue, false);
   assert.equal(collection.displayValue, "Add collection");
 });
+
+function collectionItem(overrides = {}) {
+  return {
+    id: "col",
+    title: "Collection",
+    description: "",
+    status: "active",
+    captureCount: 0,
+    previewCaptures: [],
+    updatedAt: null,
+    ...overrides
+  };
+}
+
+test("splitCollectionsByRecency fills the shelf by most-recently updated", () => {
+  const { splitCollectionsByRecency } = loadCapturePresentation();
+  const collections = [
+    collectionItem({ id: "a", updatedAt: "2026-01-01T00:00:00Z" }),
+    collectionItem({ id: "b", updatedAt: "2026-06-01T00:00:00Z" }),
+    collectionItem({ id: "c", updatedAt: "2026-03-01T00:00:00Z" })
+  ];
+  const { recent, rest } = splitCollectionsByRecency(collections, [], 2);
+  assert.deepEqual(recent.map((c) => c.id), ["b", "c"]);
+  assert.deepEqual(rest.map((c) => c.id), ["a"]);
+});
+
+test("splitCollectionsByRecency keeps all selected rows in the shelf, even past the limit", () => {
+  const { splitCollectionsByRecency } = loadCapturePresentation();
+  const collections = [
+    collectionItem({ id: "a", updatedAt: "2026-01-01T00:00:00Z" }),
+    collectionItem({ id: "b", updatedAt: "2026-06-01T00:00:00Z" }),
+    collectionItem({ id: "c", updatedAt: "2026-03-01T00:00:00Z" }),
+    collectionItem({ id: "d", updatedAt: "2026-02-01T00:00:00Z" })
+  ];
+  const { recent, rest } = splitCollectionsByRecency(collections, ["a", "d"], 2);
+  // Selected lead in incoming order; limit is already met so no fill is added.
+  assert.deepEqual(recent.map((c) => c.id), ["a", "d"]);
+  assert.deepEqual(rest.map((c) => c.id), ["b", "c"]);
+});
+
+test("splitCollectionsByRecency ignores non-active collections", () => {
+  const { splitCollectionsByRecency } = loadCapturePresentation();
+  const collections = [
+    collectionItem({ id: "a", status: "active", updatedAt: "2026-01-01T00:00:00Z" }),
+    collectionItem({ id: "b", status: "archived", updatedAt: "2026-06-01T00:00:00Z" }),
+    collectionItem({ id: "c", status: "suggested", updatedAt: "2026-03-01T00:00:00Z" })
+  ];
+  const { recent, rest } = splitCollectionsByRecency(collections, [], 5);
+  assert.deepEqual(recent.map((c) => c.id), ["a"]);
+  assert.deepEqual(rest, []);
+});

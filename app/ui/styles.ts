@@ -608,58 +608,75 @@ export const styles = StyleSheet.create({
     fontWeight: "600",
     lineHeight: 18
   },
-  // AI collection suggestion card — used in the selector sheet and the review screen.
-  // Tonal accent fill, no border (CLAUDE.md), Sparkle marker, confirm/dismiss actions.
-  suggestionCard: {
-    backgroundColor: colors.surfaceContainer,
-    borderRadius: softCardInnerRadius,
+  // The AI prediction card — ONE premium, elevated white card for both the new-
+  // collection suggestion and an existing AI pick, so the picker never reshapes by
+  // capture. A diffuse lift sets it apart from the flat list; no border (CLAUDE.md).
+  predictionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: softCardRadius,
     gap: 10,
-    padding: 14
+    padding: 16,
+    ...diffuseCardShadow
   },
-  suggestionCardHeader: {
+  predictionCardHeader: {
     alignItems: "center",
     flexDirection: "row",
     gap: 8
   },
-  suggestionCardIcon: {
+  predictionCardIcon: {
     alignItems: "center",
-    backgroundColor: colors.surface,
+    backgroundColor: colors.accentSoft,
     borderRadius: 9,
     height: 28,
     justifyContent: "center",
     width: 28
   },
-  suggestionCardLabel: {
+  predictionCardLabel: {
     ...typefaces.displaySemibold,
     color: colors.accentTextStrong,
     fontSize: 11,
     letterSpacing: 0.6,
     textTransform: "uppercase"
   },
-  suggestionCardTitle: {
+  predictionCardTitle: {
     ...typefaces.displayMedium,
     color: colors.ink,
-    fontSize: 18,
-    lineHeight: 22
+    fontSize: 19,
+    lineHeight: 24
   },
-  suggestionCardDescription: {
+  predictionCardMeta: {
+    ...typefaces.medium,
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: -4
+  },
+  predictionCardDescription: {
     ...typefaces.regular,
     color: colors.ink,
     fontSize: 14,
     lineHeight: 19
   },
-  suggestionCardRationale: {
+  // The plain-language reason — a tonal inset so the AI's "why" reads as a quiet
+  // aside within the card (the single home for collection rationale).
+  predictionCardRationale: {
+    backgroundColor: colors.reviewCardWell,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 11
+  },
+  predictionCardRationaleText: {
     ...typefaces.medium,
     color: colors.muted,
     fontSize: 13,
     lineHeight: 18
   },
-  suggestionCardActions: {
+  predictionCardActions: {
     flexDirection: "row",
     gap: 8,
     marginTop: 2
   },
-  suggestionConfirmButton: {
+  predictionConfirmButton: {
     alignItems: "center",
     backgroundColor: colors.accent,
     borderRadius: 12,
@@ -669,14 +686,14 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 12
   },
-  suggestionConfirmText: {
+  predictionConfirmText: {
     ...typefaces.displaySemibold,
     color: colors.onAccent,
     fontSize: 14
   },
-  suggestionDismissButton: {
+  predictionDismissButton: {
     alignItems: "center",
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceContainerHigh,
     borderRadius: 12,
     flexDirection: "row",
     gap: 6,
@@ -684,10 +701,36 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 12
   },
-  suggestionDismissText: {
+  predictionDismissText: {
     ...typefaces.displaySemibold,
     color: colors.muted,
     fontSize: 14
+  },
+  // Existing-pick toggle: a calm confirmed pill — the loud lime stays reserved for
+  // the genuine "create new collection" CTA. Selected = pale-green added; off = neutral.
+  predictionToggle: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 2,
+    paddingHorizontal: 16,
+    paddingVertical: 11
+  },
+  predictionToggleOn: {
+    backgroundColor: colors.accentSoft
+  },
+  predictionToggleOff: {
+    backgroundColor: colors.surfaceContainerHigh
+  },
+  predictionToggleText: {
+    ...typefaces.displaySemibold,
+    color: colors.collectionAccentText,
+    fontSize: 14
+  },
+  predictionToggleTextOn: {
+    color: colors.accentTextStrong
   },
   suggestionDisabled: {
     opacity: 0.5
@@ -724,45 +767,6 @@ export const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 15
   },
-  // Wraps the active step (pick or create) so it can slide/fade in as one unit.
-  collectionStepPane: {
-    gap: 12,
-    width: "100%"
-  },
-  // The focused new-collection step body inside the selector sheet.
-  collectionCreateStepBody: {
-    gap: 12,
-    paddingTop: 4
-  },
-  // The AI rationale reads as a soft AI note shown inline on an AI-picked row: a
-  // sparkle glyph in an accent well beside the reason, on a light card that lifts
-  // off the tinted row.
-  collectionWhyCard: {
-    alignItems: "flex-start",
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12
-  },
-  collectionWhyCardIcon: {
-    alignItems: "center",
-    backgroundColor: colors.accentSoft,
-    borderRadius: 8,
-    height: 26,
-    justifyContent: "center",
-    marginTop: 1,
-    width: 26
-  },
-  collectionWhyCardText: {
-    ...typefaces.regular,
-    color: colors.ink,
-    flex: 1,
-    fontSize: 14,
-    lineHeight: 20
-  },
   purposeOptionGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -798,19 +802,6 @@ export const styles = StyleSheet.create({
   },
   purposeOptionTextSelected: {
     color: colors.onAccent
-  },
-  collectionSelectorSheet: {
-    gap: 12,
-    maxHeight: "88%",
-    paddingBottom: Platform.OS === "android" ? 24 : 32
-  },
-  collectionSelectorSheetList: {
-    flexGrow: 0,
-    maxHeight: 430
-  },
-  collectionSelectorSheetListContent: {
-    paddingBottom: 8,
-    paddingRight: 2
   },
   sheetBackdrop: {
     backgroundColor: colors.scrim,
@@ -1700,17 +1691,6 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     width: 36
   },
-  collectionNoCollectionIconMark: {
-    alignItems: "center",
-    backgroundColor: colors.surfaceContainerHigh,
-    borderRadius: 8,
-    height: 36,
-    justifyContent: "center",
-    width: 36
-  },
-  collectionNoCollectionIconMarkSelected: {
-    backgroundColor: colors.accentSoft
-  },
   collectionRowCopy: {
     flex: 1,
     minWidth: 0
@@ -2219,15 +2199,6 @@ export const styles = StyleSheet.create({
     flexGrow: 1,
     paddingBottom: 132
   },
-  collectionSelectorScreen: {
-    flex: 1,
-    paddingHorizontal: 22,
-    paddingTop: 14
-  },
-  collectionSelectorHeader: {
-    gap: 12,
-    paddingBottom: 12
-  },
   collectionSelectorSearchInput: {
     alignItems: "center",
     backgroundColor: colors.surfaceContainer,
@@ -2236,18 +2207,6 @@ export const styles = StyleSheet.create({
     gap: 8,
     minHeight: 50,
     paddingHorizontal: 12
-  },
-  collectionSelectorSearchInputSheet: {
-    backgroundColor: colors.surfaceContainer,
-    borderRadius: 14,
-    minHeight: 48
-  },
-  collectionSelectorList: {
-    flex: 1
-  },
-  collectionSelectorListContent: {
-    paddingBottom: 118,
-    paddingRight: 2
   },
   collectionChoiceRow: {
     alignItems: "center",
@@ -2261,9 +2220,6 @@ export const styles = StyleSheet.create({
     minHeight: 64,
     paddingHorizontal: 12,
     paddingVertical: 11
-  },
-  collectionChoiceSeparatorSheet: {
-    height: 4
   },
   // Selected = a calm neutral surface; the bold lime check circle is the accent pop
   // (white card + sharp accent, never a large pale-color wash).
@@ -2307,6 +2263,65 @@ export const styles = StyleSheet.create({
     paddingBottom: Platform.OS === "android" ? 16 : 22,
     paddingHorizontal: 22,
     paddingTop: 10
+  },
+  // The full-screen collection picker. It rides in on AnimatedBottomSheet (a
+  // slide-up "push"), so it fills the screen as an opaque page. The sheet stays
+  // padding-less so the reused create composer can overlay edge to edge; the
+  // status inset lives on the inner content instead.
+  collectionPickerSheet: {
+    backgroundColor: colors.paper,
+    flex: 1
+  },
+  collectionPickerContent: {
+    flex: 1,
+    paddingTop: Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0
+  },
+  collectionPickerHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    paddingBottom: 12,
+    paddingHorizontal: 22,
+    paddingTop: 6
+  },
+  collectionPickerHeaderCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0
+  },
+  collectionPickerTitle: {
+    color: colors.ink,
+    fontSize: 24,
+    ...typefaces.appBarTitle,
+    lineHeight: 30
+  },
+  collectionPickerSubtitle: {
+    color: colors.muted,
+    ...typefaces.medium,
+    fontSize: 13,
+    lineHeight: 18
+  },
+  collectionPickerBody: {
+    paddingBottom: 6,
+    paddingHorizontal: 22
+  },
+  collectionPickerList: {
+    flex: 1
+  },
+  collectionPickerListContent: {
+    paddingBottom: 24,
+    paddingHorizontal: 22,
+    paddingTop: 8
+  },
+  // Quiet tonal group label ("Recent" / "All") — separation by type + space, no line.
+  collectionPickerSectionLabel: {
+    color: colors.muted,
+    ...typefaces.displaySemibold,
+    fontSize: 12,
+    letterSpacing: 0.8,
+    marginBottom: 6,
+    marginTop: 12,
+    textTransform: "uppercase"
   },
   detail: {
     gap: 16,

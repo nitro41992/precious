@@ -32,7 +32,6 @@ import type {
   LinkedCollection,
   NavIconComponent,
   NavIconProps,
-  PendingCollectionSuggestion,
   ToastPlacement,
   ToastState,
   ToastTone
@@ -580,77 +579,116 @@ export function AiFieldInsight({ insight }: { insight: CaptureFieldRationale }) 
   );
 }
 
-// The AI-suggested new Collection, shown in the selector sheet and the review screen.
-// Calm, dismissible, and transparent: it shows the proposed name, what belongs in it, and
-// the plain-language reason, with Confirm (persist the whole group) / Dismiss (this capture).
-export function CollectionSuggestionCard({
-  suggestion,
+// The AI's collection prediction — ONE premium card for both contexts so the
+// picker reads the same regardless of capture: the AI proposing a NEW collection
+// (Add / Dismiss) or having picked an EXISTING one (capture count + Added toggle).
+// Both surface the same prediction shape — title, what belongs in it, and the
+// plain-language reason — so the page never reshapes depending on which the AI did.
+export function CollectionPredictionCard({
+  variant,
+  title,
+  description,
+  rationale,
+  captureCountLabel,
+  selected = false,
+  busy = false,
   onConfirm,
   onDismiss,
-  busy = false,
-  confirmLabel = "Add collection",
+  onToggle,
   testID
 }: {
-  suggestion: PendingCollectionSuggestion;
-  onConfirm: () => void;
-  onDismiss: () => void;
+  variant: "suggested" | "picked";
+  title: string;
+  description?: string;
+  rationale?: string | null;
+  captureCountLabel?: string;
+  selected?: boolean;
   busy?: boolean;
-  confirmLabel?: string;
+  onConfirm?: () => void;
+  onDismiss?: () => void;
+  onToggle?: () => void;
   testID?: string;
 }) {
   return (
-    <View style={styles.suggestionCard} testID={testID}>
-      <View style={styles.suggestionCardHeader}>
-        <View style={styles.suggestionCardIcon}>
+    <View style={styles.predictionCard} testID={testID}>
+      <View style={styles.predictionCardHeader}>
+        <View style={styles.predictionCardIcon}>
           <Sparkle color={colors.accentTextStrong} size={16} weight="fill" />
         </View>
-        <Text style={styles.suggestionCardLabel}>Suggested collection</Text>
+        <Text style={styles.predictionCardLabel}>
+          {variant === "suggested" ? "Suggested collection" : "AI pick"}
+        </Text>
       </View>
-      <Text numberOfLines={2} style={styles.suggestionCardTitle}>
-        {suggestion.title}
+      <Text numberOfLines={2} style={styles.predictionCardTitle}>
+        {title}
       </Text>
-      {suggestion.description ? (
-        <Text numberOfLines={3} style={styles.suggestionCardDescription}>
-          {suggestion.description}
+      {captureCountLabel ? <Text style={styles.predictionCardMeta}>{captureCountLabel}</Text> : null}
+      {description ? (
+        <Text numberOfLines={3} style={styles.predictionCardDescription}>
+          {description}
         </Text>
       ) : null}
-      {suggestion.rationale ? (
-        <Text numberOfLines={3} style={styles.suggestionCardRationale}>
-          {suggestion.rationale}
-        </Text>
+      {rationale ? (
+        <View style={styles.predictionCardRationale}>
+          <Text style={styles.predictionCardRationaleText}>{rationale}</Text>
+        </View>
       ) : null}
-      <View style={styles.suggestionCardActions}>
+      {variant === "suggested" ? (
+        <View style={styles.predictionCardActions}>
+          <MotionPressable
+            accessibilityLabel={`Add collection: ${title}`}
+            accessibilityRole="button"
+            disabled={busy}
+            onPress={onConfirm}
+            style={({ pressed }) => [
+              styles.predictionConfirmButton,
+              busy && styles.suggestionDisabled,
+              pressed && styles.subtlePressed
+            ]}
+            testID={testID ? `${testID}.confirm` : undefined}
+          >
+            <Check color={colors.onAccent} size={16} weight="bold" />
+            <Text style={styles.predictionConfirmText}>Add collection</Text>
+          </MotionPressable>
+          <MotionPressable
+            accessibilityLabel={`Dismiss suggestion: ${title}`}
+            accessibilityRole="button"
+            disabled={busy}
+            onPress={onDismiss}
+            style={({ pressed }) => [
+              styles.predictionDismissButton,
+              busy && styles.suggestionDisabled,
+              pressed && styles.subtlePressed
+            ]}
+            testID={testID ? `${testID}.dismiss` : undefined}
+          >
+            <X color={colors.muted} size={16} weight="bold" />
+            <Text style={styles.predictionDismissText}>Dismiss</Text>
+          </MotionPressable>
+        </View>
+      ) : (
         <MotionPressable
-          accessibilityLabel={`${confirmLabel}: ${suggestion.title}`}
-          accessibilityRole="button"
-          disabled={busy}
-          onPress={onConfirm}
+          accessibilityLabel={selected ? `Added to capture: ${title}` : `Add to capture: ${title}`}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: selected }}
+          onPress={onToggle}
           style={({ pressed }) => [
-            styles.suggestionConfirmButton,
-            busy && styles.suggestionDisabled,
+            styles.predictionToggle,
+            selected ? styles.predictionToggleOn : styles.predictionToggleOff,
             pressed && styles.subtlePressed
           ]}
-          testID={testID ? `${testID}.confirm` : undefined}
+          testID={testID ? `${testID}.toggle` : undefined}
         >
-          <Check color={colors.onAccent} size={16} weight="bold" />
-          <Text style={styles.suggestionConfirmText}>{confirmLabel}</Text>
+          {selected ? (
+            <Check color={colors.accentTextStrong} size={16} weight="bold" />
+          ) : (
+            <Plus color={colors.collectionAccentText} size={16} weight="bold" />
+          )}
+          <Text style={[styles.predictionToggleText, selected && styles.predictionToggleTextOn]}>
+            {selected ? "Added" : "Add to capture"}
+          </Text>
         </MotionPressable>
-        <MotionPressable
-          accessibilityLabel={`Dismiss suggestion: ${suggestion.title}`}
-          accessibilityRole="button"
-          disabled={busy}
-          onPress={onDismiss}
-          style={({ pressed }) => [
-            styles.suggestionDismissButton,
-            busy && styles.suggestionDisabled,
-            pressed && styles.subtlePressed
-          ]}
-          testID={testID ? `${testID}.dismiss` : undefined}
-        >
-          <X color={colors.muted} size={16} weight="bold" />
-          <Text style={styles.suggestionDismissText}>Dismiss</Text>
-        </MotionPressable>
-      </View>
+      )}
     </View>
   );
 }

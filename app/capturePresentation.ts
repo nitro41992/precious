@@ -1513,6 +1513,35 @@ export function collectionCountLabel(count: number) {
   return `${count} ${count === 1 ? "capture" : "captures"}`;
 }
 
+// Split active collections into a small "Recent" shelf + the rest, so a large
+// library opens to the collections most likely wanted without typing. Ordering is
+// purely positional — no semantic/keyword logic: currently selected/linked rows
+// lead (keeping incoming order), then the remainder fills the shelf by most-
+// recently touched (updatedAt desc). The "rest" keeps its incoming order.
+export function splitCollectionsByRecency(
+  collections: Collection[],
+  selectedIds: string[],
+  recentLimit = 5
+): { recent: Collection[]; rest: Collection[] } {
+  const selected = new Set(selectedIds);
+  const active = collections.filter((collection) => collection.status === "active");
+  const updatedAtValue = (collection: Collection) => {
+    const parsed = collection.updatedAt ? Date.parse(collection.updatedAt) : NaN;
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+  // All selected/linked rows stay in the shelf (never pushed into "All"); the
+  // remaining slots go to the most-recently-updated unselected collections.
+  const selectedRows = active.filter((collection) => selected.has(collection.id));
+  const fill = active
+    .filter((collection) => !selected.has(collection.id))
+    .sort((a, b) => updatedAtValue(b) - updatedAtValue(a))
+    .slice(0, Math.max(0, recentLimit - selectedRows.length));
+  const recent = [...selectedRows, ...fill];
+  const recentIds = new Set(recent.map((collection) => collection.id));
+  const rest = active.filter((collection) => !recentIds.has(collection.id));
+  return { recent, rest };
+}
+
 export function captureDraftKey(capture: Pick<Capture, "id" | "remoteId">) {
   return capture.remoteId || capture.id;
 }
