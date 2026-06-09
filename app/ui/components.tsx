@@ -541,13 +541,11 @@ export function CollectionFormFields({
 export function AiFieldInsight({ insight }: { insight: CaptureFieldRationale }) {
   return (
     <View style={styles.aiInsight}>
-      <View style={styles.aiInsightIcon}>
-        <Sparkle color={colors.accentTextStrong} size={15} weight="fill" />
+      <View style={styles.aiInsightTag}>
+        <Sparkle color={colors.accentTextStrong} size={13} weight="fill" />
+        <Text style={styles.aiInsightTagText}>{insight.title || "AI insight"}</Text>
       </View>
-      <View style={styles.aiInsightCopy}>
-        <Text style={styles.aiInsightTitle}>{insight.title || "AI insight"}</Text>
-        <Text style={styles.aiInsightText}>{insight.text}</Text>
-      </View>
+      <Text style={styles.aiInsightText}>{insight.text}</Text>
     </View>
   );
 }
@@ -1264,7 +1262,7 @@ export function BottomAppBar({
             ]}
             testID={collectionAction ? "pc.nav.collection-create" : "pc.nav.capture"}
           >
-            <Plus color={collectionAction ? colors.onCollectionAccent : colors.onAccent} size={28} weight="thin" />
+            <Plus color={colors.surface} size={28} weight="bold" />
           </MotionPressable>
         </View>
       </View>

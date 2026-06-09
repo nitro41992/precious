@@ -2,7 +2,7 @@ import type { ReactElement, ReactNode } from "react";
 import { Pressable, StatusBar, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import type { FlashListProps, ListRenderItemInfo } from "@shopify/flash-list";
-import { Folder, MagnifyingGlass as Search, Plus, Sparkle } from "phosphor-react-native";
+import { Folder, MagnifyingGlass as Search, Plus } from "phosphor-react-native";
 
 import type { Collection, LoadPhase } from "../types";
 import { appTheme, colors } from "../ui/theme";
@@ -74,10 +74,6 @@ export function CollectionsScreen({ actions, data, state }: CollectionsScreenPro
   const visibleManagedCollections = collections;
   const suggestionsHeader = suggestions.length ? (
     <View style={styles.suggestionSection}>
-      <View style={styles.suggestionSectionHeader}>
-        <Sparkle color={colors.accentTextStrong} size={14} weight="fill" />
-        <Text style={styles.suggestionSectionTitle}>Suggested</Text>
-      </View>
       <View style={styles.suggestionSectionGrid}>
         {suggestions.map((suggestion) => (
           <CollectionSuggestionGridCard

@@ -249,33 +249,36 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 8
   },
   bottomNavIconWrapSelected: {},
+  // Deep-green FAB matching the selected nav-icon color, with a white +: the
+  // DoorDash/Spotify "modern FAB" look (white icon on a saturated fill). Keeps the
+  // create action on-brand green as the strongest shade in the hierarchy.
   bottomNavFabShadow: {
-    backgroundColor: colors.accent,
+    backgroundColor: colors.accentText,
     borderRadius: 25,
     height: 50,
     width: 50,
     ...bottomControlShadow
   },
   bottomNavFabShadowCollection: {
-    backgroundColor: colors.collectionAccent
+    backgroundColor: colors.collectionAccentText
   },
   bottomNavFab: {
     alignItems: "center",
-    backgroundColor: colors.accent,
+    backgroundColor: colors.accentText,
     borderRadius: 25,
     height: 50,
     justifyContent: "center",
     width: 50
   },
   bottomNavFabPressed: {
-    backgroundColor: colors.accentPressed,
+    backgroundColor: colors.accentTextStrong,
     transform: [{ scale: 0.965 }]
   },
   bottomNavFabCollection: {
-    backgroundColor: colors.collectionAccent
+    backgroundColor: colors.collectionAccentText
   },
   bottomNavFabCollectionPressed: {
-    backgroundColor: colors.collectionAccentPressed
+    backgroundColor: colors.accentTextStrong
   },
   searchScreen: {
     flex: 1
@@ -533,41 +536,31 @@ export const styles = StyleSheet.create({
     fontWeight: "600",
     lineHeight: 19
   },
+  // AI insight: a white card whose header reuses the "Suggested" pill (pale-green
+  // pill + green fill-sparkle + green label), with the insight body below — so the
+  // green always sits on white, never on a muddy gray fill.
   aiInsight: {
-    alignItems: "flex-start",
-    backgroundColor: colors.surfaceContainerHigh,
-    borderRadius: 8,
-    flexDirection: "row",
-    gap: 10,
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    gap: 8,
     marginBottom: 2,
-    paddingHorizontal: 12,
-    paddingVertical: 10
+    padding: 14,
+    ...softCardShadow
   },
-  aiInsightHeader: {
+  aiInsightTag: {
     alignItems: "center",
-    flexDirection: "row",
-    gap: 8
-  },
-  aiInsightIcon: {
-    alignItems: "center",
+    alignSelf: "flex-start",
     backgroundColor: colors.accentSoft,
-    borderRadius: 7,
-    height: 26,
-    justifyContent: "center",
-    marginTop: 1,
-    width: 26
+    borderRadius: 999,
+    flexDirection: "row",
+    gap: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 6
   },
-  aiInsightCopy: {
-    flex: 1,
-    gap: 2,
-    minWidth: 0
-  },
-  aiInsightTitle: {
-    color: colors.accentTextStrong,
-    fontSize: 12,
-    fontWeight: "800",
+  aiInsightTagText: {
     ...typefaces.displaySemibold,
-    lineHeight: 16
+    color: colors.accentTextStrong,
+    fontSize: 12
   },
   aiInsightText: {
     color: colors.ink,
@@ -1750,20 +1743,6 @@ export const styles = StyleSheet.create({
   // Collections-tab "Suggested" section: a labelled group of pending AI suggestions.
   suggestionSection: {
     paddingBottom: 8
-  },
-  suggestionSectionHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 6,
-    paddingBottom: 4,
-    paddingHorizontal: 12
-  },
-  suggestionSectionTitle: {
-    ...typefaces.displaySemibold,
-    color: colors.accentTextStrong,
-    fontSize: 12,
-    letterSpacing: 0.6,
-    textTransform: "uppercase"
   },
   suggestionSectionGrid: {
     flexDirection: "row",

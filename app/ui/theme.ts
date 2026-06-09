@@ -42,12 +42,12 @@ export const colors = {
    * and selection; dark ink rides on top. Small text/icons use a deep readable
    * green (not the bright fill) so they keep contrast on light surfaces.
    */
-  accent: "#84E72E",
-  accentText: "#0FA94F",
-  accentTextStrong: "#0C8F43",
-  accentSoft: "#E6F8CE",
-  accentLine: "#84E72E",
-  accentPressed: "#6FD41C",
+  accent: "#A3E635",
+  accentText: "#2E9E20",
+  accentTextStrong: "#277F18",
+  accentSoft: "#EDF6CC",
+  accentLine: "#A3E635",
+  accentPressed: "#84CC16",
 
   /**
    * Collection / secondary emphasis
@@ -56,27 +56,27 @@ export const colors = {
    * (FAB, selected check) with dark ink on top; small collection labels/icons use
    * the in-family deep green for contrast on light surfaces.
    */
-  collectionAccent: "#84E72E",
-  collectionAccentText: "#0FA94F",
-  collectionAccentSoft: "#E6F8CE",
-  collectionAccentLine: "#84E72E",
-  collectionAccentPressed: "#6FD41C",
+  collectionAccent: "#A3E635",
+  collectionAccentText: "#2E9E20",
+  collectionAccentSoft: "#EDF6CC",
+  collectionAccentLine: "#A3E635",
+  collectionAccentPressed: "#84CC16",
 
   /**
    * Secondary text/action color
    * In-family deep green for secondary-emphasis text — never a competing hue.
    */
-  secondary: "#0C8F43",
+  secondary: "#277F18",
 
-  onAccent: "#17211B",
-  onCollectionAccent: "#17211B",
+  onAccent: "#1B2A12",
+  onCollectionAccent: "#1B2A12",
 
   /**
    * Processing / informational state
    * On-brand: a calm neutral pill carries an electric-green spinner/label, so the
    * live "Analyzing" state never introduces a competing blue hue.
    */
-  processing: "#0C8F43",
+  processing: "#2E9E20",
   processingSoft: "#EDEFF1",
   processingLine: "#EDEFF1",
 
@@ -100,7 +100,7 @@ export const colors = {
    * Interaction / overlays
    */
   navBorder: "rgba(23, 33, 27, 0.14)",
-  rowRipple: "rgba(132, 231, 46, 0.22)",
+  rowRipple: "rgba(163, 230, 53, 0.22)",
   skeletonSheen: "rgba(255, 255, 255, 0.6)",
 
   shadow: "#000000",
