@@ -4,7 +4,8 @@ export type DeleteTraceKind =
   | "capture-delete"
   | "collection-delete"
   | "collection-set"
-  | "collection-unlink";
+  | "collection-unlink"
+  | "suggestion-dismiss";
 
 export type DeleteTraceToken = {
   kind: DeleteTraceKind;

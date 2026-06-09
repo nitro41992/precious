@@ -1852,6 +1852,24 @@ export const styles = StyleSheet.create({
     color: colors.onAccent,
     fontSize: 15
   },
+  // Low-emphasis, text-only dismiss sitting under the primary persist action so the
+  // whole-suggestion dismiss reads as intentional but clearly subordinate to Add. It hugs
+  // its label as a centered pill so the pressed tonal fill is a soft rounded shape, never a
+  // full-width hard-edged slab.
+  detailDismissButton: {
+    alignItems: "center",
+    alignSelf: "center",
+    borderRadius: 999,
+    justifyContent: "center",
+    marginTop: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 10
+  },
+  detailDismissText: {
+    ...typefaces.displaySemibold,
+    color: colors.muted,
+    fontSize: 14
+  },
   collectionCollageFrame: {
     aspectRatio: 1,
     backgroundColor: colors.surfaceContainer,

@@ -35,6 +35,7 @@ type CollectionDetailScreenProps = {
     closeCollectionDetail: () => void;
     loadMoreCollectionCaptures: () => void;
     onDeleteCollection: () => void;
+    onDismissSuggestion: () => void;
     onPersistSuggestion: () => void;
     openCollectionEditor: () => void;
     renderCollectionCapture: (input: ListRenderItemInfo<Capture>) => ReactElement | null;
@@ -63,6 +64,7 @@ export function CollectionDetailScreen({ actions, data }: CollectionDetailScreen
     closeCollectionDetail,
     loadMoreCollectionCaptures,
     onDeleteCollection,
+    onDismissSuggestion,
     onPersistSuggestion,
     openCollectionEditor,
     renderCollectionCapture,
@@ -143,21 +145,37 @@ export function CollectionDetailScreen({ actions, data }: CollectionDetailScreen
             </Text>
             <Text style={styles.sourceText}>{selectedCollection.description}</Text>
             {isSuggested ? (
-              <MotionPressable
-                accessibilityLabel={`Add collection: ${selectedCollection.title}`}
-                accessibilityRole="button"
-                disabled={suggestionBusy}
-                onPress={onPersistSuggestion}
-                style={({ pressed }) => [
-                  styles.detailPersistButton,
-                  suggestionBusy && styles.suggestionDisabled,
-                  pressed && styles.subtlePressed
-                ]}
-                testID="pc.collection.detail.persist"
-              >
-                <Plus color={colors.onAccent} size={17} weight="bold" />
-                <Text style={styles.detailPersistText}>Add to collections</Text>
-              </MotionPressable>
+              <>
+                <MotionPressable
+                  accessibilityLabel={`Add collection: ${selectedCollection.title}`}
+                  accessibilityRole="button"
+                  disabled={suggestionBusy}
+                  onPress={onPersistSuggestion}
+                  style={({ pressed }) => [
+                    styles.detailPersistButton,
+                    suggestionBusy && styles.suggestionDisabled,
+                    pressed && styles.subtlePressed
+                  ]}
+                  testID="pc.collection.detail.persist"
+                >
+                  <Plus color={colors.onAccent} size={17} weight="bold" />
+                  <Text style={styles.detailPersistText}>Add to collections</Text>
+                </MotionPressable>
+                <MotionPressable
+                  accessibilityLabel={`Dismiss suggestion: ${selectedCollection.title}`}
+                  accessibilityRole="button"
+                  disabled={suggestionBusy}
+                  onPress={onDismissSuggestion}
+                  style={({ pressed }) => [
+                    styles.detailDismissButton,
+                    suggestionBusy && styles.suggestionDisabled,
+                    pressed && styles.subtlePressed
+                  ]}
+                  testID="pc.collection.detail.dismiss"
+                >
+                  <Text style={styles.detailDismissText}>Dismiss suggestion</Text>
+                </MotionPressable>
+              </>
             ) : null}
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>{isSuggested ? "Captures in this suggestion" : "Captures"}</Text>

@@ -3297,6 +3297,22 @@ export default function App() {
     setCollectionCaptures((current) => current.map(removeCollection));
   }
 
+  // Drop a pending AI suggestion marker from every loaded capture that carried it, so a
+  // whole-suggestion dismiss clears the badge everywhere it was showing. Mirrors
+  // removeCollectionFromKnownCaptures; undo restores via the deletion-state snapshot.
+  function clearPendingSuggestionFromKnownCaptures(collectionId: string) {
+    const clearSuggestion = (capture: Capture): Capture =>
+      capture.pendingSuggestion?.collectionId === collectionId
+        ? { ...capture, pendingSuggestion: null, collectionSuggestionState: "none" }
+        : capture;
+    commitCaptureRows("active", (current) => current.map(clearSuggestion));
+    commitCaptureRows("archived", (current) => current.map(clearSuggestion));
+    for (const [cachedCollectionId, rows] of Object.entries(collectionCapturesCacheRef.current)) {
+      collectionCapturesCacheRef.current[cachedCollectionId] = rows.map(clearSuggestion);
+    }
+    setCollectionCaptures((current) => current.map(clearSuggestion));
+  }
+
   async function saveContextNote(capture: Capture, noteValue: string) {
     const captureKey = captureDraftKey(capture);
     setNoteSaveState("saving");
@@ -3813,6 +3829,100 @@ export default function App() {
     } finally {
       setSuggestionBusyId(null);
     }
+  }
+
+  // Reverse a whole-suggestion dismiss. Restores the captures (and their pending markers)
+  // from the snapshot taken before the dismiss, re-adds the suggestion locally, and reverses
+  // the backend dismiss once it has committed. mirrors undoDeleteCollection.
+  function undoDismissSuggestionGroup(
+    collection: Collection,
+    snapshot: DeletionStateSnapshot,
+    operationId: string
+  ) {
+    const operation = pendingDeleteOperationsRef.current[operationId];
+    if (operation) operation.undoRequested = true;
+    restoreDeletionState(snapshot);
+    replaceSuggestions([collection, ...suggestions.filter((item) => item.id !== collection.id)]);
+    setToast(null);
+    showToast("Suggestion restored.", "success");
+    if (operation && operation.commitDone && !operation.commitFailed) {
+      void (async () => {
+        try {
+          await collectionRequest("collection-suggestions", {
+            method: "PATCH",
+            body: { action: "undo_dismiss", collectionId: collection.id }
+          });
+          await loadSuggestions();
+        } catch (error) {
+          showErrorToast(error, "Could not restore the suggestion.");
+        } finally {
+          finishPendingDeleteOperation(operation.id);
+        }
+      })();
+    }
+  }
+
+  // Dismiss a whole AI suggestion (the intentional action in the suggestion detail view):
+  // every member capture drops the suggestion and the group disappears. The undo toast can
+  // bring the whole group back. Optimistic + reverse-network, mirroring deleteCollection.
+  async function dismissSuggestionGroup(collection: Collection) {
+    if (!collection?.id || suggestionBusyId) return;
+    if (!config?.apiUrl || !session) {
+      showToast("Sign in to manage collections.", "error");
+      return;
+    }
+    const collectionId = collection.id;
+    const trace = createDeleteTrace("suggestion-dismiss", { collectionId });
+    const snapshot = snapshotDeletionState();
+    const operation: PendingDeleteOperation = {
+      commitDone: false,
+      commitFailed: false,
+      id: trace.operationId,
+      kind: "suggestion-dismiss",
+      snapshot,
+      trace,
+      undoRequested: false
+    };
+    registerPendingDeleteOperation(operation);
+    // Animated close, then drop the suggestion and clear its marker from every loaded capture.
+    closeCollectionDetail();
+    replaceSuggestions(suggestions.filter((item) => item.id !== collectionId));
+    clearPendingSuggestionFromKnownCaptures(collectionId);
+    setToast(null);
+    showTracedToast({
+      text: "Suggestion dismissed.",
+      tone: "destructive",
+      actionLabel: "Undo",
+      action: () => undoDismissSuggestionGroup(collection, snapshot, trace.operationId)
+    }, trace);
+    void (async () => {
+      try {
+        await collectionRequest("collection-suggestions", {
+          method: "PATCH",
+          body: { action: "dismiss", collectionId }
+        });
+        operation.commitDone = true;
+        if (operation.undoRequested) {
+          await collectionRequest("collection-suggestions", {
+            method: "PATCH",
+            body: { action: "undo_dismiss", collectionId }
+          });
+          await loadSuggestions();
+          finishPendingDeleteOperation(operation.id);
+          return;
+        }
+        void loadSuggestions();
+        finishPendingDeleteOperation(operation.id);
+      } catch (error) {
+        operation.commitFailed = true;
+        if (!operation.undoRequested) {
+          restoreDeletionState(snapshot);
+          replaceSuggestions([collection, ...suggestions.filter((item) => item.id !== collectionId)]);
+          showErrorToast(error, "Could not dismiss the suggestion.");
+        }
+        finishPendingDeleteOperation(operation.id);
+      }
+    })();
   }
 
   async function saveCollection() {
@@ -5203,6 +5313,10 @@ export default function App() {
             onPersistSuggestion: () => {
               const collection = selectedCollectionRef.current;
               if (collection) void persistSuggestion(collection.id);
+            },
+            onDismissSuggestion: () => {
+              const collection = selectedCollectionRef.current;
+              if (collection) void dismissSuggestionGroup(collection);
             },
             openCollectionEditor,
             renderCollectionCapture,

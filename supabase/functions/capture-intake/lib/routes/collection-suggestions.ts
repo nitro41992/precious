@@ -34,6 +34,39 @@ async function loadSuggestionRow(
   return data as Record<string, unknown>;
 }
 
+// Undo loads the row a whole-suggestion dismiss soft-deleted, so it must look past
+// the deleted_at guard that loadSuggestionRow applies to live suggestions.
+async function loadDismissedSuggestionRow(
+  supabase: Supabase,
+  userId: string,
+  collectionId: string,
+) {
+  const { data, error } = await supabase
+    .from("collections")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("id", collectionId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data || data.status !== "suggested") return null;
+  return data as Record<string, unknown>;
+}
+
+async function activeMemberLinks(
+  supabase: Supabase,
+  userId: string,
+  collectionId: string,
+) {
+  const { data, error } = await supabase
+    .from("collection_capture_links")
+    .select("capture_id, rationale, confidence")
+    .eq("user_id", userId)
+    .eq("collection_id", collectionId)
+    .is("unlinked_at", null);
+  if (error) throw error;
+  return (data ?? []) as Array<Record<string, unknown>>;
+}
+
 async function activeMemberCaptureIds(
   supabase: Supabase,
   userId: string,
@@ -80,6 +113,64 @@ async function clearPendingSuggestionForCaptures(
     if (pendingId !== collectionId) continue;
     const next = { ...analysis };
     delete next.pending_collection_suggestion;
+    const normalized = normalizedReviewAnalysis(
+      resolveReviewTargets(next, ["collections", "analysis"], data.review_confirmed_at),
+      data.review_confirmed_at,
+    );
+    await supabase
+      .from("captures")
+      .update({
+        analysis: normalized,
+        analysis_state:
+          analysisRequiresReview(normalized, data.review_confirmed_at)
+            ? "needs_review"
+            : "ready",
+      })
+      .eq("user_id", userId)
+      .eq("id", data.id);
+    scheduleCaptureEmbeddingRefresh(supabase, userId, String(data.id));
+  }
+}
+
+// The inverse of clearPendingSuggestionForCaptures: when a whole-suggestion dismiss is
+// undone, every re-linked member capture must surface its pending_collection_suggestion
+// marker again. The group title/description come from the (un-deleted) suggestion row and
+// each capture's rationale/confidence from its own link row.
+async function restorePendingSuggestionForCaptures(
+  supabase: Supabase,
+  userId: string,
+  collectionId: string,
+  suggestion: Record<string, unknown>,
+  links: Array<Record<string, unknown>>,
+) {
+  const title = String(suggestion.title || "");
+  const description = String(suggestion.description || "");
+  for (const link of links) {
+    const captureId = String(link.capture_id || "");
+    if (!captureId) continue;
+    const { data, error } = await supabase
+      .from("captures")
+      .select("id, analysis, review_confirmed_at")
+      .eq("user_id", userId)
+      .eq("id", captureId)
+      .maybeSingle();
+    if (error || !data) continue;
+    const analysis = data.analysis && typeof data.analysis === "object" &&
+        !Array.isArray(data.analysis)
+      ? data.analysis as Record<string, unknown>
+      : {};
+    const next = {
+      ...analysis,
+      pending_collection_suggestion: {
+        collection_id: collectionId,
+        title,
+        description,
+        rationale: typeof link.rationale === "string" ? link.rationale : "",
+        confidence: Number.isFinite(Number(link.confidence))
+          ? Number(link.confidence)
+          : null,
+      },
+    };
     const normalized = normalizedReviewAnalysis(
       resolveReviewTargets(next, ["collections", "analysis"], data.review_confirmed_at),
       data.review_confirmed_at,
@@ -238,6 +329,95 @@ async function dismissSuggestionForCapture(
   return await captureResponse(supabase, userId, captureId);
 }
 
+// Dismiss a whole pending suggestion at once (the intentional action in the suggestion
+// detail view): every member capture is unlinked, never re-suggested for this group, and
+// loses its pending_collection_suggestion marker, then the suggestion is soft-deleted.
+// Reversible via undoDismissCollectionSuggestion within the purge window.
+export async function dismissCollectionSuggestion(
+  supabase: Supabase,
+  userId: string,
+  collectionId: string,
+) {
+  const suggestion = await loadSuggestionRow(supabase, userId, collectionId);
+  if (!suggestion) return null;
+  const memberIds = await activeMemberCaptureIds(supabase, userId, collectionId);
+  const now = new Date().toISOString();
+
+  if (memberIds.length) {
+    await supabase
+      .from("collection_suggestion_dismissals")
+      .upsert(
+        memberIds.map((captureId) => ({
+          user_id: userId,
+          collection_id: collectionId,
+          capture_id: captureId,
+        })),
+        { onConflict: "collection_id,capture_id" },
+      );
+  }
+  await supabase
+    .from("collection_capture_links")
+    .update({ unlinked_at: now, unlink_reason: "suggestion_dismissed" })
+    .eq("user_id", userId)
+    .eq("collection_id", collectionId)
+    .is("unlinked_at", null);
+  await clearPendingSuggestionForCaptures(supabase, userId, collectionId, memberIds);
+  // Keep a purge window (matching collection delete) so the Undo toast can reverse it.
+  await supabase
+    .from("collections")
+    .update({
+      deleted_at: now,
+      delete_purge_after: new Date(Date.parse(now) + 8000).toISOString(),
+    })
+    .eq("user_id", userId)
+    .eq("id", collectionId);
+  return { captureIds: memberIds };
+}
+
+// Reverse a whole-suggestion dismiss: un-delete the suggestion, re-link the members that
+// were unlinked by the dismiss, drop the dismissal records, and restore each capture's
+// pending_collection_suggestion marker.
+export async function undoDismissCollectionSuggestion(
+  supabase: Supabase,
+  userId: string,
+  collectionId: string,
+) {
+  const suggestion = await loadDismissedSuggestionRow(supabase, userId, collectionId);
+  if (!suggestion) return null;
+
+  await supabase
+    .from("collections")
+    .update({ deleted_at: null, delete_purge_after: null })
+    .eq("user_id", userId)
+    .eq("id", collectionId);
+  await supabase
+    .from("collection_capture_links")
+    .update({ unlinked_at: null, unlink_reason: null })
+    .eq("user_id", userId)
+    .eq("collection_id", collectionId)
+    .eq("unlink_reason", "suggestion_dismissed");
+  await supabase
+    .from("collection_suggestion_dismissals")
+    .delete()
+    .eq("user_id", userId)
+    .eq("collection_id", collectionId);
+
+  const links = await activeMemberLinks(supabase, userId, collectionId);
+  await restorePendingSuggestionForCaptures(
+    supabase,
+    userId,
+    collectionId,
+    suggestion,
+    links,
+  );
+  await refreshCollectionPreviewFromActiveLinks(supabase, userId, collectionId);
+  return await collectionWithCount(supabase, userId, {
+    ...suggestion,
+    deleted_at: null,
+    delete_purge_after: null,
+  });
+}
+
 export async function handleCollectionSuggestionsResource(
   request: Request,
   supabase: Supabase,
@@ -271,6 +451,22 @@ export async function handleCollectionSuggestionsResource(
       collectionId,
       captureId,
     );
+  }
+
+  if (body.action === "dismiss") {
+    const result = await dismissCollectionSuggestion(supabase, userId, collectionId);
+    if (!result) return json({ error: "Suggestion not found" }, 404);
+    return json(result);
+  }
+
+  if (body.action === "undo_dismiss") {
+    const collection = await undoDismissCollectionSuggestion(
+      supabase,
+      userId,
+      collectionId,
+    );
+    if (!collection) return json({ error: "Suggestion not found" }, 404);
+    return json({ collection });
   }
 
   return json({ error: "Unsupported action" }, 400);
