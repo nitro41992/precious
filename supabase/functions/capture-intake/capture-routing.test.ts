@@ -1381,3 +1381,63 @@ Deno.test("starter collections are object-based and seed only empty accounts", (
     "starter descriptions should describe saved objects instead of save intents or source surfaces",
   );
 });
+
+Deno.test("applyFieldRationaleCopies fans field_rationales text into legacy rationale fields", () => {
+  const analysis = {
+    default_intent: { category: "cook", confidence: 0.8, rationale: "stale" },
+    collection_decisions: [
+      { type: "existing", collection_id: "c1", title: "Recipes", rationale: "stale" },
+      { type: "new", collection_id: null, title: "Weeknight Dinners", rationale: "stale" },
+    ],
+    suggested_reminders: [
+      { trigger_type: "time", rationale: "stale" },
+      { trigger_type: "time", rationale: "second untouched" },
+    ],
+    field_rationales: {
+      purpose: { selection_key: "cook", selection_label: "Cook", text: "I chose Cook because it is a recipe." },
+      collections: [
+        { collection_id: "c1", selection_label: "Recipes", text: "I picked Recipes because it is a dish." },
+        { collection_id: null, selection_label: "Weeknight Dinners", text: "I picked Weeknight Dinners because it is a fast meal." },
+      ],
+      reminder: { trigger_value: "No Reminder idea", text: "No Reminder idea because no date is clear." },
+    },
+  };
+  const result = urlEvidence.applyFieldRationaleCopies(analysis) as any;
+  assertEqual(
+    result.default_intent.rationale,
+    "I chose Cook because it is a recipe.",
+    "purpose text should copy into default_intent.rationale",
+  );
+  assertEqual(
+    result.collection_decisions[0].rationale,
+    "I picked Recipes because it is a dish.",
+    "existing collection rationale should copy by collection_id",
+  );
+  assertEqual(
+    result.collection_decisions[1].rationale,
+    "I picked Weeknight Dinners because it is a fast meal.",
+    "new collection rationale should copy by selection_label/title",
+  );
+  assertEqual(
+    result.suggested_reminders[0].rationale,
+    "No Reminder idea because no date is clear.",
+    "reminder text should copy into suggested_reminders[0].rationale",
+  );
+  assertEqual(
+    result.suggested_reminders[1].rationale,
+    "second untouched",
+    "only the first reminder rationale should be overwritten",
+  );
+});
+
+Deno.test("applyFieldRationaleCopies leaves analysis untouched when field_rationales is absent", () => {
+  const analysis = {
+    default_intent: { category: "cook", confidence: 0.8, rationale: "model wrote this" },
+  };
+  const result = urlEvidence.applyFieldRationaleCopies(analysis) as any;
+  assertEqual(
+    result.default_intent.rationale,
+    "model wrote this",
+    "rationale should be preserved when there is no field_rationales source",
+  );
+});

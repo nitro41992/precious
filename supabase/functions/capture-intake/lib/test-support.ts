@@ -41,6 +41,7 @@ import {
   weaknessReasons,
 } from "./url-evidence.ts";
 import {
+  applyFieldRationaleCopies,
   buildOpenAiUserContent,
   buildCaptureGateRequestBody,
   buildPrompt,
@@ -93,6 +94,7 @@ export const __urlEvidenceTest = {
   activeSaveIntentKeys,
   analysisSchema,
   analysisSchemaForCollections,
+  applyFieldRationaleCopies,
   applySecondaryCollectionRecovery,
   bestEvidence,
   buildOpenAiUserContent,
