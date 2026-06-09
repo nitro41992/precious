@@ -408,7 +408,16 @@ export function CollectionSelectorSheet({ actions, data, state }: CollectionSele
       sheetStyle={[
         styles.actionSheet,
         styles.collectionSelectorSheet,
-        step === "create" && keyboardHeight > 0 ? { paddingBottom: keyboardHeight + 16 } : null
+        keyboardHeight > 0
+          ? {
+              paddingBottom: keyboardHeight + 16,
+              // Pin the picker tall while typing so filtering down to a few results
+              // can't collapse it behind the keyboard; the create step stays compact.
+              ...(step === "pick"
+                ? { minHeight: Math.round(Dimensions.get("screen").height * 0.62) }
+                : null)
+            }
+          : null
       ]}
       visible={collectionPickerOpen}
     >
