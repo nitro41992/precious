@@ -416,49 +416,6 @@ function ReviewDeleteDismissFrame({
   );
 }
 
-// A capture opened from a notification tap has no list row to morph from, so
-// the review would otherwise snap into place at committed opacity 1. This plays
-// a one-shot fade + rise on mount, then calls onEntered so the parent drops the
-// frame and the review rests at its plain committed opacity — no worklet style
-// lingers on the full-screen frame (avoids the Android resume re-attach freeze).
-function ReviewDeepLinkEnterFrame({
-  children,
-  onEntered
-}: {
-  children: ReactNode;
-  onEntered: () => void;
-}) {
-  const progress = useSharedValue(0);
-
-  useEffect(() => {
-    progress.value = withTiming(
-      1,
-      {
-        duration: 260,
-        easing: motionEasing.decelerate,
-        reduceMotion: motionReduceMotion
-      },
-      (finished) => {
-        if (finished) runOnJS(onEntered)();
-      }
-    );
-  }, [onEntered, progress]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: progress.value,
-    transform: [
-      { translateY: interpolate(progress.value, [0, 1], [16, 0]) },
-      { scale: interpolate(progress.value, [0, 1], [0.985, 1]) }
-    ]
-  }));
-
-  return (
-    <Reanimated.View style={[styles.screenOverlay, animatedStyle]}>
-      {children}
-    </Reanimated.View>
-  );
-}
-
 function TopLevelPane({
   active,
   children,
@@ -861,10 +818,6 @@ export default function App() {
   const [collectionDetailOrigin, setCollectionDetailOrigin] = useState<"recent" | "collections" | "suggestions">("collections");
   const [captureReturnCollectionId, setCaptureReturnCollectionId] = useState<string | null>(null);
   const [captureReviewOrigin, setCaptureReviewOrigin] = useState<CaptureReviewOrigin | null>(null);
-  // A notification deep-link opens the review with no list row to morph from, so
-  // it plays a one-shot fade/rise entrance instead of snapping in. Consumed once
-  // the entrance settles (see ReviewDeepLinkEnterFrame).
-  const [deepLinkEnter, setDeepLinkEnter] = useState(false);
   const [capturesLoading, setCapturesLoading] = useState(false);
   const [capturesLoadPhase, setCapturesLoadPhase] = useState<LoadPhase>("idle");
   const [capturesError, setCapturesError] = useState("");
@@ -2286,25 +2239,25 @@ export default function App() {
   );
 
   // Opening from a notification tap: there is no list row to morph from and the
-  // just-finished capture is not in the feed yet. Treat it like a recents open
-  // (so back returns to recents), seed an instant snapshot from the native store
-  // the worker just wrote, and let the review fade/rise in (deepLinkEnter).
-  const openCaptureFromDeepLink = useCallback(
-    async (captureId: string) => {
+  // just-finished capture may not be in the feed yet. Treat it like a recents
+  // open (so back returns to recents) and seed an instant snapshot so the review
+  // renders fully right away — its own editorial/handoff enter animates it in,
+  // and loadCaptures reconciles the live data in place (same id) without a
+  // remount. A synchronous in-memory hit is preferred so there is no recents
+  // flash; only fall back to the native store the worker just wrote.
+  // Holds the capture id currently opened via a notification tap so repeated
+  // deliveries of the same launch URL (getInitialURL returns it on every call)
+  // can't re-run the open and replay the enter animation. Reset on deselect.
+  const deepLinkCaptureRef = useRef<string | null>(null);
+  const finishDeepLinkOpen = useCallback(
+    (captureId: string, snapshot: Capture | null) => {
+      if (deepLinkCaptureRef.current !== captureId) return;
       setSearchOpen(false);
       setCollectionSearchOpen(false);
       setCollectionsOpen(false);
+      selectCollection(null);
       setCaptureReturnCollectionId(null);
       setCaptureReviewOrigin("recent");
-      setDeepLinkEnter(true);
-      let snapshot =
-        capturesRef.current.find((item) => item.id === captureId || item.remoteId === captureId) ??
-        archivedCapturesRef.current.find((item) => item.id === captureId || item.remoteId === captureId) ??
-        null;
-      if (!snapshot && nativeStore?.getCaptures) {
-        const raw = await nativeStore.getCaptures().catch(() => null);
-        snapshot = pickCaptureFromRaw(raw, captureId);
-      }
       if (snapshot) {
         setDraftTitle(snapshot.title);
         setDraftNote(snapshot.note);
@@ -2313,7 +2266,24 @@ export default function App() {
       selectCapture(captureId, { snapshot });
       void loadCaptures();
     },
-    [loadCaptures, selectCapture]
+    [loadCaptures, selectCapture, selectCollection]
+  );
+  const openCaptureFromDeepLink = useCallback(
+    async (captureId: string) => {
+      if (deepLinkCaptureRef.current === captureId) return;
+      deepLinkCaptureRef.current = captureId;
+      const inMemory =
+        capturesRef.current.find((item) => item.id === captureId || item.remoteId === captureId) ??
+        archivedCapturesRef.current.find((item) => item.id === captureId || item.remoteId === captureId) ??
+        null;
+      if (inMemory) {
+        finishDeepLinkOpen(captureId, inMemory);
+        return;
+      }
+      const raw = nativeStore?.getCaptures ? await nativeStore.getCaptures().catch(() => null) : null;
+      finishDeepLinkOpen(captureId, pickCaptureFromRaw(raw, captureId));
+    },
+    [finishDeepLinkOpen]
   );
 
   const openCaptureFromCollection = useCallback((capture: Capture, collectionId: string) => {
@@ -2737,7 +2707,7 @@ export default function App() {
   useEffect(() => {
     if (!selectedId && !deleteDismissCapture) {
       setCaptureReviewOrigin(null);
-      setDeepLinkEnter(false);
+      deepLinkCaptureRef.current = null;
     }
   }, [deleteDismissCapture, selectedId]);
 
@@ -5646,16 +5616,9 @@ export default function App() {
 
   if (selected) {
     if (captureReviewOrigin === "recent") {
-      const reviewOverlay = renderCaptureReviewScreen(selected);
       return renderTopLevelStack({
         active: "recent",
-        overlay: deepLinkEnter ? (
-          <ReviewDeepLinkEnterFrame onEntered={() => setDeepLinkEnter(false)}>
-            {reviewOverlay}
-          </ReviewDeepLinkEnterFrame>
-        ) : (
-          reviewOverlay
-        ),
+        overlay: renderCaptureReviewScreen(selected),
         overlayHandoff: reviewHandoff?.captureId === selected.id ? reviewHandoff : null
       });
     }

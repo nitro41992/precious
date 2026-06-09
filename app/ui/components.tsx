@@ -910,10 +910,7 @@ export function ProcessingStatusPill({
         review && styles.processingStatusPillReview
       ]}
     >
-      <View style={[styles.processingStatusIconWell, review && styles.processingStatusIconWellReview]}>
-        <View style={styles.processingStatusDot} />
-        <ClockClockwise color={colors.processing} size={review ? 16 : 14} weight="bold" />
-      </View>
+      <ClockClockwise color={colors.processing} size={review ? 15 : 13} weight="bold" />
       <Text
         numberOfLines={1}
         style={[
@@ -937,10 +934,7 @@ export function SuggestionPendingToken({
 }) {
   return (
     <View accessibilityLabel={label} accessible style={styles.processingStatusPill}>
-      <View style={styles.processingStatusIconWell}>
-        <View style={styles.processingStatusDot} />
-        <Sparkle color={colors.processing} size={14} weight="fill" />
-      </View>
+      <Sparkle color={colors.processing} size={13} weight="fill" />
       <Text numberOfLines={1} style={styles.processingStatusText}>
         {label}
       </Text>
