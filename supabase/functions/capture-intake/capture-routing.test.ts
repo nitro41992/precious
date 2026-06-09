@@ -319,7 +319,18 @@ Deno.test("confirming collection review links pending existing collection sugges
   );
 });
 
-Deno.test("review rationale drops source-format explanations when source fallback is blocked", () => {
+Deno.test("rationales are no longer filtered post-LLM, even when source fallback is blocked", () => {
+  // Rationale quality is enforced at generation time (prompt + structured output),
+  // not by judging and stripping the model's text afterward. A source-format
+  // explanation must pass through unchanged rather than be erased to "".
+  const reviewRationale = {
+    focus: "Confirm Save Intent: Learn",
+    summary: "Useful skincare advice.",
+    intent: "Suggested Learn because this is an Instagram Reel.",
+    collections:
+      "Suggested Movies & Shows because it is a short social video.",
+    reminder: "No future date, time, deadline, or time window was found.",
+  };
   const normalized = urlEvidence.normalizedReviewAnalysis({
     display_title: "Dermatologist recommends budget retinoids",
     summary: "A dermatologist recommends budget retinoids for acne care.",
@@ -328,14 +339,7 @@ Deno.test("review rationale drops source-format explanations when source fallbac
       confidence: 0.74,
       rationale: "Suggested Learn because this is an Instagram Reel.",
     },
-    review_rationale: {
-      focus: "Confirm Save Intent: Learn",
-      summary: "Useful skincare advice.",
-      intent: "Suggested Learn because this is an Instagram Reel.",
-      collections:
-        "Suggested Movies & Shows because it is a short social video.",
-      reminder: "No future date, time, deadline, or time window was found.",
-    },
+    review_rationale: reviewRationale,
     confidence_label: "Looks right",
     needs_review: false,
     content_evidence_profile: {
@@ -345,21 +349,15 @@ Deno.test("review rationale drops source-format explanations when source fallbac
       limited_reasons: [],
     },
   });
-  assert(
-    !/Instagram|Reel|short social video/i.test(
-      JSON.stringify(normalized.review_rationale),
-    ),
-    "review rationale should not explain with source format when content is available",
-  );
   assertEqual(
-    normalized.review_rationale.collections,
-    "",
-    "source-format-only legacy rationale should be stripped without fallback copy",
+    JSON.stringify(normalized.review_rationale),
+    JSON.stringify(reviewRationale),
+    "source-format rationale should be preserved, not stripped",
   );
   assertEqual(
     normalized.needs_review,
     false,
-    "legacy rationale validation should not create review state",
+    "removing the filter should not create review state",
   );
 });
 
@@ -727,8 +725,7 @@ Deno.test("analysis prompt requires evidence-rich review rationale", () => {
     "prompt should require fixed structured field rationale phrases",
   );
   assert(
-    prompt.includes("selection_label to No intent") &&
-      prompt.includes("selection_label No collection") &&
+    prompt.includes("selection_label No collection") &&
       prompt.includes("trigger_value to No Reminder idea"),
     "prompt should require structured rationale for explicit no-choice fields",
   );
@@ -774,17 +771,28 @@ Deno.test("analysis schema exposes structured field rationales", () => {
     "purpose|collections|reminder",
     "field rationale schema should include all editor fields",
   );
+  // Structured output guarantees a rationale always exists (non-null string),
+  // replacing post-LLM "fill a default when empty" logic.
+  assertEqual(
+    fieldRationales.properties.purpose.properties.text.type,
+    "string",
+    "purpose rationale text must be a non-null string",
+  );
+  assertEqual(
+    fieldRationales.properties.collections.items.properties.text.type,
+    "string",
+    "collection rationale text must be a non-null string",
+  );
+  assertEqual(
+    fieldRationales.properties.reminder.properties.text.type,
+    "string",
+    "reminder rationale text must be a non-null string",
+  );
   assert(
     fieldRationales.properties.purpose.properties.text.description.includes(
       "I chose [Intent label] because",
     ),
     "purpose rationale schema should describe fixed phrase",
-  );
-  assert(
-    fieldRationales.properties.purpose.properties.text.description.includes(
-      "No intent because",
-    ),
-    "purpose rationale schema should describe no-intent phrase",
   );
   assert(
     fieldRationales.properties.purpose.properties.selection_label.description

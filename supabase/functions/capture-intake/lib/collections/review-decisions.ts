@@ -3,6 +3,7 @@ import {
   COLLECTION_AUTO_LINK_CONFIDENCE,
   COLLECTION_AUTO_LINK_LIMIT,
   COLLECTION_SUGGESTION_DEDUP_SIMILARITY,
+  COLLECTION_SUGGESTION_MIN_CAPTURES,
   COLLECTION_SUGGESTION_MIN_CONFIDENCE,
 } from "../config.ts";
 import { errorMessage, finiteNumber, stringValue } from "../common.ts";
@@ -11,7 +12,6 @@ import {
   normalizedReviewAnalysis,
   resolveReviewTargets,
 } from "../analysis/review-normalization.ts";
-import { rationaleForAnalysis } from "../analysis/rationales.ts";
 import type { AnalysisOutput, RetrievedCollection } from "../types.ts";
 import {
   collectionEmbeddingContent,
@@ -21,6 +21,7 @@ import {
   upsertCollectionEmbedding,
 } from "./embeddings.ts";
 import {
+  activeCollectionCounts,
   activeCollectionDecisionRows,
   collectionDecisionKey,
   linkCaptureToCollection,
@@ -113,7 +114,7 @@ function collectionFieldRationale(
     if (!item || typeof item !== "object" || Array.isArray(item)) continue;
     const record = item as Record<string, unknown>;
     if (stringValue(record.collection_id) !== collectionId) continue;
-    const rationale = rationaleForAnalysis(analysis, record.text);
+    const rationale = stringValue(record.text);
     if (rationale) return rationale;
   }
   return "";
@@ -370,7 +371,7 @@ export async function autoLinkCollectionDecisions(
     const rationale = collectionFieldRationale(
       analysis,
       decision.collection_id!,
-    ) || rationaleForAnalysis(analysis, decision.rationale);
+    ) || stringValue(decision.rationale);
     await linkCaptureToCollection(
       supabase,
       userId,
@@ -429,6 +430,75 @@ export function qualifyingNewCollectionDecision(
   // The prompt allows at most one new Collection; keep the most confident if more slip through.
   return newDecisions.sort((left, right) => right.confidence - left.confidence)[0] ??
     null;
+}
+
+// A topical (subject×content-type) suggestion only surfaces once enough captures share the
+// theme; intrinsic value themes surface on the first capture. `linkedCount` already includes
+// the capture currently being processed.
+export function shouldSurfaceSuggestion(
+  basis: string,
+  linkedCount: number,
+): boolean {
+  if (basis !== "topical") return true;
+  return linkedCount >= COLLECTION_SUGGESTION_MIN_CAPTURES;
+}
+
+// When a topical suggestion crosses its frequency threshold, the earlier captures that were
+// held silent need the suggestion written back onto their analysis so they light up too. The
+// app surfaces it on the next capture-feed refresh (it already polls while a sibling resolves).
+// Idempotent: siblings that already carry the suggestion, or were dismissed, are left alone.
+export async function surfaceSuggestionToSiblings(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  suggestionId: string,
+  excludeCaptureId: string,
+  meta: { title: string; description: string },
+): Promise<void> {
+  const links = await supabase
+    .from("collection_capture_links")
+    .select("capture_id,rationale,confidence")
+    .eq("user_id", userId)
+    .eq("collection_id", suggestionId)
+    .is("unlinked_at", null);
+  if (links.error || !Array.isArray(links.data)) return;
+  for (const link of links.data as Array<Record<string, unknown>>) {
+    const siblingId = String(link.capture_id || "");
+    if (!siblingId || siblingId === excludeCaptureId) continue;
+    const dismissed = await supabase
+      .from("collection_suggestion_dismissals")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("collection_id", suggestionId)
+      .eq("capture_id", siblingId)
+      .maybeSingle();
+    if (!dismissed.error && dismissed.data) continue;
+    const { data: row } = await supabase
+      .from("captures")
+      .select("analysis")
+      .eq("id", siblingId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    const current = (row?.analysis as Record<string, unknown> | null) ?? null;
+    if (!current || current.pending_collection_suggestion) continue;
+    const nextAnalysis = {
+      ...current,
+      pending_collection_suggestion: {
+        collection_id: suggestionId,
+        title: meta.title,
+        description: meta.description,
+        rationale: typeof link.rationale === "string" ? link.rationale : "",
+        confidence: Number(link.confidence ?? 0) || 0,
+      },
+    };
+    await supabase
+      .from("captures")
+      .update({
+        analysis: nextAnalysis,
+        collection_suggestion_state: "ready",
+      })
+      .eq("id", siblingId)
+      .eq("user_id", userId);
+  }
 }
 
 // Materializes an AI-proposed new Collection as a persistent status='suggested' row,
@@ -578,13 +648,30 @@ export async function resolveNewCollectionSuggestions(
     return { ...analysis, collection_decisions: remainingDecisions };
   }
 
-  // 5. Link the capture into the suggestion and surface a pending_collection_suggestion block.
+  // 5. Link the capture into the suggestion. Topical suggestions stay silent until enough
+  //    captures share the theme; intrinsic ones surface immediately.
   await linkCaptureToCollection(supabase, userId, suggestionId, captureId, {
     createdBy: "analysis",
     rationale: decision.rationale || null,
     confidence: decision.confidence,
   });
 
+  if (decision.basis === "topical") {
+    const counts = await activeCollectionCounts(supabase, userId, [suggestionId]);
+    const linkedCount = counts.get(suggestionId) ?? 0;
+    if (!shouldSurfaceSuggestion(decision.basis, linkedCount)) {
+      // Hold it back: the silent suggested row + link persist so a later capture can dedup
+      // into it and cross the threshold. Nothing is surfaced to this capture yet.
+      return { ...analysis, collection_decisions: remainingDecisions };
+    }
+    // Threshold met — back-fill the suggestion onto the earlier captures held silent.
+    await surfaceSuggestionToSiblings(supabase, userId, suggestionId, captureId, {
+      title: suggestionTitle,
+      description: suggestionDescription,
+    });
+  }
+
+  // 6. Surface a pending_collection_suggestion block for this capture.
   return {
     ...analysis,
     collection_decisions: remainingDecisions,

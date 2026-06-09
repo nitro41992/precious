@@ -11,6 +11,7 @@ import {
   COLLECTION_AUTO_LINK_LIMIT,
   COLLECTION_DESCRIPTION_MAX_LENGTH,
   COLLECTION_SUGGESTION_DEDUP_SIMILARITY,
+  COLLECTION_SUGGESTION_MIN_CAPTURES,
   COLLECTION_SUGGESTION_MIN_CONFIDENCE,
   COLLECTION_TITLE_MAX_LENGTH,
   STARTER_COLLECTIONS,
@@ -81,6 +82,7 @@ import {
 import {
   confirmedReminderFromInput,
   saveConfirmedReminderSuggestion,
+  shouldSurfaceSuggestion,
 } from "./collections/review-decisions.ts";
 import {
   fetchSourcePreviewImage,
@@ -116,6 +118,7 @@ export const __urlEvidenceTest = {
   COLLECTION_DESCRIPTION_MAX_LENGTH,
   COLLECTION_PROMPT_CANDIDATE_COUNT,
   COLLECTION_SUGGESTION_DEDUP_SIMILARITY,
+  COLLECTION_SUGGESTION_MIN_CAPTURES,
   COLLECTION_SUGGESTION_MIN_CONFIDENCE,
   COLLECTION_TITLE_MAX_LENGTH,
   emptyUrlEvidence,
@@ -158,6 +161,7 @@ export const __urlEvidenceTest = {
   shouldRejectContextlessLinkCapture,
   shouldAnalyzeAfterCaptureGate,
   shouldUseLinkOnlyUrlEvidenceFallback,
+  shouldSurfaceSuggestion,
   shouldSeedStarterCollections,
   sourcePreviewContentType,
   sourcePreviewExtension,

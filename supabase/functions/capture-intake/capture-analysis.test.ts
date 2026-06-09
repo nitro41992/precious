@@ -155,8 +155,8 @@ Deno.test("save intent catalog is small, active, and action-oriented", () => {
     prompt.includes("- do (Do):") &&
       prompt.includes("physical therapy") &&
       prompt.includes("- cook (Cook):") &&
-      prompt.includes("return null when no listed action is clearly supported"),
-    "prompt should describe do/cook and allow blank intent",
+      prompt.includes("Always choose the single best-fit default_intent.category"),
+    "prompt should describe do/cook and always require an intent",
   );
   assert(
     prompt.includes("learn over read for tutorials") &&

@@ -111,6 +111,13 @@ export const COLLECTION_SUGGESTION_MIN_CONFIDENCE = Number(
 export const COLLECTION_SUGGESTION_DEDUP_SIMILARITY = Number(
   Deno.env.get("COLLECTION_SUGGESTION_DEDUP_SIMILARITY") || "0.85",
 );
+// Topical (subject×content-type) suggestions only surface once this many captures share the
+// same theme — a single capture shouldn't mint a reading-pile collection, but a repeated
+// pattern should. Intrinsic value themes (recipes, places, products) ignore this and surface
+// on the first capture. Frequency gate applies only to basis="topical" decisions.
+export const COLLECTION_SUGGESTION_MIN_CAPTURES = Number(
+  Deno.env.get("COLLECTION_SUGGESTION_MIN_CAPTURES") || "2",
+);
 // Title/description limits mirror the manual composer (CollectionComposerSheet.tsx).
 // Single source of truth: stated to the model in the prompt and clamped in normalization.
 export const COLLECTION_TITLE_MAX_LENGTH = 50;
@@ -196,8 +203,8 @@ export const analysisSchema = {
       required: ["category", "confidence", "rationale"],
       properties: {
         category: {
-          type: ["string", "null"],
-          enum: [...activeSaveIntentKeys, null],
+          type: "string",
+          enum: [...activeSaveIntentKeys],
         },
         confidence: { type: "number" },
         rationale: { type: "string" },
@@ -333,6 +340,7 @@ export const analysisSchema = {
         additionalProperties: false,
         required: [
           "type",
+          "basis",
           "collection_id",
           "title",
           "description",
@@ -341,6 +349,12 @@ export const analysisSchema = {
         ],
         properties: {
           type: { type: "string", enum: ["existing", "new"] },
+          basis: {
+            type: "string",
+            enum: ["intrinsic", "topical"],
+            description:
+              "For type new only. intrinsic = a durable value/utility theme (recipe, place, product, inspiration) worth suggesting on the first capture. topical = a subject + content-type reading/reference grouping (e.g. Soccer articles) only worth surfacing once several captures share it. For type existing, use intrinsic.",
+          },
           collection_id: { type: ["string", "null"] },
           title: {
             type: "string",
@@ -368,18 +382,18 @@ export const analysisSchema = {
           required: ["selection_key", "selection_label", "text"],
           properties: {
             selection_key: {
-              type: ["string", "null"],
-              enum: [...activeSaveIntentKeys, null],
+              type: "string",
+              enum: [...activeSaveIntentKeys],
             },
             selection_label: {
               type: ["string", "null"],
               description:
-                "Short header text for the selected Purpose, or No intent when no Purpose was chosen, at most 36 characters.",
+                "Short header text for the selected Purpose, at most 36 characters.",
             },
             text: {
-              type: ["string", "null"],
+              type: "string",
               description:
-                "At most 12 words in plain human language, phrased like: I chose [Intent label] because [plain evidence], or No intent because [plain reason no concrete action is clear]. Never use internal terms such as saved value, durable value, rerank, taxonomy, schema, or field rationale.",
+                "At most 12 words in plain human language, written as one complete sentence with no trailing ellipsis or dangling punctuation, phrased like: I chose [Intent label] because [plain evidence]. Never use internal terms such as saved value, durable value, rerank, taxonomy, schema, or field rationale.",
             },
           },
         },
@@ -397,9 +411,9 @@ export const analysisSchema = {
                   "Short header text for this Collection selection, or No collection when no Collection was chosen, at most 36 characters.",
               },
               text: {
-                type: ["string", "null"],
+                type: "string",
                 description:
-                  "At most 12 words in plain human language, phrased like: I picked [Collection title] because [plain evidence], or No collection because [plain reason it does not clearly fit existing collections]. Never use internal terms such as saved value, durable value, rerank, taxonomy, schema, or field rationale.",
+                  "At most 12 words in plain human language, written as one complete sentence with no trailing ellipsis or dangling punctuation, phrased like: I picked [Collection title] because [plain evidence], or No collection because [plain reason it does not clearly fit existing collections]. Never use internal terms such as saved value, durable value, rerank, taxonomy, schema, or field rationale.",
               },
             },
           },
@@ -426,9 +440,9 @@ export const analysisSchema = {
             start_time: { type: ["string", "null"] },
             end_time: { type: ["string", "null"] },
             text: {
-              type: ["string", "null"],
+              type: "string",
               description:
-                "At most 12 words in plain human language, phrased like: I suggested [Later value] because [plain evidence], or No Reminder idea because [plain reason no future date or deadline is clear]. Never use internal terms such as saved value, durable value, rerank, taxonomy, schema, or field rationale.",
+                "At most 12 words in plain human language, written as one complete sentence with no trailing ellipsis or dangling punctuation, phrased like: I suggested [Later value] because [plain evidence], or No Reminder idea because [plain reason no future date or deadline is clear]. Never use internal terms such as saved value, durable value, rerank, taxonomy, schema, or field rationale.",
             },
           },
         },

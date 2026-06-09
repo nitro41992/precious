@@ -42,6 +42,9 @@ export function normalizeCollectionDecision(decision: Record<string, unknown>) {
     : null;
   return {
     type,
+    // Frequency-gate basis for new decisions. Default to "intrinsic" (surface immediately) so
+    // decisions written before this field existed keep their original behavior.
+    basis: decision.basis === "topical" ? "topical" : "intrinsic",
     collection_id: typeof decision.collection_id === "string" &&
         decision.collection_id.trim()
       ? decision.collection_id.trim()

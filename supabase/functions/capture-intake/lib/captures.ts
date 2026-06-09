@@ -43,7 +43,7 @@ import {
   runCaptureGate,
   runOpenAi,
   runPreflight,
-  sanitizeAnalysisRationales,
+  applyFieldRationaleCopies,
   shouldAnalyzeAfterCaptureGate,
   shouldAttachUrlEvidence,
   shouldRejectContextlessLinkCapture,
@@ -591,7 +591,7 @@ export async function processCapture(captureId: string, userId: string) {
       rerankedCollections,
       promptCollections,
     );
-    const sanitizedAnalysis = sanitizeAnalysisRationales(recoveredAnalysis);
+    const sanitizedAnalysis = applyFieldRationaleCopies(recoveredAnalysis);
     // The cross-capture new-Collection suggestion (embedding + dedup + DB round-trips) is the
     // slow tail of the pipeline. Decide now whether one is pending, but resolve it in the
     // background after the capture is marked ready so the user isn't blocked on it. Auto-link

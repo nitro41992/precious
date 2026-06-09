@@ -4,7 +4,7 @@ import {
 } from "../config.ts";
 import { finiteNumber, jsonObject, stringValue } from "../common.ts";
 import type { AnalysisOutput } from "../types.ts";
-import { sanitizeAnalysisRationales } from "./rationales.ts";
+import { applyFieldRationaleCopies } from "./rationales.ts";
 import { normalizeVisitTargetFields } from "./visit-targets.ts";
 import { normalizedLocationContext } from "./capture-roles.ts";
 import { normalizedAnalysisDisplayTitle } from "./titles.ts";
@@ -310,7 +310,7 @@ export function normalizedReviewAnalysis(
   analysis: Record<string, unknown>,
   reviewConfirmedAt?: unknown,
 ): AnalysisOutput {
-  const sanitized = sanitizeAnalysisRationales(analysis);
+  const sanitized = applyFieldRationaleCopies(analysis);
   const normalizedAnalysis = {
     ...sanitized,
     display_title: normalizedAnalysisDisplayTitle(sanitized),

@@ -7,6 +7,7 @@ import {
 import {
   qualifyingNewCollectionDecision,
   resolveNewCollectionSuggestions,
+  surfaceSuggestionToSiblings,
 } from "./lib/collections/review-decisions.ts";
 
 // Any database access in these guard paths is a bug — fail loudly if it happens.
@@ -90,7 +91,7 @@ Deno.test("analysis prompt gates new collections with a granularity balance", ()
     [],
   );
   assert(
-    prompt.includes("propose exactly one new Collection") &&
+    prompt.includes("consider proposing exactly one new Collection") &&
       prompt.includes("When NO existing Collection is a strong fit"),
     "prompt gates new collections behind no strong existing fit",
   );
@@ -308,4 +309,217 @@ Deno.test("suggestion dedup and confidence thresholds are bounded", () => {
       urlEvidence.COLLECTION_SUGGESTION_MIN_CONFIDENCE <= 1,
     "minimum suggestion confidence is in [0,1]",
   );
+  assert(
+    Number.isInteger(urlEvidence.COLLECTION_SUGGESTION_MIN_CAPTURES) &&
+      urlEvidence.COLLECTION_SUGGESTION_MIN_CAPTURES >= 2,
+    "topical suggestions require at least a second corroborating capture",
+  );
+});
+
+// --- Frequency-gated topical suggestions ---
+
+Deno.test("decision normalization carries an intrinsic/topical basis", () => {
+  const topical = urlEvidence.normalizeCollectionDecision({
+    type: "new",
+    basis: "topical",
+    collection_id: null,
+    title: "Soccer articles",
+    description: "Articles about soccer to read.",
+    rationale: "Recurring soccer reads.",
+    confidence: 0.7,
+  });
+  assertEqual(topical.basis, "topical", "an explicit topical basis is preserved");
+
+  const intrinsic = urlEvidence.normalizeCollectionDecision({
+    type: "new",
+    basis: "intrinsic",
+    collection_id: null,
+    title: "Trail Runs",
+    description: "Routes and gear.",
+    rationale: "r",
+    confidence: 0.7,
+  });
+  assertEqual(intrinsic.basis, "intrinsic", "an explicit intrinsic basis is preserved");
+
+  const legacy = urlEvidence.normalizeCollectionDecision({
+    type: "new",
+    collection_id: null,
+    title: "Trail Runs",
+    description: "Routes and gear.",
+    rationale: "r",
+    confidence: 0.7,
+  });
+  assertEqual(
+    legacy.basis,
+    "intrinsic",
+    "a decision with no basis defaults to intrinsic so it surfaces immediately",
+  );
+});
+
+Deno.test("analysis schema offers an intrinsic/topical basis on decisions", () => {
+  const basisSchema =
+    urlEvidence.analysisSchema.properties.collection_decisions.items.properties.basis;
+  assertEqual(
+    basisSchema.enum.slice().sort().join(","),
+    "intrinsic,topical",
+    "the model classifies a new collection's basis",
+  );
+  assert(
+    urlEvidence.analysisSchema.properties.collection_decisions.items.required
+      .includes("basis"),
+    "basis is required (OpenAI strict mode requires every property)",
+  );
+});
+
+Deno.test("analysis prompt allows topical themes and provisional copy", () => {
+  const prompt = urlEvidence.buildPrompt(
+    captureFixture({ source_text: "A news article about a soccer match." }),
+    null,
+    [],
+  );
+  assert(
+    prompt.includes("Set basis to \"intrinsic\"") &&
+      prompt.includes("Set basis to \"topical\""),
+    "prompt instructs the model to classify intrinsic vs topical themes",
+  );
+  assert(
+    prompt.includes("subject paired with a content type") &&
+      prompt.includes("never as a bare subject"),
+    "topical themes must be subject+type, not a bare subject or bare format",
+  );
+  assert(
+    prompt.includes("Could group as [Collection label] if you save more like this"),
+    "topical rationale copy reads provisionally while the suggestion is held back",
+  );
+});
+
+Deno.test("shouldSurfaceSuggestion gates only topical themes on frequency", () => {
+  assert(
+    urlEvidence.shouldSurfaceSuggestion("intrinsic", 1),
+    "intrinsic themes surface on the very first capture",
+  );
+  assert(
+    urlEvidence.shouldSurfaceSuggestion("", 1),
+    "an unknown/default basis behaves like intrinsic and surfaces immediately",
+  );
+  assert(
+    !urlEvidence.shouldSurfaceSuggestion("topical", 1),
+    "a topical theme stays silent with only one capture",
+  );
+  assert(
+    urlEvidence.shouldSurfaceSuggestion(
+      "topical",
+      urlEvidence.COLLECTION_SUGGESTION_MIN_CAPTURES,
+    ),
+    "a topical theme surfaces once the corroborating capture count is met",
+  );
+});
+
+// A tiny in-memory Supabase double covering only the tables surfaceSuggestionToSiblings reads
+// and writes: it filters/links rows and records capture updates for assertions.
+function fakeSupabase(store: {
+  links: Array<Record<string, unknown>>;
+  dismissals: Array<Record<string, unknown>>;
+  captures: Array<Record<string, unknown>>;
+}) {
+  const updates: Array<{ id: string; values: Record<string, unknown> }> = [];
+  const matches = (row: Record<string, unknown>, filters: Array<[string, unknown]>) =>
+    filters.every(([col, val]) =>
+      val === null ? row[col] === null || row[col] === undefined : row[col] === val
+    );
+  const client = {
+    from(table: string) {
+      const state: {
+        op: "select" | "update";
+        values: Record<string, unknown> | null;
+        filters: Array<[string, unknown]>;
+      } = { op: "select", values: null, filters: [] };
+      const exec = () => {
+        if (table === "collection_capture_links") {
+          return { data: store.links.filter((r) => matches(r, state.filters)), error: null };
+        }
+        if (table === "captures" && state.op === "update") {
+          const row = store.captures.find((r) => matches(r, state.filters));
+          if (row) {
+            Object.assign(row, state.values);
+            updates.push({ id: String(row.id), values: state.values ?? {} });
+          }
+          return { data: null, error: null };
+        }
+        return { data: null, error: null };
+      };
+      const single = () => {
+        if (table === "collection_suggestion_dismissals") {
+          const row = store.dismissals.find((r) => matches(r, state.filters));
+          return { data: row ?? null, error: null };
+        }
+        if (table === "captures") {
+          const row = store.captures.find((r) => matches(r, state.filters));
+          return { data: row ? { analysis: row.analysis } : null, error: null };
+        }
+        return { data: null, error: null };
+      };
+      const api: Record<string, unknown> = {
+        select() { state.op = "select"; return api; },
+        update(values: Record<string, unknown>) { state.op = "update"; state.values = values; return api; },
+        eq(col: string, val: unknown) { state.filters.push([col, val]); return api; },
+        is(col: string, val: unknown) { state.filters.push([col, val]); return api; },
+        maybeSingle() { return Promise.resolve(single()); },
+        then(resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) {
+          return Promise.resolve(exec()).then(resolve, reject);
+        },
+      };
+      return api;
+    },
+  };
+  return { client: client as never, updates };
+}
+
+Deno.test("surfaceSuggestionToSiblings back-fills earlier captures that were held silent", async () => {
+  const store = {
+    links: [
+      { user_id: "u1", collection_id: "sug-1", capture_id: "cap-1", rationale: "Earlier soccer read.", confidence: 0.7, unlinked_at: null },
+      { user_id: "u1", collection_id: "sug-1", capture_id: "cap-2", rationale: "r2", confidence: 0.8, unlinked_at: null },
+    ],
+    dismissals: [],
+    captures: [
+      { id: "cap-1", user_id: "u1", analysis: { title: "First" }, collection_suggestion_state: "ready" },
+    ],
+  };
+  const { client, updates } = fakeSupabase(store);
+  await surfaceSuggestionToSiblings(client, "u1", "sug-1", "cap-2", {
+    title: "Soccer articles",
+    description: "Articles about soccer to read.",
+  });
+  assertEqual(updates.length, 1, "only the silent sibling cap-1 is updated, not the current cap-2");
+  assertEqual(updates[0].id, "cap-1", "the earlier capture is the one back-filled");
+  const pending = (store.captures[0].analysis as Record<string, unknown>)
+    .pending_collection_suggestion as Record<string, unknown>;
+  assertEqual(pending.collection_id, "sug-1", "the suggestion points at the shared group");
+  assertEqual(pending.title, "Soccer articles", "the suggestion carries the group title");
+  assertEqual(pending.rationale, "Earlier soccer read.", "the sibling keeps its own link rationale");
+  assertEqual(store.captures[0].collection_suggestion_state, "ready", "the sibling resolves to ready");
+});
+
+Deno.test("surfaceSuggestionToSiblings skips dismissed and already-surfaced siblings", async () => {
+  const store = {
+    links: [
+      { user_id: "u1", collection_id: "sug-1", capture_id: "cap-dismissed", rationale: "r", confidence: 0.7, unlinked_at: null },
+      { user_id: "u1", collection_id: "sug-1", capture_id: "cap-shown", rationale: "r", confidence: 0.7, unlinked_at: null },
+      { user_id: "u1", collection_id: "sug-1", capture_id: "cap-current", rationale: "r", confidence: 0.7, unlinked_at: null },
+    ],
+    dismissals: [
+      { user_id: "u1", collection_id: "sug-1", capture_id: "cap-dismissed" },
+    ],
+    captures: [
+      { id: "cap-dismissed", user_id: "u1", analysis: { title: "D" } },
+      { id: "cap-shown", user_id: "u1", analysis: { title: "S", pending_collection_suggestion: { collection_id: "sug-1" } } },
+    ],
+  };
+  const { client, updates } = fakeSupabase(store);
+  await surfaceSuggestionToSiblings(client, "u1", "sug-1", "cap-current", {
+    title: "Soccer articles",
+    description: "Articles about soccer to read.",
+  });
+  assertEqual(updates.length, 0, "a dismissed sibling and an already-surfaced sibling are both left alone");
 });
