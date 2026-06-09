@@ -502,3 +502,30 @@ test("cachedCollectionPageFromRaw round-trips the suggested status", () => {
   assert.equal(page.present, true);
   assert.equal(page.collections[0].status, "suggested");
 });
+
+test("pickCaptureFromRaw finds a capture by id", () => {
+  const { pickCaptureFromRaw } = loadRemoteData();
+  const raw = JSON.stringify([
+    { id: "local-a", remoteId: "remote-a", title: "Alpha" },
+    { id: "local-b", remoteId: "remote-b", title: "Bravo" }
+  ]);
+  const capture = pickCaptureFromRaw(raw, "local-b");
+  assert.equal(capture?.title, "Bravo");
+});
+
+test("pickCaptureFromRaw matches on remoteId too", () => {
+  const { pickCaptureFromRaw } = loadRemoteData();
+  const raw = JSON.stringify([{ id: "local-a", remoteId: "remote-a", title: "Alpha" }]);
+  const capture = pickCaptureFromRaw(raw, "remote-a");
+  assert.equal(capture?.title, "Alpha");
+});
+
+test("pickCaptureFromRaw returns null when absent, empty, or malformed", () => {
+  const { pickCaptureFromRaw } = loadRemoteData();
+  const raw = JSON.stringify([{ id: "local-a", title: "Alpha" }]);
+  assert.equal(pickCaptureFromRaw(raw, "missing"), null);
+  assert.equal(pickCaptureFromRaw(null, "local-a"), null);
+  assert.equal(pickCaptureFromRaw("", "local-a"), null);
+  assert.equal(pickCaptureFromRaw("{not json", "local-a"), null);
+  assert.equal(pickCaptureFromRaw(raw, ""), null);
+});

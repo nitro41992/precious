@@ -12,6 +12,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import org.json.JSONObject
 
 private const val CHANNEL_ID = "precious-capture-processing"
 
@@ -24,8 +25,8 @@ object CaptureNotifications {
     notify(
       context = context,
       captureId = captureId,
-      title = "Saving capture",
-      body = "Queued to check the source.",
+      title = "Saving your capture…",
+      body = "",
       ongoing = true
     )
   }
@@ -35,7 +36,7 @@ object CaptureNotifications {
       context = context,
       captureId = captureId,
       title = "Waiting for internet",
-      body = "Sharebook will keep trying when you are back online.",
+      body = "We'll finish saving once you're back online.",
       ongoing = true
     )
   }
@@ -44,8 +45,8 @@ object CaptureNotifications {
     notify(
       context = context,
       captureId = captureId,
-      title = "Saving capture",
-      body = "Uploading shared content.",
+      title = "Saving your capture…",
+      body = "",
       ongoing = true
     )
   }
@@ -54,8 +55,8 @@ object CaptureNotifications {
     notify(
       context = context,
       captureId = captureId,
-      title = "Checking the source",
-      body = "Capture analysis is running.",
+      title = "Reading the page…",
+      body = "",
       ongoing = true
     )
   }
@@ -64,30 +65,61 @@ object CaptureNotifications {
     notify(
       context = context,
       captureId = captureId,
-      title = "Saving capture",
-      body = "Storing the details.",
+      title = "Almost done…",
+      body = "",
       ongoing = true
     )
   }
 
-  fun showComplete(context: Context, captureId: String, captureTitle: String) {
+  fun showComplete(context: Context, captureId: String, capture: JSONObject) {
+    val title = capture.optString("title").ifBlank { "Capture saved" }
+    val collection = firstCollectionName(capture)
+    val body = if (collection != null) {
+      "Saved to $collection · tap to review"
+    } else {
+      "Saved · tap to review"
+    }
     notify(
       context = context,
       captureId = captureId,
-      title = "Capture processed",
-      body = "Extraction looks good.",
-      ongoing = false
+      title = title,
+      body = body,
+      ongoing = false,
+      bigText = true
     )
   }
 
-  fun showNeedsReview(context: Context, captureId: String, captureTitle: String) {
+  fun showNeedsReview(context: Context, captureId: String, capture: JSONObject) {
+    val title = capture.optString("title").ifBlank { "Capture saved" }
+    val collection = firstCollectionName(capture)
+    val body = if (collection != null) {
+      "Filed under $collection? Tap to review"
+    } else {
+      "Tap to review the details."
+    }
     notify(
       context = context,
       captureId = captureId,
-      title = "Capture processed",
-      body = "Extraction needs review.",
-      ongoing = false
+      title = title,
+      body = body,
+      ongoing = false,
+      bigText = true
     )
+  }
+
+  // Pull the first named collection the extraction proposed, so the completion
+  // notification can say where the capture landed. Renders a structured field —
+  // no semantic interpretation lives here.
+  private fun firstCollectionName(capture: JSONObject): String? {
+    val decisions = capture.optJSONArray("collectionDecisions")
+      ?: capture.optJSONArray("suggestedCollections")
+      ?: return null
+    for (index in 0 until decisions.length()) {
+      val entry = decisions.optJSONObject(index) ?: continue
+      val name = entry.optString("title").ifBlank { entry.optString("name") }
+      if (name.isNotBlank()) return name
+    }
+    return null
   }
 
   fun showFailed(context: Context, captureId: String, captureTitle: String) {
@@ -115,7 +147,8 @@ object CaptureNotifications {
     captureId: String,
     title: String,
     body: String,
-    ongoing: Boolean
+    ongoing: Boolean,
+    bigText: Boolean = false
   ) {
     ensureChannel(context)
     if (Build.VERSION.SDK_INT >= 33 &&
@@ -143,6 +176,9 @@ object CaptureNotifications {
       .setPriority(NotificationCompat.PRIORITY_DEFAULT)
       .setOnlyAlertOnce(true)
     if (ongoing) builder.setProgress(0, 0, true)
+    if (bigText && body.isNotBlank()) {
+      builder.setStyle(NotificationCompat.BigTextStyle().bigText(body))
+    }
 
     runCatching {
       NotificationManagerCompat.from(context).notify(captureId.hashCode(), builder.build())

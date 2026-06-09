@@ -101,6 +101,7 @@ import {
   edgeResourceUrl,
   freshLocalProcessingCaptures,
   isFreshLocalProcessingCapture,
+  pickCaptureFromRaw,
   sortCollectionCaptures
 } from "./remoteData";
 import { AuthScreen } from "./screens/AuthScreen";
@@ -415,6 +416,49 @@ function ReviewDeleteDismissFrame({
   );
 }
 
+// A capture opened from a notification tap has no list row to morph from, so
+// the review would otherwise snap into place at committed opacity 1. This plays
+// a one-shot fade + rise on mount, then calls onEntered so the parent drops the
+// frame and the review rests at its plain committed opacity — no worklet style
+// lingers on the full-screen frame (avoids the Android resume re-attach freeze).
+function ReviewDeepLinkEnterFrame({
+  children,
+  onEntered
+}: {
+  children: ReactNode;
+  onEntered: () => void;
+}) {
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    progress.value = withTiming(
+      1,
+      {
+        duration: 260,
+        easing: motionEasing.decelerate,
+        reduceMotion: motionReduceMotion
+      },
+      (finished) => {
+        if (finished) runOnJS(onEntered)();
+      }
+    );
+  }, [onEntered, progress]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: progress.value,
+    transform: [
+      { translateY: interpolate(progress.value, [0, 1], [16, 0]) },
+      { scale: interpolate(progress.value, [0, 1], [0.985, 1]) }
+    ]
+  }));
+
+  return (
+    <Reanimated.View style={[styles.screenOverlay, animatedStyle]}>
+      {children}
+    </Reanimated.View>
+  );
+}
+
 function TopLevelPane({
   active,
   children,
@@ -552,7 +596,7 @@ function CollectionDetailFrame({
       progress.value = withTiming(
         0,
         {
-          duration: motionPaneTransition.out,
+          duration: motionPaneTransition.overlayOut,
           easing: motionEasing.accelerate,
           reduceMotion: motionReduceMotion
         },
@@ -817,6 +861,10 @@ export default function App() {
   const [collectionDetailOrigin, setCollectionDetailOrigin] = useState<"recent" | "collections" | "suggestions">("collections");
   const [captureReturnCollectionId, setCaptureReturnCollectionId] = useState<string | null>(null);
   const [captureReviewOrigin, setCaptureReviewOrigin] = useState<CaptureReviewOrigin | null>(null);
+  // A notification deep-link opens the review with no list row to morph from, so
+  // it plays a one-shot fade/rise entrance instead of snapping in. Consumed once
+  // the entrance settles (see ReviewDeepLinkEnterFrame).
+  const [deepLinkEnter, setDeepLinkEnter] = useState(false);
   const [capturesLoading, setCapturesLoading] = useState(false);
   const [capturesLoadPhase, setCapturesLoadPhase] = useState<LoadPhase>("idle");
   const [capturesError, setCapturesError] = useState("");
@@ -2057,7 +2105,7 @@ export default function App() {
     }
   }, [config, session, withFreshAccessToken]);
 
-  const selectCapture = useCallback((captureId: string | null) => {
+  const selectCapture = useCallback((captureId: string | null, options?: { snapshot?: Capture | null }) => {
     setDraftTitleDirty(false);
     setDraftNoteDirty(false);
     setDraftIntentDirty(false);
@@ -2083,6 +2131,9 @@ export default function App() {
         ) ??
         collectionCaptures.find((item) => item.id === captureId || item.remoteId === captureId) ??
         remoteSearchResults.find((item) => item.id === captureId || item.remoteId === captureId) ??
+        // A deep-link open passes the just-finished capture read from the native
+        // store: nothing is in the in-memory lists yet, so fall back to it.
+        options?.snapshot ??
         null;
       setSelectedCaptureSnapshot(capture);
     }
@@ -2232,6 +2283,37 @@ export default function App() {
       });
     },
     [openCapture, startReviewHandoff]
+  );
+
+  // Opening from a notification tap: there is no list row to morph from and the
+  // just-finished capture is not in the feed yet. Treat it like a recents open
+  // (so back returns to recents), seed an instant snapshot from the native store
+  // the worker just wrote, and let the review fade/rise in (deepLinkEnter).
+  const openCaptureFromDeepLink = useCallback(
+    async (captureId: string) => {
+      setSearchOpen(false);
+      setCollectionSearchOpen(false);
+      setCollectionsOpen(false);
+      setCaptureReturnCollectionId(null);
+      setCaptureReviewOrigin("recent");
+      setDeepLinkEnter(true);
+      let snapshot =
+        capturesRef.current.find((item) => item.id === captureId || item.remoteId === captureId) ??
+        archivedCapturesRef.current.find((item) => item.id === captureId || item.remoteId === captureId) ??
+        null;
+      if (!snapshot && nativeStore?.getCaptures) {
+        const raw = await nativeStore.getCaptures().catch(() => null);
+        snapshot = pickCaptureFromRaw(raw, captureId);
+      }
+      if (snapshot) {
+        setDraftTitle(snapshot.title);
+        setDraftNote(snapshot.note);
+        setDraftIntent(normalizeIntent(snapshot.defaultIntent));
+      }
+      selectCapture(captureId, { snapshot });
+      void loadCaptures();
+    },
+    [loadCaptures, selectCapture]
   );
 
   const openCaptureFromCollection = useCallback((capture: Capture, collectionId: string) => {
@@ -2632,9 +2714,9 @@ export default function App() {
     Linking.getInitialURL().then((url) => {
       if (authCallbackPayload(url)) return;
       const captureId = parseCaptureUrl(url);
-      if (captureId) selectCapture(captureId);
+      if (captureId) void openCaptureFromDeepLink(captureId);
     });
-  }, [selectCapture]);
+  }, [openCaptureFromDeepLink]);
 
   useEffect(() => {
     capturesRef.current = captures;
@@ -2653,7 +2735,10 @@ export default function App() {
   }, [archivedCapturesLoaded]);
 
   useEffect(() => {
-    if (!selectedId && !deleteDismissCapture) setCaptureReviewOrigin(null);
+    if (!selectedId && !deleteDismissCapture) {
+      setCaptureReviewOrigin(null);
+      setDeepLinkEnter(false);
+    }
   }, [deleteDismissCapture, selectedId]);
 
   useEffect(() => {
@@ -2738,11 +2823,14 @@ export default function App() {
         return;
       }
       const captureId = parseCaptureUrl(url);
-      if (captureId) selectCapture(captureId);
+      if (captureId) {
+        void openCaptureFromDeepLink(captureId);
+        return;
+      }
       void loadCaptures();
     });
     return () => linkSubscription.remove();
-  }, [handleAuthCallbackUrl, loadCaptures, selectCapture]);
+  }, [handleAuthCallbackUrl, loadCaptures, openCaptureFromDeepLink]);
 
   useEffect(() => {
     if (!authReady || (config?.apiUrl && !session)) {
@@ -5253,6 +5341,33 @@ export default function App() {
     );
   }
 
+  // The Suggested collections view, rendered both as the primary overlay and
+  // (chrome suppressed) beneath a suggested-collection detail opened from it —
+  // the same absolute-fill position in both, so the detail's close reveals the
+  // suggestions view directly instead of flashing the collections grid beneath.
+  function renderSuggestionsOverlay({ includeChrome = true }: { includeChrome?: boolean } = {}) {
+    return (
+      <View style={styles.screenOverlay}>
+        <SuggestionsScreen
+          actions={{
+            closeSuggestions,
+            openSuggestion: (collectionId) => selectCollection(collectionId, "suggestions"),
+            persistSuggestion: (collectionId) => void persistSuggestion(collectionId)
+          }}
+          data={{
+            appSheets: includeChrome ? renderAppSheets() : null,
+            suggestions,
+            suggestionsMotion: searchMotion,
+            toast: includeChrome ? renderToast() : null
+          }}
+          state={{
+            suggestionBusyId
+          }}
+        />
+      </View>
+    );
+  }
+
   function renderTopLevelStack({
     active = "recent",
     underlay = null,
@@ -5455,6 +5570,28 @@ export default function App() {
     });
   }
 
+  // Opened from the Suggested collections view: keep that view mounted in the
+  // underlay (same tree position as when it's the primary screen, so it never
+  // remounts and its cards never flash) and animate the detail in the overlay
+  // on top — the same persistent-underlay / animating-overlay split a capture
+  // review opened from a collection uses. The close fades the detail out and
+  // reveals the suggestions view directly, with no collections-grid flash.
+  if (selectedCollection && collectionDetailOrigin === "suggestions") {
+    return renderTopLevelStack({
+      active: collectionsOpen ? "collections" : "recent",
+      underlay: renderSuggestionsOverlay({ includeChrome: false }),
+      overlay: renderCollectionDetailOverlay(selectedCollection, { direction: "opening" })
+    });
+  }
+
+  if (closingCollectionDetail && collectionDetailOrigin === "suggestions") {
+    return renderTopLevelStack({
+      active: collectionsOpen ? "collections" : "recent",
+      underlay: renderSuggestionsOverlay({ includeChrome: false }),
+      overlay: renderCollectionDetailOverlay(closingCollectionDetail, { direction: "closing" })
+    });
+  }
+
   if (selectedCollection) {
     return renderTopLevelStack({
       active: collectionDetailOrigin === "recent" ? "recent" : "collections",
@@ -5499,24 +5636,7 @@ export default function App() {
       // Anchor to the pane the suggestions view was opened over (Collections
       // pill vs Recents rail) so entering/leaving doesn't flash a tab switch.
       active: collectionsOpen ? "collections" : "recent",
-      overlay: (
-        <SuggestionsScreen
-          actions={{
-            closeSuggestions,
-            openSuggestion: (collectionId) => selectCollection(collectionId, "suggestions"),
-            persistSuggestion: (collectionId) => void persistSuggestion(collectionId)
-          }}
-          data={{
-            appSheets: renderAppSheets(),
-            suggestions,
-            suggestionsMotion: searchMotion,
-            toast: renderToast()
-          }}
-          state={{
-            suggestionBusyId
-          }}
-        />
-      )
+      underlay: renderSuggestionsOverlay()
     });
   }
 
@@ -5526,9 +5646,16 @@ export default function App() {
 
   if (selected) {
     if (captureReviewOrigin === "recent") {
+      const reviewOverlay = renderCaptureReviewScreen(selected);
       return renderTopLevelStack({
         active: "recent",
-        overlay: renderCaptureReviewScreen(selected),
+        overlay: deepLinkEnter ? (
+          <ReviewDeepLinkEnterFrame onEntered={() => setDeepLinkEnter(false)}>
+            {reviewOverlay}
+          </ReviewDeepLinkEnterFrame>
+        ) : (
+          reviewOverlay
+        ),
         overlayHandoff: reviewHandoff?.captureId === selected.id ? reviewHandoff : null
       });
     }

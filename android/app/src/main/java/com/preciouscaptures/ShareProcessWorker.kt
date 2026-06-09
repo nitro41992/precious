@@ -58,8 +58,8 @@ class ShareProcessWorker(
     val capture = PreciousCaptureStore.complete(applicationContext, captureId, enrichment)
     val title = capture?.optString("title", "Capture saved") ?: "Capture saved"
     when (capture?.optString("status")) {
-      "ready" -> CaptureNotifications.showComplete(applicationContext, captureId, title)
-      "needs_review" -> CaptureNotifications.showNeedsReview(applicationContext, captureId, title)
+      "ready" -> CaptureNotifications.showComplete(applicationContext, captureId, capture)
+      "needs_review" -> CaptureNotifications.showNeedsReview(applicationContext, captureId, capture)
       "processing" -> {
         if (capture.optString("analysisMode") == "llm_waiting_network") {
           CaptureNotifications.showWaitingForNetwork(applicationContext, captureId)

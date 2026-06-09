@@ -625,6 +625,21 @@ export function freshLocalProcessingCaptures(raw: string | null | undefined) {
   }
 }
 
+// Find a single capture in the raw native-store JSON by id (or remoteId). Used
+// by the notification deep-link open to surface the just-finished capture
+// instantly, before the hosted feed reloads. Tolerant of missing/garbled JSON.
+export function pickCaptureFromRaw(raw: string | null | undefined, captureId: string): Capture | null {
+  if (!raw || !captureId) return null;
+  try {
+    const captures = JSON.parse(raw || "[]") as Capture[];
+    return (
+      captures.find((capture) => capture.id === captureId || capture.remoteId === captureId) ?? null
+    );
+  } catch {
+    return null;
+  }
+}
+
 export function isFreshLocalProcessingCapture(capture: Capture, now = Date.now()) {
   return (
     !isDeleted(capture) &&

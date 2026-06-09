@@ -55,6 +55,9 @@ export const motionPressSpring = {
 export const motionPaneTransition = {
   in: 260,
   out: 200,
+  // A detail/overlay dismiss reads better a touch snappier than a tab-switch
+  // out: the user has decided to leave, so the surface should clear quickly.
+  overlayOut: 160,
   enterOffset: 30,
   overlayEnterScale: 0.97
 };
