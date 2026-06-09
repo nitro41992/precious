@@ -305,6 +305,66 @@ test("mergeCollectionsPreservingOrder drops removed collections and appends new 
   assert.deepEqual(merged.map((c) => c.id), ["a", "d", "e"]);
 });
 
+test("insertCollectionAtAnchor restores a middle collection to its original slot", () => {
+  const { insertCollectionAtAnchor } = loadCapturePresentation();
+  // List was [a, b, c]; b was deleted, leaving [a, c]. Undo should reinsert b
+  // after a (its original predecessor), not at the top.
+  const list = [
+    { id: "a", title: "A" },
+    { id: "c", title: "C" }
+  ];
+  const restored = { id: "b", title: "B" };
+  const result = insertCollectionAtAnchor(list, restored, { prevId: "a", index: 1 });
+  assert.deepEqual(result.map((c) => c.id), ["a", "b", "c"]);
+});
+
+test("insertCollectionAtAnchor inserts at the top when prevId is null", () => {
+  const { insertCollectionAtAnchor } = loadCapturePresentation();
+  const list = [
+    { id: "b", title: "B" },
+    { id: "c", title: "C" }
+  ];
+  const restored = { id: "a", title: "A" };
+  const result = insertCollectionAtAnchor(list, restored, { prevId: null, index: 0 });
+  assert.deepEqual(result.map((c) => c.id), ["a", "b", "c"]);
+});
+
+test("insertCollectionAtAnchor clamps to the original index when the predecessor is gone", () => {
+  const { insertCollectionAtAnchor } = loadCapturePresentation();
+  // Original predecessor "a" no longer exists; fall back to the recorded index.
+  const list = [
+    { id: "c", title: "C" },
+    { id: "d", title: "D" }
+  ];
+  const restored = { id: "b", title: "B" };
+  const result = insertCollectionAtAnchor(list, restored, { prevId: "a", index: 1 });
+  assert.deepEqual(result.map((c) => c.id), ["c", "b", "d"]);
+});
+
+test("insertCollectionAtAnchor is idempotent and dedupes the restored id", () => {
+  const { insertCollectionAtAnchor } = loadCapturePresentation();
+  const list = [
+    { id: "a", title: "A" },
+    { id: "b", title: "B stale" },
+    { id: "c", title: "C" }
+  ];
+  const restored = { id: "b", title: "B fresh" };
+  const result = insertCollectionAtAnchor(list, restored, { prevId: "a", index: 1 });
+  assert.deepEqual(result.map((c) => c.id), ["a", "b", "c"]);
+  assert.equal(result[1].title, "B fresh");
+});
+
+test("insertCollectionAtAnchor prepends when no anchor is provided", () => {
+  const { insertCollectionAtAnchor } = loadCapturePresentation();
+  const list = [
+    { id: "a", title: "A" },
+    { id: "b", title: "B" }
+  ];
+  const restored = { id: "c", title: "C" };
+  assert.deepEqual(insertCollectionAtAnchor(list, restored).map((c) => c.id), ["c", "a", "b"]);
+  assert.deepEqual(insertCollectionAtAnchor(list, restored, null).map((c) => c.id), ["c", "a", "b"]);
+});
+
 test("reminderLabelParts splits date and time into separate labels", () => {
   const { reminderLabelParts } = loadCapturePresentation();
 

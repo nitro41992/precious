@@ -1909,7 +1909,9 @@ export const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "400",
     ...typefaces.cardTitle,
-    lineHeight: 21
+    lineHeight: 21,
+    // Reserve two lines so 1- and 2-line titles keep cards in a row equal height.
+    height: 42
   },
   collectionCardMeta: {
     color: colors.muted,

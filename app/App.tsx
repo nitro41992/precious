@@ -75,7 +75,9 @@ import {
   captureImageLoadKey,
   captureImageUrl,
   cleanedReviewDraft,
+  type CollectionRestoreAnchor,
   friendlyError,
+  insertCollectionAtAnchor,
   isCaptureImageCancel,
   mergeCollectionsPreservingOrder,
   normalizeIntent,
@@ -929,6 +931,9 @@ export default function App() {
   const collectionsModeRef = useRef<CollectionListMode>("active");
   const collectionCapturesCacheRef = useRef<Record<string, Capture[]>>({});
   const pendingDeleteOperationsRef = useRef<Record<string, PendingDeleteOperation>>({});
+  // Where each in-flight collection delete sat, so a late undo (after the
+  // operation has been cleaned up) can drop it back in place, not at the top.
+  const restoreAnchorsRef = useRef<Record<string, CollectionRestoreAnchor>>({});
   const pendingCaptureDeleteCloseRef = useRef<PendingCaptureDeleteClose | null>(null);
   const cancelledCaptureDeleteClosesRef = useRef<Set<string>>(new Set());
   // Pending removals for the current collection so one Undo restores the whole
@@ -3798,8 +3803,10 @@ export default function App() {
         });
         try {
           const restored = await syncCollectionDeleteNetwork(collection, "undo_delete", trace, "undo_network");
-          collectionsCacheRef.current.active = uniqueCollections([restored, ...collectionsCacheRef.current.active]);
-          setCollections((current) => uniqueCollections([restored, ...current]));
+          const anchor = restoreAnchorsRef.current[collection.id];
+          collectionsCacheRef.current.active = insertCollectionAtAnchor(collectionsCacheRef.current.active, restored, anchor);
+          setCollections((current) => insertCollectionAtAnchor(current, restored, anchor));
+          delete restoreAnchorsRef.current[collection.id];
           flagCollectionRestored(restored.id);
           setToast(null);
           showToast("Collection restored.", "success");
@@ -3814,6 +3821,7 @@ export default function App() {
     operation.undoRequested = true;
     markDeleteTrace(operation.trace, "restore_state_start");
     restoreDeletionState(operation.snapshot);
+    delete restoreAnchorsRef.current[collection.id];
     markDeleteTrace(operation.trace, "restore_state_done");
     flagCollectionRestored(collection.id);
     setToast(null);
@@ -3848,6 +3856,13 @@ export default function App() {
     // Animated close; the frozen closingCollectionDetail snapshot keeps the
     // fading screen pixel-stable while the caches mutate beneath it.
     closeCollectionDetail();
+    // Remember where it sat so a late undo can drop it back in place, not at the top.
+    const activeBeforeDelete = collectionsCacheRef.current.active;
+    const deletedIndex = activeBeforeDelete.findIndex((item) => item.id === collection.id);
+    restoreAnchorsRef.current[collection.id] = {
+      index: deletedIndex,
+      prevId: deletedIndex > 0 ? activeBeforeDelete[deletedIndex - 1].id : null
+    };
     collectionsCacheRef.current.active = collectionsCacheRef.current.active.filter((item) => item.id !== collection.id);
     collectionsCacheRef.current.archived = collectionsCacheRef.current.archived.filter((item) => item.id !== collection.id);
     setCollections((current) => current.filter((item) => item.id !== collection.id));
@@ -3873,6 +3888,7 @@ export default function App() {
           return;
         }
         await reconcileCollectionsSilently("active", trace);
+        delete restoreAnchorsRef.current[collection.id];
         finishPendingDeleteOperation(operation.id);
       } catch (error) {
         operation.commitFailed = true;

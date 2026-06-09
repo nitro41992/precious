@@ -1128,6 +1128,32 @@ export function uniqueCollections(collections: Collection[]) {
   });
 }
 
+// Where a collection sat before it was deleted, so undo can drop it back in
+// place instead of at the top. `prevId` is the id of the collection that was
+// immediately above it (the stable primary anchor); `index` is the positional
+// fallback if that neighbour is gone by the time undo runs.
+export type CollectionRestoreAnchor = { prevId: string | null; index: number };
+
+// Re-insert a restored collection at its original anchor. The list is first
+// de-duped of `item.id` so re-running undo is idempotent. With no anchor we
+// fall back to prepending (the prior behaviour).
+export function insertCollectionAtAnchor(
+  list: Collection[],
+  item: Collection,
+  anchor?: CollectionRestoreAnchor | null
+) {
+  const without = list.filter((collection) => collection.id !== item.id);
+  if (!anchor) return [item, ...without];
+  if (anchor.prevId === null) return [item, ...without];
+  const afterIndex = without.findIndex((collection) => collection.id === anchor.prevId);
+  if (afterIndex !== -1) {
+    return [...without.slice(0, afterIndex + 1), item, ...without.slice(afterIndex + 1)];
+  }
+  // Neighbour is gone — clamp to the original index (append if out of range).
+  const at = Math.min(Math.max(anchor.index, 0), without.length);
+  return [...without.slice(0, at), item, ...without.slice(at)];
+}
+
 // Fold a fresh server list into the order the user is already looking at.
 // Existing on-screen collections keep their position (content updated from the
 // server, dropped if the server no longer has them); genuinely new collections
