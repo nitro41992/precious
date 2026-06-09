@@ -1,9 +1,16 @@
 import { forwardRef, memo, useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
-import type { PressableProps, PressableStateCallbackType, StyleProp, ViewStyle } from "react-native";
+import type { ReactNode, RefObject } from "react";
+import type {
+  PressableProps,
+  PressableStateCallbackType,
+  ReturnKeyTypeOptions,
+  StyleProp,
+  TextInput as NativeTextInput,
+  ViewStyle
+} from "react-native";
 import { Animated, Dimensions, Easing, KeyboardAvoidingView, Pressable, View } from "react-native";
 import { Image } from "expo-image";
-import { Check, ClockClockwise, Folder, Folders, Gear, HouseSimple, Info, Plus, Sparkle, Warning, X } from "phosphor-react-native";
+import { CaretLeft, Check, ClockClockwise, Folder, Folders, Gear, HouseSimple, Info, Plus, Sparkle, Warning, X } from "phosphor-react-native";
 import Reanimated, {
   cancelAnimation,
   interpolate,
@@ -56,7 +63,7 @@ import {
   statusLayout,
   toastLayout
 } from "./motion";
-import { Text } from "./typography";
+import { Text, TextInput } from "./typography";
 
 const AnimatedPressable = Reanimated.createAnimatedComponent(Pressable);
 
@@ -422,6 +429,7 @@ export function SheetHeader({
   confirmDisabled = false,
   confirmLabel = "Done",
   confirmTestID,
+  onBack,
   onClose,
   onConfirm,
   subtitle,
@@ -431,6 +439,7 @@ export function SheetHeader({
   confirmDisabled?: boolean;
   confirmLabel?: string;
   confirmTestID?: string;
+  onBack?: () => void;
   onClose: () => void;
   onConfirm?: () => void;
   subtitle?: string;
@@ -439,7 +448,22 @@ export function SheetHeader({
   return (
     <View style={styles.sheetHeader}>
       <View style={styles.sheetHeaderCopy}>
-        <Text style={styles.sheetTitle}>{title}</Text>
+        {onBack ? (
+          <View style={styles.sheetHeaderTitleRow}>
+            <MotionPressable
+              accessibilityLabel="Back"
+              accessibilityRole="button"
+              hitSlop={8}
+              onPress={onBack}
+              style={({ pressed }) => [styles.sheetHeaderBack, pressed && styles.subtlePressed]}
+            >
+              <CaretLeft color={colors.ink} size={20} weight="bold" />
+            </MotionPressable>
+            <Text style={styles.sheetTitle}>{title}</Text>
+          </View>
+        ) : (
+          <Text style={styles.sheetTitle}>{title}</Text>
+        )}
         {subtitle ? (
           <Text numberOfLines={2} style={styles.sheetSubtitle}>
             {subtitle}
@@ -460,6 +484,57 @@ export function SheetHeader({
         ) : null}
       </View>
     </View>
+  );
+}
+
+// The two collection fields (name + "what belongs here"), shared by the Collections-tab
+// composer and the capture-edit selector's create step so the form lives in one place.
+export function CollectionFormFields({
+  autoFocusTitle = false,
+  description,
+  descriptionTestID,
+  onDescriptionChange,
+  onTitleChange,
+  title,
+  titleRef,
+  titleReturnKeyType,
+  titleTestID
+}: {
+  autoFocusTitle?: boolean;
+  description: string;
+  descriptionTestID?: string;
+  onDescriptionChange: (value: string) => void;
+  onTitleChange: (value: string) => void;
+  title: string;
+  titleRef?: RefObject<NativeTextInput | null>;
+  titleReturnKeyType?: ReturnKeyTypeOptions;
+  titleTestID?: string;
+}) {
+  return (
+    <>
+      <TextInput
+        autoFocus={autoFocusTitle}
+        maxLength={50}
+        onChangeText={onTitleChange}
+        placeholder="Title"
+        placeholderTextColor={colors.placeholder}
+        ref={titleRef}
+        returnKeyType={titleReturnKeyType}
+        style={[styles.captureInput, styles.collectionSheetTitleInput]}
+        testID={titleTestID}
+        value={title}
+      />
+      <TextInput
+        maxLength={160}
+        multiline
+        onChangeText={onDescriptionChange}
+        placeholder="What belongs here"
+        placeholderTextColor={colors.placeholder}
+        style={[styles.captureInput, styles.collectionSheetDescriptionInput]}
+        testID={descriptionTestID}
+        value={description}
+      />
+    </>
   );
 }
 

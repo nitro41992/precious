@@ -663,13 +663,21 @@ export const styles = StyleSheet.create({
   collectionSelectorSuggestion: {
     paddingBottom: 12
   },
-  // Inline "New collection" creation inside the selector sheet.
+  // "New collection" action row — a calm soft card matching the list rows, so its
+  // press feedback never flashes a loud accent (it shares the rows' neutral press).
   collectionCreateRow: {
     alignItems: "center",
+    backgroundColor: colors.surfaceContainerHigh,
+    borderRadius: 16,
     flexDirection: "row",
     gap: 12,
-    paddingHorizontal: 4,
-    paddingVertical: 12
+    marginBottom: 8,
+    minHeight: 68,
+    paddingHorizontal: 14,
+    paddingVertical: 14
+  },
+  collectionCreateRowPressed: {
+    backgroundColor: colors.surfaceContainerHighest
   },
   collectionCreateIcon: {
     alignItems: "center",
@@ -684,50 +692,58 @@ export const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 15
   },
-  collectionCreateForm: {
-    gap: 8,
-    paddingBottom: 6,
-    paddingHorizontal: 2,
-    paddingTop: 2
+  // Wraps the active step (pick or create) so it can slide/fade in as one unit.
+  collectionStepPane: {
+    gap: 12,
+    width: "100%"
   },
-  collectionCreateInput: {
-    ...typefaces.regular,
-    backgroundColor: colors.surfaceContainerHigh,
-    borderRadius: 12,
-    color: colors.ink,
-    fontSize: 15,
-    paddingHorizontal: 14,
+  // The focused new-collection step body inside the selector sheet.
+  collectionCreateStepBody: {
+    gap: 12,
+    paddingTop: 4
+  },
+  // Compact, contextual "Why this?" disclosure on an AI-picked collection row.
+  collectionWhyToggle: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 8,
+    paddingVertical: 2
+  },
+  collectionWhyText: {
+    ...typefaces.displaySemibold,
+    color: colors.accentTextStrong,
+    fontSize: 13,
+    letterSpacing: 0.1
+  },
+  // The expanded rationale reads as a soft AI note: a sparkle glyph in an accent
+  // well beside the reason, on a light card that lifts off the tinted row.
+  collectionWhyCard: {
+    alignItems: "flex-start",
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 8,
+    paddingHorizontal: 12,
     paddingVertical: 12
   },
-  collectionCreateActions: {
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "flex-end"
-  },
-  collectionCreateCancel: {
+  collectionWhyCardIcon: {
     alignItems: "center",
-    borderRadius: 12,
+    backgroundColor: colors.accentSoft,
+    borderRadius: 8,
+    height: 26,
     justifyContent: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 11
+    marginTop: 1,
+    width: 26
   },
-  collectionCreateCancelText: {
-    ...typefaces.displaySemibold,
-    color: colors.muted,
-    fontSize: 14
-  },
-  collectionCreateSubmit: {
-    alignItems: "center",
-    backgroundColor: colors.accentText,
-    borderRadius: 12,
-    justifyContent: "center",
-    paddingHorizontal: 18,
-    paddingVertical: 11
-  },
-  collectionCreateSubmitText: {
-    ...typefaces.displaySemibold,
-    color: colors.onAccent,
-    fontSize: 14
+  collectionWhyCardText: {
+    ...typefaces.regular,
+    color: colors.ink,
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20
   },
   purposeOptionGrid: {
     flexDirection: "row",
@@ -2883,6 +2899,19 @@ export const styles = StyleSheet.create({
     flex: 1,
     gap: 3,
     minWidth: 0
+  },
+  // Title row when the sheet header shows a back affordance (e.g. the create step).
+  sheetHeaderTitleRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    marginLeft: -6
+  },
+  sheetHeaderBack: {
+    alignItems: "center",
+    justifyContent: "center",
+    height: 28,
+    width: 28
   },
   sheetTitle: {
     color: colors.ink,

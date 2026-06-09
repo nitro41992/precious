@@ -3,10 +3,8 @@ import { Animated, View } from "react-native";
 import type { TextInput as NativeTextInput } from "react-native";
 
 import type { Collection } from "../types";
-import { KeyboardSheet, SheetHeader, keyboardSheetMetrics } from "../ui/components";
+import { CollectionFormFields, KeyboardSheet, SheetHeader, keyboardSheetMetrics } from "../ui/components";
 import { styles } from "../ui/styles";
-import { colors } from "../ui/theme";
-import { TextInput } from "../ui/typography";
 
 export function CollectionComposerSheet({
   captureComposerMotion,
@@ -82,26 +80,15 @@ export function CollectionComposerSheet({
           keyboardVisible && styles.captureSheetBodyContentCompact
         ]}
       >
-        <TextInput
-          maxLength={50}
-          onChangeText={onCollectionTitleChange}
-          placeholder="Title"
-          placeholderTextColor={colors.placeholder}
-          ref={collectionTitleInputRef}
-          returnKeyType="next"
-          style={[styles.captureInput, styles.collectionSheetTitleInput]}
-          testID="pc.collections.create.title"
-          value={collectionTitle}
-        />
-        <TextInput
-          maxLength={160}
-          multiline
-          onChangeText={onCollectionDescriptionChange}
-          placeholder="What belongs here"
-          placeholderTextColor={colors.placeholder}
-          style={[styles.captureInput, styles.collectionSheetDescriptionInput]}
-          testID="pc.collections.create.description"
-          value={collectionDescription}
+        <CollectionFormFields
+          description={collectionDescription}
+          descriptionTestID="pc.collections.create.description"
+          onDescriptionChange={onCollectionDescriptionChange}
+          onTitleChange={onCollectionTitleChange}
+          title={collectionTitle}
+          titleRef={collectionTitleInputRef}
+          titleReturnKeyType="next"
+          titleTestID="pc.collections.create.title"
         />
       </View>
     </KeyboardSheet>
