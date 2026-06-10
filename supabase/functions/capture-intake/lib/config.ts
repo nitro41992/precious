@@ -134,7 +134,7 @@ export const CLIENT_RESOLUTION_MESSAGE =
 export const INSUFFICIENT_URL_MESSAGE =
   "We couldn't verify enough public information to categorize this exact link.";
 export const CONTEXTLESS_LINK_REJECTED_MESSAGE =
-  "Could not save this capture. The link did not provide enough context. Add a screenshot or note and try again.";
+  "We couldn't read enough from this link to analyze it. Add a photo or fill in the details and we'll try again.";
 export const activeSaveIntents = (saveIntents as Array<{
   key: string;
   label: string;

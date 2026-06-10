@@ -132,16 +132,6 @@ object CaptureNotifications {
     )
   }
 
-  fun showNotSaved(context: Context, captureId: String, message: String) {
-    notify(
-      context = context,
-      captureId = captureId,
-      title = "Capture not saved",
-      body = message,
-      ongoing = false
-    )
-  }
-
   private fun notify(
     context: Context,
     captureId: String,

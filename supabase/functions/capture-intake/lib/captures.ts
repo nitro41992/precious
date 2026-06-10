@@ -261,7 +261,10 @@ export async function rejectContextlessLinkCapture(
     needs_review: true,
     content_evidence_profile: contentEvidenceProfile(capture, urlEvidence),
     url_evidence: normalizedUrlEvidenceForCapture(capture, urlEvidence),
-    capture_state: "rejected",
+    // Kept as a normal failed capture (not a "rejected" tombstone) so it stays
+    // visible in the feed and the user can recover it — add a photo to re-run
+    // analysis, or fill in title/intent/collection by hand. See rejection_reason
+    // for the original cause without hiding the capture.
     rejection_reason: reason,
   });
 
@@ -293,8 +296,7 @@ export async function rejectContextlessLinkCapture(
       analysis,
       analysis_provider: "system",
       analysis_model: "deterministic",
-      analysis_mode: "contextless_rejected",
-      rejected_at: now,
+      analysis_mode: "contextless_failed",
       processed_at: now,
     })
     .eq("id", capture.id)

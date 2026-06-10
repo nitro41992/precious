@@ -266,6 +266,32 @@ object PreciousCaptureStore {
     return updated
   }
 
+  // Re-arm an existing capture so the worker re-runs analysis with a newly
+  // attached photo. Mirrors submitExpandedUrl, minus the resolved-URL fields —
+  // the asset itself is passed to the worker as input data, not stored here.
+  @Synchronized
+  fun markCaptureProcessingForAsset(context: Context, id: String): JSONObject? {
+    val captures = list(context)
+    val now = System.currentTimeMillis()
+    var updated: JSONObject? = null
+    val next = JSONArray()
+    for (index in 0 until captures.length()) {
+      val capture = captures.getJSONObject(index)
+      if (capture.optString("id") == id) {
+        capture
+          .put("status", "processing")
+          .put("analysisMode", "pending_llm")
+          .put("analysisError", "")
+          .put("processedAt", JSONObject.NULL)
+          .put("updatedAt", now)
+        updated = capture
+      }
+      next.put(capture)
+    }
+    if (updated != null) save(context, next)
+    return updated
+  }
+
   @Synchronized
   fun complete(context: Context, id: String, enrichment: JSONObject): JSONObject? {
     val captures = list(context)
@@ -280,6 +306,7 @@ object PreciousCaptureStore {
         val needsReview = enrichmentRequiresReview(enrichment)
         val nextStatus = when {
           analysisMode == "preflight_rejected" -> "failed"
+          analysisMode == "contextless_failed" -> "failed"
           analysisMode == "needs_client_resolution" -> "needs_review"
           analysisMode == "insufficient_url_evidence" -> "needs_review"
           analysisMode == "llm_processing" -> "processing"

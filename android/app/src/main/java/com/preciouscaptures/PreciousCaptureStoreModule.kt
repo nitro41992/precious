@@ -24,6 +24,9 @@ class PreciousCaptureStoreModule(
   private val cameraImageRequestCode = 41030
   private var pendingImagePromise: Promise? = null
   private var pendingCameraImageFile: File? = null
+  // When set, the next picked/captured image is attached to this existing capture
+  // (re-running its analysis) instead of creating a brand-new capture.
+  private var pendingAttachCaptureId: String? = null
 
   init {
     reactContext.addActivityEventListener(object : BaseActivityEventListener() {
@@ -34,6 +37,7 @@ class PreciousCaptureStoreModule(
 
         if (resultCode != Activity.RESULT_OK) {
           pendingCameraImageFile = null
+          pendingAttachCaptureId = null
           promise.resolve(null)
           return
         }
@@ -43,15 +47,17 @@ class PreciousCaptureStoreModule(
             val file = pendingCameraImageFile
             pendingCameraImageFile = null
             if (file == null || !file.exists() || file.length() <= 0L) {
+              pendingAttachCaptureId = null
               promise.reject("capture_camera_image_missing", "No photo was captured.")
               return
             }
-            enqueuePickedImage(promise, PickedImage(file, "image/jpeg", file.name), "camera")
+            dispatchPickedImage(promise, PickedImage(file, "image/jpeg", file.name), "camera")
             return
           }
 
           val uri = data?.data
           if (uri == null) {
+            pendingAttachCaptureId = null
             promise.reject("capture_image_missing", "No image was selected.")
             return
           }
@@ -61,12 +67,14 @@ class PreciousCaptureStoreModule(
           }
           val asset = copyPickedImage(uri)
           if (asset == null) {
+            pendingAttachCaptureId = null
             promise.reject("capture_image_read_failed", "Could not read the selected image.")
             return
           }
-          enqueuePickedImage(promise, asset, "library")
+          dispatchPickedImage(promise, asset, "library")
         } catch (error: Exception) {
           pendingCameraImageFile = null
+          pendingAttachCaptureId = null
           promise.reject("capture_image_enqueue_failed", error)
         }
       }
@@ -179,17 +187,53 @@ class PreciousCaptureStoreModule(
 
   @ReactMethod
   fun captureImage(promise: Promise) {
+    pendingAttachCaptureId = null
+    launchImagePicker(promise)
+  }
+
+  @ReactMethod
+  fun captureCameraImage(promise: Promise) {
+    pendingAttachCaptureId = null
+    launchCameraCapture(promise)
+  }
+
+  @ReactMethod
+  fun attachCaptureImage(id: String, promise: Promise) {
+    val captureId = id.ifBlank { null }
+    if (captureId == null) {
+      promise.reject("capture_attach_id_missing", "Capture id is required.")
+      return
+    }
+    pendingAttachCaptureId = captureId
+    launchImagePicker(promise)
+  }
+
+  @ReactMethod
+  fun attachCaptureCameraImage(id: String, promise: Promise) {
+    val captureId = id.ifBlank { null }
+    if (captureId == null) {
+      promise.reject("capture_attach_id_missing", "Capture id is required.")
+      return
+    }
+    pendingAttachCaptureId = captureId
+    launchCameraCapture(promise)
+  }
+
+  private fun launchImagePicker(promise: Promise) {
     try {
       if (configuredApiUrl().isNotBlank() && readNativeAuthSession(reactContext) == null) {
+        pendingAttachCaptureId = null
         promise.reject("capture_auth_required", "Sign in before saving captures.")
         return
       }
       val activity = reactContext.currentActivity
       if (activity == null) {
+        pendingAttachCaptureId = null
         promise.reject("capture_image_activity_unavailable", "Open Precious Captures before choosing an image.")
         return
       }
       if (pendingImagePromise != null) {
+        pendingAttachCaptureId = null
         promise.reject("capture_image_in_progress", "Finish choosing the current image first.")
         return
       }
@@ -199,23 +243,26 @@ class PreciousCaptureStoreModule(
       activity.startActivityForResult(intent, imagePickerRequestCode)
     } catch (error: Exception) {
       pendingImagePromise = null
+      pendingAttachCaptureId = null
       promise.reject("capture_image_picker_failed", error)
     }
   }
 
-  @ReactMethod
-  fun captureCameraImage(promise: Promise) {
+  private fun launchCameraCapture(promise: Promise) {
     try {
       if (configuredApiUrl().isNotBlank() && readNativeAuthSession(reactContext) == null) {
+        pendingAttachCaptureId = null
         promise.reject("capture_auth_required", "Sign in before saving captures.")
         return
       }
       val activity = reactContext.currentActivity
       if (activity == null) {
+        pendingAttachCaptureId = null
         promise.reject("capture_camera_activity_unavailable", "Open Precious Captures before taking a photo.")
         return
       }
       if (pendingImagePromise != null) {
+        pendingAttachCaptureId = null
         promise.reject("capture_image_in_progress", "Finish choosing the current image first.")
         return
       }
@@ -237,6 +284,7 @@ class PreciousCaptureStoreModule(
     } catch (error: Exception) {
       pendingImagePromise = null
       pendingCameraImageFile = null
+      pendingAttachCaptureId = null
       promise.reject("capture_camera_failed", error)
     }
   }
@@ -358,6 +406,40 @@ class PreciousCaptureStoreModule(
 
   private fun imageSourceText(fileName: String, source: String): String {
     return if (source == "camera") "Camera photo: $fileName" else "Selected image: $fileName"
+  }
+
+  // Route a freshly picked/captured image: attach it to an existing capture when
+  // an attach flow is in progress, otherwise create a brand-new capture.
+  private fun dispatchPickedImage(promise: Promise, asset: PickedImage, source: String) {
+    val attachId = pendingAttachCaptureId
+    pendingAttachCaptureId = null
+    if (attachId != null) {
+      enqueuePickedImageForCapture(promise, attachId, asset)
+    } else {
+      enqueuePickedImage(promise, asset, source)
+    }
+  }
+
+  // Attach the image to an existing capture and re-run its analysis with the new
+  // photo as evidence. The worker re-POSTs under the same capture id, so the
+  // backend attaches the asset to the existing row and reprocesses it.
+  private fun enqueuePickedImageForCapture(promise: Promise, captureId: String, asset: PickedImage) {
+    val capture = PreciousCaptureStore.markCaptureProcessingForAsset(reactContext, captureId)
+    if (capture == null) {
+      promise.reject("capture_not_found", "Capture not found.")
+      return
+    }
+    CaptureNotifications.showQueued(reactContext, captureId)
+    enqueueCaptureWork(
+      reactContext,
+      captureId,
+      NetworkType.CONNECTED,
+      asset.file.absolutePath,
+      asset.mimeType,
+      asset.fileName,
+      assetExpected = true
+    )
+    promise.resolve(PreciousCaptureStore.list(reactContext).toString())
   }
 
   private fun enqueuePickedImage(promise: Promise, asset: PickedImage, source: String) {
