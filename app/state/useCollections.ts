@@ -202,7 +202,7 @@ export function useCollectionsState({
 
   const collectionCapturesColdLoading = Boolean(
     selectedCollectionId &&
-      selectedCollection?.status === "active" &&
+      (selectedCollection?.status === "active" || selectedCollection?.status === "suggested") &&
       selectedCollection.captureCount !== 0 &&
       collectionCapturesLoading &&
       collectionCapturesLoadPhase === "initial" &&

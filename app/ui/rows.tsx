@@ -7,6 +7,7 @@ import Reanimated, { useAnimatedStyle, useSharedValue, withDelay, withTiming } f
 import { collectionCollageSlots, hostFromUrl } from "../captureLogic";
 import type { Capture, CaptureImageLoadState, Collection } from "../types";
 import {
+  activeLinkedCollections,
   captureDisplayTitle,
   captureFaviconHost,
   captureImageLoadKey,
@@ -14,7 +15,8 @@ import {
   captureRowSourceLabel,
   formatDateTime,
   reminderLabel,
-  shouldGhostSourceMark
+  shouldGhostSourceMark,
+  suggestedLinkedCollection
 } from "../capturePresentation";
 import { colors } from "./theme";
 import { styles } from "./styles";
@@ -82,11 +84,11 @@ export function CaptureRow({
         !rowRevealed &&
         (imageLoadKey ? !imageLoadState : true))
   );
-  const collectionTokens = showCollectionToken ? item.linkedCollections || [] : [];
+  const collectionTokens = showCollectionToken ? activeLinkedCollections(item) : [];
   const reminderText = reminderLabel(
     (item.suggestedReminders || []).find((reminder) => reminder.status !== "removed")
   );
-  const suggestionLabel = item.pendingSuggestion?.title?.trim() || "";
+  const suggestionLabel = suggestedLinkedCollection(item)?.title?.trim() || "";
   // Analysis is ready but its new-Collection suggestion is still resolving in the background.
   const suggestionPending = !suggestionLabel && item.collectionSuggestionState === "pending";
   const hasMeaningTokens = Boolean(

@@ -60,6 +60,7 @@ export type AppRenderHelpersInput = {
   onRecentHomePress: () => void;
   onRecentComposerOpen: () => void;
   onUnlinkCaptureFromCollection: (collectionId: string, capture: Capture) => void;
+  restoredCaptureIds: ReadonlySet<string>;
   restoredCollectionId: string | null;
   searchQuery: string;
   selectedCollection: Collection | null;
@@ -108,7 +109,11 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     if (!collection) return null;
     return (
       <Reanimated.View
-        entering={input.screenHandoffActive ? undefined : rowEntering(index)}
+        entering={
+          input.screenHandoffActive || input.restoredCaptureIds.has(item.id)
+            ? undefined
+            : rowEntering(index)
+        }
         style={styles.collectionCaptureRow}
       >
         <Animated.View style={{ opacity: input.collectionRowsFade }}>

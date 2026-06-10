@@ -33,6 +33,14 @@ function loadRemoteData() {
         },
         uniqueCaptures(captures) {
           return captures;
+        },
+        // remoteData re-exports these from capturePresentation; mirror them here so the stub
+        // resolves the re-export. Kept in lockstep with capturePresentation's definitions.
+        suggestedLinkedCollection(capture) {
+          return (capture.linkedCollections || []).find((collection) => collection.status === "suggested") || null;
+        },
+        activeLinkedCollections(capture) {
+          return (capture.linkedCollections || []).filter((collection) => collection.status !== "suggested");
         }
       };
     }
@@ -440,21 +448,25 @@ test("captureFromRemote maps a pending collection suggestion", () => {
       }
     }
   });
-  assert.ok(capture.pendingSuggestion);
-  assert.equal(capture.pendingSuggestion.collectionId, "11111111-1111-1111-1111-111111111111");
-  assert.equal(capture.pendingSuggestion.title, "Trail Runs");
-  assert.equal(capture.pendingSuggestion.description, "Routes and gear for trail running.");
-  assert.equal(capture.pendingSuggestion.confidence, 0.74);
+  // A resolved suggestion is normalized into linkedCollections as a status:"suggested" entry.
+  const { suggestedLinkedCollection } = loadRemoteData();
+  const suggested = suggestedLinkedCollection(capture);
+  assert.ok(suggested);
+  assert.equal(suggested.id, "11111111-1111-1111-1111-111111111111");
+  assert.equal(suggested.title, "Trail Runs");
+  assert.equal(suggested.description, "Routes and gear for trail running.");
+  assert.equal(suggested.confidence, 0.74);
+  assert.equal(suggested.status, "suggested");
 });
 
-test("captureFromRemote leaves pendingSuggestion null without a suggestion", () => {
-  const { captureFromRemote } = loadRemoteData();
+test("captureFromRemote leaves no suggested linkedCollection without a suggestion", () => {
+  const { captureFromRemote, suggestedLinkedCollection } = loadRemoteData();
   const capture = captureFromRemote({ id: "capture-2", analysis: { summary: "x" } });
-  assert.equal(capture.pendingSuggestion, null);
+  assert.equal(suggestedLinkedCollection(capture), null);
 });
 
 test("captureFromRemote surfaces ready analysis while a suggestion is still pending", () => {
-  const { captureFromRemote } = loadRemoteData();
+  const { captureFromRemote, suggestedLinkedCollection } = loadRemoteData();
   const capture = captureFromRemote({
     id: "capture-3",
     analysis_state: "ready",
@@ -462,9 +474,23 @@ test("captureFromRemote surfaces ready analysis while a suggestion is still pend
     analysis: { summary: "A trail run", display_title: "Trail run" }
   });
   // The capture's own analysis is shown immediately; the suggestion resolves in the background.
+  // While resolving there is no collection yet, so no suggested membership — only the signal.
   assert.equal(capture.status, "ready");
   assert.equal(capture.collectionSuggestionState, "pending");
-  assert.equal(capture.pendingSuggestion, null);
+  assert.equal(suggestedLinkedCollection(capture), null);
+});
+
+test("suggestedLinkedCollection / activeLinkedCollections split membership by status", () => {
+  const { suggestedLinkedCollection, activeLinkedCollections } = loadRemoteData();
+  const capture = {
+    linkedCollections: [
+      { id: "a", title: "Food", status: "active" },
+      { id: "b", title: "Trail Runs", status: "suggested" },
+      { id: "c", title: "Travel" } // missing status defaults to active
+    ]
+  };
+  assert.equal(suggestedLinkedCollection(capture).id, "b");
+  assert.deepEqual(activeLinkedCollections(capture).map((c) => c.id), ["a", "c"]);
 });
 
 test("captureFromRemote defaults collectionSuggestionState to none", () => {

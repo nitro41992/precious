@@ -155,9 +155,10 @@ export type Capture = {
   linkedCollections?: LinkedCollection[];
   collectionDecisions?: CollectionDecision[];
   suggestedCollections?: CollectionDecision[];
-  pendingSuggestion?: PendingCollectionSuggestion | null;
   // "pending" while the analysis is shown but its new-Collection suggestion is still
   // resolving in the background; flips to "ready" when the suggestion lands (or is dropped).
+  // This is a background-processing signal, not membership — a resolved suggestion surfaces as
+  // a LinkedCollection with status "suggested" (see suggestedLinkedCollection in remoteData).
   collectionSuggestionState?: "none" | "pending" | "ready";
   manualCollectionOverrides?: CollectionChoiceOverride[];
   searchPhrases?: string[];
@@ -181,6 +182,10 @@ export type LinkedCollection = {
   rationale?: string | null;
   confidence?: number | null;
   linkedAt?: number | null;
+  // "active" is a real membership; "suggested" is an AI-proposed grouping bound to a
+  // status='suggested' collection row (confirm via persist, remove via dismiss). Absent is
+  // treated as "active" for back-compat with older cached rows.
+  status?: "active" | "suggested";
 };
 
 export type CollectionDecision = {
@@ -196,16 +201,6 @@ export type CollectionChoiceOverride = {
   collectionId: string;
   source?: string;
   restoredDecisions: CollectionDecision[];
-};
-
-// An AI-proposed new Collection that does not exist yet. Bound to a real (status='suggested')
-// collection row so the user can confirm (persist) or dismiss it.
-export type PendingCollectionSuggestion = {
-  collectionId: string;
-  title: string;
-  description: string;
-  rationale: string;
-  confidence: number;
 };
 
 export type VisitTarget = {

@@ -329,6 +329,54 @@ async function dismissSuggestionForCapture(
   return await captureResponse(supabase, userId, captureId);
 }
 
+// Reverse a single-capture suggestion dismiss (the per-capture minus-circle undo): re-link
+// the one capture, drop its never-re-suggest record, restore its pending marker, and
+// un-delete the suggestion if removing this capture had emptied and soft-deleted it.
+// Scoped to one capture — the inverse of dismissSuggestionForCapture, the way
+// undoDismissCollectionSuggestion is the inverse of dismissCollectionSuggestion.
+async function undoDismissSuggestionForCapture(
+  supabase: Supabase,
+  userId: string,
+  collectionId: string,
+  captureId: string,
+) {
+  // The dismiss soft-deletes the suggestion when it removes the last capture, so look
+  // past the live-only guard the way the whole-group undo does.
+  const suggestion = await loadDismissedSuggestionRow(supabase, userId, collectionId);
+  if (!suggestion) return json({ error: "Suggestion not found" }, 404);
+
+  await supabase
+    .from("collections")
+    .update({ deleted_at: null, delete_purge_after: null })
+    .eq("user_id", userId)
+    .eq("id", collectionId);
+  await supabase
+    .from("collection_capture_links")
+    .update({ unlinked_at: null, unlink_reason: null })
+    .eq("user_id", userId)
+    .eq("collection_id", collectionId)
+    .eq("capture_id", captureId)
+    .eq("unlink_reason", "suggestion_dismissed");
+  await supabase
+    .from("collection_suggestion_dismissals")
+    .delete()
+    .eq("user_id", userId)
+    .eq("collection_id", collectionId)
+    .eq("capture_id", captureId);
+
+  const links = await activeMemberLinks(supabase, userId, collectionId);
+  const restored = links.filter((link) => String(link.capture_id || "") === captureId);
+  await restorePendingSuggestionForCaptures(
+    supabase,
+    userId,
+    collectionId,
+    suggestion,
+    restored,
+  );
+  await refreshCollectionPreviewFromActiveLinks(supabase, userId, collectionId);
+  return await captureResponse(supabase, userId, captureId);
+}
+
 // Dismiss a whole pending suggestion at once (the intentional action in the suggestion
 // detail view): every member capture is unlinked, never re-suggested for this group, and
 // loses its pending_collection_suggestion marker, then the suggestion is soft-deleted.
@@ -467,6 +515,19 @@ export async function handleCollectionSuggestionsResource(
     );
     if (!collection) return json({ error: "Suggestion not found" }, 404);
     return json({ collection });
+  }
+
+  if (body.action === "undo_dismiss_for_capture") {
+    const captureId = typeof body.captureId === "string" ? body.captureId : "";
+    if (!isUuid(captureId)) {
+      return json({ error: "captureId is required" }, 400);
+    }
+    return await undoDismissSuggestionForCapture(
+      supabase,
+      userId,
+      collectionId,
+      captureId,
+    );
   }
 
   return json({ error: "Unsupported action" }, 400);

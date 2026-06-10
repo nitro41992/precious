@@ -1309,6 +1309,18 @@ export function linkedCollectionsLabel(collections: LinkedCollection[]) {
   return `${collections[0].title} +${collections.length - 1}`;
 }
 
+// One model for collection membership: linkedCollections holds both real memberships
+// (status "active") and a resolved AI suggestion (status "suggested"). These two helpers are the
+// single read path, so a suggested membership never leaks into a "real collection" surface
+// (chips, labels) and the suggestion is derived from the same array, not a parallel field.
+export function suggestedLinkedCollection(capture: Capture): LinkedCollection | null {
+  return (capture.linkedCollections || []).find((collection) => collection.status === "suggested") || null;
+}
+
+export function activeLinkedCollections(capture: Capture): LinkedCollection[] {
+  return (capture.linkedCollections || []).filter((collection) => collection.status !== "suggested");
+}
+
 function pendingExistingCollectionDecisions(capture: Capture) {
   const linkedIds = new Set((capture.linkedCollections || []).map((collection) => collection.id));
   return (capture.collectionDecisions || []).filter((decision) => {
@@ -1328,11 +1340,11 @@ function collectionDecisionsLabel(decisions: CollectionDecision[]) {
 }
 
 export function captureFieldStates(capture: Capture): CaptureFieldState[] {
-  const linkedCollectionLabel = linkedCollectionsLabel(capture.linkedCollections || []);
+  const linkedCollectionLabel = linkedCollectionsLabel(activeLinkedCollections(capture));
   const linkedCollectionValue = linkedCollectionLabel === "Add collections" ? "" : linkedCollectionLabel;
   // With no confirmed collection but a pending AI suggestion, surface the suggestion title on
   // the row (the user confirms/dismisses it in the selector sheet, not here).
-  const pendingSuggestionTitle = (capture.pendingSuggestion?.title || "").trim();
+  const pendingSuggestionTitle = (suggestedLinkedCollection(capture)?.title || "").trim();
   const collectionSuggested = !linkedCollectionValue && Boolean(pendingSuggestionTitle);
   const collectionValue = collectionSuggested ? pendingSuggestionTitle : linkedCollectionValue;
   const reminder = (capture.suggestedReminders || [])[0];

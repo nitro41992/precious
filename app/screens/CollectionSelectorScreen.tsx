@@ -5,7 +5,7 @@ import { ArrowLeft, Check, Folder, MagnifyingGlass as Search, Plus } from "phosp
 
 import type { Capture, Collection, LoadPhase } from "../types";
 import { collectionSelectionActionState } from "../captureLogic";
-import { captureFieldRationale, collectionCountLabel, splitCollectionsByRecency } from "../capturePresentation";
+import { captureFieldRationale, collectionCountLabel, splitCollectionsByRecency, suggestedLinkedCollection } from "../capturePresentation";
 import {
   AiFieldInsight,
   AnimatedBottomSheet,
@@ -121,7 +121,7 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
     !selectionTerm ||
     [collection.title, collection.description].join(" ").toLowerCase().includes(selectionTerm);
 
-  const pendingSuggestion = selected.pendingSuggestion || null;
+  const pendingSuggestion = suggestedLinkedCollection(selected);
   // Analysis is ready but the new-collection suggestion is still resolving.
   const suggestionPending = !pendingSuggestion && selected.collectionSuggestionState === "pending";
   // The AI suggestion must resolve before adding a collection by hand, and the
@@ -190,10 +190,10 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
   const predictionCard = pendingSuggestion ? (
     <CollectionPredictionCard
       busy={suggestionBusy}
-      description={pendingSuggestion.description}
-      onConfirm={() => confirmSuggestion(pendingSuggestion.collectionId)}
-      onDismiss={() => dismissSuggestion(pendingSuggestion.collectionId, selected.remoteId || selected.id)}
-      rationale={pendingSuggestion.rationale}
+      description={pendingSuggestion.description || ""}
+      onConfirm={() => confirmSuggestion(pendingSuggestion.id)}
+      onDismiss={() => dismissSuggestion(pendingSuggestion.id, selected.remoteId || selected.id)}
+      rationale={pendingSuggestion.rationale || ""}
       testID="pc.collection.suggestion"
       title={pendingSuggestion.title}
       variant="suggested"

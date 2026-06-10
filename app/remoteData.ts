@@ -117,19 +117,33 @@ export function captureFromRemote(row: Record<string, any>): Capture {
   const manualCollectionOverrides = Array.isArray(analysis.collection_choice_overrides)
     ? analysis.collection_choice_overrides.map(collectionChoiceOverrideFromRemote).filter(Boolean) as CollectionChoiceOverride[]
     : [];
+  // A resolved AI suggestion is a real (status='suggested') collection the capture is linked to.
+  // Normalize it here into a LinkedCollection with status "suggested" so the rest of the app
+  // treats suggested and real memberships through one model (see suggestedLinkedCollection).
   const pendingSuggestionRaw = analysis.pending_collection_suggestion;
-  const pendingSuggestion = pendingSuggestionRaw &&
+  const suggestionLink: LinkedCollection | null = pendingSuggestionRaw &&
       typeof pendingSuggestionRaw === "object" &&
       typeof pendingSuggestionRaw.collection_id === "string" &&
       pendingSuggestionRaw.collection_id
     ? {
-        collectionId: String(pendingSuggestionRaw.collection_id),
+        id: String(pendingSuggestionRaw.collection_id),
         title: String(pendingSuggestionRaw.title || ""),
         description: String(pendingSuggestionRaw.description || ""),
-        rationale: String(pendingSuggestionRaw.rationale || ""),
-        confidence: Number(pendingSuggestionRaw.confidence) || 0
+        createdBy: "analysis",
+        rationale: String(pendingSuggestionRaw.rationale || "") || null,
+        confidence: Number(pendingSuggestionRaw.confidence) || null,
+        linkedAt: null,
+        status: "suggested"
       }
     : null;
+  const baseLinkedCollections: LinkedCollection[] = Array.isArray(row.linked_collections)
+    ? row.linked_collections.map(linkedCollectionFromRemote)
+    : Array.isArray(analysis.linked_collections)
+      ? analysis.linked_collections.map(linkedCollectionFromRemote)
+      : [];
+  const linkedCollections = suggestionLink
+    ? [...baseLinkedCollections.filter((collection) => collection.id !== suggestionLink.id), suggestionLink]
+    : baseLinkedCollections;
   const collectionSuggestionState =
     row.collection_suggestion_state === "pending"
       ? "pending"
@@ -202,14 +216,9 @@ export function captureFromRemote(row: Record<string, any>): Capture {
     entities: analysis.entities || [],
     visitTarget: visitTargetFromRemote(analysis),
     suggestedReminders: reminderSuggestionsFromRemote(analysis.suggested_reminders),
-    linkedCollections: Array.isArray(row.linked_collections)
-      ? row.linked_collections.map(linkedCollectionFromRemote)
-      : Array.isArray(analysis.linked_collections)
-        ? analysis.linked_collections.map(linkedCollectionFromRemote)
-        : [],
+    linkedCollections,
     collectionDecisions,
     suggestedCollections: collectionDecisions,
-    pendingSuggestion,
     collectionSuggestionState,
     manualCollectionOverrides,
     searchPhrases: analysis.search_phrases || [],
@@ -524,9 +533,16 @@ export function linkedCollectionFromRemote(row: Record<string, any>): LinkedColl
     createdBy: nullableValue(row.created_by || row.createdBy),
     rationale: nullableValue(row.rationale) || null,
     confidence: Number.isFinite(Number(row.confidence)) ? Number(row.confidence) : null,
-    linkedAt: nullableTimestamp(row.linked_at || row.linkedAt)
+    linkedAt: nullableTimestamp(row.linked_at || row.linkedAt),
+    status: row.status === "suggested" ? "suggested" : "active"
   };
 }
+
+// One model for collection membership: a capture's linkedCollections holds both real memberships
+// (status "active") and a resolved AI suggestion (status "suggested"). The split helpers live in
+// capturePresentation (remoteData imports from it, so they can't live here without a cycle); they
+// are re-exported so consumers can pull them from either module.
+export { activeLinkedCollections, suggestedLinkedCollection } from "./capturePresentation";
 
 export function collectionDecisionFromRemote(row: Record<string, any>): CollectionDecision | null {
   const type = row.type === "existing" ? "existing" : row.type === "new" ? "new" : null;
@@ -554,6 +570,28 @@ export function collectionChoiceOverrideFromRemote(row: Record<string, any>): Co
   };
 }
 
+// Fold a legacy `pendingSuggestion` field (older cache shape) into linkedCollections as a
+// status:"suggested" entry. No-op for current rows, which already carry it in linkedCollections.
+function foldLegacyPendingSuggestion(capture: Partial<Capture>): LinkedCollection[] {
+  const linked = Array.isArray(capture.linkedCollections) ? capture.linkedCollections : [];
+  const legacy = (capture as Record<string, any>).pendingSuggestion;
+  if (!legacy || typeof legacy !== "object" || !legacy.collectionId) return linked;
+  if (linked.some((collection) => collection.status === "suggested")) return linked;
+  return [
+    ...linked.filter((collection) => collection.id !== String(legacy.collectionId)),
+    {
+      id: String(legacy.collectionId),
+      title: String(legacy.title || ""),
+      description: String(legacy.description || ""),
+      createdBy: "analysis",
+      rationale: String(legacy.rationale || "") || null,
+      confidence: Number(legacy.confidence) || null,
+      linkedAt: null,
+      status: "suggested"
+    }
+  ];
+}
+
 export function cachedCapturePageFromRaw(raw: string | null | undefined) {
   if (!raw) return { present: false, captures: [] as Capture[], nextCursor: null as string | null };
   try {
@@ -572,7 +610,11 @@ export function cachedCapturePageFromRaw(raw: string | null | undefined) {
             archivedAt: capture.archivedAt ? Number(capture.archivedAt) : null,
             deletedAt: capture.deletedAt ? Number(capture.deletedAt) : null,
             deletePurgeAfter: capture.deletePurgeAfter ? Number(capture.deletePurgeAfter) : null,
-            processedAt: capture.processedAt ? Number(capture.processedAt) : null
+            processedAt: capture.processedAt ? Number(capture.processedAt) : null,
+            // Back-compat: fold a legacy pendingSuggestion (from a cache written by the previous
+            // app version) into linkedCollections so the first paint still shows it. The network
+            // refresh that follows hydration replaces it with the normalized shape.
+            linkedCollections: foldLegacyPendingSuggestion(capture)
           }))
       : [];
     return {

@@ -103,7 +103,8 @@ import {
   freshLocalProcessingCaptures,
   isFreshLocalProcessingCapture,
   pickCaptureFromRaw,
-  sortCollectionCaptures
+  sortCollectionCaptures,
+  suggestedLinkedCollection
 } from "./remoteData";
 import { AuthScreen } from "./screens/AuthScreen";
 import { CaptureReviewScreen } from "./screens/CaptureReviewScreen";
@@ -855,6 +856,11 @@ export default function App() {
   // on its grid card (FlashList re-inserts the cell without remounting, so a
   // declarative entering animation would not fire). Cleared after it plays.
   const [restoredCollectionId, setRestoredCollectionId] = useState<string | null>(null);
+  // Captures restored via undo re-mount in the detail list and would otherwise
+  // re-fire the row entering-slide (FadeInDown's translateY:8), reading as the
+  // thumbnail jumping. Flag the restored ids so the shared row renderer skips
+  // entering for them — the card reappears in place. Cleared after it commits.
+  const [restoredCaptureIds, setRestoredCaptureIds] = useState<ReadonlySet<string>>(() => new Set());
   const [draftTitle, setDraftTitle] = useState("");
   const [draftNote, setDraftNote] = useState("");
   const [reminderDrafts, setReminderDrafts] = useState<Record<string, ReminderDraftAction>>({});
@@ -2756,9 +2762,18 @@ export default function App() {
     ) {
       return;
     }
-    const candidates = collections
-      .filter((collection) => collection.status === "active" && collection.captureCount > 0)
-      .slice(0, COLLECTION_CAPTURE_PREFETCH_LIMIT);
+    const candidates = [
+      ...collections
+        .filter((collection) => collection.status === "active" && collection.captureCount > 0)
+        .slice(0, COLLECTION_CAPTURE_PREFETCH_LIMIT),
+      // Warm suggestions on the same idle tick so their detail opens land on a
+      // ready cache — a suggested collection's captures load through the same
+      // collection-captures path, it was just never prefetched. Its own slice so
+      // a long active-collection list can't crowd suggestions out.
+      ...suggestions
+        .filter((collection) => collection.captureCount > 0)
+        .slice(0, COLLECTION_CAPTURE_PREFETCH_LIMIT)
+    ];
     if (!candidates.length) return;
     let cancelled = false;
     const cancelIdleTask = scheduleIdleTask(() => {
@@ -2786,7 +2801,8 @@ export default function App() {
     config?.apiUrl,
     loadCollectionCaptures,
     selectedCollectionId,
-    session?.userId
+    session?.userId,
+    suggestions
   ]);
 
   useEffect(() => {
@@ -3412,38 +3428,42 @@ export default function App() {
     }));
   }
 
-  // Drop a pending AI suggestion marker from every loaded capture that carried it, so a
+  // Drop the suggested membership from every loaded capture that carried it, so a
   // whole-suggestion dismiss clears the badge everywhere it was showing. Mirrors
   // removeCollectionFromKnownCaptures; undo restores via the deletion-state snapshot.
   function clearPendingSuggestionFromKnownCaptures(collectionId: string) {
-    mapKnownCaptures((capture) =>
-      capture.pendingSuggestion?.collectionId === collectionId
-        ? { ...capture, pendingSuggestion: null, collectionSuggestionState: "none" }
-        : capture
-    );
+    mapKnownCaptures((capture) => {
+      const suggested = suggestedLinkedCollection(capture);
+      if (!suggested || suggested.id !== collectionId) return capture;
+      return {
+        ...capture,
+        collectionSuggestionState: "none",
+        linkedCollections: (capture.linkedCollections || []).filter((collection) => collection !== suggested)
+      };
+    });
   }
 
-  // Promote a persisted AI suggestion to a real linked collection on every loaded capture
-  // that carried it, so accepting flips the badge from suggestion to collection everywhere
-  // it was showing — not just on the open detail. Mirrors clearPendingSuggestionFromKnownCaptures.
+  // Promote a persisted AI suggestion to a real linked collection on every loaded capture that
+  // carried it, so accepting flips the badge from suggestion to collection everywhere it was
+  // showing — not just on the open detail. With the unified model this just flips the membership's
+  // status from "suggested" to "active" (keeping its rationale/confidence).
   function linkPersistedSuggestionToKnownCaptures(collectionId: string, created: Collection) {
     mapKnownCaptures((capture) => {
-      if (capture.pendingSuggestion?.collectionId !== collectionId) return capture;
+      const suggested = suggestedLinkedCollection(capture);
+      if (!suggested || suggested.id !== collectionId) return capture;
       const linked: LinkedCollection = {
+        ...suggested,
         id: created.id,
         title: created.title,
         description: created.description,
-        createdBy: "analysis",
-        rationale: capture.pendingSuggestion.rationale || null,
-        confidence: capture.pendingSuggestion.confidence ?? null,
+        status: "active",
         linkedAt: Date.now()
       };
       return {
         ...capture,
-        pendingSuggestion: null,
         collectionSuggestionState: "none",
         linkedCollections: [
-          ...(capture.linkedCollections || []).filter((collection) => collection.id !== created.id),
+          ...(capture.linkedCollections || []).filter((collection) => collection !== suggested && collection.id !== created.id),
           linked
         ]
       };
@@ -3917,21 +3937,22 @@ export default function App() {
     replaceSuggestions([collection, ...suggestions.filter((item) => item.id !== collection.id)]);
     setToast(null);
     showToast("Suggestion restored.", "success");
-    if (operation && operation.commitDone && !operation.commitFailed) {
-      void (async () => {
-        try {
-          await collectionRequest("collection-suggestions", {
-            method: "PATCH",
-            body: { action: "undo_dismiss", collectionId: collection.id }
-          });
-          await loadSuggestions();
-        } catch (error) {
-          showErrorToast(error, "Could not restore the suggestion.");
-        } finally {
-          finishPendingDeleteOperation(operation.id);
-        }
-      })();
-    }
+    const undoNetwork = async () => {
+      try {
+        await collectionRequest("collection-suggestions", {
+          method: "PATCH",
+          body: { action: "undo_dismiss", collectionId: collection.id }
+        });
+        await loadSuggestions();
+      } catch (error) {
+        showErrorToast(error, "Could not restore the suggestion.");
+      } finally {
+        if (operation) finishPendingDeleteOperation(operation.id);
+      }
+    };
+    // No operation means the dismiss already committed AND finished — undo must still reverse it
+    // on the server. If still pending pre-commit, the dismiss flow runs the undo when it lands.
+    if (!operation || (operation.commitDone && !operation.commitFailed)) void undoNetwork();
   }
 
   // Dismiss a whole AI suggestion (the intentional action in the suggestion detail view):
@@ -3991,6 +4012,136 @@ export default function App() {
           restoreDeletionState(snapshot);
           replaceSuggestions([collection, ...suggestions.filter((item) => item.id !== collectionId)]);
           showErrorToast(error, "Could not dismiss the suggestion.");
+        }
+        finishPendingDeleteOperation(operation.id);
+      }
+    })();
+  }
+
+  // Reverse a single-capture suggestion dismiss (the minus-circle Undo): restore the snapshot,
+  // re-add the suggestion locally, and reverse the backend dismiss once it has committed. Mirrors
+  // undoDismissSuggestionGroup, scoped to one capture. flagCapturesRestored keeps the restored
+  // row from re-firing its entering-slide (no thumbnail jump).
+  function undoRemoveSuggestionCapture(
+    collectionId: string,
+    capture: Capture,
+    snapshot: DeletionStateSnapshot,
+    suggestionsSnapshot: Collection[],
+    operationId: string
+  ) {
+    const operation = pendingDeleteOperationsRef.current[operationId];
+    if (operation) operation.undoRequested = true;
+    const captureId = capture.remoteId || capture.id;
+    restoreDeletionState(snapshot);
+    replaceSuggestions(suggestionsSnapshot);
+    flagCapturesRestored([capture.id]);
+    setToast(null);
+    showToast("Suggestion restored.", "success");
+    const undoNetwork = async () => {
+      try {
+        await collectionRequest("collection-suggestions", {
+          method: "PATCH",
+          body: { action: "undo_dismiss_for_capture", collectionId, captureId }
+        });
+        await loadSuggestions();
+      } catch (error) {
+        showErrorToast(error, "Could not restore the suggestion.");
+      } finally {
+        if (operation) finishPendingDeleteOperation(operation.id);
+      }
+    };
+    // No operation means the dismiss already committed AND finished — undo must still reverse it
+    // on the server (the bug was skipping this, leaving the capture unlinked / suggestion gone).
+    // If the operation is still pending and not yet committed, the dismiss flow runs the undo
+    // itself once it lands (it sees undoRequested), so we don't double-fire here.
+    if (!operation || (operation.commitDone && !operation.commitFailed)) void undoNetwork();
+  }
+
+  // Remove one capture from a suggestion (the minus-circle, dispatched from the shared
+  // unlinkCaptureFromCollection entry). A suggested membership is a status:"suggested"
+  // LinkedCollection, so the only thing that differs from a real-collection unlink is the
+  // network semantics: this *dismisses* (clears the AI marker, records never-re-suggest, deletes
+  // the collection when it empties) via the suggestion endpoints. Optimistic + reverse-network +
+  // Undo, mirroring dismissSuggestionGroup scoped to one capture.
+  async function removeSuggestionCaptureWithUndo(collectionId: string, capture: Capture) {
+    const captureId = capture.remoteId || capture.id;
+    const trace = createDeleteTrace("suggestion-dismiss", { collectionId, captureId, count: 1 });
+    const snapshot = snapshotDeletionState();
+    const suggestionsSnapshot = [...suggestions];
+    const operation: PendingDeleteOperation = {
+      commitDone: false,
+      commitFailed: false,
+      id: trace.operationId,
+      kind: "suggestion-dismiss",
+      snapshot,
+      trace,
+      undoRequested: false
+    };
+    registerPendingDeleteOperation(operation);
+
+    markDeleteTrace(trace, "optimistic_state_start", { collectionId, captureId, count: 1 });
+    // Clear the suggested membership wherever the capture is loaded (Recents keeps the capture,
+    // it just loses the suggestion badge)...
+    mapKnownCaptures((item) => {
+      if (item.id !== capture.id && item.remoteId !== captureId) return item;
+      const suggested = suggestedLinkedCollection(item);
+      if (!suggested || suggested.id !== collectionId) return item;
+      return {
+        ...item,
+        collectionSuggestionState: "none",
+        linkedCollections: (item.linkedCollections || []).filter((collection) => collection !== suggested)
+      };
+    });
+    // ...and drop its row from the open suggestion list + that list's cache.
+    setCollectionCaptures((current) => current.filter((item) => item.id !== capture.id));
+    collectionCapturesCacheRef.current[collectionId] = (collectionCapturesCacheRef.current[collectionId] || [])
+      .filter((item) => item.id !== capture.id);
+    // Keep the suggestion count truthful; an emptied suggestion is soft-deleted server-side, so
+    // close the detail and drop it locally.
+    const suggestion = suggestions.find((item) => item.id === collectionId);
+    const remaining = Math.max(0, (suggestion?.captureCount ?? 1) - 1);
+    if (suggestion && remaining === 0) {
+      closeCollectionDetail();
+      replaceSuggestions(suggestions.filter((item) => item.id !== collectionId));
+    } else {
+      replaceSuggestions(
+        suggestions.map((item) => (item.id === collectionId ? { ...item, captureCount: remaining } : item))
+      );
+    }
+    markDeleteTrace(trace, "optimistic_state_done", { collectionId, captureId, count: 1 });
+
+    setToast(null);
+    showTracedToast({
+      text: "Removed from suggestion.",
+      tone: "destructive",
+      actionLabel: "Undo",
+      action: () => undoRemoveSuggestionCapture(collectionId, capture, snapshot, suggestionsSnapshot, trace.operationId)
+    }, trace);
+
+    void (async () => {
+      try {
+        await collectionRequest("collection-suggestions", {
+          method: "PATCH",
+          body: { action: "dismiss_for_capture", collectionId, captureId }
+        });
+        operation.commitDone = true;
+        if (operation.undoRequested) {
+          await collectionRequest("collection-suggestions", {
+            method: "PATCH",
+            body: { action: "undo_dismiss_for_capture", collectionId, captureId }
+          });
+          await loadSuggestions();
+          finishPendingDeleteOperation(operation.id);
+          return;
+        }
+        void loadSuggestions();
+        finishPendingDeleteOperation(operation.id);
+      } catch (error) {
+        operation.commitFailed = true;
+        if (!operation.undoRequested) {
+          restoreDeletionState(snapshot);
+          replaceSuggestions(suggestionsSnapshot);
+          showErrorToast(error, "Could not remove from suggestion.");
         }
         finishPendingDeleteOperation(operation.id);
       }
@@ -4066,6 +4217,15 @@ export default function App() {
     setTimeout(() => {
       setRestoredCollectionId((current) => (current === collectionId ? null : current));
     }, 500);
+  }
+
+  // Mark captures restored via undo so the detail-row renderer skips its
+  // entering-slide for them (reappear in place, no thumbnail jump), then clear
+  // the flag so genuinely new rows — pagination, cache refresh — still animate.
+  function flagCapturesRestored(captureIds: string[]) {
+    if (!captureIds.length) return;
+    setRestoredCaptureIds(new Set(captureIds));
+    setTimeout(() => setRestoredCaptureIds(new Set()), 500);
   }
 
   function undoDeleteCollection(collection: Collection, operationId?: string) {
@@ -4309,6 +4469,7 @@ export default function App() {
 
   function restoreUnlinkItems(collectionId: string, items: UnlinkBatchItem[], trace?: DeleteTraceToken) {
     markDeleteTrace(trace, "restore_state_start", { collectionId, count: items.length });
+    flagCapturesRestored(items.map((item) => item.capture.id));
     for (let i = items.length - 1; i >= 0; i--) {
       const item = items[i];
       applyCollectionLinkRestore(collectionId, item.capture, item.captureId, item.collection, item.index);
@@ -4395,6 +4556,13 @@ export default function App() {
     }
     const captureId = capture.remoteId || capture.id;
     const removedCollection = (capture.linkedCollections || []).find((collection) => collection.id === collectionId);
+    // A suggested membership is removed by *dismissing* it (clears the AI marker, never-re-suggest,
+    // deletes the collection when it empties) rather than a plain link unlink — the one place the
+    // two memberships diverge. Same entry point, same Undo affordance.
+    if (removedCollection?.status === "suggested") {
+      void removeSuggestionCaptureWithUndo(collectionId, capture);
+      return;
+    }
     // Where the row sat before removal, so undo (and rollback) can return it to
     // the same spot instead of jumping it to the top of the list.
     const removedIndex = collectionCaptures.findIndex((item) => item.id === capture.id);
@@ -4999,6 +5167,7 @@ export default function App() {
     onRecentComposerOpen: openCaptureComposer,
     onRecentHomePress: openRecentHome,
     onUnlinkCaptureFromCollection: (collectionId, capture) => void unlinkCaptureFromCollection(collectionId, capture),
+    restoredCaptureIds,
     restoredCollectionId,
     searchQuery,
     // The closing snapshot keeps detail rows functional while the pane fades
@@ -5077,7 +5246,7 @@ export default function App() {
               collectionSelectionIds,
               collectionsLoadPhase,
               collectionsLoading,
-              suggestionBusy: suggestionBusyId === (selected.pendingSuggestion?.collectionId || "")
+              suggestionBusy: suggestionBusyId === (suggestedLinkedCollection(selected)?.id || "")
             }}
           />
         ) : null}
@@ -5368,7 +5537,9 @@ export default function App() {
     active = "recent",
     underlay = null,
     overlay = null,
-    overlayHandoff = null
+    overlayHandoff = null,
+    topOverlay = null,
+    topOverlayHandoff = null
   }: {
     active?: "recent" | "collections";
     // The source list kept mounted beneath a review overlay (collection detail
@@ -5376,8 +5547,15 @@ export default function App() {
     underlay?: ReactNode;
     overlay?: ReactNode;
     overlayHandoff?: ReviewHandoffState | null;
+    // A third layer above `overlay`, for the rare case where the review must
+    // animate over a screen that itself already lives in the overlay slot (a
+    // capture opened from a suggestion detail: suggestions stay in `underlay`,
+    // the detail stays in `overlay` so its frame is never remounted, and the
+    // review rides on top here).
+    topOverlay?: ReactNode;
+    topOverlayHandoff?: ReviewHandoffState | null;
   } = {}) {
-    const overlayVisible = Boolean(overlay) || Boolean(underlay);
+    const overlayVisible = Boolean(overlay) || Boolean(underlay) || Boolean(topOverlay);
     // The tab bar / gradient / FAB only change while the pane is fully
     // covered — never during a flight. Unmounting them at the open tap
     // popped the bottom of the screen mid-morph (the review is still mostly
@@ -5412,6 +5590,11 @@ export default function App() {
         {overlay ? (
           <ScreenOverlayFrame handoff={overlayHandoff} progress={reviewHandoffProgress}>
             {overlay}
+          </ScreenOverlayFrame>
+        ) : null}
+        {topOverlay ? (
+          <ScreenOverlayFrame handoff={topOverlayHandoff} progress={reviewHandoffProgress}>
+            {topOverlay}
           </ScreenOverlayFrame>
         ) : null}
         {reviewHandoff ? (
@@ -5515,6 +5698,21 @@ export default function App() {
         {renderCaptureReviewScreen(deleteDismissCapture)}
       </ReviewDeleteDismissFrame>
     );
+    // Delete/dismiss from a suggestion-origin review: keep the detail in the
+    // overlay slot over a persistent suggestions underlay (same as the review
+    // and resting branches) so its CollectionDetailFrame isn't remounted and
+    // the morph stays anchored. Checked before the generic collection branch.
+    if (deleteOrigin === "collection" && deleteCollection && collectionDetailOrigin === "suggestions") {
+      return renderTopLevelStack({
+        active: collectionsOpen ? "collections" : "recent",
+        underlay: renderSuggestionsOverlay({ includeChrome: false }),
+        overlay: renderCollectionDetailOverlay(deleteCollection, {
+          direction: "opening",
+          includeChrome: false
+        }),
+        topOverlay: deleteDismissOverlay
+      });
+    }
     if (deleteOrigin === "collection" && deleteCollection) {
       return renderTopLevelStack({
         active: "collections",
@@ -5535,6 +5733,33 @@ export default function App() {
     return renderTopLevelStack({
       active: deleteOrigin === "collection" ? "collections" : collectionsOpen ? "collections" : "recent",
       overlay: deleteDismissOverlay
+    });
+  }
+
+  // Review opened from a suggestion detail: the detail came from the overlay
+  // slot (over a persistent suggestions underlay). Keep it there — same slot,
+  // same parent chain as the resting suggestion-detail branch below — so its
+  // CollectionDetailFrame is preserved, not remounted. A remount would re-run
+  // the detail's entry transform and nudge the row, so the open hero takes off
+  // from one rect and the close hero lands on another (the thumbnail jump).
+  // The review rides on top in the new topOverlay layer. Checked before the
+  // generic collection-review branch, which would otherwise drop the detail
+  // into the underlay slot and trigger that remount.
+  if (
+    selected &&
+    captureReviewOrigin === "collection" &&
+    selectedCollection &&
+    collectionDetailOrigin === "suggestions"
+  ) {
+    return renderTopLevelStack({
+      active: collectionsOpen ? "collections" : "recent",
+      underlay: renderSuggestionsOverlay({ includeChrome: false }),
+      overlay: renderCollectionDetailOverlay(selectedCollection, {
+        direction: "opening",
+        includeChrome: false
+      }),
+      topOverlay: renderCaptureReviewScreen(selected),
+      topOverlayHandoff: reviewHandoff?.captureId === selected.id ? reviewHandoff : null
     });
   }
 
