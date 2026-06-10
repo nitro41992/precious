@@ -3347,33 +3347,62 @@ export default function App() {
     );
   }
 
+  // Apply a per-capture transform across every loaded capture store (active rows, archived
+  // rows, each collection cache, and the open collection's list) so a single edit is
+  // reflected everywhere the capture is showing. The open capture detail refreshes for free
+  // because `selected` resolves from these arrays before the snapshot fallback.
+  function mapKnownCaptures(transform: (capture: Capture) => Capture) {
+    commitCaptureRows("active", (current) => current.map(transform));
+    commitCaptureRows("archived", (current) => current.map(transform));
+    for (const [cachedCollectionId, rows] of Object.entries(collectionCapturesCacheRef.current)) {
+      collectionCapturesCacheRef.current[cachedCollectionId] = rows.map(transform);
+    }
+    setCollectionCaptures((current) => current.map(transform));
+  }
+
   function removeCollectionFromKnownCaptures(collectionId: string) {
-    const removeCollection = (capture: Capture): Capture => ({
+    mapKnownCaptures((capture) => ({
       ...capture,
       linkedCollections: (capture.linkedCollections || []).filter((collection) => collection.id !== collectionId)
-    });
-    commitCaptureRows("active", (current) => current.map(removeCollection));
-    commitCaptureRows("archived", (current) => current.map(removeCollection));
-    for (const [cachedCollectionId, rows] of Object.entries(collectionCapturesCacheRef.current)) {
-      collectionCapturesCacheRef.current[cachedCollectionId] = rows.map(removeCollection);
-    }
-    setCollectionCaptures((current) => current.map(removeCollection));
+    }));
   }
 
   // Drop a pending AI suggestion marker from every loaded capture that carried it, so a
   // whole-suggestion dismiss clears the badge everywhere it was showing. Mirrors
   // removeCollectionFromKnownCaptures; undo restores via the deletion-state snapshot.
   function clearPendingSuggestionFromKnownCaptures(collectionId: string) {
-    const clearSuggestion = (capture: Capture): Capture =>
+    mapKnownCaptures((capture) =>
       capture.pendingSuggestion?.collectionId === collectionId
         ? { ...capture, pendingSuggestion: null, collectionSuggestionState: "none" }
-        : capture;
-    commitCaptureRows("active", (current) => current.map(clearSuggestion));
-    commitCaptureRows("archived", (current) => current.map(clearSuggestion));
-    for (const [cachedCollectionId, rows] of Object.entries(collectionCapturesCacheRef.current)) {
-      collectionCapturesCacheRef.current[cachedCollectionId] = rows.map(clearSuggestion);
-    }
-    setCollectionCaptures((current) => current.map(clearSuggestion));
+        : capture
+    );
+  }
+
+  // Promote a persisted AI suggestion to a real linked collection on every loaded capture
+  // that carried it, so accepting flips the badge from suggestion to collection everywhere
+  // it was showing — not just on the open detail. Mirrors clearPendingSuggestionFromKnownCaptures.
+  function linkPersistedSuggestionToKnownCaptures(collectionId: string, created: Collection) {
+    mapKnownCaptures((capture) => {
+      if (capture.pendingSuggestion?.collectionId !== collectionId) return capture;
+      const linked: LinkedCollection = {
+        id: created.id,
+        title: created.title,
+        description: created.description,
+        createdBy: "analysis",
+        rationale: capture.pendingSuggestion.rationale || null,
+        confidence: capture.pendingSuggestion.confidence ?? null,
+        linkedAt: Date.now()
+      };
+      return {
+        ...capture,
+        pendingSuggestion: null,
+        collectionSuggestionState: "none",
+        linkedCollections: [
+          ...(capture.linkedCollections || []).filter((collection) => collection.id !== created.id),
+          linked
+        ]
+      };
+    });
   }
 
   async function saveContextNote(capture: Capture, noteValue: string) {
@@ -3760,25 +3789,7 @@ export default function App() {
       if (collectionsModeRef.current === "active") {
         setCollections((current) => uniqueCollections([created, ...current.filter((item) => item.id !== created.id)]));
       }
-      if (selected?.pendingSuggestion?.collectionId === collectionId) {
-        const linked: LinkedCollection = {
-          id: created.id,
-          title: created.title,
-          description: created.description,
-          createdBy: "analysis",
-          rationale: selected.pendingSuggestion.rationale || null,
-          confidence: selected.pendingSuggestion.confidence ?? null,
-          linkedAt: Date.now()
-        };
-        applyUpdatedCapture({
-          ...selected,
-          pendingSuggestion: null,
-          linkedCollections: [
-            ...(selected.linkedCollections || []).filter((item) => item.id !== created.id),
-            linked
-          ]
-        }, selected.id);
-      }
+      linkPersistedSuggestionToKnownCaptures(collectionId, created);
       closeCollectionPicker();
       showToast(`Saved “${created.title}”.`, "success");
       void loadSuggestions();
