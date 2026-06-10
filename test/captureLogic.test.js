@@ -240,7 +240,7 @@ test("collection selection action ignores field review targets", () => {
       pendingReview: false,
       selectionChanged: true,
       shouldSave: true,
-      label: "Save collections"
+      label: "Save"
     }
   );
   assert.deepEqual(

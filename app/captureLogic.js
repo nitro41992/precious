@@ -250,7 +250,7 @@ function collectionSelectionActionState(capture, selectedCollectionIds, currentC
     selectionChanged,
     shouldSave,
     label: selectionChanged
-      ? "Save collections"
+      ? "Save"
       : pendingReview && selectedIds.length === 0
         ? "Confirm no collection"
         : pendingReview

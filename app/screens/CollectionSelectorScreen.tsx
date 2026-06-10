@@ -226,19 +226,6 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
           </View>
         </CollapsibleInsight>
       )}
-      {canCreate ? (
-        <MotionPressable
-          accessibilityRole="button"
-          onPress={openCreateCollection}
-          style={({ pressed }) => [styles.collectionCreateRow, pressed && styles.collectionCreateRowPressed]}
-          testID="pc.collection.create.open"
-        >
-          <View style={styles.collectionCreateIcon}>
-            <Plus color={colors.collectionAccentText} size={18} weight="bold" />
-          </View>
-          <Text style={styles.collectionCreateLabel}>New collection</Text>
-        </MotionPressable>
-      ) : null}
     </View>
   );
 
@@ -348,24 +335,36 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
           style={styles.collectionPickerList}
         />
         <View style={styles.collectionSelectionFooter}>
+          {canCreate ? (
+            <MotionPressable
+              accessibilityRole="button"
+              onPress={openCreateCollection}
+              style={({ pressed }) => [
+                styles.collectionFooterCreatePill,
+                pressed && styles.collectionFooterCreatePillPressed
+              ]}
+              testID="pc.collection.create.open"
+            >
+              <Plus color={colors.collectionAccentText} size={17} weight="bold" />
+              <Text style={styles.collectionFooterCreateText}>New collection</Text>
+            </MotionPressable>
+          ) : null}
           <MotionPressable
             disabled={selectionSaving}
             onPress={completeSelection}
             style={({ pressed }) => [
-              styles.primaryButton,
-              pressed && !selectionSaving && styles.primaryButtonPressed,
+              styles.collectionFooterDonePill,
+              pressed && !selectionSaving && styles.collectionFooterDonePillPressed,
               selectionSaving && styles.disabledButton
             ]}
             testID="pc.collection.select.save"
           >
-            <View style={styles.primaryButtonContent}>
-              {!selectionSaving && selectionAction.shouldSave ? (
-                <Check color={colors.onAccent} size={18} weight="bold" />
-              ) : null}
-              <Text style={styles.primaryButtonText}>
-                {selectionSaving ? "Saving..." : selectionAction.label}
-              </Text>
-            </View>
+            {!selectionSaving && selectionAction.shouldSave ? (
+              <Check color={colors.onAccent} size={17} weight="bold" />
+            ) : null}
+            <Text numberOfLines={1} style={styles.collectionFooterDoneText}>
+              {selectionSaving ? "Saving..." : selectionAction.label}
+            </Text>
           </MotionPressable>
         </View>
       </View>

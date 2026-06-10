@@ -771,35 +771,6 @@ export const styles = StyleSheet.create({
   collectionSelectorSuggestion: {
     paddingBottom: 12
   },
-  // "New collection" action row — a calm soft card matching the list rows, so its
-  // press feedback never flashes a loud accent (it shares the rows' neutral press).
-  collectionCreateRow: {
-    alignItems: "center",
-    backgroundColor: colors.surfaceContainerHigh,
-    borderRadius: 16,
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 8,
-    minHeight: 68,
-    paddingHorizontal: 14,
-    paddingVertical: 14
-  },
-  collectionCreateRowPressed: {
-    backgroundColor: colors.surfaceContainerHighest
-  },
-  collectionCreateIcon: {
-    alignItems: "center",
-    backgroundColor: colors.collectionAccentSoft,
-    borderRadius: 11,
-    height: 38,
-    justifyContent: "center",
-    width: 38
-  },
-  collectionCreateLabel: {
-    ...typefaces.displayMedium,
-    color: colors.ink,
-    fontSize: 15
-  },
   sheetBackdrop: {
     backgroundColor: colors.scrim,
     bottom: 0,
@@ -2253,13 +2224,60 @@ export const styles = StyleSheet.create({
   collectionSelectionControlSelected: {
     backgroundColor: colors.collectionAccent
   },
+  // A two-pill action bar, not a full-width block. The compact, fill-less New
+  // collection pill sits left; the primary Done pill grows to take the rest of the
+  // row (flex: 1) so it reads as the larger action and leaves no gap. Extra bottom
+  // inset clears the gesture-nav pill; no hairline border (paper fill + space separate).
   collectionSelectionFooter: {
+    alignItems: "center",
     backgroundColor: colors.paper,
-    borderTopColor: colors.line,
-    borderTopWidth: 0,
-    paddingBottom: Platform.OS === "android" ? 16 : 22,
+    flexDirection: "row",
+    gap: 10,
+    paddingBottom: Platform.OS === "android" ? 24 : 28,
     paddingHorizontal: 22,
-    paddingTop: 10
+    paddingTop: 12
+  },
+  collectionFooterCreatePill: {
+    alignItems: "center",
+    backgroundColor: "transparent",
+    borderRadius: 999,
+    flexDirection: "row",
+    flexShrink: 0,
+    gap: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 12
+  },
+  collectionFooterCreatePillPressed: {
+    backgroundColor: colors.collectionAccentSoft,
+    transform: [{ scale: 0.98 }]
+  },
+  collectionFooterCreateText: {
+    ...typefaces.bold,
+    color: colors.accentTextStrong,
+    fontSize: 15,
+    fontWeight: "700"
+  },
+  collectionFooterDonePill: {
+    alignItems: "center",
+    backgroundColor: colors.accent,
+    borderRadius: 999,
+    flex: 1,
+    flexDirection: "row",
+    gap: 7,
+    justifyContent: "center",
+    minWidth: 0,
+    paddingHorizontal: 20,
+    paddingVertical: 14
+  },
+  collectionFooterDonePillPressed: {
+    backgroundColor: colors.accentPressed,
+    transform: [{ scale: 0.98 }]
+  },
+  collectionFooterDoneText: {
+    ...typefaces.bold,
+    color: colors.onAccent,
+    fontSize: 15,
+    fontWeight: "800"
   },
   // The full-screen collection picker. It rides in on AnimatedBottomSheet (a
   // slide-up "push"), so it fills the screen as an opaque page. The sheet stays
