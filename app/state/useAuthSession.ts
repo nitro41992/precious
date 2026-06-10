@@ -172,7 +172,12 @@ export function useAuthSession({
         provider: "google",
         redirect_to: AUTH_CALLBACK_URL
       });
-      await Linking.openURL(`${config.supabaseUrl}/auth/v1/authorize?${params.toString()}`);
+      const authUrl = `${config.supabaseUrl}/auth/v1/authorize?${params.toString()}`;
+      if (nativeAuth?.openAuthUrl) {
+        await nativeAuth.openAuthUrl(authUrl);
+      } else {
+        await Linking.openURL(authUrl);
+      }
     } catch (error) {
       onMessage(friendlyError(error, "Could not open Google sign in."));
     } finally {

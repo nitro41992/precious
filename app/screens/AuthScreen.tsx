@@ -1,11 +1,19 @@
 import type { ReactNode } from "react";
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StatusBar,
   View
 } from "react-native";
-import { ArrowLeft, Check, EnvelopeSimple as Mail } from "phosphor-react-native";
+import {
+  ArrowLeft,
+  ArrowSquareOut,
+  BookmarkSimple,
+  Check,
+  EnvelopeSimple as Mail,
+  ShieldCheck
+} from "phosphor-react-native";
 
 import type { AuthLoadingState, AuthScreenMode } from "../types";
 import { appTheme, colors } from "../ui/theme";
@@ -35,6 +43,7 @@ export function AuthScreen({ actions, data, state }: AuthScreenProps) {
   const { appSheets, message } = data;
   const { authEmail, authLoading, authPendingEmail, authScreen } = state;
   const { backToSignIn, sendEmailAuthLink, setAuthEmail, startGoogleSignIn } = actions;
+  const pendingEmail = authPendingEmail || authEmail.trim() || "your email";
 
   return (
     <View style={styles.safe}>
@@ -47,8 +56,16 @@ export function AuthScreen({ actions, data, state }: AuthScreenProps) {
       >
         {authScreen === "signin" ? (
           <>
-            <Text style={[styles.title, styles.authTitle]}>Precious Captures</Text>
+            <View style={styles.authHero}>
+              <View style={styles.authBrandMark}>
+                <BookmarkSimple color={colors.onAccent} size={30} weight="fill" />
+              </View>
+              <Text style={[styles.title, styles.authTitle]}>Precious Captures</Text>
+              <Text style={styles.authSubtitle}>Save from any app. Find it when it matters.</Text>
+            </View>
             <Pressable
+              accessibilityHint="Opens a secure Google browser tab, then returns to Precious Captures."
+              accessibilityLabel="Continue with Google"
               disabled={Boolean(authLoading)}
               onPress={startGoogleSignIn}
               style={({ pressed }) => [
@@ -61,40 +78,62 @@ export function AuthScreen({ actions, data, state }: AuthScreenProps) {
               <View style={styles.authGoogleMark}>
                 <Text style={styles.authGoogleMarkText}>G</Text>
               </View>
-              <Text style={styles.authGoogleButtonText}>
-                {authLoading === "oauth" ? "Opening Google..." : "Continue with Google"}
-              </Text>
+              <View style={styles.authButtonCopy}>
+                <Text style={styles.authGoogleButtonText}>Continue with Google</Text>
+                <Text style={styles.authGoogleButtonSubtext}>
+                  {authLoading === "oauth" ? "Opening secure tab..." : "Uses a secure Google tab"}
+                </Text>
+              </View>
+              <View style={styles.authGoogleButtonIcon}>
+                {authLoading === "oauth" ? (
+                  <ActivityIndicator color={colors.paper} size="small" />
+                ) : (
+                  <ArrowSquareOut color={colors.paper} size={20} weight="bold" />
+                )}
+              </View>
             </Pressable>
-            <View style={styles.authDivider}>
-              <View style={styles.authDividerLine} />
-              <Text style={styles.authDividerText}>or</Text>
-              <View style={styles.authDividerLine} />
+            <View style={styles.authEmailPanel}>
+              <Text style={styles.authMethodLabel}>Or continue with email</Text>
+              <TextInput
+                autoCapitalize="none"
+                editable={!Boolean(authLoading)}
+                keyboardType="email-address"
+                onChangeText={setAuthEmail}
+                placeholder="you@example.com"
+                placeholderTextColor={colors.placeholder}
+                style={styles.authEmailInput}
+                testID="pc.auth.email"
+                value={authEmail}
+              />
+              <Pressable
+                accessibilityLabel="Continue with email"
+                disabled={Boolean(authLoading)}
+                onPress={sendEmailAuthLink}
+                style={({ pressed }) => [
+                  styles.authEmailButton,
+                  pressed && !authLoading && styles.primaryButtonPressed,
+                  authLoading && styles.disabledButton
+                ]}
+                testID="pc.auth.sign-in-link"
+              >
+                {authLoading === "magiclink" ? (
+                  <ActivityIndicator color={colors.onAccent} size="small" />
+                ) : (
+                  <Mail color={colors.onAccent} size={20} weight="bold" />
+                )}
+                <Text style={styles.primaryButtonText}>
+                  {authLoading === "magiclink" ? "Sending link..." : "Continue with email"}
+                </Text>
+              </Pressable>
             </View>
-            <TextInput
-              autoCapitalize="none"
-              keyboardType="email-address"
-              onChangeText={setAuthEmail}
-              placeholder="Email"
-              placeholderTextColor={colors.placeholder}
-              style={styles.authEmailInput}
-              testID="pc.auth.email"
-              value={authEmail}
-            />
-            <Pressable
-              disabled={Boolean(authLoading)}
-              onPress={sendEmailAuthLink}
-              style={({ pressed }) => [
-                styles.authEmailButton,
-                pressed && !authLoading && styles.primaryButtonPressed,
-                authLoading && styles.disabledButton
-              ]}
-              testID="pc.auth.sign-in-link"
-            >
-              <Mail color={colors.onAccent} size={20} weight="bold" />
-              <Text style={styles.primaryButtonText}>
-                {authLoading === "magiclink" ? "Sending..." : "Send sign-in link"}
+            <View style={styles.authTrustRow}>
+              <View style={styles.authTrustIcon}>
+                <ShieldCheck color={colors.accentTextStrong} size={18} weight="fill" />
+              </View>
+              <Text style={styles.authTrustText}>
+                Use the same email with Google and links to keep one account.
               </Text>
-            </Pressable>
+            </View>
             {message ? <Text style={styles.errorText}>{message}</Text> : null}
           </>
         ) : (
@@ -113,29 +152,40 @@ export function AuthScreen({ actions, data, state }: AuthScreenProps) {
                 <Text style={[styles.title, styles.authTitle]}>Check your email</Text>
               </View>
             </View>
-            <View style={styles.authSuccessMark}>
-              <Check color={colors.onAccent} size={28} weight="bold" />
+            <View style={styles.authCheckHero}>
+              <View style={styles.authSuccessMark}>
+                <Check color={colors.onAccent} size={28} weight="bold" />
+              </View>
+              <Text style={[styles.supportingText, styles.authSupportingText]}>
+                Open the secure link on this phone and we'll bring you back here.
+              </Text>
+              <Text style={styles.authEmailPill}>{pendingEmail}</Text>
             </View>
-            <Text style={[styles.supportingText, styles.authSupportingText]}>
-              We sent a secure link to {authPendingEmail || authEmail.trim() || "your email"}. Open it on this phone to continue.
-            </Text>
-            <Pressable
-              disabled={Boolean(authLoading)}
-              onPress={backToSignIn}
-              style={[styles.primaryButton, authLoading && styles.disabledButton]}
-              testID="pc.auth.check.sign-in"
-            >
-              <Text style={styles.primaryButtonText}>Back to sign in</Text>
-            </Pressable>
             <Pressable
               disabled={Boolean(authLoading)}
               onPress={sendEmailAuthLink}
-              style={[styles.secondaryButton, authLoading && styles.disabledButton]}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                pressed && !authLoading && styles.primaryButtonPressed,
+                authLoading && styles.disabledButton
+              ]}
               testID="pc.auth.check.resend"
             >
-              <Text style={styles.secondaryButtonText}>
+              <Text style={styles.primaryButtonText}>
                 {authLoading === "magiclink" ? "Sending..." : "Send again"}
               </Text>
+            </Pressable>
+            <Pressable
+              disabled={Boolean(authLoading)}
+              onPress={backToSignIn}
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                pressed && !authLoading && styles.secondaryButtonPressed,
+                authLoading && styles.disabledButton
+              ]}
+              testID="pc.auth.check.sign-in"
+            >
+              <Text style={styles.secondaryButtonText}>Use a different email</Text>
             </Pressable>
             {message ? <Text style={styles.errorText}>{message}</Text> : null}
           </>

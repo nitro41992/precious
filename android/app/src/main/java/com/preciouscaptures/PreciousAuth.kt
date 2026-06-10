@@ -1,6 +1,11 @@
 package com.preciouscaptures
 
 import android.content.Context
+import android.content.Intent
+import android.graphics.Color
+import android.net.Uri
+import androidx.browser.customtabs.CustomTabColorSchemeParams
+import androidx.browser.customtabs.CustomTabsIntent
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -16,6 +21,35 @@ class PreciousAuthModule(
   private val reactContext: ReactApplicationContext
 ) : ReactContextBaseJavaModule(reactContext) {
   override fun getName(): String = "PreciousAuth"
+
+  @ReactMethod
+  fun openAuthUrl(url: String, promise: Promise) {
+    try {
+      val uri = Uri.parse(url)
+      val colorParams = CustomTabColorSchemeParams.Builder()
+        .setToolbarColor(Color.parseColor("#F6F7F8"))
+        .build()
+      val customTabsIntent = CustomTabsIntent.Builder()
+        .setDefaultColorSchemeParams(colorParams)
+        .setShareState(CustomTabsIntent.SHARE_STATE_OFF)
+        .setShowTitle(true)
+        .setUrlBarHidingEnabled(true)
+        .build()
+
+      customTabsIntent.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      customTabsIntent.launchUrl(reactContext.currentActivity ?: reactContext, uri)
+      promise.resolve(true)
+    } catch (error: Exception) {
+      try {
+        val fallback = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+          .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        reactContext.startActivity(fallback)
+        promise.resolve(true)
+      } catch (fallbackError: Exception) {
+        promise.reject("auth_url_open_failed", fallbackError)
+      }
+    }
+  }
 
   @ReactMethod
   fun getConfig(promise: Promise) {
