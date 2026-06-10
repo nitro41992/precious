@@ -299,8 +299,6 @@ export type CaptureReviewDraft = {
   titleDirty?: boolean;
   note?: string;
   noteDirty?: boolean;
-  intent?: string;
-  intentDirty?: boolean;
   reminders?: Record<string, ReminderDraftAction>;
   collections?: Record<string, CollectionDraftAction>;
   updatedAt?: number;
@@ -310,6 +308,8 @@ export type CaptureStore = {
   captureSource: (sourceText: string) => Promise<string>;
   captureImage?: () => Promise<string | null>;
   captureCameraImage?: () => Promise<string | null>;
+  attachCaptureImage?: (id: string) => Promise<string | null>;
+  attachCaptureCameraImage?: (id: string) => Promise<string | null>;
   submitExpandedUrl?: (id: string, expandedUrl: string) => Promise<string>;
   getCaptures: () => Promise<string>;
   getCachedCapturePage?: (userId: string, mode: "active" | "archived") => Promise<string | null>;
@@ -361,6 +361,7 @@ export type NativeAuth = {
   getSession: () => Promise<string | null>;
   refreshSession: () => Promise<string | null>;
   forceRefreshSession?: () => Promise<string | null>;
+  openAuthUrl?: (url: string) => Promise<boolean>;
   persistSession: (
     accessToken: string | null,
     refreshToken: string | null,

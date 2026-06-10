@@ -36,7 +36,6 @@ import {
   extractHttpUrl,
   hostFromUrl,
   isDeleted,
-  normalizeIntent as normalizeKnownIntent,
   statusLabel,
   uniqueCapturesByIdentity
 } from "./captureLogic";
@@ -51,7 +50,6 @@ type SaveIntentConfig = {
 export const INTENT_CONFIG = (saveIntents as SaveIntentConfig[]).filter((intent) => intent.active);
 export const INTENT_OPTIONS = INTENT_CONFIG.map((intent) => intent.key);
 export const INTENT_LABELS = new Map(INTENT_CONFIG.map((intent) => [intent.key, intent.label]));
-export const ADD_INTENT_LABEL = "Add intent";
 const NEUTRAL_REVIEW_RATIONALE: Required<ReviewRationale> = {
   focus: "Review details",
   summary: "Review the suggested details",
@@ -99,14 +97,6 @@ export function humanize(value: string | undefined) {
   return value
     .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-export function normalizeIntent(value: string | undefined) {
-  return normalizeKnownIntent(value, INTENT_OPTIONS);
-}
-
-export function activeIntentLabel(value: string | undefined) {
-  return value ? INTENT_LABELS.get(value) || "" : "";
 }
 
 export function deviceTimeZone() {
@@ -1010,10 +1000,6 @@ export function captureStatusLabel(capture: Capture) {
   return statusLabel(status);
 }
 
-export function captureIntentLabel(capture: Capture) {
-  return activeIntentLabel(capture.defaultIntent);
-}
-
 export function auditLikeText(value: string | null | undefined) {
   return /url returned|saved url failed|saved link:|failed to fetch metadata|could not fetch metadata|metadata fetch|metadata|no readable title|readable title|readable description|path suggests|generic evidence|insufficient url|link saved from android share|android share|untitled capture|extraction|analysis|confidence|analysis model|model provider|provider/i.test(
     String(value || "")
@@ -1350,18 +1336,7 @@ export function captureFieldStates(capture: Capture): CaptureFieldState[] {
   const collectionSuggested = !linkedCollectionValue && Boolean(pendingSuggestionTitle);
   const collectionValue = collectionSuggested ? pendingSuggestionTitle : linkedCollectionValue;
   const reminder = (capture.suggestedReminders || [])[0];
-  const intentValue = activeIntentLabel(capture.defaultIntent);
   return [
-    {
-      ...captureFieldState({
-        kind: "purpose",
-        value: intentValue,
-        emptyLabel: ADD_INTENT_LABEL
-      }),
-      kind: "purpose" as const,
-      label: "Purpose",
-      emptyLabel: ADD_INTENT_LABEL
-    },
     {
       ...captureFieldState({
         kind: "collection",
@@ -1399,29 +1374,6 @@ export function captureFieldRationale(
     text: "",
     visible: false
   };
-  if (field === "purpose") {
-    const currentIntent = normalizeIntent(capture.defaultIntent);
-    const purposeRationale = capture.fieldRationales?.purpose;
-    const rawAiIntent = purposeRationale && Object.prototype.hasOwnProperty.call(purposeRationale, "selectionKey")
-      ? purposeRationale.selectionKey || ""
-      : capture.aiDefaultIntent || capture.defaultIntent;
-    const aiIntent = normalizeIntent(rawAiIntent);
-    const structuredText = rationaleLine(capture.fieldRationales?.purpose?.text);
-    const fallbackText = rationaleLine(capture.intentRationale);
-    const legacyText = !structuredText && !fallbackText
-      ? authoredRationaleLine(capture, "intent", capture.reviewRationale?.intent)
-      : "";
-    const text = structuredText || fallbackText || legacyText;
-    const legacyVisible = Boolean(legacyText && currentIntent === aiIntent);
-    return {
-      ...base,
-      text,
-      visible: Boolean(
-        text &&
-          (captureFieldRationaleVisible(capture, field, { allowedIntents: INTENT_OPTIONS }) || legacyVisible)
-      )
-    };
-  }
   if (field === "collection") {
     const fallbackAiCollections = (capture.linkedCollections || [])
       .filter((collection) => collection.createdBy === "analysis");
@@ -1556,17 +1508,12 @@ export function cleanedReviewDraft(draft: CaptureReviewDraft): CaptureReviewDraf
     next.note = draft.note;
     next.noteDirty = true;
   }
-  if (draft.intentDirty) {
-    next.intent = typeof draft.intent === "string" ? draft.intent : "";
-    next.intentDirty = true;
-  }
   if (draft.reminders && Object.keys(draft.reminders).length) {
     next.reminders = draft.reminders;
   }
   const hasChanges = Boolean(
     next.titleDirty ||
       next.noteDirty ||
-      next.intentDirty ||
       next.reminders
   );
   return hasChanges ? next : null;

@@ -80,7 +80,6 @@ import {
   insertCollectionAtAnchor,
   isCaptureImageCancel,
   mergeCollectionsPreservingOrder,
-  normalizeIntent,
   reminderSuggestionFromSchedule,
   uniqueCaptures,
   uniqueCollections
@@ -122,7 +121,6 @@ import type { DeleteTraceToken } from "./deleteTrace";
 import type { MapSearchCandidate } from "./captureLogic";
 import {
   captureIdentityAliases,
-  captureIntentPatchBody,
   collectionSelectionActionState,
   capturesForListMode,
   extractHttpUrl,
@@ -856,8 +854,6 @@ export default function App() {
   const [restoredCollectionId, setRestoredCollectionId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftNote, setDraftNote] = useState("");
-  const [draftIntent, setDraftIntent] = useState("");
-  const [quickIntentOpen, setQuickIntentOpen] = useState(false);
   const [reminderDrafts, setReminderDrafts] = useState<Record<string, ReminderDraftAction>>({});
   const [collectionDrafts, setCollectionDrafts] = useState<Record<string, CollectionDraftAction>>({});
   const [collectionPickerOpen, setCollectionPickerOpen] = useState(false);
@@ -882,7 +878,6 @@ export default function App() {
   const [collectionComposerForPicker, setCollectionComposerForPicker] = useState(false);
   const [draftTitleDirty, setDraftTitleDirty] = useState(false);
   const [draftNoteDirty, setDraftNoteDirty] = useState(false);
-  const [draftIntentDirty, setDraftIntentDirty] = useState(false);
   const [message, setMessage] = useState("");
   const [toast, setToast] = useState<ToastState | null>(null);
   const [sourceDraft, setSourceDraft] = useState("");
@@ -1548,8 +1543,6 @@ export default function App() {
     setShowCollectionForm(false);
     setDraftTitleDirty(false);
     setDraftNoteDirty(false);
-    setDraftIntentDirty(false);
-    setQuickIntentOpen(false);
     setReminderDrafts({});
     setCollectionDrafts({});
     setNoteSheetOpen(false);
@@ -2064,8 +2057,6 @@ export default function App() {
   const selectCapture = useCallback((captureId: string | null, options?: { snapshot?: Capture | null }) => {
     setDraftTitleDirty(false);
     setDraftNoteDirty(false);
-    setDraftIntentDirty(false);
-    setQuickIntentOpen(false);
     setReminderDrafts({});
     setReminderSheetOpen(false);
     setCollectionDrafts({});
@@ -2225,7 +2216,6 @@ export default function App() {
       }
       setDraftTitle(capture.title);
       setDraftNote(capture.note);
-      setDraftIntent(normalizeIntent(capture.defaultIntent));
       selectCapture(capture.id);
     },
     [archivedCaptures, captures, remoteSearchResults, selectCapture]
@@ -2264,7 +2254,6 @@ export default function App() {
       if (snapshot) {
         setDraftTitle(snapshot.title);
         setDraftNote(snapshot.note);
-        setDraftIntent(normalizeIntent(snapshot.defaultIntent));
       }
       selectCapture(captureId, { snapshot });
       void loadCaptures();
@@ -2306,7 +2295,6 @@ export default function App() {
       setCaptureReviewOrigin("collection");
       setDraftTitle(capture.title);
       setDraftNote(capture.note);
-      setDraftIntent(normalizeIntent(capture.defaultIntent));
       selectCapture(capture.id);
     });
   }, [selectCapture, startReviewHandoff]);
@@ -2320,7 +2308,6 @@ export default function App() {
       setCaptureReviewOrigin("search");
       setDraftTitle(capture.title);
       setDraftNote(capture.note);
-      setDraftIntent(normalizeIntent(capture.defaultIntent));
       selectCapture(capture.id);
     });
   }, [selectCapture, startReviewHandoff]);
@@ -2584,7 +2571,6 @@ export default function App() {
   }
 
   function openNoteSheet() {
-    setQuickIntentOpen(false);
     setMessage("");
     primeSheetSurface({ keyboardUp: true });
     setNoteSheetOpen(true);
@@ -2598,7 +2584,6 @@ export default function App() {
   }
 
   function openTitleSheet() {
-    setQuickIntentOpen(false);
     setMessage("");
     primeSheetSurface({ keyboardUp: true });
     setTitleSheetOpen(true);
@@ -3043,7 +3028,6 @@ export default function App() {
     collectionTitleInputRef,
     collections,
     collectionsOpen,
-    draftIntentDirty,
     draftNoteDirty,
     draftTitleDirty,
     lastKeyboardHeightRef,
@@ -3065,15 +3049,12 @@ export default function App() {
     setCollectionSearchOpen,
     setCollectionTitle,
     setCollectionsOpen,
-    setDraftIntent,
     setDraftNote,
     setDraftTitle,
     setKeyboardHeight,
-    setQuickIntentOpen,
     setReminderSheetOpen,
     setSearchOpen,
     setSuggestionsOpen,
-    quickIntentOpen,
     reminderSheetOpen,
     showCaptureComposer,
     showCollectionForm,
@@ -3217,13 +3198,10 @@ export default function App() {
     if (!selected) {
       setDraftTitle("");
       setDraftNote("");
-      setDraftIntent("");
       setDraftTitleDirty(false);
       setDraftNoteDirty(false);
-      setDraftIntentDirty(false);
       setReminderDrafts({});
       setCollectionDrafts({});
-      setQuickIntentOpen(false);
       setCollectionPickerOpen(false);
       setCollectionPickerQuery("");
       setNoteSheetOpen(false);
@@ -3232,18 +3210,11 @@ export default function App() {
     const savedDraft = reviewDraftsByCapture[captureDraftKey(selected)] || {};
     setDraftTitle(savedDraft.titleDirty && typeof savedDraft.title === "string" ? savedDraft.title : selected.title);
     setDraftNote(savedDraft.noteDirty && typeof savedDraft.note === "string" ? savedDraft.note : selected.note);
-    setDraftIntent(
-      savedDraft.intentDirty && typeof savedDraft.intent === "string"
-        ? savedDraft.intent
-        : normalizeIntent(selected.defaultIntent)
-    );
     setDraftTitleDirty(Boolean(savedDraft.titleDirty));
     setDraftNoteDirty(Boolean(savedDraft.noteDirty));
-    setDraftIntentDirty(Boolean(savedDraft.intentDirty));
     setReminderDrafts(savedDraft.reminders || {});
     setCollectionDrafts({});
     setNoteSaveState("idle");
-    setQuickIntentOpen(false);
     setCollectionPickerOpen(false);
     setCollectionPickerQuery("");
   }, [reviewDraftsByCapture, selectedDraftKey]);
@@ -3486,7 +3457,6 @@ export default function App() {
 
   async function saveReviewDecisions() {
     if (!selected) return;
-    const currentSaveIntent = draftIntentDirty ? draftIntent || null : undefined;
 
     if (config?.apiUrl && session) {
       try {
@@ -3495,7 +3465,6 @@ export default function App() {
           title: draftTitle.trim(),
           note: draftNote.trim()
         };
-        if (currentSaveIntent !== undefined) body.currentSaveIntent = currentSaveIntent;
         const json = await withFreshAccessToken((accessToken) =>
           requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
             method: "PATCH",
@@ -3511,7 +3480,6 @@ export default function App() {
         applyUpdatedCapture(updatedCapture, selected.id);
         setDraftTitleDirty(false);
         setDraftNoteDirty(false);
-        setDraftIntentDirty(false);
         setReminderDrafts({});
         setCollectionDrafts({});
         clearSelectedReviewDraft(selected);
@@ -3527,61 +3495,15 @@ export default function App() {
       selected.id,
       draftTitle.trim(),
       draftNote.trim(),
-      draftIntentDirty ? draftIntent || null : selected.defaultIntent || null
+      selected.defaultIntent || null
     );
     replaceLocalCaptureLists(JSON.parse(raw || "[]") as Capture[]);
     setDraftTitleDirty(false);
     setDraftNoteDirty(false);
-    setDraftIntentDirty(false);
     setReminderDrafts({});
     setCollectionDrafts({});
     clearSelectedReviewDraft(selected);
     showToast("Review saved.", "success");
-  }
-
-  async function savePurposeIntent(intent: string | null) {
-    if (!selected) return;
-    if (config?.apiUrl && session) {
-      try {
-        const json = await withFreshAccessToken((accessToken) =>
-          requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
-            method: "PATCH",
-            headers: {
-              apikey: config.supabaseAnonKey,
-              authorization: `Bearer ${accessToken}`,
-              "content-type": "application/json"
-            },
-            body: captureIntentPatchBody(selected.remoteId || selected.id, intent)
-          })
-        );
-        const updatedCapture = captureFromRemote(json.capture);
-        applyUpdatedCapture(updatedCapture, selected.id);
-        setDraftIntent(normalizeIntent(updatedCapture.defaultIntent));
-        setDraftIntentDirty(false);
-        setQuickIntentOpen(false);
-        showToast("Purpose updated.", "success");
-      } catch (error) {
-        showErrorToast(error, "Could not update purpose.");
-      }
-      return;
-    }
-
-    if (!nativeStore) return;
-    try {
-      const raw = await nativeStore.updateCapture(
-        selected.id,
-        selected.title,
-        selected.note,
-        intent
-      );
-      replaceLocalCaptureLists(JSON.parse(raw || "[]") as Capture[]);
-      setDraftIntent(intent || "");
-      setDraftIntentDirty(false);
-      setQuickIntentOpen(false);
-      showToast("Purpose updated.", "success");
-    } catch (error) {
-      showErrorToast(error, "Could not update purpose.");
-    }
   }
 
   async function collectionRequest<T>(
@@ -4699,6 +4621,33 @@ export default function App() {
     }
   }
 
+  async function attachCapturePhoto(source: "camera" | "library") {
+    if (!selected) return;
+    const attach =
+      source === "camera" ? nativeStore?.attachCaptureCameraImage : nativeStore?.attachCaptureImage;
+    if (!attach) {
+      showToast("Adding a photo isn't available in this build.", "error");
+      return;
+    }
+    if (pickingCaptureImage || captureImagePickerActiveRef.current) return;
+    captureImagePickerActiveRef.current = true;
+    setPickingCaptureImage(true);
+    setToast(null);
+    try {
+      const raw = await attach(selected.id);
+      if (!raw) return;
+      const next = JSON.parse(raw || "[]") as Capture[];
+      replaceLocalCaptureLists(next);
+      showToast({ text: "Photo added. Re-checking the capture now.", tone: "processing" });
+    } catch (error) {
+      if (isCaptureImageCancel(error)) return;
+      showErrorToast(error, "Could not add the photo.");
+    } finally {
+      captureImagePickerActiveRef.current = false;
+      setPickingCaptureImage(false);
+    }
+  }
+
   async function syncCaptureDeleteNetwork(
     capture: Capture,
     action: "delete" | "undo_delete",
@@ -5147,17 +5096,14 @@ export default function App() {
           openNoteSheet,
           openTitleSheet,
           openVisitTargetMaps: (candidate) => void openVisitTargetMaps(candidate),
+          attachCapturePhoto: (source) => void attachCapturePhoto(source),
           pasteExpandedUrl: () => void pasteExpandedUrl(),
           removeReminder: (reminderIndex) => void dismissReminder(reminderIndex),
           saveReminder: (draft, reminderIndex) => void saveReminder(draft, reminderIndex),
-          savePurposeIntent: (intent) => void savePurposeIntent(intent),
-          setDraftIntent,
-          setDraftIntentDirty,
           setDraftNote,
           setDraftNoteDirty,
           setDraftTitle,
           setDraftTitleDirty,
-          setQuickIntentOpen,
           setReminderSheetOpen,
           updateSelectedReviewDraft
         }}
@@ -5188,8 +5134,6 @@ export default function App() {
         }}
         state={{
           collectionChoiceSaving,
-          draftIntent,
-          draftIntentDirty,
           draftNote,
           draftNoteDirty,
           draftTitle,
@@ -5197,7 +5141,6 @@ export default function App() {
           noteSaveState,
           noteSheetOpen,
           titleSheetOpen,
-          quickIntentOpen,
           reminderDrafts,
           reminderSheetOpen
         }}

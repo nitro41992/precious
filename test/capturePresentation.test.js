@@ -22,16 +22,23 @@ function loadCapturePresentation() {
   const module = { exports: {} };
   const localRequire = (specifier) => {
     if (specifier === "phosphor-react-native") {
-      const Icon = () => null;
-      return {
-        BookOpen: Icon,
-        Calendar: Icon,
-        ImageSquare: Icon,
-        Link: Icon,
-        MapPin: Icon,
-        Note: Icon,
-        ShoppingBag: Icon
-      };
+      // Each named icon resolves to a stable stub tagged with its name, so tests
+      // can assert which icon a capture maps to by identity/name.
+      const iconStubs = new Map();
+      return new Proxy(
+        {},
+        {
+          get(_target, name) {
+            if (typeof name !== "string") return undefined;
+            if (!iconStubs.has(name)) {
+              const Icon = () => null;
+              Icon.iconName = name;
+              iconStubs.set(name, Icon);
+            }
+            return iconStubs.get(name);
+          }
+        }
+      );
     }
     if (specifier === "./captureLogic") return require("../app/captureLogic");
     if (specifier === "../supabase/functions/_shared/save-intents.json") {

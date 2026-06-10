@@ -548,10 +548,6 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingTop: 8
   },
-  purposeSheet: {
-    gap: 12,
-    paddingBottom: Platform.OS === "android" ? 34 : 42
-  },
   fieldRationaleBox: {
     backgroundColor: colors.surfaceContainerHigh,
     borderColor: colors.line,
@@ -766,42 +762,6 @@ export const styles = StyleSheet.create({
     ...typefaces.displayMedium,
     color: colors.ink,
     fontSize: 15
-  },
-  purposeOptionGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8
-  },
-  purposeOption: {
-    alignItems: "center",
-    backgroundColor: colors.surfaceContainerHigh,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 0,
-    flexGrow: 0,
-    justifyContent: "center",
-    minHeight: 54,
-    minWidth: 0,
-    paddingHorizontal: 12,
-    width: "31.6%"
-  },
-  purposeOptionWide: {
-    width: "100%"
-  },
-  purposeOptionSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent
-  },
-  purposeOptionText: {
-    color: colors.ink,
-    ...typefaces.bold,
-    fontSize: 14,
-    fontWeight: "800",
-    lineHeight: 18,
-    textAlign: "center"
-  },
-  purposeOptionTextSelected: {
-    color: colors.onAccent
   },
   sheetBackdrop: {
     backgroundColor: colors.scrim,
@@ -2331,7 +2291,22 @@ export const styles = StyleSheet.create({
     alignItems: "stretch",
     flexGrow: 1,
     justifyContent: "center",
-    paddingBottom: 82
+    paddingBottom: 82,
+    paddingTop: 42
+  },
+  authHero: {
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4
+  },
+  authBrandMark: {
+    alignItems: "center",
+    backgroundColor: colors.accent,
+    borderRadius: 18,
+    height: 64,
+    justifyContent: "center",
+    marginBottom: 6,
+    width: 64
   },
   authHeaderRow: {
     alignItems: "center",
@@ -2343,8 +2318,21 @@ export const styles = StyleSheet.create({
     gap: 4
   },
   authTitle: {
-    marginBottom: 8,
+    marginBottom: 0,
     textAlign: "center"
+  },
+  authSubtitle: {
+    alignSelf: "center",
+    color: colors.muted,
+    fontSize: 16,
+    lineHeight: 23,
+    maxWidth: 320,
+    textAlign: "center"
+  },
+  authCheckHero: {
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 6
   },
   authSuccessMark: {
     alignItems: "center",
@@ -2361,8 +2349,8 @@ export const styles = StyleSheet.create({
     borderRadius: 8,
     flexDirection: "row",
     gap: 12,
-    justifyContent: "center",
-    minHeight: 58,
+    justifyContent: "flex-start",
+    minHeight: 66,
     paddingHorizontal: 16,
     paddingVertical: 14
   },
@@ -2378,6 +2366,11 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     width: 32
   },
+  authButtonCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0
+  },
   authGoogleMarkText: {
     color: colors.ink,
     ...typefaces.black,
@@ -2389,6 +2382,30 @@ export const styles = StyleSheet.create({
     ...typefaces.bold,
     fontSize: 16,
     fontWeight: "800"
+  },
+  authGoogleButtonSubtext: {
+    color: colors.surfaceContainerHighest,
+    ...typefaces.medium,
+    fontSize: 12.5,
+    lineHeight: 17
+  },
+  authGoogleButtonIcon: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 22
+  },
+  authEmailPanel: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    gap: 10,
+    padding: 14
+  },
+  authMethodLabel: {
+    color: colors.muted,
+    ...typefaces.bold,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18
   },
   authDivider: {
     alignItems: "center",
@@ -2431,7 +2448,45 @@ export const styles = StyleSheet.create({
     paddingVertical: 13
   },
   authSupportingText: {
+    maxWidth: 310,
     textAlign: "center"
+  },
+  authEmailPill: {
+    backgroundColor: colors.surfaceContainer,
+    borderRadius: 8,
+    color: colors.ink,
+    ...typefaces.bold,
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 19,
+    maxWidth: "100%",
+    overflow: "hidden",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    textAlign: "center"
+  },
+  authTrustRow: {
+    alignItems: "flex-start",
+    backgroundColor: colors.surfaceContainer,
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 9,
+    paddingHorizontal: 12,
+    paddingVertical: 11
+  },
+  authTrustIcon: {
+    alignItems: "center",
+    height: 20,
+    justifyContent: "center",
+    marginTop: 1,
+    width: 20
+  },
+  authTrustText: {
+    color: colors.muted,
+    flex: 1,
+    ...typefaces.medium,
+    fontSize: 13,
+    lineHeight: 19
   },
   reviewShell: {
     flex: 1
@@ -2835,18 +2890,6 @@ export const styles = StyleSheet.create({
     overflow: "hidden",
     paddingVertical: 7
   },
-  reviewEditRailIntent: {
-    borderRadius: 6,
-    gap: 4,
-    justifyContent: "center",
-    minHeight: 72,
-    minWidth: 98,
-    paddingHorizontal: 10,
-    width: 108
-  },
-  reviewEditRailIntentActive: {
-    backgroundColor: colors.accentSoft
-  },
   reviewEditRailPressed: {
     backgroundColor: colors.surfaceContainerHigh
   },
@@ -2856,12 +2899,6 @@ export const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0,
     lineHeight: 14
-  },
-  reviewEditRailIntentValue: {
-    color: colors.ink,
-    fontSize: 23,
-    fontWeight: "800",
-    lineHeight: 29
   },
   reviewEditRailDivider: {
     backgroundColor: colors.line,
@@ -3581,23 +3618,6 @@ export const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8
   },
-  intentChip: {
-    backgroundColor: colors.surfaceContainer,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8
-  },
-  intentChipSelected: {
-    backgroundColor: colors.accent
-  },
-  intentChipText: {
-    color: colors.ink,
-    fontSize: 13,
-    fontWeight: "700"
-  },
-  intentChipTextSelected: {
-    color: colors.onAccent
-  },
   noteInput: {
     backgroundColor: colors.reviewCardWell,
     borderRadius: 8,
@@ -3850,6 +3870,10 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     minHeight: 50,
     paddingVertical: 14
+  },
+  secondaryButtonPressed: {
+    backgroundColor: colors.surfaceContainerHigh,
+    transform: [{ scale: 0.99 }]
   },
   secondaryButtonText: {
     color: colors.ink,

@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 import { Animated, View } from "react-native";
 import { Image } from "expo-image";
-import { CalendarBlank, Folder, ImageSquare, Lightbulb, MinusCircle, Plus, Sparkle } from "phosphor-react-native";
+import { CalendarBlank, Folder, ImageSquare, MinusCircle, Plus, Sparkle } from "phosphor-react-native";
 import Reanimated, { useAnimatedStyle, useSharedValue, withDelay, withTiming } from "react-native-reanimated";
 
 import { collectionCollageSlots, hostFromUrl } from "../captureLogic";
@@ -10,7 +10,6 @@ import {
   captureDisplayTitle,
   captureFaviconHost,
   captureImageLoadKey,
-  captureIntentLabel,
   captureRowRevealKey,
   captureRowSourceLabel,
   formatDateTime,
@@ -83,7 +82,6 @@ export function CaptureRow({
         !rowRevealed &&
         (imageLoadKey ? !imageLoadState : true))
   );
-  const intentLabel = captureIntentLabel(item);
   const collectionTokens = showCollectionToken ? item.linkedCollections || [] : [];
   const reminderText = reminderLabel(
     (item.suggestedReminders || []).find((reminder) => reminder.status !== "removed")
@@ -92,8 +90,7 @@ export function CaptureRow({
   // Analysis is ready but its new-Collection suggestion is still resolving in the background.
   const suggestionPending = !suggestionLabel && item.collectionSuggestionState === "pending";
   const hasMeaningTokens = Boolean(
-    intentLabel ||
-      reminderText ||
+    reminderText ||
       suggestionLabel ||
       suggestionPending ||
       collectionTokens.some((collection) => collection.title.trim())
@@ -170,9 +167,6 @@ export function CaptureRow({
         ) : null}
         {hasMeaningTokens ? (
           <View style={styles.rowMeaningLine}>
-            {intentLabel ? (
-              <MeaningToken Icon={Lightbulb} text={intentLabel} />
-            ) : null}
             <CollectionMeaningToken collections={collectionTokens} />
             {suggestionLabel ? (
               <MeaningToken Icon={Sparkle} iconColor={colors.accentTextStrong} text={suggestionLabel} />

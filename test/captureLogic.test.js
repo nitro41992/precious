@@ -5,7 +5,6 @@ const {
   LOCAL_PROCESSING_GRACE_MS,
   captureIdentityAliases,
   captureFieldRationaleVisible,
-  captureIntentPatchBody,
   collectionCollageSlots,
   capturesForListMode,
   capturesForSearchScope,
@@ -15,6 +14,7 @@ const {
   displayStatus,
   extractHttpUrl,
   hostFromUrl,
+  isRejected,
   mapSearchCandidates,
   mapSearchCandidatesForVisitTarget,
   mapsSearchUrls,
@@ -172,8 +172,8 @@ test("reviewReasons ignores field uncertainty and keeps confirmed reviews ready"
     []
   );
   assert.equal(
-    reviewReasonSummary(["intent", "analysis"]),
-    "Intent uncertain, Analysis needs review"
+    reviewReasonSummary(["collections", "analysis"]),
+    "Collection needs review, Analysis needs review"
   );
   assert.deepEqual(
     reviewReasons(capture({ status: "needs_review", needsReview: true, reviewConfirmedAt: Date.now() })),
@@ -602,24 +602,6 @@ test("capture fields fall back to add labels when empty", () => {
   );
 });
 
-test("capture intent patch body uses direct field editing contract", () => {
-  assert.deepEqual(
-    captureIntentPatchBody("capture-123", "watch"),
-    {
-      captureId: "capture-123",
-      currentSaveIntent: "watch"
-    }
-  );
-  assert.deepEqual(
-    captureIntentPatchBody("capture-123", null),
-    {
-      captureId: "capture-123",
-      currentSaveIntent: null
-    }
-  );
-  assert.equal(Object.hasOwn(captureIntentPatchBody("capture-123", "read"), "action"), false);
-  assert.equal(Object.hasOwn(captureIntentPatchBody("capture-123", "read"), "resolvedTargets"), false);
-});
 
 test("displayStatus keeps extracted failed captures visible as ready but blocks analysis review", () => {
   assert.equal(displayStatus(capture({ status: "failed", summary: "Recovered extraction" })), "ready");
@@ -668,6 +650,19 @@ test("capture scope helpers keep only active captures visible", () => {
   assert.deepEqual(capturesForSearchScope(rows, "active").map((item) => item.id), ["active"]);
   assert.deepEqual(capturesForSearchScope(rows, "archived").map((item) => item.id), ["active"]);
   assert.deepEqual(capturesForSearchScope(rows, "all").map((item) => item.id), ["active"]);
+});
+
+test("contextless analysis failures stay visible and recoverable", () => {
+  // Links we couldn't read are kept as failed captures (not tombstoned) so the
+  // user can add a photo or fill in details. Only the legacy contextless_rejected
+  // tombstone is hidden.
+  const failed = capture({ id: "failed", status: "failed", analysisMode: "contextless_failed" });
+  const tombstoned = capture({ id: "tombstoned", rejectedAt: 5678, analysisMode: "contextless_rejected" });
+  const rows = [failed, tombstoned];
+
+  assert.equal(isRejected(failed), false);
+  assert.equal(isRejected(tombstoned), true);
+  assert.deepEqual(capturesForListMode(rows, "active").map((item) => item.id), ["failed"]);
 });
 
 test("capture identity aliases compare local and remote ids without source dedupe", () => {

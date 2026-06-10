@@ -9,7 +9,6 @@ import {
 } from "react-native";
 import type { TextInput } from "react-native";
 
-import { normalizeIntent } from "../capturePresentation";
 import type {
   Capture,
   CaptureComposerMode,
@@ -38,7 +37,6 @@ export function useAppUiEffects({
   collectionTitleInputRef,
   collections,
   collectionsOpen,
-  draftIntentDirty,
   draftNoteDirty,
   draftTitleDirty,
   lastKeyboardHeightRef,
@@ -47,7 +45,6 @@ export function useAppUiEffects({
   titleInputRef,
   titleSheetOpen,
   pickingCaptureImage,
-  quickIntentOpen,
   reminderSheetOpen,
   reviewMotion,
   searchMotion,
@@ -62,11 +59,9 @@ export function useAppUiEffects({
   setCollectionSearchOpen,
   setCollectionTitle,
   setCollectionsOpen,
-  setDraftIntent,
   setDraftNote,
   setDraftTitle,
   setKeyboardHeight,
-  setQuickIntentOpen,
   setReminderSheetOpen,
   setSearchOpen,
   setSuggestionsOpen,
@@ -96,7 +91,6 @@ export function useAppUiEffects({
   collectionTitleInputRef: RefObject<TextInput | null>;
   collections: Collection[];
   collectionsOpen: boolean;
-  draftIntentDirty: boolean;
   draftNoteDirty: boolean;
   draftTitleDirty: boolean;
   lastKeyboardHeightRef: MutableRefObject<number>;
@@ -105,7 +99,6 @@ export function useAppUiEffects({
   titleInputRef: RefObject<TextInput | null>;
   titleSheetOpen: boolean;
   pickingCaptureImage: boolean;
-  quickIntentOpen: boolean;
   reminderSheetOpen: boolean;
   reviewMotion: Animated.Value;
   searchMotion: Animated.Value;
@@ -120,11 +113,9 @@ export function useAppUiEffects({
   setCollectionSearchOpen: (value: boolean) => void;
   setCollectionTitle: (value: string) => void;
   setCollectionsOpen: (value: boolean) => void;
-  setDraftIntent: (value: string) => void;
   setDraftNote: (value: string) => void;
   setDraftTitle: (value: string) => void;
   setKeyboardHeight: (value: number) => void;
-  setQuickIntentOpen: (value: boolean) => void;
   setReminderSheetOpen: (value: boolean) => void;
   setSearchOpen: (value: boolean) => void;
   setSuggestionsOpen: (value: boolean) => void;
@@ -139,14 +130,11 @@ export function useAppUiEffects({
     if (!capture) return;
     if (!draftTitleDirty) setDraftTitle(capture.title);
     if (!draftNoteDirty) setDraftNote(capture.note);
-    if (!draftIntentDirty) setDraftIntent(normalizeIntent(capture.defaultIntent));
   }, [
     captures,
-    draftIntentDirty,
     draftNoteDirty,
     draftTitleDirty,
     selectedId,
-    setDraftIntent,
     setDraftNote,
     setDraftTitle
   ]);
@@ -176,7 +164,6 @@ export function useAppUiEffects({
       !noteSheetOpen &&
       !titleSheetOpen &&
       !collectionPickerOpen &&
-      !quickIntentOpen &&
       !reminderSheetOpen &&
       !collectionsOpen &&
       !suggestionsOpen &&
@@ -185,10 +172,6 @@ export function useAppUiEffects({
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
       if (collectionPickerOpen) {
         closeCollectionPicker();
-        return true;
-      }
-      if (quickIntentOpen) {
-        setQuickIntentOpen(false);
         return true;
       }
       if (reminderSheetOpen) {
@@ -266,7 +249,6 @@ export function useAppUiEffects({
     collectionsOpen,
     noteSheetOpen,
     titleSheetOpen,
-    quickIntentOpen,
     reminderSheetOpen,
     searchOpen,
     suggestionsOpen,
@@ -277,7 +259,6 @@ export function useAppUiEffects({
     setAccountSheetOpen,
     setCollectionSearchOpen,
     setCollectionsOpen,
-    setQuickIntentOpen,
     setReminderSheetOpen,
     setSearchOpen,
     setSuggestionsOpen,

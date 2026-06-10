@@ -899,6 +899,7 @@ export function sourceIconColor(status: CaptureStatus) {
   return colors.accentText;
 }
 
+
 export function StatusGlyph({ capture }: { capture: Capture }) {
   const status = displayStatus(capture);
   if (status === "ready" || status === "needs_review") return null;

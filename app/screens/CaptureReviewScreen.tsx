@@ -46,9 +46,6 @@ import type {
   ReminderScheduleDraft
 } from "../types";
 import {
-  ADD_INTENT_LABEL,
-  INTENT_OPTIONS,
-  activeIntentLabel,
   captureFieldRationale,
   captureFieldStates,
   captureFullImageCacheKey,
@@ -60,7 +57,6 @@ import {
   captureSourceLabel,
   captureStatusLabel,
   formatDateTime,
-  normalizeIntent,
   isImageCapture,
   reminderDraftKey,
   reminderLabel,
@@ -72,7 +68,7 @@ import { ReminderEditorSheet } from "../sheets/ReminderEditorSheet";
 import { motionDuration, motionEasing, motionReduceMotion, reviewHeroExpandedScale } from "../ui/motion";
 import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
-import { AiFieldInsight, AnimatedBottomSheet, KeyboardSheet, MotionPressable, ProcessingStatusPill, SheetHeader, SourceMark, keyboardSheetMetrics } from "../ui/components";
+import { KeyboardSheet, MotionPressable, ProcessingStatusPill, SheetHeader, SourceMark, keyboardSheetMetrics } from "../ui/components";
 import { Text, TextInput } from "../ui/typography";
 
 type ReviewHandoffRect = {
@@ -105,8 +101,6 @@ type CaptureReviewScreenProps = {
   };
   state: {
     collectionChoiceSaving: string | null;
-    draftIntent: string;
-    draftIntentDirty: boolean;
     draftNote: string;
     draftNoteDirty: boolean;
     draftTitle: string;
@@ -114,7 +108,6 @@ type CaptureReviewScreenProps = {
     noteSaveState: NoteSaveState;
     noteSheetOpen: boolean;
     titleSheetOpen: boolean;
-    quickIntentOpen: boolean;
     reminderDrafts: Record<string, ReminderDraftAction>;
     reminderSheetOpen: boolean;
   };
@@ -139,17 +132,14 @@ type CaptureReviewScreenProps = {
     openNoteSheet: () => void;
     openTitleSheet: () => void;
     openVisitTargetMaps: (candidate: MapSearchCandidate) => void;
+    attachCapturePhoto: (source: "camera" | "library") => void;
     pasteExpandedUrl: () => void;
     removeReminder: (reminderIndex: number) => void;
     saveReminder: (draft: ReminderScheduleDraft, reminderIndex: number | null) => void;
-    savePurposeIntent: (intent: string | null) => void;
-    setDraftIntent: (value: string) => void;
-    setDraftIntentDirty: (value: boolean) => void;
     setDraftNote: (value: string) => void;
     setDraftNoteDirty: (value: boolean) => void;
     setDraftTitle: (value: string) => void;
     setDraftTitleDirty: (value: boolean) => void;
-    setQuickIntentOpen: Dispatch<SetStateAction<boolean>>;
     setReminderSheetOpen: Dispatch<SetStateAction<boolean>>;
     updateSelectedReviewDraft: (patch: Partial<CaptureReviewDraft>) => void;
   };
@@ -361,15 +351,12 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   } = data;
   const {
     collectionChoiceSaving,
-    draftIntent,
-    draftIntentDirty,
     draftNote,
     draftNoteDirty,
     draftTitle,
     noteSaveState,
     noteSheetOpen,
     titleSheetOpen,
-    quickIntentOpen,
     reminderDrafts,
     reminderSheetOpen
   } = state;
@@ -388,17 +375,14 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     openNoteSheet,
     openTitleSheet,
     openVisitTargetMaps,
+    attachCapturePhoto,
     pasteExpandedUrl,
     removeReminder,
     saveReminder,
-    savePurposeIntent,
-    setDraftIntent,
-    setDraftIntentDirty,
     setDraftNote,
     setDraftNoteDirty,
     setDraftTitle,
     setDraftTitleDirty,
-    setQuickIntentOpen,
     setReminderSheetOpen,
     updateSelectedReviewDraft
   } = actions;
@@ -533,19 +517,15 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
   const [imageViewerSource, setImageViewerSource] = useState<{ cacheKey: string; url: string } | null>(null);
   const selectedReviewReasons = reviewReasons(selected);
-  const aiIntentValue = normalizeIntent(selected.defaultIntent);
-  const quickIntentValue = draftIntentDirty ? draftIntent : aiIntentValue;
   const reminderRows = selected.suggestedReminders || [];
   const primaryReminderIndex = reminderRows.findIndex((reminder, index) => {
     return reminderDrafts[reminderDraftKey(reminder, index)] !== "remove";
   });
   const primaryReminder = primaryReminderIndex >= 0 ? reminderRows[primaryReminderIndex] : undefined;
   const meaningFields = captureFieldStates(selected);
-  const purposeField = meaningFields.find((field) => field.kind === "purpose");
   const collectionField = meaningFields.find((field) => field.kind === "collection");
   const laterField = meaningFields.find((field) => field.kind === "later");
   const laterParts = laterField?.hasValue ? reminderLabelParts(reminderRows[0]) : null;
-  const purposeRationale = captureFieldRationale(selected, "purpose");
   const reminderRationale = captureFieldRationale(selected, "later");
   const urlEvidenceNotice = urlEvidenceMessage(selected.urlEvidence);
   const selectedVisitTarget = selected.visitTarget;
@@ -831,10 +811,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   }
 
   function openInlineField(kind: CaptureFieldKind) {
-    if (kind === "purpose") {
-      setQuickIntentOpen(true);
-      return;
-    }
     if (kind === "collection") {
       void openCollectionPicker();
       return;
@@ -1146,28 +1122,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                   <View style={styles.quickEditBlock}>
                     <Text style={styles.reviewActionLabel}>Saved as</Text>
                     <View style={styles.propertyRowsCard}>
-                      {purposeField ? (
-                        <MotionPressable
-                          accessibilityLabel={`Purpose: ${purposeField.displayValue}`}
-                          accessibilityRole="button"
-                          onPress={() => openInlineField("purpose")}
-                          pressScale={1}
-                          style={({ pressed }) => [styles.propertyRow, pressed && styles.propertyRowPressed]}
-                          testID="pc.review.intent.open"
-                        >
-                          <Text style={styles.propertyRowLabel}>Purpose</Text>
-                          <Text
-                            numberOfLines={1}
-                            style={[
-                              styles.propertyRowValue,
-                              !purposeField.hasValue && styles.propertyRowValuePending
-                            ]}
-                          >
-                            {purposeField.displayValue}
-                          </Text>
-                          <CaretRight color={colors.placeholder} size={17} weight="bold" />
-                        </MotionPressable>
-                      ) : null}
                       {collectionField ? (
                         <MotionPressable
                           accessibilityLabel={`Collection: ${collectionField.displayValue}`}
@@ -1269,6 +1223,37 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                   ) : null}
                   <View style={styles.reviewActionBlock}>
                     <Text style={styles.reviewActionLabel}>Capture actions</Text>
+                    {selectedStatus === "failed" && !isImageCapture(selected) ? (
+                      <>
+                        <MotionPressable
+                          accessibilityRole="button"
+                          onPress={() => attachCapturePhoto("library")}
+                          style={({ pressed }) => [styles.noteActionCard, pressed && styles.subtlePressed]}
+                          testID="pc.review.photo.add"
+                        >
+                          <View style={styles.noteActionCardIcon}>
+                            <Camera color={colors.accentTextStrong} size={21} weight="bold" />
+                          </View>
+                          <View style={styles.noteActionCopy}>
+                            <View style={styles.noteActionHeader}>
+                              <Text style={styles.noteActionTitle}>Add a photo</Text>
+                            </View>
+                            <Text numberOfLines={2} style={styles.noteActionPreview}>
+                              A screenshot or photo helps us read this capture.
+                            </Text>
+                          </View>
+                          <CaretRight color={colors.muted} size={18} weight="bold" />
+                        </MotionPressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => attachCapturePhoto("camera")}
+                          style={styles.secondaryButton}
+                          testID="pc.review.photo.camera"
+                        >
+                          <Text style={styles.secondaryButtonText}>Take photo</Text>
+                        </Pressable>
+                      </>
+                    ) : null}
                     <MotionPressable
                       accessibilityRole="button"
                       onPress={openNoteSheet}
@@ -1395,66 +1380,6 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
           </View>
         </KeyboardSheet>
       ) : null}
-      <AnimatedBottomSheet
-        closeLabel="Close Purpose choices"
-        onClose={() => setQuickIntentOpen(false)}
-        sheetStyle={[styles.actionSheet, styles.purposeSheet]}
-        visible={quickIntentOpen}
-      >
-            <View style={styles.sheetGrabber} />
-            <SheetHeader
-              closeLabel="Close Purpose choices"
-              onClose={() => setQuickIntentOpen(false)}
-              subtitle="Choose what this capture should help you do later."
-              title="Purpose"
-            />
-            {purposeRationale.visible ? (
-              <AiFieldInsight insight={purposeRationale} />
-            ) : null}
-            <View style={styles.purposeOptionGrid}>
-              {INTENT_OPTIONS.map((intent) => {
-                const selectedIntent = quickIntentValue === intent;
-                return (
-                  <MotionPressable
-                    accessibilityRole="button"
-                    key={intent}
-                    onPress={() => {
-                      setQuickIntentOpen(false);
-                      savePurposeIntent(intent);
-                    }}
-                    style={({ pressed }) => [
-                      styles.purposeOption,
-                      selectedIntent && styles.purposeOptionSelected,
-                      pressed && styles.subtlePressed
-                    ]}
-                    testID={`pc.intent.option.${intent}`}
-                  >
-                    <Text style={[styles.purposeOptionText, selectedIntent && styles.purposeOptionTextSelected]}>
-                      {activeIntentLabel(intent)}
-                    </Text>
-                  </MotionPressable>
-                );
-              })}
-              <MotionPressable
-                accessibilityRole="button"
-                onPress={() => {
-                  setQuickIntentOpen(false);
-                  savePurposeIntent(null);
-                }}
-                style={({ pressed }) => [
-                  styles.purposeOption,
-                  styles.purposeOptionWide,
-                  !quickIntentValue && styles.purposeOptionSelected,
-                  pressed && styles.subtlePressed
-                ]}
-                testID="pc.intent.option.none"
-              >
-                <Text style={[styles.purposeOptionText, !quickIntentValue && styles.purposeOptionTextSelected]}>
-                  No intent
-                </Text>
-              </MotionPressable>
-            </View>
-      </AnimatedBottomSheet>
       <CaptureImageViewer
         cacheKey={imageViewerSource?.cacheKey || ""}
         imageUrl={imageViewerSource?.url || ""}

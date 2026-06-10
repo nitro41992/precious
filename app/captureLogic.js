@@ -1,5 +1,5 @@
 const LOCAL_PROCESSING_GRACE_MS = 30 * 60 * 1000;
-const REVIEW_TARGETS = ["intent", "collections", "reminder", "analysis"];
+const REVIEW_TARGETS = ["collections", "reminder", "analysis"];
 const REVIEW_TARGET_SET = new Set(REVIEW_TARGETS);
 const CAPTURE_LINK_PATTERN = /^(?:https?:\/\/)?(?=.{1,2048}$)(?!.*\s)(?!.*@)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?::[0-9]{1,5})?(?:[/?#][^\s]*)?$/i;
 const CAPTURE_LINK_HOST_PATTERN = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
@@ -48,13 +48,6 @@ function parseCaptureUrl(url) {
 function normalizeIntent(value, allowedIntents = []) {
   if (!value) return "";
   return allowedIntents.includes(value) ? value : "";
-}
-
-function captureIntentPatchBody(captureId, currentSaveIntent) {
-  return {
-    captureId,
-    currentSaveIntent: currentSaveIntent || null
-  };
 }
 
 function mapsSearchUrls(query) {
@@ -407,7 +400,6 @@ function reviewReasons(capture) {
 }
 
 function reviewReasonLabel(reason) {
-  if (reason === "intent") return "Intent uncertain";
   if (reason === "collections") return "Collection needs review";
   if (reason === "reminder") return "Reminder needs review";
   return "Analysis needs review";
@@ -584,7 +576,6 @@ module.exports = {
   REVIEW_TARGETS,
   captureIdentityAliases,
   captureFieldRationaleVisible,
-  captureIntentPatchBody,
   capturesForListMode,
   capturesForSearchScope,
   capturesShareIdentity,
