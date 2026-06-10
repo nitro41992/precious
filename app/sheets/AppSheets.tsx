@@ -1,47 +1,63 @@
-import { View } from "react-native";
-import { SignOut as LogOut } from "phosphor-react-native";
+import { ActivityIndicator, View } from "react-native";
 
 import { AnimatedBottomSheet, MotionPressable, SheetHeader } from "../ui/components";
 import { styles } from "../ui/styles";
 import { colors } from "../ui/theme";
 import { Text } from "../ui/typography";
 
+// The account-deletion confirmation sheet. Sign-out and the rest of the account
+// surface now live on the full-page Settings screen; this sheet is the single,
+// deliberate gate in front of the irreversible delete.
 export function AppSheets({
-  accountSheetOpen,
-  onSignOut,
-  setAccountSheetOpen
+  deleteConfirmOpen,
+  deleteBusy,
+  onConfirmDelete,
+  onCloseDeleteConfirm
 }: {
-  accountSheetOpen: boolean;
-  onSignOut: () => void;
-  setAccountSheetOpen: (value: boolean) => void;
+  deleteConfirmOpen: boolean;
+  deleteBusy: boolean;
+  onConfirmDelete: () => void;
+  onCloseDeleteConfirm: () => void;
 }) {
   return (
     <AnimatedBottomSheet
-      closeLabel="Close account actions"
-      onClose={() => setAccountSheetOpen(false)}
+      closeLabel="Close delete account"
+      onClose={() => {
+        if (!deleteBusy) onCloseDeleteConfirm();
+      }}
       sheetStyle={styles.actionSheet}
-      visible={accountSheetOpen}
+      visible={deleteConfirmOpen}
     >
-          <View style={styles.sheetGrabber} />
-          <SheetHeader
-            closeLabel="Close account actions"
-            onClose={() => setAccountSheetOpen(false)}
-            subtitle="Manage this device session."
-            title="Settings"
-          />
-          <MotionPressable
-            onPress={() => {
-              setAccountSheetOpen(false);
-              onSignOut();
-            }}
-            style={({ pressed }) => [styles.sheetActionRow, pressed && styles.subtlePressed]}
-          >
-            <LogOut color={colors.danger} size={20} weight="bold" />
-            <View style={styles.sheetActionCopy}>
-              <Text style={[styles.sheetActionTitle, styles.sheetActionDanger]}>Sign out</Text>
-              <Text style={styles.sheetActionText}>Remove this session from the phone.</Text>
-            </View>
-          </MotionPressable>
+      <View style={styles.sheetGrabber} />
+      <SheetHeader
+        closeLabel="Close delete account"
+        onClose={() => {
+          if (!deleteBusy) onCloseDeleteConfirm();
+        }}
+        title="Delete account"
+      />
+      <Text style={styles.settingsDeleteConfirmCopy}>
+        This permanently deletes your account and all captures, collections, and saved media. This cannot be undone.
+      </Text>
+      <MotionPressable
+        accessibilityLabel="Delete account"
+        accessibilityRole="button"
+        disabled={deleteBusy}
+        onPress={onConfirmDelete}
+        style={({ pressed }) => [
+          styles.primaryButton,
+          styles.destructiveButton,
+          styles.settingsDeleteButton,
+          pressed && styles.settingsDeleteButtonPressed,
+          deleteBusy && styles.disabledButton
+        ]}
+      >
+        {deleteBusy ? (
+          <ActivityIndicator color={colors.onDanger} />
+        ) : (
+          <Text style={styles.destructiveButtonText}>Delete my account</Text>
+        )}
+      </MotionPressable>
     </AnimatedBottomSheet>
   );
 }

@@ -28,6 +28,10 @@ export function useAuthSession({
 }) {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [session, setSession] = useState<AuthSession | null>(null);
+  // The signed-in email is kept in JS only (the persisted native session holds
+  // just ids/tokens). It is captured at sign-in and lazily re-fetched on cold
+  // start, where the restored session carries no email.
+  const [sessionEmail, setSessionEmail] = useState<string | null>(null);
   const [authScreen, setAuthScreen] = useState<AuthScreenMode>("signin");
   const [authEmail, setAuthEmail] = useState("");
   const [authPendingEmail, setAuthPendingEmail] = useState("");
@@ -40,7 +44,7 @@ export function useAuthSession({
     if (!config?.supabaseUrl || !config.supabaseAnonKey || !nativeAuth) {
       throw new Error("Supabase URL and anon key are not configured in the Android build.");
     }
-    const user = await requestJson<{ id?: string; user?: { id?: string } }>(`${config.supabaseUrl}/auth/v1/user`, {
+    const user = await requestJson<{ id?: string; email?: string; user?: { id?: string; email?: string } }>(`${config.supabaseUrl}/auth/v1/user`, {
       headers: {
         apikey: config.supabaseAnonKey,
         authorization: `Bearer ${accessToken}`
@@ -51,6 +55,7 @@ export function useAuthSession({
     const next = { accessToken, refreshToken, expiresAt, userId };
     await nativeAuth.persistSession(accessToken, refreshToken, expiresAt, userId);
     setSession(next);
+    setSessionEmail(user.email || user.user?.email || null);
     onMessage("");
     setAuthScreen("signin");
   }, [config?.supabaseAnonKey, config?.supabaseUrl, onMessage]);
@@ -122,6 +127,28 @@ export function useAuthSession({
       cancelled = true;
     };
   }, [configLoaded, session, sessionLoaded]);
+
+  // On cold start the session is restored from native storage without an email,
+  // so fetch it once from the auth user endpoint to populate the account header.
+  useEffect(() => {
+    if (!session?.accessToken || sessionEmail || !config?.supabaseUrl || !config.supabaseAnonKey) return;
+    let cancelled = false;
+    requestJson<{ email?: string; user?: { email?: string } }>(`${config.supabaseUrl}/auth/v1/user`, {
+      headers: {
+        apikey: config.supabaseAnonKey,
+        authorization: `Bearer ${session.accessToken}`
+      }
+    })
+      .then((user) => {
+        if (cancelled) return;
+        const email = user.email || user.user?.email;
+        if (email) setSessionEmail(email);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [config?.supabaseAnonKey, config?.supabaseUrl, session?.accessToken, sessionEmail]);
 
   const getFreshSession = useCallback(async (force = false) => {
     if (!session) return null;
@@ -237,6 +264,7 @@ export function useAuthSession({
   async function signOut() {
     await nativeAuth?.clearSession();
     setSession(null);
+    setSessionEmail(null);
     onClearAuthenticatedState();
   }
 
@@ -251,6 +279,7 @@ export function useAuthSession({
     handleAuthCallbackUrl,
     sendEmailAuthLink,
     session,
+    sessionEmail,
     setAuthEmail,
     signOut,
     startGoogleSignIn,

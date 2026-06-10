@@ -2,6 +2,7 @@ import { adminClient, currentUser } from "../supabase.ts";
 import { corsHeaders } from "../config.ts";
 import { errorMessage } from "../common.ts";
 import { json } from "../http.ts";
+import { handleAccountResource } from "./account.ts";
 import { handleClientEventsResource } from "../client-events.ts";
 import { handleCapturesResource } from "./captures.ts";
 import { handleCollectionCapturesResource } from "./collection-captures.ts";
@@ -62,6 +63,10 @@ export async function handleCaptureIntakeRequest(request: Request) {
 
     if (resource === "purge-deleted") {
       return await handlePurgeDeletedResource(request, supabase, user.id, url);
+    }
+
+    if (resource === "account") {
+      return await handleAccountResource(request, supabase, user.id);
     }
 
     return await handleCapturesResource(request, supabase, user.id, url);

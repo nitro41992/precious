@@ -1708,6 +1708,141 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingTop: 8
   },
+  // Settings page: the app's standard soft shadowed cards (softCardRadius) and
+  // Geist typefaces. Circular brand-lime icon chips carry routine rows; the
+  // single permanent action (delete) is isolated in a red card at the bottom.
+  settingsContent: {
+    gap: 22,
+    paddingBottom: 72,
+    paddingHorizontal: 20,
+    paddingTop: 8
+  },
+  settingsAccountCard: {
+    ...softCardShadow,
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: softCardRadius,
+    flexDirection: "row",
+    gap: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 18
+  },
+  settingsAvatar: {
+    alignItems: "center",
+    backgroundColor: colors.accent,
+    borderRadius: 28,
+    height: 56,
+    justifyContent: "center",
+    width: 56
+  },
+  settingsAvatarText: {
+    ...typefaces.bold,
+    color: colors.onAccent,
+    fontSize: 24
+  },
+  settingsAccountTextCol: {
+    flex: 1,
+    gap: 4,
+    minWidth: 0
+  },
+  settingsAccountLabel: {
+    ...typefaces.displaySemibold,
+    color: colors.accentTextStrong,
+    fontSize: 12,
+    letterSpacing: 0.6,
+    textTransform: "uppercase"
+  },
+  settingsAccountEmail: {
+    ...typefaces.bold,
+    color: colors.ink,
+    fontSize: 18
+  },
+  settingsSection: {
+    gap: 10
+  },
+  settingsSectionLabel: {
+    ...typefaces.displaySemibold,
+    color: colors.muted,
+    fontSize: 13,
+    letterSpacing: 0.3,
+    paddingHorizontal: 6,
+    textTransform: "uppercase"
+  },
+  settingsGroup: {
+    gap: 10
+  },
+  settingsRow: {
+    ...softCardShadow,
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: softCardRadius,
+    flexDirection: "row",
+    gap: 16,
+    minHeight: 64,
+    paddingHorizontal: 16,
+    paddingVertical: 14
+  },
+  settingsRowPressed: {
+    backgroundColor: colors.surfaceContainer
+  },
+  settingsRowCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0
+  },
+  settingsRowTitle: {
+    ...typefaces.bold,
+    color: colors.ink,
+    fontSize: 16
+  },
+  settingsRowDanger: {
+    color: colors.danger
+  },
+  settingsRowSubtitle: {
+    ...typefaces.regular,
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18
+  },
+  settingsRowIconDanger: {
+    alignItems: "center",
+    backgroundColor: colors.dangerSoft,
+    borderRadius: 22,
+    height: 44,
+    justifyContent: "center",
+    width: 44
+  },
+  settingsRowIconNeutral: {
+    alignItems: "center",
+    backgroundColor: colors.accentSoft,
+    borderRadius: 22,
+    height: 44,
+    justifyContent: "center",
+    width: 44
+  },
+  settingsDangerZone: {
+    gap: 10,
+    marginTop: 8
+  },
+  settingsVersionText: {
+    ...typefaces.regular,
+    color: colors.placeholder,
+    fontSize: 13,
+    paddingTop: 6,
+    textAlign: "center"
+  },
+  settingsDeleteConfirmCopy: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20,
+    paddingBottom: 4
+  },
+  settingsDeleteButton: {
+    marginTop: 4
+  },
+  settingsDeleteButtonPressed: {
+    opacity: 0.85
+  },
   // Collections list banner: primary "Add collection" pill + secondary
   // "See suggestions" entry. Soft pills, no hairline; pressed fills hug each
   // pill's own rounded footprint.

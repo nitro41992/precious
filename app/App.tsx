@@ -40,6 +40,8 @@ import { createAppRenderHelpers } from "./ui/renderHelpers";
 import { motionEasing, motionPaneTransition, motionReduceMotion, reviewHeroExpandedScale } from "./ui/motion";
 import { styles } from "./ui/styles";
 import { appTheme } from "./ui/theme";
+import { PRIVACY_POLICY_URL, SUPPORT_EMAIL, TERMS_URL } from "./ui/links";
+import appJson from "../app.json";
 
 import type {
   Capture,
@@ -110,6 +112,7 @@ import { CollectionSearchScreen } from "./screens/CollectionSearchScreen";
 import { CollectionsScreen } from "./screens/CollectionsScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { SearchScreen } from "./screens/SearchScreen";
+import { SettingsScreen } from "./screens/SettingsScreen";
 import { SuggestionsScreen } from "./screens/SuggestionsScreen";
 import {
   createDeleteTrace,
@@ -888,7 +891,9 @@ export default function App() {
   const [noteSheetOpen, setNoteSheetOpen] = useState(false);
   const [titleSheetOpen, setTitleSheetOpen] = useState(false);
   const [reminderSheetOpen, setReminderSheetOpen] = useState(false);
-  const [accountSheetOpen, setAccountSheetOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteAccountBusy, setDeleteAccountBusy] = useState(false);
   const [faviconFailures, setFaviconFailures] = useState<Record<string, boolean>>({});
   const [savingCapture, setSavingCapture] = useState(false);
   const [pickingCaptureImage, setPickingCaptureImage] = useState(false);
@@ -1640,6 +1645,7 @@ export default function App() {
     handleAuthCallbackUrl,
     sendEmailAuthLink,
     session,
+    sessionEmail,
     setAuthEmail,
     signOut,
     startGoogleSignIn,
@@ -2421,12 +2427,49 @@ export default function App() {
     setCollectionSearchOpen(false);
     setSuggestionsOpen(false);
     setCollectionsOpen(false);
-    setAccountSheetOpen(false);
+    setSettingsOpen(false);
     setMessage("");
   }
 
   function openAccountActions() {
-    setAccountSheetOpen(true);
+    selectCapture(null);
+    selectCollection(null);
+    setSearchOpen(false);
+    setCollectionSearchOpen(false);
+    setSuggestionsOpen(false);
+    setCollectionsOpen(false);
+    setMessage("");
+    setSettingsOpen(true);
+  }
+
+  function closeSettings() {
+    setSettingsOpen(false);
+  }
+
+  async function deleteAccount() {
+    if (!config?.apiUrl) return;
+    setDeleteAccountBusy(true);
+    try {
+      await withFreshAccessToken(async (accessToken) =>
+        requestJson(edgeResourceUrl(config.apiUrl, "account"), {
+          method: "DELETE",
+          headers: {
+            accept: "application/json",
+            apikey: config.supabaseAnonKey,
+            authorization: `Bearer ${accessToken}`
+          }
+        })
+      );
+      setDeleteConfirmOpen(false);
+      setSettingsOpen(false);
+      // signOut clears the native session and returns to the auth screen via
+      // onClearAuthenticatedState; the account and its data are already gone.
+      await signOut();
+    } catch (error) {
+      setMessage(friendlyError(error, "Could not delete your account."));
+    } finally {
+      setDeleteAccountBusy(false);
+    }
   }
 
   function resetCaptureComposerSurface() {
@@ -2493,7 +2536,7 @@ export default function App() {
     setCollectionSearchOpen(false);
     setSuggestionsOpen(false);
     setCollectionsOpen(true);
-    setAccountSheetOpen(false);
+    setSettingsOpen(false);
     setMessage("");
     setCollectionTitle("");
     setCollectionDescription("");
@@ -2597,7 +2640,7 @@ export default function App() {
     setSearchOpen(false);
     setCollectionSearchOpen(false);
     setSuggestionsOpen(false);
-    setAccountSheetOpen(false);
+    setSettingsOpen(false);
     setCollectionsMode(mode);
     setCollectionsOpen(true);
     setSelectedCollectionId(null);
@@ -2620,7 +2663,7 @@ export default function App() {
     selectCollection(null);
     setSearchOpen(false);
     setSuggestionsOpen(false);
-    setAccountSheetOpen(false);
+    setSettingsOpen(false);
     setCollectionSearchQuery("");
     setCollectionSearchOpen(true);
   }
@@ -2635,7 +2678,7 @@ export default function App() {
     selectCollection(null);
     setSearchOpen(false);
     setCollectionSearchOpen(false);
-    setAccountSheetOpen(false);
+    setSettingsOpen(false);
     setSuggestionsOpen(true);
   }
 
@@ -2975,7 +3018,8 @@ export default function App() {
   });
 
   useAppUiEffects({
-    accountSheetOpen,
+    settingsOpen,
+    deleteConfirmOpen,
     captureComposerClosing,
     captureComposerClosingRef,
     captureSheetOpen,
@@ -3012,7 +3056,8 @@ export default function App() {
     selectCollection,
     selectedCollectionId,
     selectedId,
-    setAccountSheetOpen,
+    setSettingsOpen,
+    setDeleteConfirmOpen,
     setCollectionDescription,
     setCollectionSearchOpen,
     setCollectionTitle,
@@ -4997,9 +5042,10 @@ export default function App() {
     return (
       <>
         <AppSheets
-          accountSheetOpen={accountSheetOpen}
-          onSignOut={() => void signOut()}
-          setAccountSheetOpen={setAccountSheetOpen}
+          deleteBusy={deleteAccountBusy}
+          deleteConfirmOpen={deleteConfirmOpen}
+          onCloseDeleteConfirm={() => setDeleteConfirmOpen(false)}
+          onConfirmDelete={() => void deleteAccount()}
         />
         {selected ? (
           <CollectionSelectorScreen
@@ -5292,6 +5338,30 @@ export default function App() {
     );
   }
 
+  function renderSettingsOverlay({ includeChrome = true }: { includeChrome?: boolean } = {}) {
+    return (
+      <View style={styles.screenOverlay}>
+        <SettingsScreen
+          actions={{
+            closeSettings,
+            signOut: () => void signOut(),
+            openDeleteConfirm: () => setDeleteConfirmOpen(true),
+            openPrivacyPolicy: () => void Linking.openURL(PRIVACY_POLICY_URL),
+            openTerms: () => void Linking.openURL(TERMS_URL),
+            openNotificationSettings: () => void Linking.openSettings(),
+            openSupportEmail: () => void Linking.openURL(`mailto:${SUPPORT_EMAIL}`)
+          }}
+          data={{
+            appSheets: includeChrome ? renderAppSheets() : null,
+            appVersion: appJson.expo.version,
+            email: sessionEmail,
+            toast: includeChrome ? renderToast() : null
+          }}
+        />
+      </View>
+    );
+  }
+
   function renderTopLevelStack({
     active = "recent",
     underlay = null,
@@ -5552,6 +5622,13 @@ export default function App() {
           }}
         />
       )
+    });
+  }
+
+  if (settingsOpen) {
+    return renderTopLevelStack({
+      active: "recent",
+      underlay: renderSettingsOverlay()
     });
   }
 

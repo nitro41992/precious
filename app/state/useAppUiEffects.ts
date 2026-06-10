@@ -18,7 +18,8 @@ import type {
 } from "../types";
 
 export function useAppUiEffects({
-  accountSheetOpen,
+  settingsOpen,
+  deleteConfirmOpen,
   captureComposerClosing,
   captureComposerClosingRef,
   captureSheetOpen,
@@ -56,7 +57,8 @@ export function useAppUiEffects({
   selectCollection,
   selectedCollectionId,
   selectedId,
-  setAccountSheetOpen,
+  setSettingsOpen,
+  setDeleteConfirmOpen,
   setCollectionDescription,
   setCollectionSearchOpen,
   setCollectionTitle,
@@ -72,7 +74,8 @@ export function useAppUiEffects({
   skeletonPulse,
   sourceInputRef
 }: {
-  accountSheetOpen: boolean;
+  settingsOpen: boolean;
+  deleteConfirmOpen: boolean;
   captureComposerClosing: boolean;
   captureComposerClosingRef: MutableRefObject<boolean>;
   captureSheetOpen: SharedValue<number>;
@@ -110,7 +113,8 @@ export function useAppUiEffects({
   selectCollection: (collectionId: string | null) => void;
   selectedCollectionId: string | null;
   selectedId: string | null;
-  setAccountSheetOpen: (value: boolean) => void;
+  setSettingsOpen: (value: boolean) => void;
+  setDeleteConfirmOpen: (value: boolean) => void;
   setCollectionDescription: (value: string) => void;
   setCollectionSearchOpen: (value: boolean) => void;
   setCollectionTitle: (value: string) => void;
@@ -169,7 +173,8 @@ export function useAppUiEffects({
       !reminderSheetOpen &&
       !collectionsOpen &&
       !suggestionsOpen &&
-      !accountSheetOpen
+      !settingsOpen &&
+      !deleteConfirmOpen
     ) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
       if (collectionPickerOpen) {
@@ -180,8 +185,14 @@ export function useAppUiEffects({
         setReminderSheetOpen(false);
         return true;
       }
-      if (accountSheetOpen) {
-        setAccountSheetOpen(false);
+      // The delete-account confirmation sheet sits above the Settings screen, so
+      // back dismisses the sheet first, then the screen.
+      if (deleteConfirmOpen) {
+        setDeleteConfirmOpen(false);
+        return true;
+      }
+      if (settingsOpen) {
+        setSettingsOpen(false);
         return true;
       }
       if (showCaptureComposer) {
@@ -238,7 +249,8 @@ export function useAppUiEffects({
     });
     return () => subscription.remove();
   }, [
-    accountSheetOpen,
+    settingsOpen,
+    deleteConfirmOpen,
     closeCaptureComposer,
     closeCollectionComposer,
     closeCollectionDetail,
@@ -258,7 +270,8 @@ export function useAppUiEffects({
     selectCollection,
     selectedCollectionId,
     selectedId,
-    setAccountSheetOpen,
+    setSettingsOpen,
+    setDeleteConfirmOpen,
     setCollectionSearchOpen,
     setCollectionsOpen,
     setReminderSheetOpen,
