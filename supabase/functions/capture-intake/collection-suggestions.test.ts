@@ -371,7 +371,7 @@ Deno.test("analysis schema offers an intrinsic/topical basis on decisions", () =
   );
 });
 
-Deno.test("analysis prompt allows topical themes and provisional copy", () => {
+Deno.test("analysis prompt allows topical themes and grounded new-Collection copy", () => {
   const prompt = urlEvidence.buildPrompt(
     captureFixture({ source_text: "A news article about a soccer match." }),
     null,
@@ -388,8 +388,9 @@ Deno.test("analysis prompt allows topical themes and provisional copy", () => {
     "topical themes must be subject+type, not a bare subject or bare format",
   );
   assert(
-    prompt.includes("Could group as [Collection label] if you save more like this"),
-    "topical rationale copy reads provisionally while the suggestion is held back",
+    prompt.includes("I'd start [Collection label] because [plain evidence]") &&
+      prompt.includes("Never use a generic forward-looking placeholder"),
+    "new-Collection rationale is grounded in this capture's evidence, like an existing pick",
   );
 });
 
