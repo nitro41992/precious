@@ -492,9 +492,15 @@ export function KeyboardSheet({
   open: SharedValue<number>;
 }) {
   const offscreen = Dimensions.get("screen").height;
+  // The slide distance is the sheet's own height (+ a margin), measured on layout
+  // — not the whole screen. The sheet is bottom-docked, so sliding down by its own
+  // height drops its top exactly to the screen edge: it clears precisely when the
+  // open value reaches 0, instead of racing off-screen partway through and
+  // finishing ahead of the keyboard. Until measured it starts fully off-screen.
+  const sheetTravel = useSharedValue(offscreen);
   const { height, progress } = useReanimatedKeyboardAnimation();
   const sheetStyle = useAnimatedStyle(() => {
-    const slide = (1 - open.value) * offscreen;
+    const slide = (1 - open.value) * sheetTravel.value;
     // height.value is 0 when closed and negative while the keyboard is up, so
     // adding it rides the sheet up with the keyboard. On this edge-to-edge window
     // the keyboard inset (measured from the true screen bottom) lands the sheet a
@@ -508,6 +514,9 @@ export function KeyboardSheet({
       <Pressable accessibilityLabel={backdropLabel} onPress={onBackdropPress} style={styles.sheetBackdrop} />
       <View pointerEvents="box-none" style={styles.sheetKeyboard}>
         <Reanimated.View
+          onLayout={(event) => {
+            sheetTravel.value = event.nativeEvent.layout.height + 40;
+          }}
           style={[styles.captureSheet, compact && styles.captureSheetCompact, { maxHeight }, sheetStyle]}
         >
           {children}

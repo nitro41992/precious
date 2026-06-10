@@ -22,6 +22,7 @@ export function useAppUiEffects({
   captureComposerClosing,
   captureComposerClosingRef,
   captureSheetOpen,
+  keyboardAnimationDurationRef,
   captureImagePickerActiveRef,
   captureMode,
   captureModeRef,
@@ -75,6 +76,7 @@ export function useAppUiEffects({
   captureComposerClosing: boolean;
   captureComposerClosingRef: MutableRefObject<boolean>;
   captureSheetOpen: SharedValue<number>;
+  keyboardAnimationDurationRef: MutableRefObject<number>;
   captureImagePickerActiveRef: MutableRefObject<boolean>;
   captureMode: CaptureComposerMode;
   captureModeRef: MutableRefObject<CaptureComposerMode>;
@@ -368,10 +370,13 @@ export function useAppUiEffects({
   // The sheet's *position* rides the live keyboard worklet inside KeyboardSheet;
   // this just keeps the JS-side height in sync so the max-height/compact layout
   // is right from the moment the keyboard starts moving.
-  const applyKeyboardLayout = useCallback((height: number) => {
+  const applyKeyboardLayout = useCallback((height: number, duration: number) => {
+    // Remember the keyboard's own animation duration so the close slide can match
+    // it. Captured even mid-close so the next close uses a fresh value.
+    if (duration > 0) keyboardAnimationDurationRef.current = duration;
     if (captureImagePickerActiveRef.current || captureComposerClosingRef.current) return;
     setKeyboardHeight(Math.max(0, Math.round(height)));
-  }, [captureComposerClosingRef, captureImagePickerActiveRef, setKeyboardHeight]);
+  }, [captureComposerClosingRef, captureImagePickerActiveRef, keyboardAnimationDurationRef, setKeyboardHeight]);
 
   // Android product behavior: dismissing the keyboard (back gesture, the keyboard's
   // own collapse) dismisses the open sheet — except the image tab, which has no
@@ -416,12 +421,12 @@ export function useAppUiEffects({
       onStart: (event) => {
         "worklet";
         const target = Math.abs(event.height);
-        runOnJS(applyKeyboardLayout)(target);
+        runOnJS(applyKeyboardLayout)(target, event.duration);
         if (target < 1) runOnJS(closeSheetForKeyboardDismiss)();
       },
       onEnd: (event) => {
         "worklet";
-        runOnJS(applyKeyboardLayout)(Math.abs(event.height));
+        runOnJS(applyKeyboardLayout)(Math.abs(event.height), event.duration);
       }
     },
     [applyKeyboardLayout, closeSheetForKeyboardDismiss]

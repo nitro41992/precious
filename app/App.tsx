@@ -1000,6 +1000,10 @@ export default function App() {
   // sheet's keyboard tracking comes from the live OS keyboard animation inside
   // KeyboardSheet, so this is the only sheet motion value we own.
   const captureSheetOpen = useSharedValue(0);
+  // The OS keyboard's own animation duration, captured from the keyboard events
+  // (useAppUiEffects). The close slide matches it so the sheet and keyboard leave
+  // over the same window instead of the sheet finishing first on a slow keyboard.
+  const keyboardAnimationDurationRef = useRef(280);
   const skeletonPulse = useRef(new Animated.Value(0)).current;
   const homeRowsFade = useRef(new Animated.Value(0)).current;
   const collectionRowsFade = useRef(new Animated.Value(0)).current;
@@ -2454,9 +2458,14 @@ export default function App() {
     captureComposerClosingRef.current = true;
     setCaptureComposerClosing(true);
     KeyboardController.dismiss();
+    // Match the keyboard's own animation duration (+ a small buffer) so the sheet
+    // never finishes ahead of a slow keyboard — the keyboard leads out by a hair
+    // and the sheet rides it down, instead of collapsing first and leaving the
+    // keyboard hanging.
+    const closeDuration = Math.min(420, Math.max(220, keyboardAnimationDurationRef.current + 40));
     captureSheetOpen.value = withTiming(
       0,
-      { duration: 250, easing: ReanimatedEasing.in(ReanimatedEasing.cubic) },
+      { duration: closeDuration, easing: ReanimatedEasing.in(ReanimatedEasing.cubic) },
       (finished) => {
         if (finished) runOnJS(finishCaptureSheetClose)(onClosed);
       }
@@ -2970,6 +2979,7 @@ export default function App() {
     captureComposerClosing,
     captureComposerClosingRef,
     captureSheetOpen,
+    keyboardAnimationDurationRef,
     captureImagePickerActiveRef,
     captureMode,
     captureModeRef,
