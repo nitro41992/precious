@@ -61,7 +61,21 @@ jobs:
             -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US"
 
+      - name: Resolve version
+        id: version
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == android-* ]]; then
+            echo "name=${GITHUB_REF_NAME#android-}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=0.0.0-dev" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build hosted release APK
+        env:
+          # versionName comes from the release tag (android-0.2.0 -> 0.2.0);
+          # versionCode is the monotonic CI build counter so every upload is unique.
+          PRECIOUS_VERSION_NAME: ${{ steps.version.outputs.name }}
+          PRECIOUS_VERSION_CODE: ${{ github.run_number }}
         run: npm run android:build:hosted
 
       - name: Name APK

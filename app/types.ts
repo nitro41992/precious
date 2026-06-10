@@ -354,6 +354,7 @@ export type AppConfig = {
   apiUrl: string;
   supabaseUrl: string;
   supabaseAnonKey: string;
+  appVersion?: string;
 };
 
 export type NativeAuth = {

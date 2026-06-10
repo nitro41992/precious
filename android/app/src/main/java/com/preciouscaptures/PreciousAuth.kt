@@ -60,6 +60,7 @@ class PreciousAuthModule(
           .put("apiUrl", apiUrl)
           .put("supabaseUrl", BuildConfig.SUPABASE_URL)
           .put("supabaseAnonKey", BuildConfig.SUPABASE_ANON_KEY)
+          .put("appVersion", BuildConfig.VERSION_NAME)
           .toString()
       )
     } catch (error: Exception) {

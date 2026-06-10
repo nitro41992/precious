@@ -5353,7 +5353,9 @@ export default function App() {
           }}
           data={{
             appSheets: includeChrome ? renderAppSheets() : null,
-            appVersion: appJson.expo.version,
+            // The installed APK's real versionName (CI injects it from the
+            // release tag); app.json is only a local-dev fallback.
+            appVersion: config?.appVersion || appJson.expo.version,
             email: sessionEmail,
             toast: includeChrome ? renderToast() : null
           }}

@@ -6,6 +6,11 @@ def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 def preciousApiUrl = (findProperty("PRECIOUS_API_URL") ?: System.getenv("PRECIOUS_API_URL") ?: "").toString()
 def supabaseUrl = (findProperty("EXPO_PUBLIC_SUPABASE_URL") ?: System.getenv("EXPO_PUBLIC_SUPABASE_URL") ?: "").toString()
 def supabaseAnonKey = (findProperty("EXPO_PUBLIC_SUPABASE_ANON_KEY") ?: System.getenv("EXPO_PUBLIC_SUPABASE_ANON_KEY") ?: "").toString()
+// Version is injected by CI from the release tag (versionName) and the CI build
+// counter (versionCode). The hardcoded fallbacks below are only for local dev
+// builds, where the exact version does not matter.
+def resolvedVersionName = (findProperty("PRECIOUS_VERSION_NAME") ?: System.getenv("PRECIOUS_VERSION_NAME") ?: "0.1.0").toString()
+def resolvedVersionCode = (findProperty("PRECIOUS_VERSION_CODE") ?: System.getenv("PRECIOUS_VERSION_CODE") ?: "1").toString().toInteger()
 
 react {
   entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", projectRoot, "android", "absolute"].execute(null, rootDir).text.trim())
@@ -27,8 +32,8 @@ android {
     applicationId "com.preciouscaptures"
     minSdkVersion rootProject.ext.minSdkVersion
     targetSdkVersion rootProject.ext.targetSdkVersion
-    versionCode 1
-    versionName "0.1.0"
+    versionCode resolvedVersionCode
+    versionName resolvedVersionName
     buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     buildConfigField "String", "PRECIOUS_API_URL", "\"${preciousApiUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\""
     buildConfigField "String", "SUPABASE_URL", "\"${supabaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\""
