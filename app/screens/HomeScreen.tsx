@@ -24,7 +24,7 @@ import type { CaptureComposerMode, Collection, HomeListRow } from "../types";
 import { normalizeCaptureLink } from "../captureLogic";
 import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
-import { HeaderContentGradient, KeyboardSheet, MotionPressable, SearchBarTrigger, SheetHeader, keyboardSheetMetrics } from "../ui/components";
+import { CaptureModeToggle, FadeSwap, HeaderContentGradient, ImageSourcePicker, KeyboardSheet, MotionPressable, SearchBarTrigger, SheetHeader, keyboardSheetMetrics } from "../ui/components";
 import { CollectionSuggestionRailCard } from "../ui/rows";
 import { Text, TextInput } from "../ui/typography";
 
@@ -333,38 +333,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                 onConfirm={captureMode === "link" ? () => void saveCaptureSource() : undefined}
                 title="New capture"
               />
-              <View style={styles.captureModeRow}>
-                {([
-                  { mode: "link", label: "Link", Icon: Link2 },
-                  { mode: "image", label: "Image", Icon: ImageIcon }
-                ] as const).map(({ mode, label, Icon }) => {
-                  const selectedMode = captureMode === mode;
-                  return (
-                    <MotionPressable
-                      accessibilityRole="button"
-                      key={mode}
-                      onPress={() => chooseCaptureMode(mode)}
-                      style={({ pressed }) => [
-                        styles.captureModeChip,
-                        selectedMode && styles.captureModeChipSelected,
-                        pressed && styles.subtlePressed
-                      ]}
-                      testID={`pc.capture.mode.${mode}`}
-                    >
-                      <Icon color={selectedMode ? colors.onAccent : colors.muted} size={16} weight={selectedMode ? "fill" : "bold"} />
-                      <Text
-                        numberOfLines={1}
-                        style={[
-                          styles.captureModeText,
-                          selectedMode && styles.captureModeTextSelected
-                        ]}
-                      >
-                        {label}
-                      </Text>
-                    </MotionPressable>
-                  );
-                })}
-              </View>
+              <CaptureModeToggle mode={captureMode} onChange={chooseCaptureMode} />
               <View
                 style={[
                   styles.captureSheetBody,
@@ -372,61 +341,37 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
                   composerKeyboardVisible && styles.captureSheetBodyContentCompact
                 ]}
               >
-                {captureMode === "link" ? (
-                  <>
-                    <TextInput
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      keyboardType="url"
-                      multiline
-                      ref={sourceInputRef}
-                      onChangeText={setSourceDraft}
-                      placeholder="Paste a link"
-                      placeholderTextColor={colors.placeholder}
-                      style={[styles.captureInput, composerKeyboardVisible && styles.captureInputCompact]}
-                      testID="pc.capture.source"
-                      value={sourceDraft}
+                <FadeSwap style={styles.captureSheetFade} swapKey={captureMode}>
+                  {captureMode === "link" ? (
+                    <>
+                      <TextInput
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        autoFocus
+                        keyboardType="url"
+                        multiline
+                        ref={sourceInputRef}
+                        onChangeText={setSourceDraft}
+                        placeholder="Paste a link"
+                        placeholderTextColor={colors.placeholder}
+                        style={[styles.captureInput, composerKeyboardVisible && styles.captureInputCompact]}
+                        testID="pc.capture.source"
+                        value={sourceDraft}
+                      />
+                      <Text style={[styles.captureHelperText, captureLinkInvalid && styles.captureHelperTextError]}>
+                        Paste a valid link, like https://example.com.
+                      </Text>
+                    </>
+                  ) : (
+                    <ImageSourcePicker
+                      cameraTestID="pc.capture.image.camera"
+                      disabled={pickingCaptureImage}
+                      onCamera={takeCapturePhoto}
+                      onPhotos={pickCaptureImage}
+                      photosTestID="pc.capture.image.upload"
                     />
-                    <Text style={[styles.captureHelperText, captureLinkInvalid && styles.captureHelperTextError]}>
-                      Paste a valid link, like https://example.com.
-                    </Text>
-                  </>
-                ) : (
-                  <View style={styles.captureImagePanel}>
-                    <MotionPressable
-                      accessibilityRole="button"
-                      disabled={pickingCaptureImage}
-                      onPress={takeCapturePhoto}
-                      style={({ pressed }) => [
-                        styles.captureImageButton,
-                        pickingCaptureImage && styles.captureImageButtonDisabled,
-                        pressed && styles.subtlePressed
-                      ]}
-                      testID="pc.capture.image.camera"
-                    >
-                      <View style={styles.captureImageButtonIcon}>
-                        <Camera color={colors.accentTextStrong} size={21} weight="bold" />
-                      </View>
-                      <Text style={styles.captureImageButtonText}>Take photo</Text>
-                    </MotionPressable>
-                    <MotionPressable
-                      accessibilityRole="button"
-                      disabled={pickingCaptureImage}
-                      onPress={pickCaptureImage}
-                      style={({ pressed }) => [
-                        styles.captureImageButton,
-                        pickingCaptureImage && styles.captureImageButtonDisabled,
-                        pressed && styles.subtlePressed
-                      ]}
-                      testID="pc.capture.image.upload"
-                    >
-                      <View style={styles.captureImageButtonIcon}>
-                        <ImageIcon color={colors.accentTextStrong} size={21} weight="bold" />
-                      </View>
-                      <Text style={styles.captureImageButtonText}>Choose from photos</Text>
-                    </MotionPressable>
-                  </View>
-                )}
+                  )}
+                </FadeSwap>
               </View>
         </KeyboardSheet>
       ) : null}

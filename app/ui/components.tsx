@@ -10,7 +10,7 @@ import type {
 } from "react-native";
 import { Animated, Dimensions, Easing, KeyboardAvoidingView, Pressable, View } from "react-native";
 import { Image } from "expo-image";
-import { CaretLeft, Check, ClockClockwise, Folder, Folders, Gear, HouseSimple, Info, MagnifyingGlass, Plus, Sparkle, Warning, X } from "phosphor-react-native";
+import { Camera, CaretLeft, Check, ClockClockwise, Folder, Folders, Gear, HouseSimple, ImageSquare, Info, Link, MagnifyingGlass, Plus, Sparkle, Warning, X } from "phosphor-react-native";
 import Reanimated, {
   cancelAnimation,
   interpolate,
@@ -26,6 +26,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import type {
   AppIconComponent,
   Capture,
+  CaptureComposerMode,
   CaptureFieldRationale,
   CaptureImageLoadState,
   CaptureStatus,
@@ -130,6 +131,170 @@ export const MotionPressable = forwardRef<View, MotionPressableProps>(function M
     />
   );
 });
+
+// Refined segmented control for the capture composer: a tonal track with a single
+// white thumb that glides under the active label. Premium and quiet — the slide is
+// the feedback, so the labels just tint between deep-green (active) and muted.
+const CAPTURE_MODE_TRACK_PADDING = 4;
+const CAPTURE_MODES = [
+  { key: "link" as const, label: "Link", Icon: Link },
+  { key: "image" as const, label: "Image", Icon: ImageSquare }
+];
+
+export function CaptureModeToggle({
+  mode,
+  onChange
+}: {
+  mode: CaptureComposerMode;
+  onChange: (mode: CaptureComposerMode) => void;
+}) {
+  const [trackWidth, setTrackWidth] = useState(0);
+  const progress = useSharedValue(mode === "image" ? 1 : 0);
+
+  useEffect(() => {
+    progress.value = withTiming(mode === "image" ? 1 : 0, {
+      duration: motionDuration.settle,
+      easing: motionEasing.emphasized,
+      reduceMotion: motionReduceMotion
+    });
+  }, [mode, progress]);
+
+  const segmentWidth =
+    trackWidth > 0 ? (trackWidth - CAPTURE_MODE_TRACK_PADDING * 2) / CAPTURE_MODES.length : 0;
+  const thumbStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: progress.value * segmentWidth }]
+  }));
+
+  return (
+    <View onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)} style={styles.captureModeTrack}>
+      {segmentWidth > 0 ? (
+        <Reanimated.View style={[styles.captureModeThumb, { width: segmentWidth }, thumbStyle]} />
+      ) : null}
+      {CAPTURE_MODES.map(({ key, label, Icon }) => {
+        const selected = mode === key;
+        const tint = selected ? colors.accentTextStrong : colors.muted;
+        return (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
+            key={key}
+            onPress={() => onChange(key)}
+            style={({ pressed }) => [
+              styles.captureModeSegment,
+              pressed && !selected && styles.captureModeSegmentPressed
+            ]}
+            testID={`pc.capture.mode.${key}`}
+          >
+            <Icon color={tint} size={16} weight={selected ? "fill" : "bold"} />
+            <Text numberOfLines={1} style={[styles.captureModeSegmentText, { color: tint }]}>
+              {label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+// Gentle crossfade whenever swapKey changes: the new content fades up from zero so
+// switching capture modes reads as one intentional move rather than a hard cut.
+// Imperative (withTiming on swap), so it never stalls on an idle UI thread.
+export function FadeSwap({
+  swapKey,
+  children,
+  style
+}: {
+  swapKey: string;
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const opacity = useSharedValue(1);
+  useEffect(() => {
+    opacity.value = 0;
+    opacity.value = withTiming(1, {
+      duration: motionDuration.enter,
+      easing: motionEasing.standard,
+      reduceMotion: motionReduceMotion
+    });
+  }, [swapKey, opacity]);
+  const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return <Reanimated.View style={[style, animatedStyle]}>{children}</Reanimated.View>;
+}
+
+// Side-by-side source tiles for adding a photo. Camera and Photos read as two
+// equal, tactile choices rather than a single "upload" affordance, so the camera
+// option is never overlooked. Shared by the capture composer and the Capture
+// Review add-photo flow so both surfaces stay visually in sync.
+function ImageSourceTile({
+  Icon,
+  title,
+  helper,
+  onPress,
+  disabled,
+  testID
+}: {
+  Icon: AppIconComponent;
+  title: string;
+  helper: string;
+  onPress: () => void;
+  disabled?: boolean;
+  testID?: string;
+}) {
+  return (
+    <MotionPressable
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.imageSourceTile,
+        pressed && styles.imageSourceTilePressed,
+        disabled && styles.imageSourceTileDisabled
+      ]}
+      testID={testID}
+    >
+      <View style={styles.imageSourceTileIcon}>
+        <Icon color={colors.accentTextStrong} size={26} weight="bold" />
+      </View>
+      <Text style={styles.imageSourceTileTitle}>{title}</Text>
+      <Text numberOfLines={1} style={styles.imageSourceTileHelper}>{helper}</Text>
+    </MotionPressable>
+  );
+}
+
+export function ImageSourcePicker({
+  onCamera,
+  onPhotos,
+  disabled = false,
+  cameraTestID,
+  photosTestID
+}: {
+  onCamera: () => void;
+  onPhotos: () => void;
+  disabled?: boolean;
+  cameraTestID?: string;
+  photosTestID?: string;
+}) {
+  return (
+    <View style={styles.imageSourceRow}>
+      <ImageSourceTile
+        Icon={Camera}
+        title="Camera"
+        helper="Take a new photo"
+        onPress={onCamera}
+        disabled={disabled}
+        testID={cameraTestID}
+      />
+      <ImageSourceTile
+        Icon={ImageSquare}
+        title="Photos"
+        helper="Choose from library"
+        onPress={onPhotos}
+        disabled={disabled}
+        testID={photosTestID}
+      />
+    </View>
+  );
+}
 
 // Borderless pill switch built on the app's motion system: the thumb slides and
 // the track tints with withTiming so it reads as a soft toggle, not a hairline

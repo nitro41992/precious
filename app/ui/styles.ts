@@ -42,6 +42,19 @@ const diffuseCardShadow = Platform.OS === "android"
       shadowOpacity: 0.10,
       shadowRadius: 26
     };
+// Soft lift for the segmented-control thumb so the white pill floats just above
+// its tonal track without any outline.
+const segmentThumbShadow = Platform.OS === "android"
+  ? {
+      boxShadow: "0px 2px 8px 0px rgba(23, 33, 27, 0.12)",
+      elevation: 0
+    }
+  : {
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8
+    };
 // Tight shadow so the light count pill separates from light areas of a thumbnail.
 const pillShadow = Platform.OS === "android"
   ? { boxShadow: "0px 1px 5px 0px rgba(23, 33, 27, 0.20)" }
@@ -443,73 +456,93 @@ export const styles = StyleSheet.create({
   collectionSheetDescriptionInput: {
     minHeight: 96
   },
-  captureModeRow: {
-    alignItems: "center",
+  captureModeTrack: {
+    backgroundColor: colors.surfaceContainerHigh,
+    borderRadius: 16,
     flexDirection: "row",
-    gap: 8
+    padding: 4,
+    position: "relative"
   },
-  captureModeChip: {
+  captureModeThumb: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    bottom: 4,
+    left: 4,
+    position: "absolute",
+    top: 4,
+    ...segmentThumbShadow
+  },
+  captureModeSegment: {
     alignItems: "center",
-    backgroundColor: colors.paper,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 0,
+    borderRadius: 12,
     flex: 1,
     flexDirection: "row",
     gap: 7,
     justifyContent: "center",
-    minHeight: 44,
+    minHeight: 42,
     minWidth: 0,
-    paddingHorizontal: 8
+    zIndex: 1
   },
-  captureModeChipSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent
+  captureModeSegmentPressed: {
+    opacity: 0.55
   },
-  captureModeText: {
-    color: colors.ink,
+  captureModeSegmentText: {
     ...typefaces.bold,
     flexShrink: 1,
     fontSize: 14,
     fontWeight: "800"
   },
-  captureModeTextSelected: {
-    color: colors.onAccent
+  captureSheetFade: {
+    gap: 12
   },
-  captureImagePanel: {
-    alignItems: "stretch",
-    gap: 10
-  },
-  captureImageButton: {
-    alignItems: "center",
-    alignSelf: "stretch",
-    backgroundColor: colors.reviewCardWell,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 0,
+  imageSourceRow: {
     flexDirection: "row",
-    gap: 12,
-    justifyContent: "flex-start",
-    minHeight: 64,
-    paddingHorizontal: 14,
-    paddingVertical: 10
+    gap: 12
   },
-  captureImageButtonIcon: {
+  imageSourceTile: {
     alignItems: "center",
-    backgroundColor: colors.accentSoft,
-    borderRadius: 8,
-    height: 42,
-    justifyContent: "center",
-    width: 42
+    backgroundColor: colors.surface,
+    borderRadius: 22,
+    flex: 1,
+    gap: 13,
+    minHeight: 138,
+    paddingHorizontal: 14,
+    paddingVertical: 22,
+    ...diffuseCardShadow
   },
-  captureImageButtonDisabled: {
+  imageSourceTilePressed: {
+    backgroundColor: colors.accentSoft
+  },
+  imageSourceTileDisabled: {
     opacity: 0.56
   },
-  captureImageButtonText: {
+  imageSourceTileIcon: {
+    alignItems: "center",
+    backgroundColor: colors.accentSoft,
+    borderRadius: 18,
+    height: 56,
+    justifyContent: "center",
+    width: 56
+  },
+  imageSourceTileTitle: {
     color: colors.ink,
     ...typefaces.bold,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "800"
+  },
+  imageSourceTileHelper: {
+    color: colors.muted,
+    fontSize: 12.5,
+    lineHeight: 16,
+    textAlign: "center"
+  },
+  reviewPhotoPrompt: {
+    gap: 12
+  },
+  reviewPhotoPromptText: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18
   },
   sheetLayer: {
     bottom: 0,

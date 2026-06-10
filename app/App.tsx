@@ -970,6 +970,12 @@ export default function App() {
   const lastKeyboardHeightRef = useRef(0);
   const captureComposerClosingRef = useRef(false);
   const captureImagePickerActiveRef = useRef(false);
+  // Mirrors captureMode for the keyboard-hide listener: on Android, dismissing the
+  // keyboard normally closes the composer, but switching to the Image tab dismisses
+  // it programmatically. The ref lets the listener keep the sheet open in image mode
+  // without re-subscribing (which would race the dismiss). Kept in sync below and
+  // set synchronously in chooseCaptureMode before Keyboard.dismiss().
+  const captureModeRef = useRef<CaptureComposerMode>(DEFAULT_CAPTURE_COMPOSER_MODE);
   const searchMotion = useRef(new Animated.Value(0)).current;
   const reviewMotion = useRef(new Animated.Value(1)).current;
   // Single clock for the hero morph and the review screen fade — both read
@@ -2617,12 +2623,21 @@ export default function App() {
 
   function chooseCaptureMode(mode: CaptureComposerMode) {
     setCaptureMode(mode);
+    // Set the ref synchronously so the keyboard-hide listener sees image mode the
+    // instant Keyboard.dismiss() fires, not a render later.
+    captureModeRef.current = mode;
     if (mode === "link") {
       requestAnimationFrame(() => sourceInputRef.current?.focus());
     } else {
       Keyboard.dismiss();
     }
   }
+
+  // Keep captureModeRef aligned with every other mode change (open/close/reset),
+  // so the keyboard-hide listener never reads a stale mode after the sheet closes.
+  useEffect(() => {
+    captureModeRef.current = captureMode;
+  }, [captureMode]);
 
   async function openCollectionsScreen(mode: CollectionListMode = collectionsMode) {
     selectCapture(null);
@@ -3014,6 +3029,7 @@ export default function App() {
     captureImagePickerActiveRef,
     captureKeyboardInset,
     captureMode,
+    captureModeRef,
     captures,
     closeCaptureComposer,
     closeCollectionComposer,

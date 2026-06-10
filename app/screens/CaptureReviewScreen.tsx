@@ -68,7 +68,7 @@ import { ReminderEditorSheet } from "../sheets/ReminderEditorSheet";
 import { motionDuration, motionEasing, motionReduceMotion, reviewHeroExpandedScale } from "../ui/motion";
 import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
-import { KeyboardSheet, MotionPressable, ProcessingStatusPill, SheetHeader, SourceMark, keyboardSheetMetrics } from "../ui/components";
+import { ImageSourcePicker, KeyboardSheet, MotionPressable, ProcessingStatusPill, SheetHeader, SourceMark, keyboardSheetMetrics } from "../ui/components";
 import { Text, TextInput } from "../ui/typography";
 
 type ReviewHandoffRect = {
@@ -1224,35 +1224,17 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                   <View style={styles.reviewActionBlock}>
                     <Text style={styles.reviewActionLabel}>Capture actions</Text>
                     {selectedStatus === "failed" && !isImageCapture(selected) ? (
-                      <>
-                        <MotionPressable
-                          accessibilityRole="button"
-                          onPress={() => attachCapturePhoto("library")}
-                          style={({ pressed }) => [styles.noteActionCard, pressed && styles.subtlePressed]}
-                          testID="pc.review.photo.add"
-                        >
-                          <View style={styles.noteActionCardIcon}>
-                            <Camera color={colors.accentTextStrong} size={21} weight="bold" />
-                          </View>
-                          <View style={styles.noteActionCopy}>
-                            <View style={styles.noteActionHeader}>
-                              <Text style={styles.noteActionTitle}>Add a photo</Text>
-                            </View>
-                            <Text numberOfLines={2} style={styles.noteActionPreview}>
-                              A screenshot or photo helps us read this capture.
-                            </Text>
-                          </View>
-                          <CaretRight color={colors.muted} size={18} weight="bold" />
-                        </MotionPressable>
-                        <Pressable
-                          accessibilityRole="button"
-                          onPress={() => attachCapturePhoto("camera")}
-                          style={styles.secondaryButton}
-                          testID="pc.review.photo.camera"
-                        >
-                          <Text style={styles.secondaryButtonText}>Take photo</Text>
-                        </Pressable>
-                      </>
+                      <View style={styles.reviewPhotoPrompt}>
+                        <Text style={styles.reviewPhotoPromptText}>
+                          A screenshot or photo helps us read this capture.
+                        </Text>
+                        <ImageSourcePicker
+                          cameraTestID="pc.review.photo.camera"
+                          onCamera={() => attachCapturePhoto("camera")}
+                          onPhotos={() => attachCapturePhoto("library")}
+                          photosTestID="pc.review.photo.add"
+                        />
+                      </View>
                     ) : null}
                     <MotionPressable
                       accessibilityRole="button"

@@ -23,6 +23,7 @@ export function useAppUiEffects({
   captureImagePickerActiveRef,
   captureKeyboardInset,
   captureMode,
+  captureModeRef,
   captures,
   closeCaptureComposer,
   closeCollectionComposer,
@@ -77,6 +78,7 @@ export function useAppUiEffects({
   captureImagePickerActiveRef: MutableRefObject<boolean>;
   captureKeyboardInset: Animated.Value;
   captureMode: CaptureComposerMode;
+  captureModeRef: MutableRefObject<CaptureComposerMode>;
   captures: Capture[];
   closeCaptureComposer: (options?: { keyboardHidden?: boolean }) => void;
   closeCollectionComposer: (options?: { keyboardHidden?: boolean }) => void;
@@ -392,11 +394,18 @@ export function useAppUiEffects({
         return;
       }
       if (Platform.OS === "android" && (showCaptureComposer || showCollectionForm || noteSheetOpen || titleSheetOpen)) {
-        if (showCaptureComposer) closeCaptureComposer({ keyboardHidden: true });
-        else if (showCollectionForm) closeCollectionComposer({ keyboardHidden: true });
-        else if (noteSheetOpen) closeNoteSheet({ keyboardHidden: true });
-        else closeTitleSheet({ keyboardHidden: true });
-        return;
+        // The Image tab dismisses the keyboard on purpose (no text field there), so a
+        // keyboard hide in image mode is not the user dismissing the sheet — keep the
+        // composer open and just collapse the inset below. Link mode and the other
+        // sheets still close on keyboard hide as before.
+        const keepComposerForImage = showCaptureComposer && captureModeRef.current !== "link";
+        if (!keepComposerForImage) {
+          if (showCaptureComposer) closeCaptureComposer({ keyboardHidden: true });
+          else if (showCollectionForm) closeCollectionComposer({ keyboardHidden: true });
+          else if (noteSheetOpen) closeNoteSheet({ keyboardHidden: true });
+          else closeTitleSheet({ keyboardHidden: true });
+          return;
+        }
       }
       if (!captureComposerClosingRef.current) setKeyboardHeight(0);
       if (Platform.OS === "ios") Keyboard.scheduleLayoutAnimation(event);
@@ -415,6 +424,7 @@ export function useAppUiEffects({
     captureComposerClosingRef,
     captureImagePickerActiveRef,
     captureKeyboardInset,
+    captureModeRef,
     closeCaptureComposer,
     closeCollectionComposer,
     closeCollectionPicker,
