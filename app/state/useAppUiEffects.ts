@@ -1,13 +1,15 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import type { MutableRefObject, RefObject } from "react";
 import {
   Animated,
   BackHandler,
   Easing,
-  Keyboard,
   Platform
 } from "react-native";
 import type { TextInput } from "react-native";
+import { Easing as ReanimatedEasing, runOnJS, withTiming } from "react-native-reanimated";
+import type { SharedValue } from "react-native-reanimated";
+import { useKeyboardHandler } from "react-native-keyboard-controller";
 
 import type {
   Capture,
@@ -19,9 +21,8 @@ export function useAppUiEffects({
   accountSheetOpen,
   captureComposerClosing,
   captureComposerClosingRef,
-  captureComposerMotion,
+  captureSheetOpen,
   captureImagePickerActiveRef,
-  captureKeyboardInset,
   captureMode,
   captureModeRef,
   captures,
@@ -40,7 +41,6 @@ export function useAppUiEffects({
   collectionsOpen,
   draftNoteDirty,
   draftTitleDirty,
-  lastKeyboardHeightRef,
   noteInputRef,
   noteSheetOpen,
   titleInputRef,
@@ -74,18 +74,17 @@ export function useAppUiEffects({
   accountSheetOpen: boolean;
   captureComposerClosing: boolean;
   captureComposerClosingRef: MutableRefObject<boolean>;
-  captureComposerMotion: Animated.Value;
+  captureSheetOpen: SharedValue<number>;
   captureImagePickerActiveRef: MutableRefObject<boolean>;
-  captureKeyboardInset: Animated.Value;
   captureMode: CaptureComposerMode;
   captureModeRef: MutableRefObject<CaptureComposerMode>;
   captures: Capture[];
-  closeCaptureComposer: (options?: { keyboardHidden?: boolean }) => void;
-  closeCollectionComposer: (options?: { keyboardHidden?: boolean }) => void;
+  closeCaptureComposer: () => void;
+  closeCollectionComposer: () => void;
   closeCollectionDetail: () => void;
   closeCollectionPicker: () => void;
-  closeNoteSheet: (options?: { keyboardHidden?: boolean }) => void;
-  closeTitleSheet: (options?: { keyboardHidden?: boolean }) => void;
+  closeNoteSheet: () => void;
+  closeTitleSheet: () => void;
   closeSelectedCapture: () => void;
   collectionSearchOpen: boolean;
   collectionPickerOpen: boolean;
@@ -95,7 +94,6 @@ export function useAppUiEffects({
   collectionsOpen: boolean;
   draftNoteDirty: boolean;
   draftTitleDirty: boolean;
-  lastKeyboardHeightRef: MutableRefObject<number>;
   noteInputRef: RefObject<TextInput | null>;
   noteSheetOpen: boolean;
   titleInputRef: RefObject<TextInput | null>;
@@ -310,19 +308,15 @@ export function useAppUiEffects({
 
   useEffect(() => {
     if ((!showCaptureComposer && !showCollectionForm && !noteSheetOpen && !titleSheetOpen) || captureComposerClosing) return;
-    captureComposerMotion.setValue(0);
-    Animated.timing(captureComposerMotion, {
-      duration: 220,
-      easing: Easing.out(Easing.cubic),
-      toValue: 1,
-      // JS-driven: this value's translateY shares an Animated.View with the
-      // JS-driven keyboard marginBottom inset, so it cannot use the native driver
-      // (mixing pins the view to native and crashes the JS keyboard animation).
-      useNativeDriver: false
-    }).start();
+    // Slide the sheet up from off-screen. Its keyboard tracking is owned by the
+    // live worklet inside KeyboardSheet, so this drives only the open progress.
+    captureSheetOpen.value = withTiming(1, {
+      duration: 300,
+      easing: ReanimatedEasing.out(ReanimatedEasing.cubic)
+    });
   }, [
     captureComposerClosing,
-    captureComposerMotion,
+    captureSheetOpen,
     noteSheetOpen,
     titleSheetOpen,
     showCaptureComposer,
@@ -370,60 +364,36 @@ export function useAppUiEffects({
     return () => cancelAnimationFrame(frame);
   }, [titleInputRef, titleSheetOpen]);
 
-  useEffect(() => {
-    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    const showSubscription = Keyboard.addListener(showEvent, (event) => {
-      if (captureComposerClosingRef.current || captureImagePickerActiveRef.current) return;
-      const nextHeight = event.endCoordinates.height;
-      lastKeyboardHeightRef.current = nextHeight;
-      setKeyboardHeight(nextHeight);
-      if (Platform.OS === "ios") Keyboard.scheduleLayoutAnimation(event);
-      Animated.timing(captureKeyboardInset, {
-        duration: Math.max(140, Math.min(event.duration || 240, 340)),
-        easing: Easing.out(Easing.cubic),
-        toValue: nextHeight,
-        useNativeDriver: false
-      }).start();
-    });
-    const hideSubscription = Keyboard.addListener(hideEvent, (event) => {
-      if (captureImagePickerActiveRef.current) return;
-      if (captureComposerClosingRef.current) return;
-      if (Platform.OS === "android" && collectionPickerOpen) {
-        closeCollectionPicker();
-        return;
-      }
-      if (Platform.OS === "android" && (showCaptureComposer || showCollectionForm || noteSheetOpen || titleSheetOpen)) {
-        // The Image tab dismisses the keyboard on purpose (no text field there), so a
-        // keyboard hide in image mode is not the user dismissing the sheet — keep the
-        // composer open and just collapse the inset below. Link mode and the other
-        // sheets still close on keyboard hide as before.
-        const keepComposerForImage = showCaptureComposer && captureModeRef.current !== "link";
-        if (!keepComposerForImage) {
-          if (showCaptureComposer) closeCaptureComposer({ keyboardHidden: true });
-          else if (showCollectionForm) closeCollectionComposer({ keyboardHidden: true });
-          else if (noteSheetOpen) closeNoteSheet({ keyboardHidden: true });
-          else closeTitleSheet({ keyboardHidden: true });
-          return;
-        }
-      }
-      if (!captureComposerClosingRef.current) setKeyboardHeight(0);
-      if (Platform.OS === "ios") Keyboard.scheduleLayoutAnimation(event);
-      Animated.timing(captureKeyboardInset, {
-        duration: Math.max(120, Math.min(event.duration || 200, 300)),
-        easing: Easing.out(Easing.cubic),
-        toValue: 0,
-        useNativeDriver: false
-      }).start();
-    });
-    return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
-    };
+  // Track the keyboard height for the sheet sizing clamp (keyboardSheetMetrics).
+  // The sheet's *position* rides the live keyboard worklet inside KeyboardSheet;
+  // this just keeps the JS-side height in sync so the max-height/compact layout
+  // is right from the moment the keyboard starts moving.
+  const applyKeyboardLayout = useCallback((height: number) => {
+    if (captureImagePickerActiveRef.current || captureComposerClosingRef.current) return;
+    setKeyboardHeight(Math.max(0, Math.round(height)));
+  }, [captureComposerClosingRef, captureImagePickerActiveRef, setKeyboardHeight]);
+
+  // Android product behavior: dismissing the keyboard (back gesture, the keyboard's
+  // own collapse) dismisses the open sheet — except the image tab, which has no
+  // text field and dismisses the keyboard on purpose. Fired at the START of the
+  // keyboard's downward animation so the sheet's close slide begins in the same
+  // instant and the two leave together, routed through the one shared close path.
+  const closeSheetForKeyboardDismiss = useCallback(() => {
+    if (Platform.OS !== "android") return;
+    if (captureImagePickerActiveRef.current || captureComposerClosingRef.current) return;
+    if (collectionPickerOpen) {
+      closeCollectionPicker();
+      return;
+    }
+    const keepComposerForImage = showCaptureComposer && captureModeRef.current !== "link";
+    if (keepComposerForImage) return;
+    if (showCaptureComposer) closeCaptureComposer();
+    else if (showCollectionForm) closeCollectionComposer();
+    else if (noteSheetOpen) closeNoteSheet();
+    else if (titleSheetOpen) closeTitleSheet();
   }, [
     captureComposerClosingRef,
     captureImagePickerActiveRef,
-    captureKeyboardInset,
     captureModeRef,
     closeCaptureComposer,
     closeCollectionComposer,
@@ -431,11 +401,29 @@ export function useAppUiEffects({
     closeNoteSheet,
     closeTitleSheet,
     collectionPickerOpen,
-    lastKeyboardHeightRef,
     noteSheetOpen,
-    titleSheetOpen,
-    setKeyboardHeight,
     showCaptureComposer,
-    showCollectionForm
+    showCollectionForm,
+    titleSheetOpen
   ]);
+
+  // The OS keyboard animation, surfaced on the UI thread. onStart fires the moment
+  // the keyboard begins moving — so we both size the sheet for the target height
+  // and, when the keyboard is heading down, kick off the sheet close right then so
+  // the two animate out as one. onEnd just settles the final height.
+  useKeyboardHandler(
+    {
+      onStart: (event) => {
+        "worklet";
+        const target = Math.abs(event.height);
+        runOnJS(applyKeyboardLayout)(target);
+        if (target < 1) runOnJS(closeSheetForKeyboardDismiss)();
+      },
+      onEnd: (event) => {
+        "worklet";
+        runOnJS(applyKeyboardLayout)(Math.abs(event.height));
+      }
+    },
+    [applyKeyboardLayout, closeSheetForKeyboardDismiss]
+  );
 }

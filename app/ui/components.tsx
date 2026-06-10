@@ -8,7 +8,7 @@ import type {
   TextInput as NativeTextInput,
   ViewStyle
 } from "react-native";
-import { Animated, Dimensions, Easing, KeyboardAvoidingView, Pressable, View } from "react-native";
+import { Animated, Dimensions, Easing, Pressable, View } from "react-native";
 import { Image } from "expo-image";
 import { Camera, CaretLeft, Check, ClockClockwise, Folder, Folders, Gear, HouseSimple, ImageSquare, Info, Link, MagnifyingGlass, Plus, Sparkle, Warning, X } from "phosphor-react-native";
 import Reanimated, {
@@ -21,6 +21,8 @@ import Reanimated, {
   withSpring,
   withTiming
 } from "react-native-reanimated";
+import type { SharedValue } from "react-native-reanimated";
+import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 import type {
@@ -377,8 +379,8 @@ export function AnimatedBottomSheet({
       motion.setValue(0);
       const frame = requestAnimationFrame(() => {
         Animated.timing(motion, {
-          duration: 165,
-          easing: Easing.out(Easing.cubic),
+          duration: 300,
+          easing: Easing.bezier(0.4, 0, 0.2, 1),
           toValue: 1,
           useNativeDriver: true
         }).start();
@@ -387,8 +389,8 @@ export function AnimatedBottomSheet({
     }
     if (!mounted) return;
     Animated.timing(motion, {
-      duration: 135,
-      easing: Easing.in(Easing.cubic),
+      duration: 200,
+      easing: Easing.bezier(0.4, 0, 0.2, 1),
       toValue: 0,
       useNativeDriver: true
     }).start(({ finished }) => {
@@ -422,28 +424,17 @@ export function AnimatedBottomSheet({
   );
 }
 
-// Bottom margin for a keyboard sheet: the raw keyboard inset, the inset plus a
-// resting gap, or a plain gap when the window is already keyboard-sized.
-type KeyboardSheetInset = Animated.Value | Animated.AnimatedAddition<number> | number;
-
-type KeyboardSheetMetrics = {
-  keyboardVisible: boolean;
-  screenHeight: number;
-  maxHeight: number;
-  bottomInset: KeyboardSheetInset;
-};
-
 // Shared sizing for the keyboard-aware bottom sheets (capture composer, note,
 // title, collection composer). They all clamp the sheet to the space above the
-// keyboard and pin its bottom to the keyboard inset; only the height caps and
-// the resting-height scale differ per sheet, so those come in as parameters.
-// Centralizing this keeps the four sheets from drifting apart and means a sizing
-// fix lands in one place.
+// keyboard; only the height caps and the resting-height scale differ per sheet,
+// so those come in as parameters. The sheet's *position* (riding above the
+// keyboard, sliding in/out) is owned by KeyboardSheet's live worklet — this
+// helper only decides how tall the sheet may grow. Centralizing it keeps the
+// four sheets from drifting apart and means a sizing fix lands in one place.
 export function keyboardSheetMetrics({
   active,
   keyboardHeight,
   windowHeight,
-  keyboardInset,
   maxWithKeyboard,
   maxWithoutKeyboard,
   withoutKeyboardScale
@@ -451,11 +442,10 @@ export function keyboardSheetMetrics({
   active: boolean;
   keyboardHeight: number;
   windowHeight: number;
-  keyboardInset: Animated.Value;
   maxWithKeyboard: number;
   maxWithoutKeyboard: number;
   withoutKeyboardScale: number;
-}): KeyboardSheetMetrics {
+}): { keyboardVisible: boolean; maxHeight: number } {
   const keyboardVisible = active && keyboardHeight > 0;
   const screenHeight = Dimensions.get("screen").height;
   // When the OS already shrinks the window to exclude the keyboard
@@ -470,63 +460,59 @@ export function keyboardSheetMetrics({
   const maxHeight = keyboardVisible
     ? Math.min(maxWithKeyboard, Math.max(320, visibleHeight - 24 - keyboardGap))
     : Math.min(maxWithoutKeyboard, Math.max(340, windowHeight * withoutKeyboardScale));
-  const bottomInset: KeyboardSheetInset = windowAlreadyKeyboardSized
-    ? keyboardGap
-    : keyboardVisible
-      ? Animated.add(keyboardInset, keyboardGap)
-      : keyboardInset;
-  return { keyboardVisible, screenHeight, maxHeight, bottomInset };
+  return { keyboardVisible, maxHeight };
 }
 
-// Shared shell for the keyboard-aware bottom sheets: backdrop + keyboard-avoiding
-// frame + the sliding Animated.View. `motion` (translateY) and `bottomInset`
-// (marginBottom) must both be JS-driven Animated values — they share this one
-// view, and mixing a native-driven transform with a JS-driven layout prop here
-// crashes the keyboard animation. Each sheet supplies only its own children.
+// Shared shell for the keyboard-aware bottom sheets: backdrop + a bottom-docked
+// Reanimated sheet. The sheet's translateY combines two UI-thread inputs so it
+// stays glued to the keyboard frame-for-frame on both open AND close:
+//   • `open` (0→1) slides the sheet up from off-screen and back down on close.
+//   • the live keyboard `height`/`progress` (react-native-keyboard-controller,
+//     backed by the OS keyboard animation) lifts the sheet to sit just above the
+//     keyboard, with a resting gap that fades in as the keyboard rises.
+// Both live in one worklet on the UI thread, so there is no JS/native driver
+// split to coordinate and the close no longer lags the keyboard. Each sheet
+// supplies only its own children; `maxHeight`/`compact` come from
+// keyboardSheetMetrics.
 export function KeyboardSheet({
   backdropLabel,
-  bottomInset,
   children,
   compact,
+  keyboardSettle = 12,
   maxHeight,
-  motion,
   onBackdropPress,
-  screenHeight
+  open
 }: {
   backdropLabel: string;
-  bottomInset: KeyboardSheetInset;
   children: ReactNode;
   compact: boolean;
+  keyboardSettle?: number;
   maxHeight: number;
-  motion: Animated.Value;
   onBackdropPress: () => void;
-  screenHeight: number;
+  open: SharedValue<number>;
 }) {
+  const offscreen = Dimensions.get("screen").height;
+  const { height, progress } = useReanimatedKeyboardAnimation();
+  const sheetStyle = useAnimatedStyle(() => {
+    const slide = (1 - open.value) * offscreen;
+    // height.value is 0 when closed and negative while the keyboard is up, so
+    // adding it rides the sheet up with the keyboard. On this edge-to-edge window
+    // the keyboard inset (measured from the true screen bottom) lands the sheet a
+    // touch high, so settle it back down a few px as the keyboard arrives
+    // (progress 0→1) to leave a small, even resting gap.
+    const settle = interpolate(progress.value, [0, 1], [0, keyboardSettle]);
+    return { transform: [{ translateY: slide + height.value + settle }] };
+  });
   return (
     <View style={styles.sheetLayer} pointerEvents="box-none">
       <Pressable accessibilityLabel={backdropLabel} onPress={onBackdropPress} style={styles.sheetBackdrop} />
-      <KeyboardAvoidingView pointerEvents="box-none" style={styles.sheetKeyboard}>
-        <Animated.View
-          style={[
-            styles.captureSheet,
-            compact && styles.captureSheetCompact,
-            {
-              marginBottom: bottomInset,
-              maxHeight,
-              transform: [
-                {
-                  translateY: motion.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [screenHeight, 0]
-                  })
-                }
-              ]
-            }
-          ]}
+      <View pointerEvents="box-none" style={styles.sheetKeyboard}>
+        <Reanimated.View
+          style={[styles.captureSheet, compact && styles.captureSheetCompact, { maxHeight }, sheetStyle]}
         >
           {children}
-        </Animated.View>
-      </KeyboardAvoidingView>
+        </Reanimated.View>
+      </View>
     </View>
   );
 }

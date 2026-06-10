@@ -1,12 +1,12 @@
 import type { ReactElement, ReactNode, RefObject } from "react";
 import {
-  Animated,
   Pressable,
   ScrollView,
   StatusBar,
   View
 } from "react-native";
 import type { TextInput as NativeTextInput } from "react-native";
+import type { SharedValue } from "react-native-reanimated";
 import { FlashList } from "@shopify/flash-list";
 import type { FlashListProps, ListRenderItemInfo } from "@shopify/flash-list";
 import {
@@ -32,8 +32,7 @@ type HomeScreenProps = {
   data: {
     appSheets: ReactNode;
     bottomAppBar: ReactNode;
-    captureComposerMotion: Animated.Value;
-    captureKeyboardInset: Animated.Value;
+    captureSheetOpen: SharedValue<number>;
     homeCaptureTotalCount: number | null;
     homeCaptures: HomeListRow[];
     listPerfProps: Partial<FlashListProps<HomeListRow>>;
@@ -60,7 +59,7 @@ type HomeScreenProps = {
   };
   actions: {
     chooseCaptureMode: (mode: CaptureComposerMode) => void;
-    closeCaptureComposer: (options?: { keyboardHidden?: boolean }) => void;
+    closeCaptureComposer: () => void;
     loadCaptures: () => void;
     loadMoreActiveCaptures: () => void;
     openCaptureComposer: () => void;
@@ -81,8 +80,7 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
   const {
     appSheets,
     bottomAppBar,
-    captureComposerMotion,
-    captureKeyboardInset,
+    captureSheetOpen,
     homeCaptureTotalCount,
     homeCaptures,
     listPerfProps,
@@ -136,14 +134,11 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
       : "";
   const {
     keyboardVisible: composerKeyboardVisible,
-    screenHeight,
-    maxHeight: captureSheetMaxHeight,
-    bottomInset: captureSheetBottomInset
+    maxHeight: captureSheetMaxHeight
   } = keyboardSheetMetrics({
     active: showCaptureComposer,
     keyboardHeight,
     windowHeight,
-    keyboardInset: captureKeyboardInset,
     maxWithKeyboard: 430,
     maxWithoutKeyboard: 560,
     withoutKeyboardScale: 0.72
@@ -316,12 +311,10 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
       {showCaptureComposer ? (
         <KeyboardSheet
           backdropLabel="Close capture composer"
-          bottomInset={captureSheetBottomInset}
           compact={composerKeyboardVisible}
           maxHeight={captureSheetMaxHeight}
-          motion={captureComposerMotion}
           onBackdropPress={() => closeCaptureComposer()}
-          screenHeight={screenHeight}
+          open={captureSheetOpen}
         >
           <View style={styles.sheetGrabber} />
               <SheetHeader

@@ -1,14 +1,14 @@
 import type { RefObject } from "react";
-import { Animated, View } from "react-native";
+import { View } from "react-native";
 import type { TextInput as NativeTextInput } from "react-native";
+import type { SharedValue } from "react-native-reanimated";
 
 import type { Collection } from "../types";
 import { CollectionFormFields, KeyboardSheet, SheetHeader, keyboardSheetMetrics } from "../ui/components";
 import { styles } from "../ui/styles";
 
 export function CollectionComposerSheet({
-  captureComposerMotion,
-  captureKeyboardInset,
+  captureSheetOpen,
   collectionDescription,
   collectionTitle,
   collectionTitleInputRef,
@@ -21,8 +21,7 @@ export function CollectionComposerSheet({
   showCollectionForm,
   windowHeight
 }: {
-  captureComposerMotion: Animated.Value;
-  captureKeyboardInset: Animated.Value;
+  captureSheetOpen: SharedValue<number>;
   collectionDescription: string;
   collectionTitle: string;
   collectionTitleInputRef: RefObject<NativeTextInput | null>;
@@ -37,11 +36,10 @@ export function CollectionComposerSheet({
 }) {
   if (!showCollectionForm) return null;
   const editingCollection = selectedCollection;
-  const { keyboardVisible, screenHeight, maxHeight, bottomInset } = keyboardSheetMetrics({
+  const { keyboardVisible, maxHeight } = keyboardSheetMetrics({
     active: showCollectionForm,
     keyboardHeight,
     windowHeight,
-    keyboardInset: captureKeyboardInset,
     maxWithKeyboard: 430,
     maxWithoutKeyboard: 440,
     withoutKeyboardScale: 0.62
@@ -51,12 +49,10 @@ export function CollectionComposerSheet({
   return (
     <KeyboardSheet
       backdropLabel="Close collection composer"
-      bottomInset={bottomInset}
       compact={keyboardVisible}
       maxHeight={maxHeight}
-      motion={captureComposerMotion}
       onBackdropPress={onClose}
-      screenHeight={screenHeight}
+      open={captureSheetOpen}
     >
       <View style={styles.sheetGrabber} />
       <SheetHeader

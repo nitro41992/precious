@@ -22,6 +22,7 @@ import Reanimated, {
   useSharedValue,
   withTiming
 } from "react-native-reanimated";
+import type { SharedValue } from "react-native-reanimated";
 import {
   ArrowLeft,
   Camera,
@@ -82,8 +83,7 @@ type ReviewHandoffRect = {
 type CaptureReviewScreenProps = {
   data: {
     appSheets: ReactNode;
-    captureComposerMotion: Animated.Value;
-    captureKeyboardInset: Animated.Value;
+    captureSheetOpen: SharedValue<number>;
     faviconFailures: Record<string, boolean>;
     keyboardHeight: number;
     noteInputRef: RefObject<NativeTextInput | null>;
@@ -119,8 +119,8 @@ type CaptureReviewScreenProps = {
       imageCacheKey?: string;
       imageUrl?: string;
     }) => void;
-    closeNoteSheet: (options?: { keyboardHidden?: boolean }) => void;
-    closeTitleSheet: (options?: { keyboardHidden?: boolean }) => void;
+    closeNoteSheet: () => void;
+    closeTitleSheet: () => void;
     deleteCapture: () => void;
     copySource: () => void;
     markFaviconFailed: (host: string) => void;
@@ -332,8 +332,7 @@ function CaptureImageViewer({
 export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScreenProps) {
   const {
     appSheets,
-    captureComposerMotion,
-    captureKeyboardInset,
+    captureSheetOpen,
     faviconFailures,
     keyboardHeight,
     noteInputRef,
@@ -559,27 +558,22 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
   const noteHasText = Boolean(draftNote.trim());
   const {
     keyboardVisible: noteSheetKeyboardVisible,
-    screenHeight,
-    maxHeight: noteSheetMaxHeight,
-    bottomInset: noteSheetBottomInset
+    maxHeight: noteSheetMaxHeight
   } = keyboardSheetMetrics({
     active: noteSheetOpen,
     keyboardHeight,
     windowHeight,
-    keyboardInset: captureKeyboardInset,
     maxWithKeyboard: 440,
     maxWithoutKeyboard: 500,
     withoutKeyboardScale: 0.64
   });
   const {
     keyboardVisible: titleSheetKeyboardVisible,
-    maxHeight: titleSheetMaxHeight,
-    bottomInset: titleSheetBottomInset
+    maxHeight: titleSheetMaxHeight
   } = keyboardSheetMetrics({
     active: titleSheetOpen,
     keyboardHeight,
     windowHeight,
-    keyboardInset: captureKeyboardInset,
     maxWithKeyboard: 440,
     maxWithoutKeyboard: 500,
     withoutKeyboardScale: 0.64
@@ -1276,12 +1270,10 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       {noteSheetOpen ? (
         <KeyboardSheet
           backdropLabel="Close note editor"
-          bottomInset={noteSheetBottomInset}
           compact={noteSheetKeyboardVisible}
           maxHeight={noteSheetMaxHeight}
-          motion={captureComposerMotion}
           onBackdropPress={() => closeNoteSheet()}
-          screenHeight={screenHeight}
+          open={captureSheetOpen}
         >
           <View style={styles.sheetGrabber} />
           <SheetHeader
@@ -1323,12 +1315,10 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
       {titleSheetOpen ? (
         <KeyboardSheet
           backdropLabel="Close title editor"
-          bottomInset={titleSheetBottomInset}
           compact={titleSheetKeyboardVisible}
           maxHeight={titleSheetMaxHeight}
-          motion={captureComposerMotion}
           onBackdropPress={() => closeTitleSheet()}
-          screenHeight={screenHeight}
+          open={captureSheetOpen}
         >
           <View style={styles.sheetGrabber} />
           <SheetHeader

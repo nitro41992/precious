@@ -6,7 +6,6 @@ import {
   Animated,
   AppState,
   Dimensions,
-  Easing,
   Keyboard,
   Linking,
   Platform,
@@ -16,6 +15,7 @@ import {
 } from "react-native";
 import type { FlatList, TextInput } from "react-native";
 import { Image } from "expo-image";
+import { KeyboardController } from "react-native-keyboard-controller";
 import Reanimated, {
   Easing as ReanimatedEasing,
   interpolate,
@@ -967,7 +967,6 @@ export default function App() {
   const reviewHeroRectRef = useRef<ReviewHandoffRect | null>(null);
   const reviewHandoffRef = useRef<ReviewHandoffState | null>(null);
   const reviewHandoffKeyRef = useRef(0);
-  const lastKeyboardHeightRef = useRef(0);
   const captureComposerClosingRef = useRef(false);
   const captureImagePickerActiveRef = useRef(false);
   // Mirrors captureMode for the keyboard-hide listener: on Android, dismissing the
@@ -997,8 +996,10 @@ export default function App() {
   // Set when back interrupts an in-flight open: blocks a late-arriving
   // target from starting the forward morph mid-reversal.
   const reviewHandoffCancelled = useSharedValue(false);
-  const captureComposerMotion = useRef(new Animated.Value(0)).current;
-  const captureKeyboardInset = useRef(new Animated.Value(0)).current;
+  // Open/close slide for every keyboard sheet (0 = off-screen, 1 = docked). The
+  // sheet's keyboard tracking comes from the live OS keyboard animation inside
+  // KeyboardSheet, so this is the only sheet motion value we own.
+  const captureSheetOpen = useSharedValue(0);
   const skeletonPulse = useRef(new Animated.Value(0)).current;
   const homeRowsFade = useRef(new Animated.Value(0)).current;
   const collectionRowsFade = useRef(new Animated.Value(0)).current;
@@ -2425,92 +2426,41 @@ export default function App() {
   }
 
   function resetCaptureComposerSurface() {
-    captureComposerMotion.stopAnimation();
-    captureKeyboardInset.stopAnimation();
     setShowCaptureComposer(false);
     setCaptureComposerClosing(false);
     captureComposerClosingRef.current = false;
     setCaptureMode(DEFAULT_CAPTURE_COMPOSER_MODE);
     setKeyboardHeight(0);
-    captureComposerMotion.setValue(0);
-    captureKeyboardInset.setValue(0);
+    captureSheetOpen.value = 0;
   }
 
-  function animateCaptureSheetClose(
-    onClosed: () => void,
-    options: { keyboardHidden?: boolean } = {}
-  ) {
-    captureComposerMotion.stopAnimation();
-    captureKeyboardInset.stopAnimation();
+  // Runs once the close slide finishes (on the JS thread via runOnJS): unmount
+  // the sheet and clear the closing latch.
+  function finishCaptureSheetClose(onClosed: () => void) {
+    onClosed();
+    setKeyboardHeight(0);
+    setCaptureComposerClosing(false);
+    captureComposerClosingRef.current = false;
+  }
+
+  // The single close path for every keyboard sheet, used by the backdrop, the X,
+  // the back button, and the user dismissing the keyboard. The keyboard descent
+  // and the sheet slide are one parallel motion on the UI thread: dismiss() drives
+  // the OS keyboard down (which the sheet's worklet rides) while the open value
+  // times out to 0 over the same window. There is no "keyboard already hidden"
+  // branch — calling dismiss() when it's already going down is a harmless no-op,
+  // and keeping one path means the keyboard and sheet always leave together.
+  function animateCaptureSheetClose(onClosed: () => void) {
     captureComposerClosingRef.current = true;
     setCaptureComposerClosing(true);
-    if (options.keyboardHidden) {
-      onClosed();
-      setKeyboardHeight(0);
-      captureKeyboardInset.setValue(0);
-      captureComposerMotion.setValue(0);
-      setCaptureComposerClosing(false);
-      captureComposerClosingRef.current = false;
-      return;
-    }
-    const closeDuration = 125;
-    const keyboardWasVisible = keyboardHeight > 0;
-    const keyboardSettleDuration = Platform.OS === "android" ? 190 : 160;
-    Keyboard.dismiss();
-    const closeAnimation = keyboardWasVisible
-      ? Animated.sequence([
-          Animated.timing(captureKeyboardInset, {
-            duration: keyboardSettleDuration,
-            easing: Easing.out(Easing.cubic),
-            toValue: 0,
-            useNativeDriver: false
-          }),
-          Animated.timing(captureComposerMotion, {
-            duration: closeDuration,
-            easing: Easing.in(Easing.cubic),
-            toValue: 0,
-            // JS-driven to match the keyboard marginBottom inset it shares a view with.
-            useNativeDriver: false
-          })
-        ])
-      : Animated.timing(captureComposerMotion, {
-          duration: closeDuration,
-          easing: Easing.in(Easing.cubic),
-          toValue: 0,
-          // JS-driven to match the keyboard marginBottom inset it shares a view with.
-          useNativeDriver: false
-        });
-    closeAnimation.start(() => {
-      onClosed();
-      setKeyboardHeight(0);
-      captureKeyboardInset.setValue(0);
-      captureComposerMotion.setValue(0);
-      requestAnimationFrame(() => {
-        setCaptureComposerClosing(false);
-        captureComposerClosingRef.current = false;
-      });
-    });
-  }
-
-  // Snap the shared sheet animation surface to its open resting state. With the
-  // keyboard up, prime the inset to the last/estimated keyboard height so the
-  // sheet opens already docked above the keyboard; calm opens (the collection
-  // editor) start with the keyboard down. Shared by every keyboard sheet so the
-  // priming can't drift between them.
-  function primeSheetSurface({ keyboardUp }: { keyboardUp: boolean }) {
-    captureComposerMotion.stopAnimation();
-    captureKeyboardInset.stopAnimation();
-    captureComposerMotion.setValue(0);
-    if (!keyboardUp) {
-      captureKeyboardInset.setValue(0);
-      return;
-    }
-    const screenHeight = Dimensions.get("screen").height;
-    const estimatedKeyboardHeight =
-      lastKeyboardHeightRef.current || Math.round(screenHeight * (Platform.OS === "ios" ? 0.34 : 0.4));
-    lastKeyboardHeightRef.current = estimatedKeyboardHeight;
-    captureKeyboardInset.setValue(estimatedKeyboardHeight);
-    setKeyboardHeight(estimatedKeyboardHeight);
+    KeyboardController.dismiss();
+    captureSheetOpen.value = withTiming(
+      0,
+      { duration: 250, easing: ReanimatedEasing.in(ReanimatedEasing.cubic) },
+      (finished) => {
+        if (finished) runOnJS(finishCaptureSheetClose)(onClosed);
+      }
+    );
   }
 
   function openCaptureComposer() {
@@ -2524,7 +2474,6 @@ export default function App() {
     setCaptureMode(DEFAULT_CAPTURE_COMPOSER_MODE);
     captureComposerClosingRef.current = false;
     setCaptureComposerClosing(false);
-    primeSheetSurface({ keyboardUp: true });
     setShowCaptureComposer(true);
   }
 
@@ -2541,7 +2490,6 @@ export default function App() {
     setCollectionDescription("");
     setCollectionDraftDirty(false);
     setShowCaptureComposer(false);
-    primeSheetSurface({ keyboardUp: true });
     setShowCollectionForm(true);
   }
 
@@ -2553,14 +2501,13 @@ export default function App() {
     setCollectionDescription("");
     setCollectionDraftDirty(false);
     setCollectionComposerForPicker(true);
-    primeSheetSurface({ keyboardUp: true });
     setShowCollectionForm(true);
   }
 
   // Edit mode for the collection sheet: the detail pencil opens the same
   // composer prefilled by the useAppUiEffects draft sync (selectedCollection
-  // stays set, so the sheet renders its edit header and delete row). No
-  // keyboard priming — the sheet opens calm with the keyboard down.
+  // stays set, so the sheet renders its edit header and delete row). It opens
+  // calm with the keyboard down (no autofocus), so the sheet just slides up.
   function openCollectionEditor() {
     // Re-seed from the current collection on every open. The draft-sync effect
     // only fires when selectedCollectionId/collections change, so reopening the
@@ -2572,45 +2519,42 @@ export default function App() {
       setCollectionDescription(collection.description);
     }
     setCollectionDraftDirty(false);
-    primeSheetSurface({ keyboardUp: false });
     setShowCollectionForm(true);
   }
 
   function openNoteSheet() {
     setMessage("");
-    primeSheetSurface({ keyboardUp: true });
     setNoteSheetOpen(true);
   }
 
-  function closeNoteSheet(options?: { keyboardHidden?: boolean }) {
+  function closeNoteSheet() {
     if (!noteSheetOpen || captureComposerClosing) return;
     animateCaptureSheetClose(() => {
       setNoteSheetOpen(false);
-    }, options);
+    });
   }
 
   function openTitleSheet() {
     setMessage("");
-    primeSheetSurface({ keyboardUp: true });
     setTitleSheetOpen(true);
   }
 
-  function closeTitleSheet(options?: { keyboardHidden?: boolean }) {
+  function closeTitleSheet() {
     if (!titleSheetOpen || captureComposerClosing) return;
     animateCaptureSheetClose(() => {
       setTitleSheetOpen(false);
-    }, options);
+    });
   }
 
-  function closeCaptureComposer(options?: { keyboardHidden?: boolean }) {
+  function closeCaptureComposer() {
     if (!showCaptureComposer || captureComposerClosing) return;
     animateCaptureSheetClose(() => {
       setShowCaptureComposer(false);
       setCaptureMode(DEFAULT_CAPTURE_COMPOSER_MODE);
-    }, options);
+    });
   }
 
-  function closeCollectionComposer(options?: { keyboardHidden?: boolean }) {
+  function closeCollectionComposer() {
     if (!showCollectionForm || captureComposerClosing) return;
     animateCaptureSheetClose(() => {
       setShowCollectionForm(false);
@@ -2618,7 +2562,7 @@ export default function App() {
       setCollectionDescription("");
       setCollectionDraftDirty(false);
       setCollectionComposerForPicker(false);
-    }, options);
+    });
   }
 
   function chooseCaptureMode(mode: CaptureComposerMode) {
@@ -3025,9 +2969,8 @@ export default function App() {
     accountSheetOpen,
     captureComposerClosing,
     captureComposerClosingRef,
-    captureComposerMotion,
+    captureSheetOpen,
     captureImagePickerActiveRef,
-    captureKeyboardInset,
     captureMode,
     captureModeRef,
     captures,
@@ -3046,7 +2989,6 @@ export default function App() {
     collectionsOpen,
     draftNoteDirty,
     draftTitleDirty,
-    lastKeyboardHeightRef,
     noteInputRef,
     noteSheetOpen,
     titleInputRef,
@@ -5008,8 +4950,7 @@ export default function App() {
   function renderCollectionComposerSheet() {
     return (
       <CollectionComposerSheet
-        captureComposerMotion={captureComposerMotion}
-        captureKeyboardInset={captureKeyboardInset}
+        captureSheetOpen={captureSheetOpen}
         collectionDescription={collectionDescription}
         collectionTitle={collectionTitle}
         collectionTitleInputRef={collectionTitleInputRef}
@@ -5125,8 +5066,7 @@ export default function App() {
         }}
         data={{
           appSheets: renderAppSheets(),
-          captureComposerMotion,
-          captureKeyboardInset,
+          captureSheetOpen,
           faviconFailures,
           keyboardHeight,
           noteInputRef,
@@ -5190,8 +5130,7 @@ export default function App() {
           // tab-switch animation instead of sliding with this pane.
           appSheets: null,
           bottomAppBar: null,
-          captureComposerMotion,
-          captureKeyboardInset,
+          captureSheetOpen,
           homeCaptureTotalCount: activeCaptureTotalCount,
           homeCaptures: homeRows,
           listPerfProps: CAPTURE_LIST_PERF_PROPS,
