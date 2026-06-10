@@ -1,6 +1,7 @@
 import { forwardRef, memo, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import type {
+  LayoutChangeEvent,
   PressableProps,
   PressableStateCallbackType,
   ReturnKeyTypeOptions,
@@ -736,6 +737,62 @@ export function AiFieldInsight({ insight }: { insight: CaptureFieldRationale }) 
       </View>
       <Text style={styles.aiInsightText}>{insight.text}</Text>
     </View>
+  );
+}
+
+// Height+opacity collapse for a block whose presence comes and goes (e.g. the
+// picker's no-collection insight, which closes once a collection is chosen).
+// Driven imperatively with withTiming — never declarative entering/exiting —
+// because those stall on an idle UI thread and leave the block painted. We
+// measure the natural content height once (the inner View lays out unconstrained
+// and is clipped by the parent's fixed height) and interpolate to it.
+export function CollapsibleInsight({ visible, children }: { visible: boolean; children: ReactNode }) {
+  const [mounted, setMounted] = useState(visible);
+  const [contentHeight, setContentHeight] = useState(0);
+  const progress = useSharedValue(visible ? 1 : 0);
+
+  useEffect(() => {
+    cancelAnimation(progress);
+    if (visible) {
+      setMounted(true);
+      progress.value = withTiming(1, {
+        duration: motionDuration.enter,
+        easing: motionEasing.standard,
+        reduceMotion: motionReduceMotion
+      });
+      return;
+    }
+    progress.value = withTiming(
+      0,
+      {
+        duration: motionDuration.exit,
+        easing: motionEasing.exit,
+        reduceMotion: motionReduceMotion
+      },
+      (finished) => {
+        if (finished) runOnJS(setMounted)(false);
+      }
+    );
+  }, [visible, progress]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: progress.value,
+    height: contentHeight ? interpolate(progress.value, [0, 1], [0, contentHeight]) : undefined
+  }));
+
+  if (!mounted) return null;
+
+  return (
+    <Reanimated.View style={[styles.collapsibleInsight, animatedStyle]}>
+      <View
+        onLayout={(event: LayoutChangeEvent) => {
+          const height = event.nativeEvent.layout.height;
+          if (height > 0 && height !== contentHeight) setContentHeight(height);
+        }}
+      >
+        {children}
+      </View>
+    </Reanimated.View>
   );
 }
 

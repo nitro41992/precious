@@ -604,6 +604,10 @@ export const styles = StyleSheet.create({
     fontWeight: "600",
     lineHeight: 19
   },
+  // Clip wrapper for the height+opacity collapse of a presence-toggled insight.
+  collapsibleInsight: {
+    overflow: "hidden"
+  },
   // AI insight: a white card whose header reuses the "Suggested" pill (pale-green
   // pill + green fill-sparkle + green label), with the insight body below — so the
   // green always sits on white, never on a muddy gray fill.

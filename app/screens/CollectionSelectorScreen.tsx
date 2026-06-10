@@ -5,9 +5,11 @@ import { ArrowLeft, Check, Folder, MagnifyingGlass as Search, Plus } from "phosp
 
 import type { Capture, Collection, LoadPhase } from "../types";
 import { collectionSelectionActionState } from "../captureLogic";
-import { collectionCountLabel, splitCollectionsByRecency } from "../capturePresentation";
+import { captureFieldRationale, collectionCountLabel, splitCollectionsByRecency } from "../capturePresentation";
 import {
+  AiFieldInsight,
   AnimatedBottomSheet,
+  CollapsibleInsight,
   CollectionPredictionCard,
   IconButton,
   MotionPressable,
@@ -168,6 +170,14 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
     }
   }
 
+  // The AI's "No collection because…" read, shown only when nothing is filed yet
+  // (i.e. the AI recommended none and the user hasn't picked one). It collapses
+  // away the moment a collection is selected. The AI PICK / SUGGESTED cards carry
+  // their own reasoning, so this insight only fills the otherwise-empty card slot.
+  const collectionInsight = captureFieldRationale(selected, "collection", {
+    collectionSelectionIds
+  });
+
   const selectionCountText = collectionSelectionIds.length
     ? `${collectionSelectionIds.length} selected`
     : "No collection yet";
@@ -209,7 +219,13 @@ export function CollectionSelectorScreen({ actions, data, state }: CollectionSel
         <View style={styles.collectionSelectorSuggestion}>
           <SuggestionPendingToken label="Finding a collection" />
         </View>
-      ) : null}
+      ) : (
+        <CollapsibleInsight visible={collectionInsight.visible && !selectionTerm}>
+          <View style={styles.collectionSelectorSuggestion}>
+            <AiFieldInsight insight={collectionInsight} />
+          </View>
+        </CollapsibleInsight>
+      )}
       {canCreate ? (
         <MotionPressable
           accessibilityRole="button"

@@ -549,3 +549,81 @@ test("splitCollectionsByRecency ignores non-active collections", () => {
   assert.deepEqual(recent.map((c) => c.id), ["a"]);
   assert.deepEqual(rest, []);
 });
+
+test("captureFieldRationale surfaces the no-collection rationale while nothing is selected", () => {
+  const { captureFieldRationale } = loadCapturePresentation();
+  const noCollection = capture({
+    linkedCollections: [],
+    fieldRationales: {
+      collections: [
+        {
+          collectionId: null,
+          selectionLabel: "No collection",
+          text: "No collection because it's a one-off clip, not a recurring topic you save"
+        }
+      ]
+    }
+  });
+  const insight = captureFieldRationale(noCollection, "collection", {
+    collectionSelectionIds: []
+  });
+  assert.equal(insight.field, "collection");
+  assert.equal(insight.title, "AI insight");
+  assert.equal(
+    insight.text,
+    "No collection because it's a one-off clip, not a recurring topic you save"
+  );
+  assert.equal(insight.visible, true);
+});
+
+test("captureFieldRationale hides the no-collection insight once a collection is selected", () => {
+  const { captureFieldRationale } = loadCapturePresentation();
+  const noCollection = capture({
+    linkedCollections: [],
+    fieldRationales: {
+      collections: [
+        {
+          collectionId: null,
+          selectionLabel: "No collection",
+          text: "No collection because it's a one-off clip, not a recurring topic you save"
+        }
+      ]
+    }
+  });
+  const insight = captureFieldRationale(noCollection, "collection", {
+    collectionSelectionIds: ["collection-a"]
+  });
+  // Text stays available so the block can render through its collapse animation,
+  // but it is no longer "current" so visibility flips off to drive the close.
+  assert.equal(insight.text, "No collection because it's a one-off clip, not a recurring topic you save");
+  assert.equal(insight.visible, false);
+});
+
+test("captureFieldRationale keeps the AI-pick insight visible while its collection stays selected", () => {
+  const { captureFieldRationale } = loadCapturePresentation();
+  const picked = capture({
+    linkedCollections: [
+      {
+        id: "collection-a",
+        createdBy: "analysis",
+        rationale: "I picked Recipes because the capture gives cooking steps."
+      }
+    ],
+    fieldRationales: {
+      collections: [
+        {
+          collectionId: "collection-a",
+          text: "I picked Recipes because the capture gives cooking steps."
+        }
+      ]
+    }
+  });
+  assert.equal(
+    captureFieldRationale(picked, "collection", { collectionSelectionIds: ["collection-a"] }).visible,
+    true
+  );
+  assert.equal(
+    captureFieldRationale(picked, "collection", { collectionSelectionIds: ["collection-b"] }).visible,
+    false
+  );
+});
