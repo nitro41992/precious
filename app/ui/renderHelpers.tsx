@@ -44,6 +44,7 @@ export type AppRenderHelpersInput = {
   onAccountActionsPress: () => void;
   onCaptureImageLoadState: (key: string, state: CaptureImageLoadState) => void;
   onCaptureRowImageDisplayed: (capture: Capture, url: string, cacheKey: string) => void;
+  onCalendarScreenOpen: () => void;
   onCollectionComposerOpen: () => void;
   onCollectionsScreenOpen: (mode: CollectionListMode) => void;
   onCollectionDescriptionChange: (value: string) => void;
@@ -268,10 +269,11 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
     return <ToastHost toast={input.toast} placement={placement} />;
   }
 
-  function renderBottomAppBar(active: "recent" | "collections") {
+  function renderBottomAppBar(active: "recent" | "collections" | "calendar") {
     return (
       <BottomAppBar
         active={active}
+        onCalendarPress={input.onCalendarScreenOpen}
         onCollectionsPress={() => input.onCollectionsScreenOpen("active")}
         // The FAB is the single global "add capture" action on every tab.
         onFabPress={input.onRecentComposerOpen}

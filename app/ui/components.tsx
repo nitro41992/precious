@@ -11,7 +11,7 @@ import type {
 } from "react-native";
 import { Animated, Dimensions, Easing, Pressable, View } from "react-native";
 import { Image } from "expo-image";
-import { Camera, CaretLeft, Check, ClockClockwise, Folder, Folders, Gear, HouseSimple, ImageSquare, Info, Link, MagnifyingGlass, Plus, Sparkle, Warning, X } from "phosphor-react-native";
+import { CalendarBlank, Camera, CaretLeft, Check, ClockClockwise, Folder, Folders, Gear, HouseSimple, ImageSquare, Info, Link, MagnifyingGlass, Plus, Sparkle, Warning, X } from "phosphor-react-native";
 import Reanimated, {
   cancelAnimation,
   interpolate,
@@ -528,15 +528,19 @@ export function KeyboardSheet({
 }
 
 export function RecentNavIcon({ color, selected = false, size = 24 }: NavIconProps) {
-  return <HouseSimple color={color} size={size} weight={selected ? "fill" : "bold"} />;
+  return <HouseSimple color={color} size={size} weight="regular" />;
 }
 
 export function CollectionsNavIcon({ color, selected = false, size = 24 }: NavIconProps) {
-  return <Folders color={color} size={size} weight={selected ? "fill" : "bold"} />;
+  return <Folders color={color} size={size} weight="regular" />;
+}
+
+export function CalendarNavIcon({ color, selected = false, size = 24 }: NavIconProps) {
+  return <CalendarBlank color={color} size={size} weight="regular" />;
 }
 
 export function SettingsNavIcon({ color, selected = false, size = 24 }: NavIconProps) {
-  return <Gear color={color} size={size} weight={selected ? "fill" : "bold"} />;
+  return <Gear color={color} size={size} weight="regular" />;
 }
 
 export function IconButton({
@@ -1439,17 +1443,19 @@ export function BottomAppBar({
   active,
   onRecentPress,
   onCollectionsPress,
+  onCalendarPress,
   onSettingsPress,
   onFabPress
 }: {
-  active: "recent" | "collections";
+  active: "recent" | "collections" | "calendar";
   onRecentPress: () => void;
   onCollectionsPress: () => void;
+  onCalendarPress: () => void;
   onSettingsPress: () => void;
   onFabPress: () => void;
 }) {
   const navItems: Array<{
-    key: "recent" | "collections" | "settings";
+    key: "recent" | "collections" | "calendar" | "settings";
     label: string;
     Icon: NavIconComponent;
     selected: boolean;
@@ -1471,6 +1477,14 @@ export function BottomAppBar({
       selected: active === "collections",
       onPress: onCollectionsPress,
       testID: "pc.nav.collections"
+    },
+    {
+      key: "calendar",
+      label: "Calendar",
+      Icon: CalendarNavIcon,
+      selected: active === "calendar",
+      onPress: onCalendarPress,
+      testID: "pc.nav.calendar"
     },
     {
       key: "settings",

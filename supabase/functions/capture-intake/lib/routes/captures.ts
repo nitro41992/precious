@@ -1,6 +1,7 @@
 import { adminClient } from "../supabase.ts";
 import { activeSaveIntentKeySet, CAPTURE_DETAIL_SELECT, CAPTURE_LIST_SELECT } from "../config.ts";
-import { boundedLimit, isUuid, runInBackground } from "../common.ts";
+import { boundedLimit, errorMessage, isUuid, runInBackground } from "../common.ts";
+import { syncDetectedCaptureEvents } from "../calendar/events.ts";
 import { json } from "../http.ts";
 import { archivedFilter, capturePayloadExpectsAsset, mergeAnalysisPatch, readCapturePayload, withCaptureState, withCaptureStates, withSignedCaptureAssetRows } from "../capture-records.ts";
 import { withLazySourcePreviewAssets } from "../source-previews.ts";
@@ -423,6 +424,13 @@ export async function handleCapturesResource(
           .single();
       }
       if (result.error) throw result.error;
+      await syncDetectedCaptureEvents(
+        supabase,
+        userId,
+        String(existingResult.data.id),
+        nextAnalysis,
+        nextAnalysis.display_title,
+      ).catch((error) => console.warn("Calendar event sync failed", errorMessage(error)));
       return await captureResponse(
         supabase,
         userId,
@@ -467,6 +475,13 @@ export async function handleCapturesResource(
         .select("*")
         .single();
       if (result.error) throw result.error;
+      await syncDetectedCaptureEvents(
+        supabase,
+        userId,
+        String(existingResult.data.id),
+        nextAnalysis,
+        nextAnalysis.display_title,
+      ).catch((error) => console.warn("Calendar event sync failed", errorMessage(error)));
       return await captureResponse(
         supabase,
         userId,

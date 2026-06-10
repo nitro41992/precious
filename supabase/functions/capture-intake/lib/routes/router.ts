@@ -9,6 +9,7 @@ import { handleCollectionCapturesResource } from "./collection-captures.ts";
 import { handleCollectionLinksResource } from "./collection-links.ts";
 import { handleCollectionsResource } from "./collections.ts";
 import { handleCollectionSuggestionsResource } from "./collection-suggestions.ts";
+import { handleEventsResource } from "./events.ts";
 import { handlePurgeDeletedResource } from "./purge-deleted.ts";
 import { handleSearchResource } from "./search.ts";
 import { handlePlacePhotoRequest } from "../places.ts";
@@ -59,6 +60,10 @@ export async function handleCaptureIntakeRequest(request: Request) {
         user.id,
         url,
       );
+    }
+
+    if (resource === "events") {
+      return await handleEventsResource(request, supabase, user.id, url);
     }
 
     if (resource === "purge-deleted") {

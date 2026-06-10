@@ -555,3 +555,51 @@ test("pickCaptureFromRaw returns null when absent, empty, or malformed", () => {
   assert.equal(pickCaptureFromRaw("{not json", "local-a"), null);
   assert.equal(pickCaptureFromRaw(raw, ""), null);
 });
+
+test("eventFromRemote maps a snake_case timed event, trimming Postgres time seconds", () => {
+  const { eventFromRemote } = loadRemoteData();
+  const event = eventFromRemote({
+    id: "evt-1",
+    capture_id: "cap-9",
+    title: "Rooftop film night",
+    start_date: "2026-07-03",
+    end_date: "2026-07-03",
+    start_time: "20:00:00",
+    end_time: "22:30:00",
+    all_day: false,
+    duration: 150,
+    duration_unit: "minutes",
+    date_precision: "exact",
+    time_precision: "time_range",
+    timezone: "America/New_York",
+    source: "analysis",
+    status: "detected",
+    reminder_index: 0
+  });
+  assert.equal(event.startTime, "20:00");
+  assert.equal(event.endTime, "22:30");
+  assert.equal(event.allDay, false);
+  assert.equal(event.captureId, "cap-9");
+  assert.equal(event.durationUnit, "minutes");
+  assert.equal(event.source, "analysis");
+});
+
+test("eventFromRemote treats a missing start time as an all-day event with null capture", () => {
+  const { eventFromRemote } = loadRemoteData();
+  const event = eventFromRemote({
+    id: "evt-2",
+    capture_id: null,
+    title: "Trip week",
+    start_date: "2026-08-01",
+    all_day: true,
+    date_precision: "month",
+    source: "manual",
+    status: "confirmed"
+  });
+  assert.equal(event.allDay, true);
+  assert.equal(event.startTime, "");
+  assert.equal(event.endDate, "2026-08-01");
+  assert.equal(event.captureId, null);
+  assert.equal(event.datePrecision, "month");
+  assert.equal(event.source, "manual");
+});

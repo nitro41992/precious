@@ -23,6 +23,7 @@ import {
   reviewRationaleFromRemote,
   uniqueCaptures
 } from "./capturePresentation";
+import type { CalendarEvent } from "./calendarLogic";
 
 export const CAPTURE_PAGE_SIZE = 18;
 export const COLLECTION_CAPTURE_PAGE_SIZE = 18;
@@ -480,6 +481,64 @@ export function edgeResourceUrl(apiUrl: string, resource: string, params: Record
   url.searchParams.set("resource", resource);
   for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
   return url.toString();
+}
+
+export function calendarEventsUrl(apiUrl: string, params: { from: string; to: string }) {
+  return edgeResourceUrl(apiUrl, "events", { from: params.from, to: params.to });
+}
+
+export function calendarEventMutationUrl(apiUrl: string) {
+  return edgeResourceUrl(apiUrl, "events");
+}
+
+// Postgres `time` serializes as "HH:MM:SS"; the app's reminder utilities expect "HH:mm".
+function trimRemoteTime(value: unknown): string {
+  const text = String(value || "");
+  return /^\d{2}:\d{2}/.test(text) ? text.slice(0, 5) : "";
+}
+
+const CALENDAR_DATE_PRECISIONS = new Set([
+  "exact",
+  "day",
+  "date_range",
+  "week",
+  "month_window",
+  "month",
+  "unknown"
+]);
+const CALENDAR_TIME_PRECISIONS = new Set(["exact", "time_range", "unknown"]);
+const CALENDAR_DURATION_UNITS = new Set(["minutes", "hours", "days", "weeks"]);
+
+export function eventFromRemote(row: Record<string, any>): CalendarEvent {
+  const startDate = String(row.start_date || "");
+  const startTime = trimRemoteTime(row.start_time);
+  const durationUnit = CALENDAR_DURATION_UNITS.has(String(row.duration_unit))
+    ? (String(row.duration_unit) as CalendarEvent["durationUnit"])
+    : null;
+  return {
+    id: String(row.id),
+    captureId: nullableValue(row.capture_id) || null,
+    title: String(row.title || ""),
+    startDate,
+    endDate: String(row.end_date || startDate),
+    startTime,
+    endTime: startTime ? trimRemoteTime(row.end_time) : "",
+    allDay: row.all_day === true || !startTime,
+    duration: Number.isFinite(Number(row.duration)) && Number(row.duration) > 0
+      ? Number(row.duration)
+      : null,
+    durationUnit,
+    datePrecision: CALENDAR_DATE_PRECISIONS.has(String(row.date_precision))
+      ? (String(row.date_precision) as CalendarEvent["datePrecision"])
+      : "exact",
+    timePrecision: CALENDAR_TIME_PRECISIONS.has(String(row.time_precision))
+      ? (String(row.time_precision) as CalendarEvent["timePrecision"])
+      : "unknown",
+    timezone: nullableValue(row.timezone) || null,
+    source: row.source === "manual" ? "manual" : "analysis",
+    status: row.status === "confirmed" || row.status === "dismissed" ? row.status : "detected",
+    reminderIndex: Number.isFinite(Number(row.reminder_index)) ? Number(row.reminder_index) : null
+  };
 }
 
 export function normalizeCollectionStatus(value: unknown): Collection["status"] {

@@ -13,6 +13,7 @@ import {
   normalizeUrl,
   runInBackground,
 } from "./common.ts";
+import { syncDetectedCaptureEvents } from "./calendar/events.ts";
 import {
   ensureCaptureBucket,
   extractUrl,
@@ -712,6 +713,15 @@ export async function processCapture(captureId: string, userId: string) {
         console.warn("Capture embedding refresh failed", errorMessage(error));
       },
     );
+    await syncDetectedCaptureEvents(
+      supabase,
+      userId,
+      captureId,
+      analysis,
+      analysis.display_title,
+    ).catch((error) => {
+      console.warn("Calendar event sync failed", errorMessage(error));
+    });
     // Resolve the cross-capture pending suggestion off the critical path. It only ever *adds*
     // a pending_collection_suggestion and links this capture into the suggested group — never
     // unlinks — and re-reads the current analysis before writing so it can't clobber a

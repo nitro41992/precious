@@ -29,10 +29,12 @@ import type { SharedValue } from "react-native-reanimated";
 
 import { AppSheets } from "./sheets/AppSheets";
 import { CollectionComposerSheet } from "./sheets/CollectionComposerSheet";
+import { EventEditorSheet } from "./sheets/EventEditorSheet";
 import { CollectionSelectorScreen } from "./screens/CollectionSelectorScreen";
 import { useAppUiEffects } from "./state/useAppUiEffects";
 import { useAuthSession } from "./state/useAuthSession";
 import { useCaptureFeed } from "./state/useCaptureFeed";
+import { useCalendarState } from "./state/useCalendar";
 import { useCaptureReview } from "./state/useCaptureReview";
 import { useCaptureSearch } from "./state/useCaptureSearch";
 import { useCollectionsState } from "./state/useCollections";
@@ -64,6 +66,7 @@ import type {
   ToastState,
 } from "./types";
 import { DEFAULT_CAPTURE_COMPOSER_MODE } from "./types";
+import type { CalendarEvent } from "./calendarLogic";
 import {
   nativeClipboard,
   nativeStore,
@@ -77,6 +80,7 @@ import {
   captureImageLoadKey,
   captureImageUrl,
   cleanedReviewDraft,
+  dateStringFromDate,
   type CollectionRestoreAnchor,
   friendlyError,
   insertCollectionAtAnchor,
@@ -92,6 +96,8 @@ import {
   COLLECTION_CAPTURE_PAGE_SIZE,
   cachedCapturePageFromRaw,
   cachedCollectionPageFromRaw,
+  calendarEventMutationUrl,
+  calendarEventsUrl,
   captureBelongsToCollection,
   captureDetailUrl,
   captureFromRemote,
@@ -100,6 +106,7 @@ import {
   collectionFromRemote,
   collectionLinkTimestamp,
   edgeResourceUrl,
+  eventFromRemote,
   freshLocalProcessingCaptures,
   isFreshLocalProcessingCapture,
   pickCaptureFromRaw,
@@ -110,6 +117,7 @@ import { AuthScreen } from "./screens/AuthScreen";
 import { CaptureReviewScreen } from "./screens/CaptureReviewScreen";
 import { CollectionDetailScreen } from "./screens/CollectionDetailScreen";
 import { CollectionSearchScreen } from "./screens/CollectionSearchScreen";
+import { CalendarScreen } from "./screens/CalendarScreen";
 import { CollectionsScreen } from "./screens/CollectionsScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { SearchScreen } from "./screens/SearchScreen";
@@ -832,6 +840,8 @@ export default function App() {
   const [capturesNextCursor, setCapturesNextCursor] = useState<string | null>(null);
   const [archivedCapturesNextCursor, setArchivedCapturesNextCursor] = useState<string | null>(null);
   const [collectionsOpen, setCollectionsOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const calendar = useCalendarState();
   const [collectionSearchOpen, setCollectionSearchOpen] = useState(false);
   const [collectionSearchQuery, setCollectionSearchQuery] = useState("");
   const [collectionsMode, setCollectionsMode] = useState<CollectionListMode>("active");
@@ -1788,6 +1798,115 @@ export default function App() {
     [loadCaptures]
   );
 
+  function monthRangeBounds(year: number, month: number) {
+    const monthLabel = `${year}-${String(month + 1).padStart(2, "0")}`;
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    return { from: `${monthLabel}-01`, to: `${monthLabel}-${String(lastDay).padStart(2, "0")}` };
+  }
+
+  const loadEvents = useCallback(async (from: string, to: string) => {
+    if (!authReady || !config?.apiUrl || !session) return;
+    calendar.setEventsLoading(true);
+    calendar.setEventsError(null);
+    try {
+      const json = (await withFreshAccessToken(async (accessToken) =>
+        requestJson(calendarEventsUrl(config.apiUrl, { from, to }), {
+          headers: {
+            accept: "application/json",
+            apikey: config.supabaseAnonKey,
+            authorization: `Bearer ${accessToken}`
+          }
+        })
+      )) as { events?: Array<Record<string, any>>; next_event_date?: string | null };
+      calendar.setEvents((json.events ?? []).map(eventFromRemote));
+      calendar.setNextEventDate(json.next_event_date ?? null);
+    } catch (error) {
+      calendar.setEventsError(friendlyError(error, "Could not load your calendar."));
+    } finally {
+      calendar.setEventsLoading(false);
+    }
+  }, [authReady, config, session, withFreshAccessToken, calendar]);
+
+  const loadEventsForMonth = useCallback((year: number, month: number) => {
+    const { from, to } = monthRangeBounds(year, month);
+    void loadEvents(from, to);
+  }, [loadEvents]);
+
+  const submitEventMutation = useCallback(async (
+    method: "POST" | "PATCH",
+    body: Record<string, unknown>
+  ) => {
+    if (!config?.apiUrl || !session) return false;
+    try {
+      await withFreshAccessToken(async (accessToken) =>
+        requestJson(calendarEventMutationUrl(config.apiUrl), {
+          method,
+          headers: {
+            accept: "application/json",
+            apikey: config.supabaseAnonKey,
+            authorization: `Bearer ${accessToken}`
+          },
+          body
+        })
+      );
+      loadEventsForMonth(calendar.visibleMonth.year, calendar.visibleMonth.month);
+      return true;
+    } catch (error) {
+      showErrorToast(error, "Could not save the event.");
+      return false;
+    }
+  }, [config, session, withFreshAccessToken, loadEventsForMonth, calendar.visibleMonth, showErrorToast]);
+
+  const saveCalendarEvent = useCallback((
+    body: Record<string, unknown>,
+    eventId?: string | null
+  ) => submitEventMutation(eventId ? "PATCH" : "POST", eventId ? { ...body, eventId, action: "update" } : body),
+    [submitEventMutation]
+  );
+
+  const deleteCalendarEvent = useCallback((eventId: string) =>
+    submitEventMutation("PATCH", { eventId, action: "delete" }),
+    [submitEventMutation]
+  );
+
+  const showCalendarMonth = useCallback((year: number, month: number, date?: string | null) => {
+    calendar.setVisibleMonth({ year, month });
+    if (typeof date !== "undefined") calendar.setSelectedDate(date);
+    loadEventsForMonth(year, month);
+  }, [calendar, loadEventsForMonth]);
+
+  const stepCalendarMonth = useCallback((delta: number) => {
+    const base = new Date(calendar.visibleMonth.year, calendar.visibleMonth.month + delta, 1);
+    showCalendarMonth(base.getFullYear(), base.getMonth(), null);
+  }, [calendar.visibleMonth, showCalendarMonth]);
+
+  const jumpToNextCalendarEvent = useCallback(() => {
+    const target = calendar.nextEventDate;
+    if (!target) return;
+    showCalendarMonth(Number(target.slice(0, 4)), Number(target.slice(5, 7)) - 1, target);
+  }, [calendar, showCalendarMonth]);
+
+  const showCalendarToday = useCallback(() => {
+    const now = new Date();
+    showCalendarMonth(now.getFullYear(), now.getMonth(), dateStringFromDate(now));
+  }, [showCalendarMonth]);
+
+  // Tapping any event opens the editor. Detected (capture-backed) events are editable too — the
+  // backend promotes an edited detected event to 'confirmed' so re-analysis won't overwrite it.
+  const handleCalendarEventPress = useCallback((event: CalendarEvent) => {
+    calendar.openEventEditor({ event });
+  }, [calendar]);
+
+  const handleSaveCalendarEvent = useCallback((body: Record<string, unknown>, eventId?: string | null) => {
+    void saveCalendarEvent(body, eventId);
+    calendar.closeEventEditor();
+  }, [saveCalendarEvent, calendar]);
+
+  const handleDeleteCalendarEvent = useCallback((eventId: string) => {
+    void deleteCalendarEvent(eventId);
+    calendar.closeEventEditor();
+  }, [deleteCalendarEvent, calendar]);
+
   const {
     currentSearchKey,
     remoteSearchActive,
@@ -2433,8 +2552,26 @@ export default function App() {
     setCollectionSearchOpen(false);
     setSuggestionsOpen(false);
     setCollectionsOpen(false);
+    setCalendarOpen(false);
     setSettingsOpen(false);
     setMessage("");
+  }
+
+  function openCalendar() {
+    selectCapture(null);
+    selectCollection(null);
+    setSearchOpen(false);
+    setCollectionSearchOpen(false);
+    setSuggestionsOpen(false);
+    setCollectionsOpen(false);
+    setSettingsOpen(false);
+    setMessage("");
+    setCalendarOpen(true);
+    const now = new Date();
+    if (now.getFullYear() === calendar.visibleMonth.year && now.getMonth() === calendar.visibleMonth.month) {
+      calendar.setSelectedDate(dateStringFromDate(now));
+    }
+    loadEventsForMonth(calendar.visibleMonth.year, calendar.visibleMonth.month);
   }
 
   function openAccountActions() {
@@ -2444,6 +2581,7 @@ export default function App() {
     setCollectionSearchOpen(false);
     setSuggestionsOpen(false);
     setCollectionsOpen(false);
+    setCalendarOpen(false);
     setMessage("");
     setSettingsOpen(true);
   }
@@ -2528,6 +2666,7 @@ export default function App() {
     // pane. Switch to Recents so it opens on the visible pane (both panes stay
     // mounted, so without this it would open behind the Collections tab).
     setCollectionsOpen(false);
+    setCalendarOpen(false);
     setSuggestionsOpen(false);
     setCaptureMode(DEFAULT_CAPTURE_COMPOSER_MODE);
     captureComposerClosingRef.current = false;
@@ -2649,6 +2788,7 @@ export default function App() {
     setSettingsOpen(false);
     setCollectionsMode(mode);
     setCollectionsOpen(true);
+    setCalendarOpen(false);
     setSelectedCollectionId(null);
     if (mode === "active") void loadSuggestions();
     const cached = collectionsCacheRef.current[mode];
@@ -5149,6 +5289,7 @@ export default function App() {
     homeFeedRevealPending,
     homeRowsFade,
     onAccountActionsPress: openAccountActions,
+    onCalendarScreenOpen: openCalendar,
     onCaptureImageLoadState: markCaptureImageLoadState,
     onCaptureRowImageDisplayed: recordCaptureRowImageDisplayed,
     onCollectionComposerOpen: openCollectionComposer,
@@ -5215,6 +5356,14 @@ export default function App() {
           deleteConfirmOpen={deleteConfirmOpen}
           onCloseDeleteConfirm={() => setDeleteConfirmOpen(false)}
           onConfirmDelete={() => void deleteAccount()}
+        />
+        <EventEditorSheet
+          event={calendar.editorEvent}
+          onClose={calendar.closeEventEditor}
+          onDelete={handleDeleteCalendarEvent}
+          onSave={handleSaveCalendarEvent}
+          seedDate={calendar.editorDate}
+          visible={calendar.editorOpen}
         />
         {selected ? (
           <CollectionSelectorScreen
@@ -5431,6 +5580,31 @@ export default function App() {
     );
   }
 
+  function renderCalendarScreen(_options: { includeChrome?: boolean } = {}) {
+    return (
+      <CalendarScreen
+        actions={{
+          onPrevMonth: () => stepCalendarMonth(-1),
+          onNextMonth: () => stepCalendarMonth(1),
+          onToday: showCalendarToday,
+          onJumpToNextEvent: jumpToNextCalendarEvent,
+          onSelectDay: calendar.setSelectedDate,
+          onAddEvent: (date) => calendar.openEventEditor({ date: date ?? calendar.selectedDate }),
+          onSelectEvent: handleCalendarEventPress
+        }}
+        data={{
+          events: calendar.events,
+          eventsError: calendar.eventsError,
+          nextEventDate: calendar.nextEventDate
+        }}
+        state={{
+          visibleMonth: calendar.visibleMonth,
+          selectedDate: calendar.selectedDate
+        }}
+      />
+    );
+  }
+
   // The search screen, rendered both as the primary overlay and (chrome
   // suppressed) beneath a capture review opened from search — the same mounted
   // frame in both, so the close morph lands on the live row and the query /
@@ -5541,7 +5715,7 @@ export default function App() {
     topOverlay = null,
     topOverlayHandoff = null
   }: {
-    active?: "recent" | "collections";
+    active?: "recent" | "collections" | "calendar";
     // The source list kept mounted beneath a review overlay (collection detail
     // or search), so the close morph lands on the live row.
     underlay?: ReactNode;
@@ -5573,7 +5747,11 @@ export default function App() {
     // Keeping the sheets and toast here too preserves their stacking above the
     // bar (a bar hoisted above the panes would otherwise paint over in-pane
     // sheets/toast). Order matters: bar, then toast, then sheets — last on top.
-    const composerOpen = active === "recent" ? showCaptureComposer : showCollectionForm;
+    const composerOpen = active === "recent"
+      ? showCaptureComposer
+      : active === "collections"
+        ? showCollectionForm
+        : false;
     const bottomBarVisible = paneChromeVisible && !composerOpen;
     return (
       <View collapsable={false} ref={handoffRootRef} style={styles.screenStack}>
@@ -5582,6 +5760,9 @@ export default function App() {
         </TopLevelPane>
         <TopLevelPane active={active === "collections"} direction={1}>
           {renderCollectionsScreen({ includeChrome: active === "collections" && paneChromeVisible })}
+        </TopLevelPane>
+        <TopLevelPane active={active === "calendar"} direction={1}>
+          {renderCalendarScreen({ includeChrome: active === "calendar" && paneChromeVisible })}
         </TopLevelPane>
         {bottomBarVisible ? renderBottomAppBar(active) : null}
         {paneChromeVisible ? renderToast(composerOpen ? "footer" : "bottomNav") : null}
@@ -5866,6 +6047,10 @@ export default function App() {
       active: collectionsOpen ? "collections" : "recent",
       underlay: renderSuggestionsOverlay()
     });
+  }
+
+  if (calendarOpen) {
+    return renderTopLevelStack({ active: "calendar" });
   }
 
   if (collectionsOpen) {
