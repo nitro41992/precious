@@ -82,6 +82,7 @@ export const calendarStyles = StyleSheet.create({
     paddingVertical: 4,
     width: CALENDAR_GEOMETRY.railCellWidth
   },
+  railCellPressed: { opacity: 0.55 },
   railWeekday: {
     color: colors.placeholder,
     ...typefaces.bold,
@@ -99,7 +100,10 @@ export const calendarStyles = StyleSheet.create({
     width: 42
   },
   railDiscToday: { backgroundColor: colors.accentSoft },
-  railDiscSelected: { backgroundColor: colors.accent, ...softCardShadow },
+  // Explicitly circular and elevation-free: Android renders a View that has BOTH `elevation` and
+  // `borderRadius` with a square (rect-outline) fill, which is what made the selected day a square
+  // while today stayed a circle. No shadow + an explicit radius keeps the selection a clean circle.
+  railDiscSelected: { backgroundColor: colors.accent, borderRadius: 21 },
   railNumber: { color: colors.ink, ...typefaces.medium, fontSize: 18, lineHeight: 22 },
   railNumberToday: { color: colors.accentTextStrong, ...typefaces.bold },
   railNumberSelected: { color: colors.onAccent, ...typefaces.bold },

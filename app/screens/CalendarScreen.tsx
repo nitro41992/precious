@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useRef } from "react";
-import { Dimensions, ScrollView, StatusBar, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { Dimensions, Pressable, ScrollView, StatusBar, View } from "react-native";
 import { ArrowRight, CalendarBlank, CaretLeft, CaretRight } from "phosphor-react-native";
 
 import { dateFromReminderParts, dateStringFromDate, monthLabel } from "../capturePresentation";
@@ -86,6 +86,19 @@ export function CalendarScreen({ actions, data, state }: CalendarScreenProps) {
     onSelectDay(eventDaysThisMonth[0]);
   }, [selectedInMonth, eventDaysThisMonth, onSelectDay]);
 
+  const scrollRailToDate = useCallback((date: string, animated: boolean) => {
+    const index = Number(date.slice(8, 10)) - 1;
+    const x = Math.max(0, index * G.railCellWidth - SCREEN_WIDTH / 2 + G.railCellWidth / 2);
+    railRef.current?.scrollTo({ x, animated });
+  }, []);
+
+  // Recenter the rail on today whenever Today is pressed — even when today is already the selected
+  // day (then the selectedDate effect below won't re-fire), so a rail scrolled away still snaps back.
+  const handleTodayPress = useCallback(() => {
+    onToday();
+    requestAnimationFrame(() => scrollRailToDate(today, true));
+  }, [onToday, scrollRailToDate, today]);
+
   // Keep the selected day centered in the rail; with no day selected in this month (e.g. a
   // fuzzy-only month), snap back to the 1st so the rail never lingers on the previous month's offset.
   useEffect(() => {
@@ -93,9 +106,7 @@ export function CalendarScreen({ actions, data, state }: CalendarScreenProps) {
       railRef.current?.scrollTo({ x: 0, animated: false });
       return;
     }
-    const index = Number(selectedDate.slice(8, 10)) - 1;
-    const x = Math.max(0, index * G.railCellWidth - SCREEN_WIDTH / 2 + G.railCellWidth / 2);
-    const handle = setTimeout(() => railRef.current?.scrollTo({ x, animated: true }), 60);
+    const handle = setTimeout(() => scrollRailToDate(selectedDate, true), 60);
     return () => clearTimeout(handle);
   }, [selectedDate, monthPrefix]);
 
@@ -124,7 +135,7 @@ export function CalendarScreen({ actions, data, state }: CalendarScreenProps) {
           <MotionPressable
             accessibilityLabel="Jump to today"
             accessibilityRole="button"
-            onPress={onToday}
+            onPress={handleTodayPress}
             style={({ pressed }) => [cs.todayPill, pressed && cs.todayPillPressed]}
             testID="pc.calendar.today"
           >
@@ -163,13 +174,15 @@ export function CalendarScreen({ actions, data, state }: CalendarScreenProps) {
           const isToday = entry.date === today;
           const count = dots[entry.date]?.count ?? 0;
           return (
-            <MotionPressable
+            // Plain Pressable, not MotionPressable: its animated scale transform promotes the cell
+            // to an Android hardware layer where the selected disc's rounded background rasterizes
+            // as a square. Opacity dim is the press feedback; the disc turning lime is the rest.
+            <Pressable
               accessibilityLabel={entry.date}
               accessibilityRole="button"
               key={entry.date}
               onPress={() => onSelectDay(entry.date)}
-              pressScale={0.96}
-              style={cs.railCell}
+              style={({ pressed }) => [cs.railCell, pressed && cs.railCellPressed]}
               testID={`pc.calendar.day.${entry.date}`}
             >
               <Text style={[cs.railWeekday, isSelected && cs.railWeekdaySelected]}>{entry.weekday}</Text>
@@ -191,7 +204,7 @@ export function CalendarScreen({ actions, data, state }: CalendarScreenProps) {
                   <View key={i} style={[cs.railDot, isSelected && cs.railDotSelected]} />
                 ))}
               </View>
-            </MotionPressable>
+            </Pressable>
           );
         })}
       </ScrollView>
