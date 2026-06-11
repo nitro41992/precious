@@ -3,8 +3,9 @@ import {
   CAPTURE_GATE_REASONING_EFFORT,
   captureGateSchema,
   OPENAI_MODEL,
+  reasoningEffortForModel,
 } from "../config.ts";
-import { env } from "../common.ts";
+import { fetchOpenAiResponses } from "./openai-http.ts";
 import { titleFallback } from "../capture-records.ts";
 import type {
   AnalysisOutput,
@@ -26,14 +27,7 @@ export async function runCaptureGate(capture: CaptureRow) {
   const started = Date.now();
   const model = captureGateModel();
   const requestBody = buildCaptureGateRequestBody(capture, model);
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${env("OPENAI_API_KEY")}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(requestBody),
-  });
+  const response = await fetchOpenAiResponses(requestBody);
   const raw = await response.json();
   if (!response.ok) {
     throw new Error(
@@ -70,7 +64,9 @@ export function buildCaptureGateRequestBody(capture: CaptureRow, model: string) 
   }
   return {
     model,
-    reasoning: { effort: CAPTURE_GATE_REASONING_EFFORT },
+    reasoning: {
+      effort: reasoningEffortForModel(model, CAPTURE_GATE_REASONING_EFFORT),
+    },
     max_output_tokens: 700,
     input: [
       {

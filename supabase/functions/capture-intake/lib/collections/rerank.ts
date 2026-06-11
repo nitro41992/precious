@@ -1,8 +1,9 @@
 import {
   COLLECTION_RERANK_REASONING_EFFORT,
   OPENAI_MODEL,
+  reasoningEffortForModel,
 } from "../config.ts";
-import { env } from "../common.ts";
+import { fetchOpenAiResponses } from "../analysis/openai-http.ts";
 import { compactUrlEvidence } from "../url-evidence/quality.ts";
 import type { CaptureRow, RetrievedCollection, UrlEvidence } from "../types.ts";
 import {
@@ -191,7 +192,9 @@ export async function rerankCollectionsForCapture(
   const model = Deno.env.get("OPENAI_COLLECTION_RERANK_MODEL") || OPENAI_MODEL;
   const requestBody = {
     model,
-    reasoning: { effort: COLLECTION_RERANK_REASONING_EFFORT },
+    reasoning: {
+      effort: reasoningEffortForModel(model, COLLECTION_RERANK_REASONING_EFFORT),
+    },
     max_output_tokens: 1200,
     input: [
       {
@@ -213,14 +216,7 @@ export async function rerankCollectionsForCapture(
       },
     },
   };
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${env("OPENAI_API_KEY")}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(requestBody),
-  });
+  const response = await fetchOpenAiResponses(requestBody);
   const raw = await response.json();
   if (!response.ok) {
     throw new Error(

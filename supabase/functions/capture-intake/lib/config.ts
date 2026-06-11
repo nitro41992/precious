@@ -84,24 +84,59 @@ export const clientDiagnosticNumberFields = new Set([
 // OPENAI_MODEL secret. Classification/ranking stages override to a cheaper tier via their own
 // OPENAI_*_MODEL secrets.
 export const OPENAI_MODEL = Deno.env.get("OPENAI_MODEL") || "gpt-5.4-mini";
+// Hard timeout for every OpenAI Responses call. A stalled call (e.g. server-side web_search
+// hanging on a login-walled page) aborts at this bound instead of running until the edge worker
+// is terminated and stranding the capture in "processing" forever. Env-overridable.
+export const OPENAI_REQUEST_TIMEOUT_MS = Number(
+  Deno.env.get("OPENAI_REQUEST_TIMEOUT_MS") || "60000",
+);
+// Overall deadline for one capture's analysis pipeline. A slow-but-alive run (e.g. Exa plus a
+// server-side web_search that each return just under their own timeout) is failed fast and
+// cleanly here — the existing catch records a run and marks the capture recoverable "failed" —
+// instead of dragging on until the edge worker is killed and the capture is stranded. Above
+// normal completion (~15-30s) but well under the edge execution budget. Env-overridable.
+export const PIPELINE_DEADLINE_MS = Number(
+  Deno.env.get("PIPELINE_DEADLINE_MS") || "60000",
+);
+// Backstop for the rarer case the in-worker deadline can't catch: the worker is terminated
+// outright (its setTimeout never fires). The captures list fetch reaps anything still
+// "processing" past this to a recoverable "failed" so it never spins forever. Kept just above
+// the pipeline deadline so a genuinely-alive run is never reaped out from under itself.
+export const STALE_PROCESSING_MS = Number(
+  Deno.env.get("STALE_PROCESSING_MS") || String(90 * 1000),
+);
 export const COLLECTION_AUTO_LINK_CONFIDENCE = Number(
   Deno.env.get("COLLECTION_AUTO_LINK_CONFIDENCE") || "0.82",
 );
 export const COLLECTION_AUTO_LINK_LIMIT = 2;
-// Reasoning effort per LLM stage. The auxiliary classification/ranking calls default to
-// "minimal" (they don't need deep reasoning and it's the dominant latency cost on the
+// Reasoning effort per LLM stage. The auxiliary classification/ranking calls run at the lowest
+// effort (they don't need deep reasoning and it's the dominant latency cost on the
 // reasoning-heavy rerank + collection-context passes); the main extraction keeps "low".
+// The lowest tier is spelled differently across model families and the two spellings are
+// mutually exclusive — see reasoningEffortForModel below — so every call site maps the
+// configured token to whatever its (possibly per-stage-overridden) model accepts.
 // Env-overridable per stage so effort can be tuned without a deploy.
 export const PREFLIGHT_REASONING_EFFORT =
-  Deno.env.get("OPENAI_PREFLIGHT_REASONING_EFFORT") || "minimal";
+  Deno.env.get("OPENAI_PREFLIGHT_REASONING_EFFORT") || "none";
 export const CAPTURE_GATE_REASONING_EFFORT =
-  Deno.env.get("OPENAI_CAPTURE_GATE_REASONING_EFFORT") || "minimal";
+  Deno.env.get("OPENAI_CAPTURE_GATE_REASONING_EFFORT") || "none";
 export const COLLECTION_CONTEXT_REASONING_EFFORT =
-  Deno.env.get("OPENAI_COLLECTION_CONTEXT_REASONING_EFFORT") || "minimal";
+  Deno.env.get("OPENAI_COLLECTION_CONTEXT_REASONING_EFFORT") || "none";
 export const COLLECTION_RERANK_REASONING_EFFORT =
-  Deno.env.get("OPENAI_COLLECTION_RERANK_REASONING_EFFORT") || "minimal";
+  Deno.env.get("OPENAI_COLLECTION_RERANK_REASONING_EFFORT") || "none";
 export const ANALYSIS_REASONING_EFFORT =
   Deno.env.get("OPENAI_ANALYSIS_REASONING_EFFORT") || "low";
+
+// The two lowest reasoning tokens are mutually exclusive across model families: the gpt-5.4+
+// line accepts "none" (and rejects "minimal"), while the GPT-5.0 line — gpt-5, gpt-5-mini,
+// gpt-5-nano — accepts "minimal" (and rejects "none"). Since stages can override to a different
+// model than the gpt-5.4-mini default, a single configured literal can't be valid everywhere.
+// Normalize any lowest-tier request to the token the target model accepts; pass everything else
+// (low/medium/high/xhigh) straight through.
+export function reasoningEffortForModel(model: string, effort: string) {
+  if (effort !== "minimal" && effort !== "none") return effort;
+  return /gpt-5\.[1-9]/.test(model) ? "none" : "minimal";
+}
 // AI-suggested new collections. Lean conservative: only materialize a suggestion when
 // the model is reasonably confident, and treat a near-duplicate of an existing pending
 // suggestion (cosine similarity at/above this threshold) as the same group.

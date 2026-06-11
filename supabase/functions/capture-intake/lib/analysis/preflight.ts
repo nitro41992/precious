@@ -4,8 +4,10 @@ import {
   OPENAI_MODEL,
   PREFLIGHT_REASONING_EFFORT,
   preflightSchema,
+  reasoningEffortForModel,
 } from "../config.ts";
-import { env, hostFromUrl } from "../common.ts";
+import { hostFromUrl } from "../common.ts";
+import { fetchOpenAiResponses } from "./openai-http.ts";
 import { titleFallback } from "../capture-records.ts";
 import {
   compactUrlEvidence,
@@ -43,7 +45,9 @@ export async function runPreflight(
   const model = preflightModel();
   const requestBody: Record<string, unknown> = {
     model,
-    reasoning: { effort: PREFLIGHT_REASONING_EFFORT },
+    reasoning: {
+      effort: reasoningEffortForModel(model, PREFLIGHT_REASONING_EFFORT),
+    },
     max_output_tokens: 900,
     input: [
       {
@@ -68,14 +72,7 @@ export async function runPreflight(
       },
     },
   };
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${env("OPENAI_API_KEY")}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(requestBody),
-  });
+  const response = await fetchOpenAiResponses(requestBody);
   const raw = await response.json();
   if (!response.ok) {
     throw new Error(

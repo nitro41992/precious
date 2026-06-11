@@ -3,8 +3,10 @@ import {
   ANALYSIS_REASONING_EFFORT,
   OPENAI_MODEL,
   PROMPT_VERSION,
+  reasoningEffortForModel,
 } from "../config.ts";
-import { env } from "../common.ts";
+import { errorMessage, isTransientHttpStatus } from "../common.ts";
+import { fetchOpenAiResponses } from "./openai-http.ts";
 import { shouldUseWebSearch } from "../url-evidence/quality.ts";
 import type { CaptureRow, RetrievedCollection, UrlEvidence } from "../types.ts";
 import { buildPrompt, responseText } from "./prompts.ts";
@@ -78,7 +80,7 @@ function buildOpenAiRequestBody(
   );
   const requestBody: Record<string, unknown> = {
     model,
-    reasoning: { effort: ANALYSIS_REASONING_EFFORT },
+    reasoning: { effort: reasoningEffortForModel(model, ANALYSIS_REASONING_EFFORT) },
     // Output tokens drive generation latency; the analysis JSON fits comfortably under this.
     max_output_tokens: 1800,
     // The system message + the static instruction block that leads buildPrompt form a stable
@@ -103,7 +105,11 @@ function buildOpenAiRequestBody(
       },
     },
   };
-  if (shouldUseWebSearch(urlEvidence)) {
+  // Skip server-side web_search when the user attached image evidence: the image is now the
+  // content to read, so browsing a weak/login-walled URL adds no value and only risks stalling
+  // the call until the pipeline deadline (which is exactly what kept a photo-recovered capture
+  // failing). With no image, web_search still augments thin link evidence.
+  if (shouldUseWebSearch(urlEvidence) && !imageUrls.length) {
     requestBody.tools = [{ type: "web_search", search_context_size: "low" }];
     requestBody.tool_choice = "required";
     requestBody.include = ["web_search_call.action.sources"];
@@ -111,19 +117,70 @@ function buildOpenAiRequestBody(
   return requestBody;
 }
 
-async function requestOpenAiAnalysis(requestBody: Record<string, unknown>) {
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${env("OPENAI_API_KEY")}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(requestBody),
-  });
+const OPENAI_RETRY_BACKOFF_MS = 400;
+
+// Single retry, gated strictly on transient failures. A deterministic 4xx (invalid param such
+// as a bad reasoning effort, auth, or a schema rejection) is never retried — retrying it would
+// only burn a second identical-failing call. Only gateway/server errors (5xx), the standard
+// back-off codes, or a network/timeout failure get one more attempt.
+export async function requestOpenAiAnalysis(
+  requestBody: Record<string, unknown>,
+) {
+  const first = await attemptOpenAiAnalysis(requestBody);
+  if (first.ok || !first.transient) return first;
+  await new Promise((resolve) => setTimeout(resolve, OPENAI_RETRY_BACKOFF_MS));
+  const second = await attemptOpenAiAnalysis(requestBody);
+  return second.ok ? second : first;
+}
+
+export async function attemptOpenAiAnalysis(
+  requestBody: Record<string, unknown>,
+) {
+  let response: Response;
+  try {
+    response = await fetchOpenAiResponses(requestBody);
+  } catch (error) {
+    // A timeout abort (the call stalled past OPENAI_REQUEST_TIMEOUT_MS) is NOT retried — a stall
+    // on the same input just re-stalls and burns the very budget the timeout exists to protect.
+    // Other network blips have no HTTP status and get one retry.
+    const isTimeout = error instanceof DOMException &&
+      (error.name === "TimeoutError" || error.name === "AbortError");
+    return {
+      ok: false,
+      status: 0,
+      body: {
+        error: {
+          message: errorMessage(
+            error,
+            isTimeout ? "OpenAI request timed out" : "OpenAI request failed",
+          ),
+        },
+      },
+      transient: !isTimeout,
+    };
+  }
+  const status = response.status;
+  // Read as text first: gateways return upstream 5xx errors as plain text (e.g.
+  // "upstream connect error..."), which await response.json() would throw a SyntaxError on,
+  // surfacing as an opaque "Unexpected token" failure instead of a retryable transient error.
+  const rawText = await response.text();
+  let body: Record<string, unknown>;
+  try {
+    body = rawText ? JSON.parse(rawText) : {};
+  } catch {
+    body = {
+      error: {
+        message: `OpenAI returned a non-JSON ${status} response: ${
+          rawText.slice(0, 300)
+        }`,
+      },
+    };
+  }
   return {
     ok: response.ok,
-    status: response.status,
-    body: await response.json(),
+    status,
+    body,
+    transient: !response.ok && isTransientHttpStatus(status),
   };
 }
 

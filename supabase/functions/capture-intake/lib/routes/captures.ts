@@ -5,7 +5,7 @@ import { syncDetectedCaptureEvents } from "../calendar/events.ts";
 import { json } from "../http.ts";
 import { archivedFilter, capturePayloadExpectsAsset, mergeAnalysisPatch, readCapturePayload, withCaptureState, withCaptureStates, withSignedCaptureAssetRows } from "../capture-records.ts";
 import { withLazySourcePreviewAssets } from "../source-previews.ts";
-import { createOrGetCaptureFromFields, createOrGetCaptureWithAsset, failCaptureMissingAsset, processCapture } from "../captures.ts";
+import { createOrGetCaptureFromFields, createOrGetCaptureWithAsset, failCaptureMissingAsset, processCapture, reapStaleProcessingCaptures } from "../captures.ts";
 import { analysisRequiresReview, analysisWithCurrentIntent, normalizedReviewAnalysis, normalizedReviewTargets, resolveReviewTargets, reviewTargetsForAnalysis } from "../analysis/review-normalization.ts";
 import {
   acceptPendingCollectionDecisions,
@@ -29,6 +29,9 @@ export async function handleCapturesResource(
   url: URL,
 ) {
   if (request.method === "GET") {
+    // Reap any of this user's captures stranded in "processing" before reading the feed, so an
+    // endlessly-spinning capture self-heals into a recoverable "failed" the moment they look.
+    await reapStaleProcessingCaptures(supabase, userId);
     const clientCaptureKey = url.searchParams.get("clientCaptureKey");
     const archived = url.searchParams.get("archived") === "true";
     const includeRejectedTombstones =
@@ -158,6 +161,34 @@ export async function handleCapturesResource(
         userId,
         existingResult.data as Record<string, unknown>,
         body,
+      );
+    }
+
+    if (body.action === "reanalyze") {
+      // User-triggered recovery for a capture stranded by a transient/upstream analysis
+      // failure. Only re-run a capture that actually failed — never re-burn an LLM call on one
+      // that already analyzed. Flip it back to "processing" so the feed reflects the retry, then
+      // reuse the same processCapture path the initial intake uses.
+      if (existingResult.data.analysis_state !== "failed") {
+        return await captureResponse(
+          supabase,
+          userId,
+          String(existingResult.data.id),
+        );
+      }
+      const result = await supabase
+        .from("captures")
+        .update({ analysis_state: "processing", analysis_error: null })
+        .eq("user_id", userId)
+        .eq("id", String(existingResult.data.id))
+        .select("*")
+        .single();
+      if (result.error) throw result.error;
+      runInBackground(processCapture(String(existingResult.data.id), userId));
+      return await captureResponse(
+        supabase,
+        userId,
+        String(existingResult.data.id),
       );
     }
 

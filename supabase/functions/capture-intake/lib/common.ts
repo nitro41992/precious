@@ -19,6 +19,13 @@ export function env(name: string) {
   return value;
 }
 
+// HTTP statuses worth a single retry: gateway/server errors (>=500) plus the standard
+// "slow down / try again" codes. Deterministic client errors (400 invalid-param, 401/403
+// auth, 404 not-found) are intentionally excluded — retrying them only wastes the call.
+export function isTransientHttpStatus(status: number) {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
 export function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
     .test(value);

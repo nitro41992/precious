@@ -1307,7 +1307,7 @@ Deno.test("capture gate prompt treats capture text and image text as untrusted",
   );
 });
 
-Deno.test("capture gate request uses minimal reasoning effort", () => {
+Deno.test("capture gate request uses the lowest supported reasoning effort", () => {
   const request = urlEvidence.buildCaptureGateRequestBody(
     captureFixture({
       capture_type: "image",
@@ -1319,13 +1319,14 @@ Deno.test("capture gate request uses minimal reasoning effort", () => {
   ) as Record<string, any>;
   const userContent = request.input?.[1]?.content || [];
 
-  // The gate is a classification call; it routes to minimal reasoning effort to cut latency.
-  // gpt-5-mini accepts reasoning.effort "minimal" with structured output (verified against the
-  // Responses API); the earlier "low-only" assumption was stale.
+  // The gate is a classification call; it routes to the lowest reasoning effort to cut latency,
+  // mapped to the token the target model accepts. For this gpt-5-mini request that floor is
+  // "minimal" (the GPT-5.0 line rejects "none"); a gpt-5.4 model would instead get "none". The
+  // mapping exists because the two lowest tokens are mutually exclusive across model families.
   assertEqual(
     request.reasoning?.effort,
     "minimal",
-    "capture gate should route to minimal reasoning effort",
+    "gpt-5-mini gate should route to its supported lowest effort",
   );
   assert(
     userContent.some((entry: Record<string, unknown>) =>

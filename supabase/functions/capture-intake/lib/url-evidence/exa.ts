@@ -2,6 +2,7 @@ import {
   cleanedString,
   errorMessage,
   hostFromUrl,
+  isTransientHttpStatus,
   normalizeUrl,
   stringValue,
 } from "../common.ts";
@@ -125,10 +126,6 @@ export function exaContentsRequestBody(urls: string[]) {
     maxAgeHours: EXA_MAX_AGE_HOURS,
     livecrawlTimeout: EXA_LIVECRAWL_TIMEOUT_MS,
   };
-}
-
-function isTransientHttpStatus(status: number) {
-  return status === 408 || status === 425 || status === 429 || status >= 500;
 }
 
 function exaHttpStatusCode(evidence: UrlEvidence): number | null {

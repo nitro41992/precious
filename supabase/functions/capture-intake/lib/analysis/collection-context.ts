@@ -1,8 +1,9 @@
 import {
   COLLECTION_CONTEXT_REASONING_EFFORT,
   OPENAI_MODEL,
+  reasoningEffortForModel,
 } from "../config.ts";
-import { env } from "../common.ts";
+import { fetchOpenAiResponses } from "./openai-http.ts";
 import { compactUrlEvidence } from "../url-evidence/quality.ts";
 import type { CaptureRow, CollectionContext, UrlEvidence } from "../types.ts";
 import { responseText } from "./prompts.ts";
@@ -178,7 +179,9 @@ export async function runCollectionContextPrepass(
   ];
   const requestBody = {
     model,
-    reasoning: { effort: COLLECTION_CONTEXT_REASONING_EFFORT },
+    reasoning: {
+      effort: reasoningEffortForModel(model, COLLECTION_CONTEXT_REASONING_EFFORT),
+    },
     max_output_tokens: 900,
     input: [
       {
@@ -197,14 +200,7 @@ export async function runCollectionContextPrepass(
       },
     },
   };
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${env("OPENAI_API_KEY")}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(requestBody),
-  });
+  const response = await fetchOpenAiResponses(requestBody);
   const raw = await response.json();
   if (!response.ok) {
     const error = raw.error && typeof raw.error === "object"

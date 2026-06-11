@@ -4,8 +4,10 @@ import {
   CONTEXTLESS_LINK_REJECTED_MESSAGE,
   OPENAI_MODEL,
   PREFLIGHT_PROMPT_VERSION,
+  PIPELINE_DEADLINE_MS,
   PROMPT_VERSION,
   SCHEMA_VERSION,
+  STALE_PROCESSING_MS,
 } from "./config.ts";
 import {
   cleanedString,
@@ -373,6 +375,49 @@ export async function failCaptureMissingAsset(
   return data;
 }
 
+// Belt-and-suspenders for captures whose worker was killed mid-run before processCapture's catch
+// could mark them failed (e.g. the edge instance was recycled while awaiting a slow call). The
+// per-call OpenAI timeouts catch the common hang; this reaps the rare survivor so a capture never
+// spins in "processing" forever. Called on the captures list fetch — exactly when the user would
+// otherwise watch an endless spinner — and scoped to that user. Failure here is non-fatal.
+export async function reapStaleProcessingCaptures(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+) {
+  const cutoff = new Date(Date.now() - STALE_PROCESSING_MS).toISOString();
+  const { error } = await supabase
+    .from("captures")
+    .update({
+      analysis_state: "failed",
+      analysis_mode: "timed_out",
+      analysis_error:
+        "Analysis took too long and was stopped. Tap Try again, or add a photo.",
+      processed_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId)
+    .eq("analysis_state", "processing")
+    .lt("updated_at", cutoff);
+  if (error) {
+    console.warn("reapStaleProcessingCaptures failed", errorMessage(error));
+  }
+}
+
+// Races the analysis pipeline against a hard deadline. If the work outruns the deadline it
+// rejects, which propagates to processCapture's catch — recording a run and marking the capture
+// recoverable "failed" fast — rather than the run dragging on until the edge worker is killed and
+// the capture stranded in "processing". The losing work isn't cancelled, but it's already past
+// the point of doing useful work, and its own writes are guarded by user_id + state.
+function runWithPipelineDeadline<T>(work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error("Capture analysis exceeded the time limit.")),
+      PIPELINE_DEADLINE_MS,
+    );
+  });
+  return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
+}
+
 export async function processCapture(captureId: string, userId: string) {
   const supabase = adminClient();
   const { data: capture, error: captureError } = await supabase
@@ -390,6 +435,7 @@ export async function processCapture(captureId: string, userId: string) {
     .eq("user_id", userId);
 
   try {
+    await runWithPipelineDeadline((async () => {
     const pipelineStart = Date.now();
     // Per-stage wall-clock breakdown, persisted into analysis_runs.raw_model_output so we can
     // measure where the analyzer spends its time on real captures. Each entry is the stage's
@@ -646,7 +692,7 @@ export async function processCapture(captureId: string, userId: string) {
     });
     stageTimings.totalMs = Date.now() - pipelineStart;
     console.log("[timing] capture", captureId, JSON.stringify(stageTimings));
-    const { data: run, error: runError } = await supabase
+    const { error: runError } = await supabase
       .from("analysis_runs")
       .insert({
         user_id: userId,
@@ -676,10 +722,13 @@ export async function processCapture(captureId: string, userId: string) {
           prompt_collections: promptCollections,
           stage_timings_ms: stageTimings,
         }),
-      })
-      .select("id")
-      .single();
-    if (runError) throw runError;
+      });
+    // analysis_runs is telemetry/bookkeeping only. A failure here (e.g. an oversized
+    // raw_model_output payload) must never strand an otherwise-successful analysis as
+    // "Saved link", so log and continue — the captures update below is the authoritative step.
+    if (runError) {
+      console.warn("analysis_runs insert failed", errorMessage(runError));
+    }
     if (shouldAttachUrlEvidence(capture, urlEvidence)) {
       logUrlIngest(urlEvidence, analysis.default_intent?.confidence ?? null);
     }
@@ -779,10 +828,9 @@ export async function processCapture(captureId: string, userId: string) {
         }
       })());
     }
+    })());
   } catch (error) {
-    const message = error instanceof Error
-      ? error.message
-      : "Capture analysis failed";
+    const message = errorMessage(error, "Capture analysis failed");
     await supabase.from("analysis_runs").insert({
       user_id: userId,
       capture_id: captureId,
@@ -814,6 +862,22 @@ export async function createOrGetCaptureFromFields(
   userId: string,
   fields: Record<string, unknown>,
 ) {
+  // Attach-to-existing path: when the client targets an existing capture by id (e.g. adding a
+  // photo to an already-saved capture that lives only server-side, like a failed link the user
+  // wants to recover), match it directly so the asset attaches to that capture instead of
+  // creating a duplicate. The existing capture already has its source, so skip source validation.
+  const targetCaptureId = cleanedString(fields.captureId || fields.capture_id);
+  if (targetCaptureId) {
+    const target = await supabase
+      .from("captures")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("id", targetCaptureId)
+      .maybeSingle();
+    if (target.error) throw target.error;
+    if (target.data) return target.data;
+  }
+
   const sourceText = typeof fields.sourceText === "string"
     ? fields.sourceText.trim()
     : "";
@@ -994,6 +1058,10 @@ export async function createOrGetCaptureWithAsset(
       capture_type: asset.contentType.startsWith("image/")
         ? "image"
         : capture.capture_type,
+      // A freshly attached photo is new evidence — (re)queue analysis so the worker re-runs it.
+      // This is what lets "add a photo" recover a capture that previously failed on a weak link.
+      analysis_state: "queued",
+      analysis_error: null,
     })
     .eq("id", capture.id)
     .eq("user_id", userId)
