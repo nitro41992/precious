@@ -17,6 +17,7 @@ import {
   ToastHost
 } from "./components";
 import {
+  CaptureRow,
   CollectionCard,
   CollectionCaptureRowItem,
   CaptureRowInlineSkeleton,
@@ -50,6 +51,7 @@ export type AppRenderHelpersInput = {
   onCollectionDescriptionChange: (value: string) => void;
   onCollectionPress: (collectionId: string) => void;
   onCollectionTitleChange: (value: string) => void;
+  onCalendarCaptureThumbnailRef: (captureId: string, node: View | null) => void;
   onCaptureThumbnailRef: (captureId: string, node: View | null) => void;
   onCollectionCaptureThumbnailRef: (captureId: string, node: View | null) => void;
   onSearchCaptureThumbnailRef: (captureId: string, node: View | null) => void;
@@ -65,7 +67,7 @@ export type AppRenderHelpersInput = {
   restoredCollectionId: string | null;
   searchQuery: string;
   selectedCollection: Collection | null;
-  handoffHiddenCapture: { aliases: string[]; surface: "home" | "collection" | "search" } | null;
+  handoffHiddenCapture: { aliases: string[]; surface: "home" | "collection" | "search" | "calendar" } | null;
   screenHandoffActive: boolean;
   skeletonPulse: Animated.Value;
   toast: ToastState | null;
@@ -140,6 +142,32 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
           />
         </Animated.View>
       </Reanimated.View>
+    );
+  }
+
+  // The calendar agenda renders the real capture card (DRY); tapping opens the same capture review
+  // with the Recents thumbnail-expansion morph (its thumbnail is the shared-element source).
+  function renderCalendarCaptureRow(capture: Capture, onPress: () => void) {
+    return (
+      <CaptureRow
+        captureImageLoadStates={input.captureImageLoadStates}
+        captureRowRevealStates={input.captureRowRevealStates}
+        failedFavicons={input.failedFavicons}
+        hideThumbnail={Boolean(
+          input.handoffHiddenCapture?.surface === "calendar" &&
+            input.handoffHiddenCapture.aliases.includes(capture.id)
+        )}
+        item={capture}
+        onFaviconFailure={input.onFaviconFailure}
+        onImageLoadState={input.onCaptureImageLoadState}
+        onPress={onPress}
+        onThumbnailImageDisplayed={(url, cacheKey) => input.onCaptureRowImageDisplayed(capture, url, cacheKey)}
+        renderInlineSkeleton={() => null}
+        SkeletonBlock={SkeletonBlock}
+        surface="card"
+        testID={`pc.calendar.capture.row.${capture.id}`}
+        thumbnailRef={(node) => input.onCalendarCaptureThumbnailRef(capture.id, node)}
+      />
     );
   }
 
@@ -285,6 +313,7 @@ export function createAppRenderHelpers(input: AppRenderHelpersInput) {
 
   return {
     renderBottomAppBar,
+    renderCalendarCaptureRow,
     renderCaptureRowInlineSkeleton,
     renderCaptureSkeletonRows,
     renderCollection,

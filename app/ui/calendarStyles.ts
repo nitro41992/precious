@@ -11,15 +11,20 @@ const softCardShadow = Platform.OS === "android"
       shadowRadius: 18
     };
 
-// Material 3 Expressive calendar, in this app's language (lime accent, Clash Display, Geist, no
-// hairline borders — separation via tonal fills, rounded shape, and soft shadows). Expressive
-// shape: the selected day is a filled lime circle, today a soft-lime circle; the day's events
-// render inline in a tonal container right under the grid.
+export const CALENDAR_GEOMETRY = {
+  screenPadding: 22,
+  railCellWidth: 54
+};
+
+// Material 3 Expressive calendar: a horizontal rail of days at the top (focused, not a full month
+// of info at once), with the selected day's capture cards below. Lime is reserved for
+// today/selection; no hairline borders.
 export const calendarStyles = StyleSheet.create({
   // --- Header ---
   header: {
+    paddingHorizontal: CALENDAR_GEOMETRY.screenPadding,
     paddingTop: (Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0) + 16,
-    paddingBottom: 6
+    paddingBottom: 4
   },
   monthTitle: {
     color: colors.ink,
@@ -33,8 +38,7 @@ export const calendarStyles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     justifyContent: "flex-end",
-    marginTop: 10,
-    marginBottom: 6
+    marginTop: 10
   },
   todayPill: {
     alignItems: "center",
@@ -44,14 +48,8 @@ export const calendarStyles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 9
   },
-  todayPillPressed: {
-    backgroundColor: colors.suggestionSurfacePressed
-  },
-  todayPillText: {
-    color: colors.accentTextStrong,
-    ...typefaces.bold,
-    fontSize: 14
-  },
+  todayPillPressed: { backgroundColor: colors.suggestionSurfacePressed },
+  todayPillText: { color: colors.accentTextStrong, ...typefaces.bold, fontSize: 14 },
   iconButton: {
     alignItems: "center",
     backgroundColor: colors.surfaceContainer,
@@ -60,9 +58,7 @@ export const calendarStyles = StyleSheet.create({
     justifyContent: "center",
     width: 40
   },
-  iconButtonPressed: {
-    backgroundColor: colors.surfaceContainerHigh
-  },
+  iconButtonPressed: { backgroundColor: colors.surfaceContainerHigh },
   addButton: {
     alignItems: "center",
     backgroundColor: colors.accent,
@@ -71,162 +67,60 @@ export const calendarStyles = StyleSheet.create({
     justifyContent: "center",
     width: 40
   },
-  addButtonPressed: {
-    backgroundColor: colors.accentPressed
-  },
+  addButtonPressed: { backgroundColor: colors.accentPressed },
 
-  scrollContent: {
-    paddingBottom: 140
-  },
-
-  // --- Weekday header + grid ---
-  weekRow: {
-    flexDirection: "row",
-    marginTop: 4,
-    marginBottom: 6
-  },
-  weekdayCell: {
+  // --- Day rail ---
+  // A horizontal ScrollView needs an explicit height in this flex column (it collapses below its
+  // content otherwise), so the height must clear the full cell — weekday + disc + dot row — with
+  // margin. Android's includeFontPadding makes the weekday line box taller than its nominal size,
+  // which is what silently clipped the dot row at smaller heights; this value leaves real headroom.
+  rail: { flexGrow: 0, height: 140 },
+  railContent: { alignItems: "flex-start", paddingHorizontal: CALENDAR_GEOMETRY.screenPadding - 4, paddingTop: 8 },
+  railCell: {
     alignItems: "center",
-    flex: 1
+    gap: 7,
+    paddingVertical: 4,
+    width: CALENDAR_GEOMETRY.railCellWidth
   },
-  weekdayText: {
+  railWeekday: {
     color: colors.placeholder,
     ...typefaces.bold,
     fontSize: 12,
-    letterSpacing: 0.6
+    includeFontPadding: false,
+    letterSpacing: 0.4,
+    lineHeight: 14
   },
-  gridRow: {
-    flexDirection: "row"
-  },
-  dayCell: {
+  railWeekdaySelected: { color: colors.accentTextStrong },
+  railDisc: {
     alignItems: "center",
-    flex: 1,
-    gap: 4,
-    justifyContent: "flex-start",
-    paddingVertical: 5
-  },
-  dayCellPressed: {
-    opacity: 0.55
-  },
-  // The expressive shape: a circle that wraps just the number.
-  dayDisc: {
-    alignItems: "center",
-    borderRadius: 22,
-    height: 44,
+    borderRadius: 21,
+    height: 42,
     justifyContent: "center",
-    width: 44
+    width: 42
   },
-  dayDiscToday: {
-    backgroundColor: colors.accentSoft
-  },
-  dayDiscSelected: {
-    backgroundColor: colors.accent,
-    ...softCardShadow
-  },
-  dayNumber: {
-    color: colors.ink,
-    ...typefaces.medium,
-    fontSize: 17,
-    lineHeight: 22
-  },
-  dayNumberOutside: {
-    color: colors.placeholder,
-    ...typefaces.regular
-  },
-  dayNumberToday: {
-    color: colors.accentTextStrong,
-    ...typefaces.bold
-  },
-  dayNumberSelected: {
-    color: colors.onAccent,
-    ...typefaces.bold
-  },
-  dotRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 3,
-    height: 6,
-    justifyContent: "center"
-  },
-  dot: {
-    backgroundColor: colors.accentText,
-    borderRadius: 3,
-    height: 5,
-    width: 5
-  },
-  dotCountText: {
-    color: colors.accentText,
-    ...typefaces.bold,
-    fontSize: 10,
-    lineHeight: 11
-  },
+  railDiscToday: { backgroundColor: colors.accentSoft },
+  railDiscSelected: { backgroundColor: colors.accent, ...softCardShadow },
+  railNumber: { color: colors.ink, ...typefaces.medium, fontSize: 18, lineHeight: 22 },
+  railNumberToday: { color: colors.accentTextStrong, ...typefaces.bold },
+  railNumberSelected: { color: colors.onAccent, ...typefaces.bold },
+  railDotRow: { alignItems: "center", flexDirection: "row", gap: 4, height: 7, justifyContent: "center" },
+  railDot: { backgroundColor: colors.accentText, borderRadius: 3, height: 6, width: 6 },
+  railDotSelected: { backgroundColor: colors.accentText },
 
-  // --- Fuzzy "Sometime in <month>" card ---
-  fuzzyCard: {
-    backgroundColor: colors.suggestionSurface,
-    borderRadius: 24,
-    gap: 10,
-    marginTop: 18,
-    padding: 18,
-    ...softCardShadow
-  },
-  fuzzyHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8
-  },
-  fuzzyTitle: {
-    color: colors.accentTextStrong,
-    ...typefaces.bold,
-    fontSize: 15
-  },
-  fuzzyRow: {
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    flexDirection: "row",
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12
-  },
-  fuzzyRowPressed: {
-    backgroundColor: colors.surfaceContainer
-  },
-  fuzzyRowTitle: {
-    color: colors.ink,
-    ...typefaces.medium,
-    flex: 1,
-    fontSize: 15
-  },
-  fuzzyRowMeta: {
-    color: colors.muted,
-    ...typefaces.regular,
-    fontSize: 12
-  },
+  scrollContent: { paddingBottom: 140 },
 
-  // --- Inline selected-day agenda ---
-  agendaCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 24,
-    gap: 12,
-    marginTop: 18,
-    padding: 18,
-    ...softCardShadow
-  },
-  agendaHeader: {
+  // --- Sections (selected day + fuzzy month), one consistent treatment ---
+  section: { marginTop: 14 },
+  sectionHeaderRow: {
     alignItems: "center",
     flexDirection: "row",
     gap: 12,
-    justifyContent: "space-between"
+    justifyContent: "space-between",
+    marginBottom: 10,
+    paddingHorizontal: CALENDAR_GEOMETRY.screenPadding
   },
-  agendaDate: {
-    color: colors.ink,
-    ...typefaces.bold,
-    flex: 1,
-    fontSize: 18,
-    letterSpacing: -0.2
-  },
-  agendaAddPill: {
+  sectionTitle: { color: colors.ink, ...typefaces.bold, flex: 1, fontSize: 18, letterSpacing: -0.2 },
+  sectionAddPill: {
     alignItems: "center",
     backgroundColor: colors.accentSoft,
     borderRadius: 16,
@@ -235,83 +129,29 @@ export const calendarStyles = StyleSheet.create({
     paddingHorizontal: 13,
     paddingVertical: 8
   },
-  agendaAddPillPressed: {
-    backgroundColor: colors.suggestionSurfacePressed
-  },
-  agendaAddPillText: {
-    color: colors.accentTextStrong,
-    ...typefaces.bold,
-    fontSize: 13
-  },
-  agendaGroupRow: {
-    flexDirection: "row",
-    gap: 8
-  },
-  eventCard: {
-    backgroundColor: colors.surfaceContainer,
+  sectionAddPillPressed: { backgroundColor: colors.suggestionSurfacePressed },
+  sectionAddPillText: { color: colors.accentTextStrong, ...typefaces.bold, fontSize: 13 },
+  sectionEmpty: { paddingHorizontal: CALENDAR_GEOMETRY.screenPadding, paddingVertical: 6 },
+  sectionEmptyText: { color: colors.muted, ...typefaces.medium, fontSize: 15 },
+
+  // Manual events (no capture behind them) — a compact card matching the capture cards.
+  manualCard: {
+    backgroundColor: colors.surface,
     borderRadius: 18,
-    flex: 1,
-    gap: 5,
-    overflow: "hidden",
-    paddingHorizontal: 14,
-    paddingVertical: 13
+    gap: 4,
+    marginBottom: 18,
+    marginHorizontal: CALENDAR_GEOMETRY.screenPadding,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+    ...softCardShadow
   },
-  eventCardManual: {
-    backgroundColor: colors.suggestionSurface
-  },
-  eventCardPressed: {
-    backgroundColor: colors.surfaceContainerHigh
-  },
-  // A tonal accent edge so timed events read as "blocks" without a hairline border.
-  eventAccentEdge: {
-    backgroundColor: colors.accent,
-    borderRadius: 3,
-    height: 22,
-    position: "absolute",
-    left: 0,
-    top: 14,
-    width: 4
-  },
-  eventTime: {
-    color: colors.accentTextStrong,
-    ...typefaces.bold,
-    fontSize: 13
-  },
-  eventTitle: {
-    color: colors.ink,
-    ...typefaces.medium,
-    fontSize: 16,
-    lineHeight: 21
-  },
-  eventMetaRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 1
-  },
-  eventMeta: {
-    color: colors.muted,
-    ...typefaces.regular,
-    fontSize: 13
-  },
-  agendaEmpty: {
-    alignItems: "center",
-    gap: 14,
-    paddingVertical: 18
-  },
-  agendaEmptyText: {
-    color: colors.muted,
-    ...typefaces.medium,
-    fontSize: 15
-  },
+  manualCardPressed: { backgroundColor: colors.surfaceContainer },
+  manualTime: { color: colors.accentTextStrong, ...typefaces.bold, fontSize: 13 },
+  manualTitle: { color: colors.ink, ...typefaces.medium, fontSize: 16, lineHeight: 21 },
+  manualMeta: { color: colors.muted, ...typefaces.regular, fontSize: 13 },
 
   // --- Whole-month empty state ---
-  emptyState: {
-    alignItems: "center",
-    gap: 14,
-    marginTop: 40,
-    paddingHorizontal: 24
-  },
+  emptyState: { alignItems: "center", gap: 14, marginTop: 36, paddingHorizontal: 24 },
   emptyGlyphWrap: {
     alignItems: "center",
     backgroundColor: colors.surfaceContainer,
@@ -320,25 +160,9 @@ export const calendarStyles = StyleSheet.create({
     justifyContent: "center",
     width: 72
   },
-  emptyTitle: {
-    color: colors.ink,
-    ...typefaces.bold,
-    fontSize: 19,
-    textAlign: "center"
-  },
-  emptyText: {
-    color: colors.muted,
-    ...typefaces.regular,
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: "center"
-  },
-  emptyActions: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 6
-  },
+  emptyTitle: { color: colors.ink, ...typefaces.bold, fontSize: 19, textAlign: "center" },
+  emptyText: { color: colors.muted, ...typefaces.regular, fontSize: 14, lineHeight: 20, textAlign: "center" },
+  emptyActions: { alignItems: "center", flexDirection: "row", gap: 10, marginTop: 6 },
   primaryPill: {
     alignItems: "center",
     backgroundColor: colors.accent,
@@ -348,14 +172,8 @@ export const calendarStyles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12
   },
-  primaryPillPressed: {
-    backgroundColor: colors.accentPressed
-  },
-  primaryPillText: {
-    color: colors.onAccent,
-    ...typefaces.bold,
-    fontSize: 15
-  },
+  primaryPillPressed: { backgroundColor: colors.accentPressed },
+  primaryPillText: { color: colors.onAccent, ...typefaces.bold, fontSize: 15 },
   ghostPill: {
     alignItems: "center",
     alignSelf: "center",
@@ -366,23 +184,18 @@ export const calendarStyles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 12
   },
-  ghostPillPressed: {
-    backgroundColor: colors.suggestionSurfacePressed
-  },
-  ghostPillText: {
-    color: colors.accentTextStrong,
-    ...typefaces.bold,
-    fontSize: 14
-  },
+  ghostPillPressed: { backgroundColor: colors.suggestionSurfacePressed },
+  ghostPillText: { color: colors.accentTextStrong, ...typefaces.bold, fontSize: 14 },
   errorText: {
     color: colors.danger,
     ...typefaces.medium,
     fontSize: 14,
-    marginTop: 12,
+    marginTop: 8,
+    paddingHorizontal: CALENDAR_GEOMETRY.screenPadding,
     textAlign: "center"
   },
 
-  // --- Event editor: collapsible date row (replaces the embedded month calendar) ---
+  // --- Event editor: collapsible date row ---
   eventTitleField: {
     backgroundColor: colors.surfaceContainer,
     borderRadius: 16,
@@ -403,13 +216,6 @@ export const calendarStyles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 15
   },
-  eventDateRowPressed: {
-    backgroundColor: colors.surfaceContainerHigh
-  },
-  eventDateValue: {
-    color: colors.ink,
-    ...typefaces.medium,
-    flex: 1,
-    fontSize: 16
-  }
+  eventDateRowPressed: { backgroundColor: colors.surfaceContainerHigh },
+  eventDateValue: { color: colors.ink, ...typefaces.medium, flex: 1, fontSize: 16 }
 });

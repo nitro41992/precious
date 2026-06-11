@@ -73,7 +73,7 @@ function summaryDate(dateText: string) {
 // Turo-style time slider: drag the pill thumb along a full-day track; the time it
 // shows carries AM/PM, so no separate meridiem control is needed. Snaps to 15
 // minutes.
-export function TimeSlider({
+function TimeSlider({
   label,
   value,
   dateText,

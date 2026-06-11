@@ -20,6 +20,7 @@
         "npm:next@^16.2.6",
         "npm:phosphor-react-native@3",
         "npm:react-dom@19.2.3",
+        "npm:react-native-keyboard-controller@^1.21.11",
         "npm:react-native-reanimated@^4.4.1",
         "npm:react-native-svg@15.15.5",
         "npm:react-native-url-polyfill@3",

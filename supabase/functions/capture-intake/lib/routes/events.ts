@@ -1,6 +1,46 @@
 import { adminClient } from "../supabase.ts";
+import { CAPTURE_LIST_SELECT } from "../config.ts";
 import { isUuid } from "../common.ts";
 import { json } from "../http.ts";
+import { withCaptureStates, withSignedCaptureAssetRows } from "../capture-records.ts";
+import { withLazySourcePreviewAssets } from "../source-previews.ts";
+import { attachLinkedCollections } from "../collections/links.ts";
+import { hydrateResolvedPlaceThumbnails } from "../places.ts";
+
+// Builds list-shaped capture rows (the exact pipeline the feed/list endpoint uses) for the
+// captures behind a set of events, so the calendar agenda renders the real CaptureRow — DRY,
+// and tapping one opens the same capture review where dates can be edited.
+async function capturesForEvents(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  events: Array<Record<string, unknown>>,
+): Promise<Array<Record<string, unknown>>> {
+  const captureIds = Array.from(
+    new Set(events.map((event) => String(event.capture_id || "")).filter((id) => isUuid(id))),
+  );
+  if (!captureIds.length) return [];
+  const { data, error } = await supabase
+    .from("captures")
+    .select(CAPTURE_LIST_SELECT)
+    .eq("user_id", userId)
+    .in("id", captureIds)
+    .is("deleted_at", null);
+  if (error) throw error;
+  const rows = await attachLinkedCollections(
+    supabase,
+    userId,
+    (data ?? []) as unknown as Array<Record<string, unknown>>,
+  );
+  const previewRows = await withLazySourcePreviewAssets(
+    supabase,
+    userId,
+    rows as Array<Record<string, unknown>>,
+    rows.length,
+  );
+  const placeHydratedRows = await hydrateResolvedPlaceThumbnails(previewRows as Array<Record<string, unknown>>);
+  const signedRows = await withSignedCaptureAssetRows(supabase, userId, placeHydratedRows, "thumb");
+  return withCaptureStates(signedRows);
+}
 
 const EVENT_SELECT =
   "id,capture_id,title,start_date,end_date,start_time,end_time,all_day,duration,duration_unit,date_precision,time_precision,timezone,source,status,reminder_index,created_at,updated_at";
@@ -82,8 +122,12 @@ export async function handleEventsResource(
       .limit(1)
       .maybeSingle();
 
+    const events = (result.data ?? []) as Array<Record<string, unknown>>;
+    const captures = await capturesForEvents(supabase, userId, events);
+
     return json({
-      events: result.data ?? [],
+      events,
+      captures,
       from,
       to,
       next_event_date: upcoming.data?.start_date ?? null,

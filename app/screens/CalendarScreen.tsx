@@ -1,29 +1,26 @@
-import { useMemo, useRef } from "react";
-import { PanResponder, ScrollView, StatusBar, View } from "react-native";
-import { ArrowRight, CalendarBlank, CaretLeft, CaretRight, Clock, Plus } from "phosphor-react-native";
+import type { ReactNode } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { Dimensions, ScrollView, StatusBar, View } from "react-native";
+import { ArrowRight, CalendarBlank, CaretLeft, CaretRight } from "phosphor-react-native";
 
-import {
-  buildMonthGrid,
-  dateFromReminderParts,
-  dateStringFromDate,
-  monthLabel,
-  reminderDurationLabel,
-  reminderTimeLabel
-} from "../capturePresentation";
-import { dayDotIndex, dayOverlapGroups, fuzzyEventsByMonth } from "../calendarLogic";
+import { dateFromReminderParts, dateStringFromDate, monthLabel } from "../capturePresentation";
+import { dayAgenda, dayDotIndex, fuzzyEventsByMonth } from "../calendarLogic";
 import type { CalendarEvent } from "../calendarLogic";
+import type { Capture } from "../types";
 import { MotionPressable } from "../ui/components";
-import { calendarStyles as cs } from "../ui/calendarStyles";
+import { calendarStyles as cs, CALENDAR_GEOMETRY as G } from "../ui/calendarStyles";
 import { styles } from "../ui/styles";
 import { appTheme, colors } from "../ui/theme";
 import { Text } from "../ui/typography";
 
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
-const SWIPE_THRESHOLD = 48;
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const MAX_DOTS = 3;
 
 type CalendarScreenProps = {
   data: {
     events: CalendarEvent[];
+    eventCaptures: Record<string, Capture>;
     eventsError: string | null;
     nextEventDate: string | null;
   };
@@ -37,303 +34,222 @@ type CalendarScreenProps = {
     onToday: () => void;
     onJumpToNextEvent: () => void;
     onSelectDay: (date: string) => void;
-    onAddEvent: (date?: string | null) => void;
     onSelectEvent: (event: CalendarEvent) => void;
+    renderCaptureRow: (capture: Capture, onPress: () => void) => ReactNode;
   };
 };
 
-function fuzzyCaption(event: CalendarEvent): string {
-  switch (event.datePrecision) {
-    case "week":
-      return "Sometime that week";
-    case "month_window":
-      return "Within this period";
-    case "unknown":
-      return "Date to confirm";
-    default:
-      return "Sometime this month";
-  }
-}
-
-function eventTimeLabel(event: CalendarEvent): string {
-  if (event.allDay || !event.startTime) return "All day";
-  const start = reminderTimeLabel(event.startDate, event.startTime);
-  const end = event.endTime ? reminderTimeLabel(event.endDate, event.endTime) : "";
-  return end && end !== start ? `${start} – ${end}` : start;
-}
-
-function EventCard({ event, onPress }: { event: CalendarEvent; onPress: () => void }) {
-  const duration = reminderDurationLabel(event.duration, event.durationUnit, false);
-  const timed = !event.allDay && Boolean(event.startTime);
-  return (
-    <MotionPressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [
-        cs.eventCard,
-        event.source === "manual" && cs.eventCardManual,
-        pressed && cs.eventCardPressed
-      ]}
-      testID={`pc.calendar.event.${event.id}`}
-    >
-      {timed ? <View style={cs.eventAccentEdge} /> : null}
-      <Text style={cs.eventTime}>{eventTimeLabel(event)}</Text>
-      <Text numberOfLines={2} style={cs.eventTitle}>
-        {event.title}
-      </Text>
-      {duration || event.captureId ? (
-        <View style={cs.eventMetaRow}>
-          {duration ? <Text style={cs.eventMeta}>{duration}</Text> : null}
-          {event.captureId ? <Text style={cs.eventMeta}>From a capture</Text> : null}
-        </View>
-      ) : null}
-    </MotionPressable>
-  );
-}
-
 export function CalendarScreen({ actions, data, state }: CalendarScreenProps) {
-  const { events, eventsError, nextEventDate } = data;
+  const { events, eventCaptures, eventsError, nextEventDate } = data;
   const { visibleMonth, selectedDate } = state;
-  const { onPrevMonth, onNextMonth, onToday, onJumpToNextEvent, onSelectDay, onAddEvent, onSelectEvent } = actions;
+  const { onPrevMonth, onNextMonth, onToday, onJumpToNextEvent, onSelectDay, onSelectEvent, renderCaptureRow } =
+    actions;
 
+  const railRef = useRef<ScrollView | null>(null);
   const today = useMemo(() => dateStringFromDate(new Date()), []);
-  const cells = useMemo(
-    () => buildMonthGrid(visibleMonth.year, visibleMonth.month),
-    [visibleMonth.year, visibleMonth.month]
+  // Only events whose capture actually resolved are renderable — the agenda card IS the capture
+  // (DRY), so an event whose capture is gone (e.g. soft-deleted) has nothing to show. Driving dots,
+  // agenda, and the fuzzy section from this one filtered list keeps every dot and section header
+  // tied to a real, tappable card and never leaves an empty header floating over a void.
+  const renderableEvents = useMemo(
+    () => events.filter((event) => event.captureId && eventCaptures[event.captureId]),
+    [events, eventCaptures]
   );
-  const dots = useMemo(() => dayDotIndex(events), [events]);
+  const dots = useMemo(() => dayDotIndex(renderableEvents), [renderableEvents]);
   const monthPrefix = `${visibleMonth.year}-${String(visibleMonth.month + 1).padStart(2, "0")}`;
-  const fuzzyForMonth = useMemo(() => fuzzyEventsByMonth(events)[monthPrefix] || [], [events, monthPrefix]);
-  const monthHasContent =
-    Object.keys(dots).some((date) => date.startsWith(monthPrefix)) || fuzzyForMonth.length > 0;
 
+  const days = useMemo(() => {
+    const count = new Date(visibleMonth.year, visibleMonth.month + 1, 0).getDate();
+    return Array.from({ length: count }, (_, index) => {
+      const day = index + 1;
+      const date = new Date(visibleMonth.year, visibleMonth.month, day);
+      return { day, date: dateStringFromDate(date), weekday: WEEKDAYS[date.getDay()] };
+    });
+  }, [visibleMonth.year, visibleMonth.month]);
+
+  const fuzzyForMonth = useMemo(
+    () => fuzzyEventsByMonth(renderableEvents)[monthPrefix] || [],
+    [renderableEvents, monthPrefix]
+  );
+  const eventDaysThisMonth = useMemo(
+    () => Object.keys(dots).filter((date) => date.startsWith(monthPrefix)).sort(),
+    [dots, monthPrefix]
+  );
+  const monthHasContent = eventDaysThisMonth.length > 0 || fuzzyForMonth.length > 0;
   const selectedInMonth = Boolean(selectedDate && selectedDate.startsWith(monthPrefix));
-  const dayGroups = useMemo(
-    () => (selectedInMonth && selectedDate ? dayOverlapGroups(events, selectedDate) : { allDay: [], groups: [] }),
-    [events, selectedDate, selectedInMonth]
+
+  // Best practice: when a month is shown without a relevant day selected, land on the first day
+  // that actually has events so the agenda is never a blank slate (Google/Apple both auto-focus a
+  // day). Empty months fall through to the month empty-state instead.
+  useEffect(() => {
+    if (selectedInMonth || !eventDaysThisMonth.length) return;
+    onSelectDay(eventDaysThisMonth[0]);
+  }, [selectedInMonth, eventDaysThisMonth, onSelectDay]);
+
+  // Keep the selected day centered in the rail; with no day selected in this month (e.g. a
+  // fuzzy-only month), snap back to the 1st so the rail never lingers on the previous month's offset.
+  useEffect(() => {
+    if (!selectedDate || !selectedDate.startsWith(monthPrefix)) {
+      railRef.current?.scrollTo({ x: 0, animated: false });
+      return;
+    }
+    const index = Number(selectedDate.slice(8, 10)) - 1;
+    const x = Math.max(0, index * G.railCellWidth - SCREEN_WIDTH / 2 + G.railCellWidth / 2);
+    const handle = setTimeout(() => railRef.current?.scrollTo({ x, animated: true }), 60);
+    return () => clearTimeout(handle);
+  }, [selectedDate, monthPrefix]);
+
+  const dayEvents = useMemo(
+    () => (selectedInMonth && selectedDate ? dayAgenda(renderableEvents, selectedDate) : []),
+    [renderableEvents, selectedDate, selectedInMonth]
   );
   const selectedDayLabel = selectedDate
     ? dateFromReminderParts(selectedDate).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })
     : "";
 
-  const swipe = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_evt, gesture) =>
-        Math.abs(gesture.dx) > 24 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.5,
-      onPanResponderRelease: (_evt, gesture) => {
-        if (gesture.dx >= SWIPE_THRESHOLD) onPrevMonth();
-        else if (gesture.dx <= -SWIPE_THRESHOLD) onNextMonth();
-      }
-    })
-  ).current;
-
-  const rows: typeof cells[] = [];
-  for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+  function renderEventCard(event: CalendarEvent) {
+    const capture = event.captureId ? eventCaptures[event.captureId] : null;
+    if (!capture) return null;
+    return <View key={event.id}>{renderCaptureRow(capture, () => onSelectEvent(event))}</View>;
+  }
 
   return (
     <View style={styles.edgeToEdgeSafe}>
       <StatusBar backgroundColor={colors.transparent} barStyle={appTheme.statusBarStyle} translucent />
-      <View style={styles.topAppBarScreen}>
-        <View style={cs.header}>
-          <Text adjustsFontSizeToFit minimumFontScale={0.7} numberOfLines={1} style={cs.monthTitle}>
-            {monthLabel(visibleMonth.year, visibleMonth.month)}
-          </Text>
-          <View style={cs.controlStrip}>
-            <MotionPressable
-              accessibilityLabel="Jump to today"
-              accessibilityRole="button"
-              onPress={onToday}
-              style={({ pressed }) => [cs.todayPill, pressed && cs.todayPillPressed]}
-              testID="pc.calendar.today"
-            >
-              <Text style={cs.todayPillText}>Today</Text>
-            </MotionPressable>
-            <MotionPressable
-              accessibilityLabel="Previous month"
-              accessibilityRole="button"
-              onPress={onPrevMonth}
-              style={({ pressed }) => [cs.iconButton, pressed && cs.iconButtonPressed]}
-              testID="pc.calendar.prev"
-            >
-              <CaretLeft color={colors.ink} size={18} weight="bold" />
-            </MotionPressable>
-            <MotionPressable
-              accessibilityLabel="Next month"
-              accessibilityRole="button"
-              onPress={onNextMonth}
-              style={({ pressed }) => [cs.iconButton, pressed && cs.iconButtonPressed]}
-              testID="pc.calendar.next"
-            >
-              <CaretRight color={colors.ink} size={18} weight="bold" />
-            </MotionPressable>
-            <MotionPressable
-              accessibilityLabel="Add event"
-              accessibilityRole="button"
-              onPress={() => onAddEvent(selectedDate)}
-              style={({ pressed }) => [cs.addButton, pressed && cs.addButtonPressed]}
-              testID="pc.calendar.add"
-            >
-              <Plus color={colors.onAccent} size={20} weight="bold" />
-            </MotionPressable>
-          </View>
+      <View style={cs.header}>
+        <Text adjustsFontSizeToFit minimumFontScale={0.7} numberOfLines={1} style={cs.monthTitle}>
+          {monthLabel(visibleMonth.year, visibleMonth.month)}
+        </Text>
+        <View style={cs.controlStrip}>
+          <MotionPressable
+            accessibilityLabel="Jump to today"
+            accessibilityRole="button"
+            onPress={onToday}
+            style={({ pressed }) => [cs.todayPill, pressed && cs.todayPillPressed]}
+            testID="pc.calendar.today"
+          >
+            <Text style={cs.todayPillText}>Today</Text>
+          </MotionPressable>
+          <MotionPressable
+            accessibilityLabel="Previous month"
+            accessibilityRole="button"
+            onPress={onPrevMonth}
+            style={({ pressed }) => [cs.iconButton, pressed && cs.iconButtonPressed]}
+            testID="pc.calendar.prev"
+          >
+            <CaretLeft color={colors.ink} size={18} weight="bold" />
+          </MotionPressable>
+          <MotionPressable
+            accessibilityLabel="Next month"
+            accessibilityRole="button"
+            onPress={onNextMonth}
+            style={({ pressed }) => [cs.iconButton, pressed && cs.iconButtonPressed]}
+            testID="pc.calendar.next"
+          >
+            <CaretRight color={colors.ink} size={18} weight="bold" />
+          </MotionPressable>
         </View>
-
-        {eventsError ? <Text style={cs.errorText}>{eventsError}</Text> : null}
-
-        <ScrollView contentContainerStyle={cs.scrollContent} showsVerticalScrollIndicator={false}>
-          <View {...swipe.panHandlers}>
-            <View style={cs.weekRow}>
-              {WEEKDAYS.map((label, index) => (
-                <View key={`${label}-${index}`} style={cs.weekdayCell}>
-                  <Text style={cs.weekdayText}>{label}</Text>
-                </View>
-              ))}
-            </View>
-
-            {rows.map((week, weekIndex) => (
-              <View key={weekIndex} style={cs.gridRow}>
-                {week.map((cell) => {
-                  const dot = dots[cell.date];
-                  const isSelected = selectedDate === cell.date;
-                  const isToday = cell.date === today;
-                  return (
-                    <MotionPressable
-                      accessibilityLabel={cell.date}
-                      accessibilityRole="button"
-                      key={cell.date}
-                      onPress={() => onSelectDay(cell.date)}
-                      style={({ pressed }) => [cs.dayCell, pressed && cs.dayCellPressed]}
-                      testID={`pc.calendar.day.${cell.date}`}
-                    >
-                      <View
-                        style={[
-                          cs.dayDisc,
-                          isToday && !isSelected && cs.dayDiscToday,
-                          isSelected && cs.dayDiscSelected
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            cs.dayNumber,
-                            !cell.inMonth && cs.dayNumberOutside,
-                            isToday && !isSelected && cs.dayNumberToday,
-                            isSelected && cs.dayNumberSelected
-                          ]}
-                        >
-                          {cell.day}
-                        </Text>
-                      </View>
-                      <View style={cs.dotRow}>
-                        {dot
-                          ? dot.count > 3
-                            ? <Text style={cs.dotCountText}>{`${dot.count}`}</Text>
-                            : Array.from({ length: dot.count }).map((_, i) => <View key={i} style={cs.dot} />)
-                          : null}
-                      </View>
-                    </MotionPressable>
-                  );
-                })}
-              </View>
-            ))}
-          </View>
-
-          {selectedInMonth ? (
-            <View style={cs.agendaCard}>
-              <View style={cs.agendaHeader}>
-                <Text numberOfLines={1} style={cs.agendaDate}>
-                  {selectedDayLabel}
-                </Text>
-                <MotionPressable
-                  accessibilityLabel="Add event on this day"
-                  accessibilityRole="button"
-                  onPress={() => onAddEvent(selectedDate)}
-                  style={({ pressed }) => [cs.agendaAddPill, pressed && cs.agendaAddPillPressed]}
-                  testID="pc.calendar.day-add"
-                >
-                  <Plus color={colors.accentTextStrong} size={15} weight="bold" />
-                  <Text style={cs.agendaAddPillText}>Add</Text>
-                </MotionPressable>
-              </View>
-              {dayGroups.allDay.length || dayGroups.groups.length ? (
-                <>
-                  {dayGroups.allDay.map((event) => (
-                    <EventCard event={event} key={event.id} onPress={() => onSelectEvent(event)} />
-                  ))}
-                  {dayGroups.groups.map((group, groupIndex) => (
-                    <View key={groupIndex} style={cs.agendaGroupRow}>
-                      {group.map((event) => (
-                        <EventCard event={event} key={event.id} onPress={() => onSelectEvent(event)} />
-                      ))}
-                    </View>
-                  ))}
-                </>
-              ) : (
-                <View style={cs.agendaEmpty}>
-                  <Text style={cs.agendaEmptyText}>Nothing scheduled</Text>
-                </View>
-              )}
-            </View>
-          ) : null}
-
-          {fuzzyForMonth.length ? (
-            <View style={cs.fuzzyCard}>
-              <View style={cs.fuzzyHeader}>
-                <Clock color={colors.accentTextStrong} size={16} weight="bold" />
-                <Text style={cs.fuzzyTitle}>
-                  Sometime in {monthLabel(visibleMonth.year, visibleMonth.month).split(" ")[0]}
-                </Text>
-              </View>
-              {fuzzyForMonth.map((event) => (
-                <MotionPressable
-                  accessibilityRole="button"
-                  key={event.id}
-                  onPress={() => onSelectEvent(event)}
-                  style={({ pressed }) => [cs.fuzzyRow, pressed && cs.fuzzyRowPressed]}
-                >
-                  <Text numberOfLines={1} style={cs.fuzzyRowTitle}>
-                    {event.title}
-                  </Text>
-                  <Text style={cs.fuzzyRowMeta}>{fuzzyCaption(event)}</Text>
-                </MotionPressable>
-              ))}
-            </View>
-          ) : null}
-
-          {!monthHasContent && !selectedInMonth ? (
-            <View style={cs.emptyState}>
-              <View style={cs.emptyGlyphWrap}>
-                <CalendarBlank color={colors.accentText} size={34} weight="regular" />
-              </View>
-              <Text style={cs.emptyTitle}>No events this month</Text>
-              <Text style={cs.emptyText}>
-                Events from your captures land here automatically — and you can add your own.
-              </Text>
-              <View style={cs.emptyActions}>
-                <MotionPressable
-                  accessibilityRole="button"
-                  onPress={() => onAddEvent(selectedDate)}
-                  style={({ pressed }) => [cs.primaryPill, pressed && cs.primaryPillPressed]}
-                  testID="pc.calendar.empty-add"
-                >
-                  <Plus color={colors.onAccent} size={16} weight="bold" />
-                  <Text style={cs.primaryPillText}>Add event</Text>
-                </MotionPressable>
-                {nextEventDate ? (
-                  <MotionPressable
-                    accessibilityRole="button"
-                    onPress={onJumpToNextEvent}
-                    style={({ pressed }) => [cs.ghostPill, pressed && cs.ghostPillPressed]}
-                    testID="pc.calendar.jump-next"
-                  >
-                    <Text style={cs.ghostPillText}>Next event</Text>
-                    <ArrowRight color={colors.accentTextStrong} size={16} weight="bold" />
-                  </MotionPressable>
-                ) : null}
-              </View>
-            </View>
-          ) : null}
-        </ScrollView>
       </View>
+
+      <ScrollView
+        contentContainerStyle={cs.railContent}
+        horizontal
+        ref={railRef}
+        showsHorizontalScrollIndicator={false}
+        style={cs.rail}
+      >
+        {days.map((entry) => {
+          const isSelected = selectedDate === entry.date;
+          const isToday = entry.date === today;
+          const count = dots[entry.date]?.count ?? 0;
+          return (
+            <MotionPressable
+              accessibilityLabel={entry.date}
+              accessibilityRole="button"
+              key={entry.date}
+              onPress={() => onSelectDay(entry.date)}
+              pressScale={0.96}
+              style={cs.railCell}
+              testID={`pc.calendar.day.${entry.date}`}
+            >
+              <Text style={[cs.railWeekday, isSelected && cs.railWeekdaySelected]}>{entry.weekday}</Text>
+              <View
+                style={[cs.railDisc, isToday && !isSelected && cs.railDiscToday, isSelected && cs.railDiscSelected]}
+              >
+                <Text
+                  style={[
+                    cs.railNumber,
+                    isToday && !isSelected && cs.railNumberToday,
+                    isSelected && cs.railNumberSelected
+                  ]}
+                >
+                  {entry.day}
+                </Text>
+              </View>
+              <View style={cs.railDotRow}>
+                {Array.from({ length: Math.min(count, MAX_DOTS) }).map((_, i) => (
+                  <View key={i} style={[cs.railDot, isSelected && cs.railDotSelected]} />
+                ))}
+              </View>
+            </MotionPressable>
+          );
+        })}
+      </ScrollView>
+
+      {eventsError ? <Text style={cs.errorText}>{eventsError}</Text> : null}
+
+      <ScrollView contentContainerStyle={cs.scrollContent} showsVerticalScrollIndicator={false}>
+        {selectedInMonth ? (
+          <View style={cs.section}>
+            <View style={cs.sectionHeaderRow}>
+              <Text numberOfLines={1} style={cs.sectionTitle}>
+                {selectedDayLabel}
+              </Text>
+            </View>
+            {dayEvents.length ? (
+              dayEvents.map((event) => renderEventCard(event))
+            ) : (
+              <View style={cs.sectionEmpty}>
+                <Text style={cs.sectionEmptyText}>Nothing scheduled</Text>
+              </View>
+            )}
+          </View>
+        ) : null}
+
+        {fuzzyForMonth.length ? (
+          <View style={cs.section}>
+            <View style={cs.sectionHeaderRow}>
+              <Text style={cs.sectionTitle}>
+                Sometime in {monthLabel(visibleMonth.year, visibleMonth.month).split(" ")[0]}
+              </Text>
+            </View>
+            {fuzzyForMonth.map((event) => renderEventCard(event))}
+          </View>
+        ) : null}
+
+        {!monthHasContent && !selectedInMonth ? (
+          <View style={cs.emptyState}>
+            <View style={cs.emptyGlyphWrap}>
+              <CalendarBlank color={colors.accentText} size={34} weight="regular" />
+            </View>
+            <Text style={cs.emptyTitle}>No events this month</Text>
+            <Text style={cs.emptyText}>
+              Events from your captures land here automatically — capture a date or deadline and it shows up.
+            </Text>
+            {nextEventDate ? (
+              <MotionPressable
+                accessibilityRole="button"
+                onPress={onJumpToNextEvent}
+                style={({ pressed }) => [cs.ghostPill, pressed && cs.ghostPillPressed]}
+                testID="pc.calendar.jump-next"
+              >
+                <Text style={cs.ghostPillText}>Jump to next event</Text>
+                <ArrowRight color={colors.accentTextStrong} size={16} weight="bold" />
+              </MotionPressable>
+            ) : null}
+          </View>
+        ) : null}
+      </ScrollView>
     </View>
   );
 }

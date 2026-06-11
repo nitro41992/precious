@@ -29,7 +29,6 @@ import type { SharedValue } from "react-native-reanimated";
 
 import { AppSheets } from "./sheets/AppSheets";
 import { CollectionComposerSheet } from "./sheets/CollectionComposerSheet";
-import { EventEditorSheet } from "./sheets/EventEditorSheet";
 import { CollectionSelectorScreen } from "./screens/CollectionSelectorScreen";
 import { useAppUiEffects } from "./state/useAppUiEffects";
 import { useAuthSession } from "./state/useAuthSession";
@@ -96,7 +95,6 @@ import {
   COLLECTION_CAPTURE_PAGE_SIZE,
   cachedCapturePageFromRaw,
   cachedCollectionPageFromRaw,
-  calendarEventMutationUrl,
   calendarEventsUrl,
   captureBelongsToCollection,
   captureDetailUrl,
@@ -169,8 +167,8 @@ type ReviewHandoffRect = {
 // Which list the morph flies from/to. Home, collection detail, and search can
 // show the same capture at once, so thumbnail refs are registered per surface
 // and the handoff resolves its source through its own surface only.
-type ReviewHandoffSurface = "home" | "collection" | "search";
-type CaptureReviewOrigin = "recent" | "collection" | "search" | "other";
+type ReviewHandoffSurface = "home" | "collection" | "search" | "calendar";
+type CaptureReviewOrigin = "recent" | "collection" | "search" | "calendar" | "other";
 
 type ReviewHandoffState = {
   cacheKey: string;
@@ -1059,6 +1057,11 @@ export default function App() {
     [registerCaptureThumbnailRef]
   );
 
+  const registerCalendarCaptureThumbnailRef = useCallback(
+    (captureId: string, node: View | null) => registerCaptureThumbnailRef("calendar", captureId, node),
+    [registerCaptureThumbnailRef]
+  );
+
   useEffect(() => {
     reviewHandoffRef.current = reviewHandoff;
   }, [reviewHandoff]);
@@ -1804,10 +1807,41 @@ export default function App() {
     return { from: `${monthLabel}-01`, to: `${monthLabel}-${String(lastDay).padStart(2, "0")}` };
   }
 
-  const loadEvents = useCallback(async (from: string, to: string) => {
+  // Snappy month switching: show a visited month's cached events instantly, then refresh in the
+  // background so revisiting never blanks out or re-flashes the cards.
+  const eventsMonthCacheRef = useRef<
+    Record<string, { events: CalendarEvent[]; captures: Record<string, Capture>; nextEventDate: string | null }>
+  >({});
+  const calendarVisibleMonthRef = useRef("");
+  useEffect(() => {
+    calendarVisibleMonthRef.current =
+      `${calendar.visibleMonth.year}-${String(calendar.visibleMonth.month + 1).padStart(2, "0")}`;
+  }, [calendar.visibleMonth]);
+
+  // Defined via ref so loadEvents can warm its neighbours without a circular useCallback dep.
+  const loadEventsRef = useRef<(year: number, month: number, options?: { prefetch?: boolean }) => Promise<void>>(
+    async () => {}
+  );
+
+  const loadEvents = useCallback(async (year: number, month: number, options?: { prefetch?: boolean }) => {
     if (!authReady || !config?.apiUrl || !session) return;
-    calendar.setEventsLoading(true);
-    calendar.setEventsError(null);
+    // Prefetch mode only warms the cache (and image thumbnails) for an off-screen month — it never
+    // touches the visible-month state, so paging into it lands instantly with no flash.
+    const prefetch = options?.prefetch === true;
+    const { from, to } = monthRangeBounds(year, month);
+    const cacheKey = from.slice(0, 7);
+    const cached = eventsMonthCacheRef.current[cacheKey];
+    if (prefetch && cached) return;
+    if (!prefetch) {
+      if (cached) {
+        calendar.setEvents(cached.events);
+        calendar.setEventCaptures(cached.captures);
+        calendar.setNextEventDate(cached.nextEventDate);
+      } else {
+        calendar.setEventsLoading(true);
+      }
+      calendar.setEventsError(null);
+    }
     try {
       const json = (await withFreshAccessToken(async (accessToken) =>
         requestJson(calendarEventsUrl(config.apiUrl, { from, to }), {
@@ -1817,57 +1851,47 @@ export default function App() {
             authorization: `Bearer ${accessToken}`
           }
         })
-      )) as { events?: Array<Record<string, any>>; next_event_date?: string | null };
-      calendar.setEvents((json.events ?? []).map(eventFromRemote));
-      calendar.setNextEventDate(json.next_event_date ?? null);
+      )) as {
+        events?: Array<Record<string, any>>;
+        captures?: Array<Record<string, any>>;
+        next_event_date?: string | null;
+      };
+      const events = (json.events ?? []).map(eventFromRemote);
+      const captureMap: Record<string, Capture> = {};
+      for (const raw of json.captures ?? []) {
+        const capture = captureFromRemote(raw);
+        if (capture.remoteId) captureMap[capture.remoteId] = capture;
+      }
+      const nextEventDate = json.next_event_date ?? null;
+      eventsMonthCacheRef.current[cacheKey] = { events, captures: captureMap, nextEventDate };
+      // Warm the agenda thumbnails so the cards paint the instant the day is shown.
+      prefetchImageUrls(Object.values(captureMap).map(captureImageUrl));
+      if (prefetch) return;
+      // Only commit if this month is still the visible one (the user may have paged on).
+      if (calendarVisibleMonthRef.current === cacheKey) {
+        calendar.setEvents(events);
+        calendar.setEventCaptures(captureMap);
+        calendar.setNextEventDate(nextEventDate);
+        // Warm the neighbouring months in the background so the next page is instant.
+        const prev = new Date(year, month - 1, 1);
+        const next = new Date(year, month + 1, 1);
+        void loadEventsRef.current(prev.getFullYear(), prev.getMonth(), { prefetch: true });
+        void loadEventsRef.current(next.getFullYear(), next.getMonth(), { prefetch: true });
+      }
     } catch (error) {
-      calendar.setEventsError(friendlyError(error, "Could not load your calendar."));
+      if (!prefetch && !cached) calendar.setEventsError(friendlyError(error, "Could not load your calendar."));
     } finally {
-      calendar.setEventsLoading(false);
+      if (!prefetch) calendar.setEventsLoading(false);
     }
   }, [authReady, config, session, withFreshAccessToken, calendar]);
 
-  const loadEventsForMonth = useCallback((year: number, month: number) => {
-    const { from, to } = monthRangeBounds(year, month);
-    void loadEvents(from, to);
+  useEffect(() => {
+    loadEventsRef.current = loadEvents;
   }, [loadEvents]);
 
-  const submitEventMutation = useCallback(async (
-    method: "POST" | "PATCH",
-    body: Record<string, unknown>
-  ) => {
-    if (!config?.apiUrl || !session) return false;
-    try {
-      await withFreshAccessToken(async (accessToken) =>
-        requestJson(calendarEventMutationUrl(config.apiUrl), {
-          method,
-          headers: {
-            accept: "application/json",
-            apikey: config.supabaseAnonKey,
-            authorization: `Bearer ${accessToken}`
-          },
-          body
-        })
-      );
-      loadEventsForMonth(calendar.visibleMonth.year, calendar.visibleMonth.month);
-      return true;
-    } catch (error) {
-      showErrorToast(error, "Could not save the event.");
-      return false;
-    }
-  }, [config, session, withFreshAccessToken, loadEventsForMonth, calendar.visibleMonth, showErrorToast]);
-
-  const saveCalendarEvent = useCallback((
-    body: Record<string, unknown>,
-    eventId?: string | null
-  ) => submitEventMutation(eventId ? "PATCH" : "POST", eventId ? { ...body, eventId, action: "update" } : body),
-    [submitEventMutation]
-  );
-
-  const deleteCalendarEvent = useCallback((eventId: string) =>
-    submitEventMutation("PATCH", { eventId, action: "delete" }),
-    [submitEventMutation]
-  );
+  const loadEventsForMonth = useCallback((year: number, month: number) => {
+    void loadEvents(year, month);
+  }, [loadEvents]);
 
   const showCalendarMonth = useCallback((year: number, month: number, date?: string | null) => {
     calendar.setVisibleMonth({ year, month });
@@ -1890,22 +1914,6 @@ export default function App() {
     const now = new Date();
     showCalendarMonth(now.getFullYear(), now.getMonth(), dateStringFromDate(now));
   }, [showCalendarMonth]);
-
-  // Tapping any event opens the editor. Detected (capture-backed) events are editable too — the
-  // backend promotes an edited detected event to 'confirmed' so re-analysis won't overwrite it.
-  const handleCalendarEventPress = useCallback((event: CalendarEvent) => {
-    calendar.openEventEditor({ event });
-  }, [calendar]);
-
-  const handleSaveCalendarEvent = useCallback((body: Record<string, unknown>, eventId?: string | null) => {
-    void saveCalendarEvent(body, eventId);
-    calendar.closeEventEditor();
-  }, [saveCalendarEvent, calendar]);
-
-  const handleDeleteCalendarEvent = useCallback((eventId: string) => {
-    void deleteCalendarEvent(eventId);
-    calendar.closeEventEditor();
-  }, [deleteCalendarEvent, calendar]);
 
   const {
     currentSearchKey,
@@ -2230,6 +2238,20 @@ export default function App() {
   }, [collectionCaptures, remoteSearchResults]);
 
   selectCaptureRef.current = selectCapture;
+
+  // Tapping a calendar event opens its capture review with the same thumbnail-expansion morph as
+  // the Recents feed; editing the reminder there re-syncs the calendar on return. Events are
+  // capture-derived, so there is no manual add/edit path.
+  const handleCalendarEventPress = useCallback((event: CalendarEvent) => {
+    const capture = event.captureId ? calendar.eventCaptures[event.captureId] : null;
+    if (!capture) return;
+    startReviewHandoff(capture, "calendar", () => {
+      setCaptureReviewOrigin("calendar");
+      setDraftTitle(capture.title);
+      setDraftNote(capture.note);
+      selectCapture(capture.id, { snapshot: capture });
+    });
+  }, [calendar, selectCapture, startReviewHandoff]);
 
   const selectCollection = useCallback((collectionId: string | null, origin: "recent" | "collections" | "suggestions" = "collections") => {
     setCollectionFeedReadyKey("");
@@ -3072,22 +3094,36 @@ export default function App() {
     const closesToCollection =
       captureReviewOrigin === "collection" && Boolean(selectedCollectionRef.current);
     const closesToSearch = captureReviewOrigin === "search" && searchOpenRef.current;
+    // Calendar-origin reviews morph back the same way: the calendar pane stays mounted as the
+    // underlay while the review is open (active: "calendar"), so its live agenda card is there for
+    // the copy to land on.
+    const closesToCalendar = captureReviewOrigin === "calendar" && calendarOpen;
     if (
-      (captureReviewOrigin === "recent" || closesToCollection || closesToSearch) &&
+      (captureReviewOrigin === "recent" || closesToCollection || closesToSearch || closesToCalendar) &&
       options?.allowHandoff !== false &&
       startReviewCloseHandoff(selected, {
         ...options,
         returnCollectionId: closesToCollection ? captureReturnCollectionId : null,
-        returnSurface: closesToSearch ? "search" : undefined
+        returnSurface: closesToSearch ? "search" : closesToCalendar ? "calendar" : undefined
       })
     ) {
+      // Re-pull events while the return morph runs so any reminder/date edit made in the review is
+      // reflected on the grid and agenda by the time the card lands.
+      if (closesToCalendar) loadEventsForMonth(calendar.visibleMonth.year, calendar.visibleMonth.month);
       return;
+    }
+    // Non-morph calendar close (handoff disabled or no flyable image): still refresh the agenda.
+    if (captureReviewOrigin === "calendar") {
+      loadEventsForMonth(calendar.visibleMonth.year, calendar.visibleMonth.month);
     }
     selectCapture(null);
   }, [
+    calendar.visibleMonth,
+    calendarOpen,
     cancelReviewOpeningHandoff,
     captureReturnCollectionId,
     captureReviewOrigin,
+    loadEventsForMonth,
     reviewHandoff,
     selectCapture,
     selected,
@@ -5264,6 +5300,7 @@ export default function App() {
 
   const {
     renderBottomAppBar,
+    renderCalendarCaptureRow,
     renderCaptureSkeletonRows,
     renderCollection,
     renderCollectionCapture,
@@ -5289,6 +5326,7 @@ export default function App() {
     homeFeedRevealPending,
     homeRowsFade,
     onAccountActionsPress: openAccountActions,
+    onCalendarCaptureThumbnailRef: registerCalendarCaptureThumbnailRef,
     onCalendarScreenOpen: openCalendar,
     onCaptureImageLoadState: markCaptureImageLoadState,
     onCaptureRowImageDisplayed: recordCaptureRowImageDisplayed,
@@ -5356,14 +5394,6 @@ export default function App() {
           deleteConfirmOpen={deleteConfirmOpen}
           onCloseDeleteConfirm={() => setDeleteConfirmOpen(false)}
           onConfirmDelete={() => void deleteAccount()}
-        />
-        <EventEditorSheet
-          event={calendar.editorEvent}
-          onClose={calendar.closeEventEditor}
-          onDelete={handleDeleteCalendarEvent}
-          onSave={handleSaveCalendarEvent}
-          seedDate={calendar.editorDate}
-          visible={calendar.editorOpen}
         />
         {selected ? (
           <CollectionSelectorScreen
@@ -5589,11 +5619,12 @@ export default function App() {
           onToday: showCalendarToday,
           onJumpToNextEvent: jumpToNextCalendarEvent,
           onSelectDay: calendar.setSelectedDate,
-          onAddEvent: (date) => calendar.openEventEditor({ date: date ?? calendar.selectedDate }),
-          onSelectEvent: handleCalendarEventPress
+          onSelectEvent: handleCalendarEventPress,
+          renderCaptureRow: (capture, onPress) => renderCalendarCaptureRow(capture, onPress)
         }}
         data={{
           events: calendar.events,
+          eventCaptures: calendar.eventCaptures,
           eventsError: calendar.eventsError,
           nextEventDate: calendar.nextEventDate
         }}
@@ -6046,6 +6077,14 @@ export default function App() {
       // pill vs Recents rail) so entering/leaving doesn't flash a tab switch.
       active: collectionsOpen ? "collections" : "recent",
       underlay: renderSuggestionsOverlay()
+    });
+  }
+
+  if (selected && captureReviewOrigin === "calendar") {
+    return renderTopLevelStack({
+      active: "calendar",
+      overlay: renderCaptureReviewScreen(selected),
+      overlayHandoff: reviewHandoff?.captureId === selected.id ? reviewHandoff : null
     });
   }
 
