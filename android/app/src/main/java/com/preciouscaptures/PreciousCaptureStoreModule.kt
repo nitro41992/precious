@@ -317,6 +317,28 @@ class PreciousCaptureStoreModule(
     }
   }
 
+  // "Try again" on a failed capture: re-establish the progress notification and poll the capture
+  // to completion. The backend re-analysis itself is triggered by the JS "reanalyze" PATCH; this
+  // reuses the existing re-arm + notification + WorkManager poll machinery (no upload — the worker
+  // skips it when no asset is provided and polls the existing capture by id).
+  @ReactMethod
+  fun reanalyzeCapture(id: String, promise: Promise) {
+    try {
+      if (configuredApiUrl().isNotBlank() && readNativeAuthSession(reactContext) == null) {
+        promise.reject("capture_auth_required", "Sign in before analyzing captures.")
+        return
+      }
+      // Find-or-seed so a server-fetched capture (not in the local cache) still re-establishes its
+      // progress notification; the worker matches the existing capture on the backend by id.
+      PreciousCaptureStore.ensureProcessingCaptureForId(reactContext, id)
+      CaptureNotifications.showQueued(reactContext, id)
+      enqueueCaptureWork(reactContext, id, NetworkType.CONNECTED)
+      promise.resolve(PreciousCaptureStore.list(reactContext).toString())
+    } catch (error: Exception) {
+      promise.reject("capture_reanalyze_enqueue_failed", error)
+    }
+  }
+
   @ReactMethod
   fun updateCapture(id: String, title: String, note: String, currentSaveIntent: String?, promise: Promise) {
     try {
@@ -424,11 +446,10 @@ class PreciousCaptureStoreModule(
   // photo as evidence. The worker re-POSTs under the same capture id, so the
   // backend attaches the asset to the existing row and reprocesses it.
   private fun enqueuePickedImageForCapture(promise: Promise, captureId: String, asset: PickedImage) {
-    val capture = PreciousCaptureStore.markCaptureProcessingForAsset(reactContext, captureId)
-    if (capture == null) {
-      promise.reject("capture_not_found", "Capture not found.")
-      return
-    }
+    // Find-or-seed: a capture fetched from the server feed (e.g. an older failed link) isn't in
+    // the local store, but we can still attach a photo to it — the worker uploads the asset and
+    // the backend attaches it to the existing capture by id.
+    PreciousCaptureStore.ensureProcessingCaptureForId(reactContext, captureId)
     CaptureNotifications.showQueued(reactContext, captureId)
     enqueueCaptureWork(
       reactContext,

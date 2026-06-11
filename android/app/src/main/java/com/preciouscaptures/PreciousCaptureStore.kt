@@ -130,10 +130,14 @@ object PreciousCaptureStore {
   }
 
   @Synchronized
-  fun addProcessingCapture(context: Context, sourceText: String): JSONObject {
+  fun addProcessingCapture(
+    context: Context,
+    sourceText: String,
+    id: String = UUID.randomUUID().toString()
+  ): JSONObject {
     val now = System.currentTimeMillis()
     val capture = JSONObject()
-      .put("id", UUID.randomUUID().toString())
+      .put("id", id)
       .put("title", titleFromSource(sourceText))
       .put("sourceText", sourceText)
       .put("sourceUrl", extractUrl(sourceText))
@@ -290,6 +294,14 @@ object PreciousCaptureStore {
     }
     if (updated != null) save(context, next)
     return updated
+  }
+
+  // Re-arm an existing local capture, or seed a minimal one when the target lives only
+  // server-side (e.g. adding a photo to an older capture fetched from the feed). The backend
+  // attaches the asset to the existing capture by id, so the seeded source fields can be empty.
+  @Synchronized
+  fun ensureProcessingCaptureForId(context: Context, id: String): JSONObject {
+    return markCaptureProcessingForAsset(context, id) ?: addProcessingCapture(context, "", id)
   }
 
   @Synchronized

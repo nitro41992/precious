@@ -185,6 +185,10 @@ object CaptureAnalysisClient {
     return request(url, "POST", accessToken, phase = "enqueue_capture") { connection ->
       val body = JSONObject()
         .put("clientCaptureKey", captureId)
+        // Lets the backend attach to an existing capture by id (recovering a server-only capture,
+        // e.g. adding a photo to a failed link) instead of creating a duplicate. Ignored when no
+        // capture with this id exists — the backend then falls back to client_capture_key.
+        .put("captureId", captureId)
         .put("sourceText", sourceText)
         .put("sourceUrl", sourceUrl ?: JSONObject.NULL)
         .put("original_url", sourceUrl ?: JSONObject.NULL)
@@ -235,6 +239,8 @@ object CaptureAnalysisClient {
         }
 
         field("clientCaptureKey", captureId)
+        // See postCapture: attach to an existing capture by id when one exists (photo recovery).
+        field("captureId", captureId)
         field("sourceText", sourceText)
         field("sourceUrl", sourceUrl)
         field("original_url", sourceUrl)
