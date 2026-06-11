@@ -133,6 +133,7 @@ import {
   captureIdentityAliases,
   collectionSelectionActionState,
   capturesForListMode,
+  displayStatus,
   extractHttpUrl,
   isDeleted,
   mergeRemoteCaptures,
@@ -153,6 +154,7 @@ const TOAST_ACTION_MS = 6000;
 // fresh toast each time, and a single Undo can restore the whole burst.
 const COLLECTION_UNLINK_TOAST_ID = "collection-unlink-batch";
 const CAPTURES_FRESH_MS = 30_000;
+const PROCESSING_REFRESH_MS = 3_000;
 const REVIEW_HANDOFF_OPEN_MS = 220;
 const REVIEW_HANDOFF_CLOSE_MS = 180;
 
@@ -3178,7 +3180,6 @@ export default function App() {
     capturesLoading,
     homeFeedReadyKey,
     homeRowsFade,
-    loadCaptures,
     markCaptureRowsRevealed,
     setHomeFeedReadyKey
   });
@@ -3325,6 +3326,30 @@ export default function App() {
     });
     return () => appSubscription.remove();
   }, [draftNote, draftNoteDirty, loadCaptures, reviewDraftsByCapture, selected]);
+
+  // Poll while any capture is still analyzing (or its collection suggestion is resolving) so the
+  // state updates live everywhere — including the capture-edit screen, which is why this lives at
+  // the app level rather than inside the Home feed hook (that unmounts when you open a capture).
+  // With the backend's 60s pipeline deadline, a stuck capture resolves to failed within one poll
+  // cycle of a minute, instead of spinning until the app is restarted.
+  const hasInFlightCapture = useMemo(
+    () =>
+      captures.some(
+        (capture) =>
+          displayStatus(capture) === "processing" ||
+          capture.collectionSuggestionState === "pending"
+      ),
+    [captures]
+  );
+  useEffect(() => {
+    if (!hasInFlightCapture) return;
+    const timer = setInterval(() => {
+      void loadCaptures().catch(() => {
+        // Foreground polling stays quiet; explicit loads still surface errors.
+      });
+    }, PROCESSING_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [hasInFlightCapture, loadCaptures]);
 
   useEffect(() => {
     if (!selected || !draftNoteDirty) return;
@@ -5006,6 +5031,20 @@ export default function App() {
       if (!raw) return;
       const next = JSON.parse(raw || "[]") as Capture[];
       replaceLocalCaptureLists(next);
+      // Treat the photo as a fresh second try, like "Try again": bump the card to the top so it
+      // reads as new activity (sortAt survives the reload merge). The native update already set
+      // the capture to processing, so the card shows Analyzing.
+      const bumpAt = Date.now();
+      const bumpAliases = new Set(captureIdentityAliases(selected));
+      commitCaptureRows("active", (current) =>
+        sortCaptures(
+          current.map((item) =>
+            captureIdentityAliases(item).some((alias) => bumpAliases.has(alias))
+              ? { ...item, sortAt: bumpAt }
+              : item
+          )
+        )
+      );
       showToast({ text: "Photo added. Re-checking the capture now.", tone: "processing" });
     } catch (error) {
       if (isCaptureImageCancel(error)) return;
@@ -5013,6 +5052,43 @@ export default function App() {
     } finally {
       captureImagePickerActiveRef.current = false;
       setPickingCaptureImage(false);
+    }
+  }
+
+  async function reanalyzeCapture() {
+    if (!selected) return;
+    if (!config?.apiUrl || !session) {
+      showToast("Re-analyzing isn't available offline.", "error");
+      return;
+    }
+    try {
+      const json = await withFreshAccessToken((accessToken) =>
+        requestJson<{ capture: Record<string, any> }>(captureMutationUrl(config.apiUrl), {
+          method: "PATCH",
+          headers: {
+            apikey: config.supabaseAnonKey,
+            authorization: `Bearer ${accessToken}`,
+            "content-type": "application/json"
+          },
+          body: {
+            captureId: selected.remoteId || selected.id,
+            action: "reanalyze"
+          }
+        })
+      );
+      // Bump it to the top of recents (and keep it there across reloads) — a retry reads as fresh
+      // activity. captureFromRemote returns processing; sortAt floats it up via captureSortValue.
+      applyUpdatedCapture(
+        { ...captureFromRemote(json.capture), sortAt: Date.now() },
+        selected.id
+      );
+      // Re-establish the native progress notification and let the worker poll to completion.
+      if (nativeStore?.reanalyzeCapture) {
+        void nativeStore.reanalyzeCapture(selected.id).catch(() => {});
+      }
+      showToast({ text: "Re-analyzing the capture now.", tone: "processing" });
+    } catch (error) {
+      showErrorToast(error, "Could not re-analyze the capture.");
     }
   }
 
@@ -5469,6 +5545,7 @@ export default function App() {
           openTitleSheet,
           openVisitTargetMaps: (candidate) => void openVisitTargetMaps(candidate),
           attachCapturePhoto: (source) => void attachCapturePhoto(source),
+          reanalyzeCapture: () => void reanalyzeCapture(),
           pasteExpandedUrl: () => void pasteExpandedUrl(),
           removeReminder: (reminderIndex) => void dismissReminder(reminderIndex),
           saveReminder: (draft, reminderIndex) => void saveReminder(draft, reminderIndex),

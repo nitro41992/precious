@@ -32,6 +32,7 @@ import type {
 import {
   captureFieldState,
   captureFieldRationaleVisible,
+  captureSortValue,
   displayStatus,
   extractHttpUrl,
   hostFromUrl,
@@ -1091,7 +1092,7 @@ export function groupedCaptureRows(captures: Capture[]) {
   const rows: HomeListRow[] = [];
   const seenGroups = new Set<string>();
   for (const capture of captures) {
-    const group = recencyGroupLabel(capture.createdAt);
+    const group = recencyGroupLabel(captureSortValue(capture));
     if (!seenGroups.has(group)) {
       rows.push({ type: "section", id: `section:${group}`, title: group });
       seenGroups.add(group);

@@ -1064,19 +1064,34 @@ export const styles = StyleSheet.create({
   processingStatusPill: {
     alignItems: "center",
     alignSelf: "flex-start",
-    backgroundColor: colors.processingSoft,
+    // Premium accent-green tint (not the old flat gray) so the pill reads as a live, branded
+    // "analyzing" cue alongside the spinning icon and the sweep highlight. overflow:hidden clips
+    // the sweep to the rounded pill.
+    backgroundColor: "rgba(46, 158, 32, 0.12)",
     borderRadius: 999,
     flexDirection: "row",
     flexShrink: 0,
     gap: 5,
+    overflow: "hidden",
     paddingHorizontal: 10,
     paddingVertical: 5
   },
   processingStatusPillReview: {
-    backgroundColor: "rgba(192, 214, 223, 0.94)",
+    // Frosted light surface over the capture image, replacing the old blue-gray — cleaner and
+    // more premium, with the spinning green icon and sweep reading clearly on top.
+    backgroundColor: "rgba(255, 255, 255, 0.94)",
     paddingHorizontal: 12,
     paddingVertical: 7,
     ...bottomControlShadow
+  },
+  // Soft accent light that sweeps across the pill on a loop (skewed for a premium shimmer feel).
+  processingStatusSweep: {
+    backgroundColor: "rgba(46, 158, 32, 0.28)",
+    borderRadius: 6,
+    bottom: -4,
+    position: "absolute",
+    top: -4,
+    width: 22
   },
   processingStatusText: {
     color: colors.processing,
@@ -4069,6 +4084,20 @@ export const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 16,
     fontWeight: "700"
+  },
+  // Primary recovery action on a failed capture: re-run analysis. Row layout (icon + label) on
+  // the same tonal surface as secondaryButton; it reuses secondaryButtonPressed so the tonal
+  // press fill matches this radius rather than leaving a default rectangle.
+  reviewRetryButton: {
+    alignItems: "center",
+    backgroundColor: colors.surfaceContainer,
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    marginBottom: 12,
+    minHeight: 52,
+    paddingVertical: 14
   },
   dangerButtonText: {
     color: colors.danger,

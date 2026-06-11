@@ -190,5 +190,6 @@ export function reviewReasons(capture: ReviewableCapture): ReviewReason[];
 export function reviewTargetsForCapture(capture: ReviewableCapture): ReviewReason[];
 export function searchCacheKey(scope: "active" | "archived" | "all" | string, query?: string | null): string;
 export function sortCaptures<T extends { createdAt: number }>(captures: T[]): T[];
+export function captureSortValue(capture: { sortAt?: number; createdAt?: number }): number;
 export function statusLabel(status: CaptureStatus): string;
 export function uniqueCapturesByIdentity<T extends { id?: string; remoteId?: string }>(captures: T[]): T[];

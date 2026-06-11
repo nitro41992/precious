@@ -133,6 +133,7 @@ type CaptureReviewScreenProps = {
     openTitleSheet: () => void;
     openVisitTargetMaps: (candidate: MapSearchCandidate) => void;
     attachCapturePhoto: (source: "camera" | "library") => void;
+    reanalyzeCapture: () => void;
     pasteExpandedUrl: () => void;
     removeReminder: (reminderIndex: number) => void;
     saveReminder: (draft: ReminderScheduleDraft, reminderIndex: number | null) => void;
@@ -375,6 +376,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
     openTitleSheet,
     openVisitTargetMaps,
     attachCapturePhoto,
+    reanalyzeCapture,
     pasteExpandedUrl,
     removeReminder,
     saveReminder,
@@ -1217,6 +1219,17 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                   ) : null}
                   <View style={styles.reviewActionBlock}>
                     <Text style={styles.reviewActionLabel}>Capture actions</Text>
+                    {selectedStatus === "failed" ? (
+                      <MotionPressable
+                        accessibilityRole="button"
+                        onPress={reanalyzeCapture}
+                        style={({ pressed }) => [styles.reviewRetryButton, pressed && styles.secondaryButtonPressed]}
+                        testID="pc.review.reanalyze"
+                      >
+                        <Sparkle color={colors.ink} size={19} weight="bold" />
+                        <Text style={styles.secondaryButtonText}>Try again</Text>
+                      </MotionPressable>
+                    ) : null}
                     {selectedStatus === "failed" && !isImageCapture(selected) ? (
                       <View style={styles.reviewPhotoPrompt}>
                         <Text style={styles.reviewPhotoPromptText}>

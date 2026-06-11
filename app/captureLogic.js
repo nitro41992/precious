@@ -185,11 +185,11 @@ function statusLabel(status) {
 }
 
 function hasExtractedData(capture) {
-  return Boolean(
-    capture.defaultIntent ||
-      capture.summary ||
-      (capture.analysisProvider && capture.analysisProvider !== "none")
-  );
+  // A failed run still stamps analysisProvider (e.g. "openai") even when it produced nothing, so
+  // the provider is NOT evidence of real output — only actual extracted content is. Without this,
+  // a crashed/llm_failed capture with no intent or summary displayed as "ready/Saved link",
+  // hiding its recovery UI (the "Try again" button and the "add a photo" prompt).
+  return Boolean(capture.defaultIntent || capture.summary);
 }
 
 function confidenceRequiresReview(value) {
@@ -416,8 +416,14 @@ function displayStatus(capture) {
   return capture.status;
 }
 
+// Recency used for ordering AND date-grouping. sortAt is a client-only override (set on
+// "Try again") so a re-activated capture floats to the top; everything else uses createdAt.
+function captureSortValue(capture) {
+  return capture?.sortAt || capture?.createdAt || 0;
+}
+
 function sortCaptures(captures) {
-  return [...captures].sort((a, b) => b.createdAt - a.createdAt);
+  return [...captures].sort((a, b) => captureSortValue(b) - captureSortValue(a));
 }
 
 function captureIdentityAliases(capture) {
@@ -452,7 +458,16 @@ function mergeRemoteCaptures(remoteCaptures, currentCaptures, listMode, now = Da
       captureIdentityAliases(capture).forEach((alias) => rejectedAliases.add(alias));
     }
   }
-  const remoteRows = uniqueCapturesByIdentity(capturesForListMode(remoteCaptures, listMode));
+  // A reload replaces capture objects with fresh server rows, which don't carry the client-only
+  // sortAt. Carry it forward from the matching current row so a "Try again" bump survives polls.
+  const remoteRows = uniqueCapturesByIdentity(capturesForListMode(remoteCaptures, listMode)).map(
+    (remote) => {
+      const prior = (currentCaptures || []).find(
+        (capture) => capture.sortAt && capturesShareIdentity(capture, remote)
+      );
+      return prior ? { ...remote, sortAt: prior.sortAt } : remote;
+    }
+  );
   if (listMode === "archived") return sortCaptures(remoteRows);
   const freshLocalProcessing = currentCaptures.filter((capture) => {
     const aliases = captureIdentityAliases(capture);
@@ -607,6 +622,7 @@ module.exports = {
   reviewReasons,
   reviewTargetsForCapture,
   searchCacheKey,
+  captureSortValue,
   sortCaptures,
   statusLabel,
   uniqueCapturesByIdentity

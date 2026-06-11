@@ -172,6 +172,9 @@ export type Capture = {
   createdAt: number;
   updatedAt: number;
   processedAt: number | null;
+  // Client-only recency override. Set when the user re-activates a capture (e.g. "Try again") so
+  // it floats to the top of the feed and stays there across reloads; falls back to createdAt.
+  sortAt?: number;
 };
 
 export type LinkedCollection = {
@@ -306,6 +309,7 @@ export type CaptureStore = {
   attachCaptureImage?: (id: string) => Promise<string | null>;
   attachCaptureCameraImage?: (id: string) => Promise<string | null>;
   submitExpandedUrl?: (id: string, expandedUrl: string) => Promise<string>;
+  reanalyzeCapture?: (id: string) => Promise<string>;
   getCaptures: () => Promise<string>;
   getCachedCapturePage?: (userId: string, mode: "active" | "archived") => Promise<string | null>;
   setCachedCapturePage?: (

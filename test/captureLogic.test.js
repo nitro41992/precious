@@ -10,6 +10,7 @@ const {
   capturesForSearchScope,
   capturesShareIdentity,
   captureFieldState,
+  captureSortValue,
   collectionSelectionActionState,
   displayStatus,
   extractHttpUrl,
@@ -28,6 +29,7 @@ const {
   reviewReasons,
   reviewTargetsForCapture,
   searchCacheKey,
+  sortCaptures,
   statusLabel,
   uniqueCapturesByIdentity
 } = require("../app/captureLogic");
@@ -607,6 +609,46 @@ test("displayStatus keeps extracted failed captures visible as ready but blocks 
   assert.equal(displayStatus(capture({ status: "failed", summary: "Recovered extraction" })), "ready");
   assert.equal(displayStatus(capture({ status: "needs_review", needsReview: true })), "needs_review");
   assert.equal(statusLabel("failed"), "Failed");
+});
+
+test("sortAt floats a re-activated capture to the top and survives a remote merge", () => {
+  const older = capture({ id: "a", createdAt: 3000 });
+  const newer = capture({ id: "b", createdAt: 5000 });
+  const bumped = capture({ id: "c", createdAt: 1000, sortAt: 9000 });
+  assert.equal(captureSortValue(bumped), 9000);
+  assert.equal(captureSortValue(older), 3000);
+  assert.deepEqual(
+    sortCaptures([older, newer, bumped]).map((row) => row.id),
+    ["c", "b", "a"]
+  );
+  // A reload returns the bumped capture as a fresh server row (no sortAt); the merge must carry
+  // the client bump forward so it stays at the top.
+  const current = [bumped, newer, older];
+  const remote = [
+    capture({ id: "a", createdAt: 3000 }),
+    capture({ id: "b", createdAt: 5000 }),
+    capture({ id: "c", createdAt: 1000 })
+  ];
+  assert.deepEqual(
+    mergeRemoteCaptures(remote, current, "active").map((row) => row.id),
+    ["c", "b", "a"]
+  );
+});
+
+test("displayStatus shows a failed capture with no real output as failed (keeps recovery UI reachable)", () => {
+  // A crashed/llm_failed run stamps analysisProvider "openai" but extracts nothing. It must stay
+  // "failed" so the Try again button and add-a-photo prompt show, not be upgraded to "ready".
+  assert.equal(
+    displayStatus(
+      capture({
+        status: "failed",
+        defaultIntent: null,
+        summary: null,
+        analysisProvider: "openai",
+      }),
+    ),
+    "failed",
+  );
 });
 
 test("mergeRemoteCaptures preserves only fresh local processing rows in the active list", () => {

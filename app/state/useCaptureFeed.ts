@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Animated, Easing } from "react-native";
 
 import {
-  capturesForListMode,
-  displayStatus
+  capturesForListMode
 } from "../captureLogic";
 import {
   captureRowRevealKey,
@@ -16,7 +15,6 @@ import type {
   LoadPhase
 } from "../types";
 
-const PROCESSING_REFRESH_MS = 3000;
 const RECENT_FEED_REVEAL_COUNT = 8;
 const REVEAL_DELAY_MS = 40;
 
@@ -29,7 +27,6 @@ export function useCaptureFeed({
   capturesLoading,
   homeFeedReadyKey,
   homeRowsFade,
-  loadCaptures,
   markCaptureRowsRevealed,
   setHomeFeedReadyKey
 }: {
@@ -41,33 +38,12 @@ export function useCaptureFeed({
   capturesLoading: boolean;
   homeFeedReadyKey: string;
   homeRowsFade: Animated.Value;
-  loadCaptures: () => Promise<void>;
   markCaptureRowsRevealed: (keys: string[]) => void;
   setHomeFeedReadyKey: (value: string) => void;
 }) {
   const [homeColdSkeletonVisible, setHomeColdSkeletonVisible] = useState(false);
-  // Keep polling while a capture is processing, or while its analysis is shown but the
-  // new-Collection suggestion is still resolving in the background (so the in-progress
-  // suggestion state resolves without the user having to refresh).
-  const hasProcessingCapture = useMemo(
-    () =>
-      captures.some(
-        (capture) =>
-          displayStatus(capture) === "processing" ||
-          capture.collectionSuggestionState === "pending"
-      ),
-    [captures]
-  );
-
-  useEffect(() => {
-    if (!hasProcessingCapture) return;
-    const timer = setInterval(() => {
-      void loadCaptures().catch(() => {
-        // Keep foreground polling quiet; explicit loads still surface errors.
-      });
-    }, PROCESSING_REFRESH_MS);
-    return () => clearInterval(timer);
-  }, [hasProcessingCapture, loadCaptures]);
+  // Polling while a capture is analyzing (or its suggestion is resolving) is driven at the app
+  // level in App.tsx so it keeps running on every screen, not just while the Home feed is mounted.
 
   const homeCaptures = useMemo(() => capturesForListMode(captures, "active"), [captures]);
   const homeRows = useMemo(() => groupedCaptureRows(homeCaptures), [homeCaptures]);

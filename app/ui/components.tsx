@@ -14,11 +14,13 @@ import { Image } from "expo-image";
 import { CalendarBlank, Camera, CaretLeft, Check, ClockClockwise, Folder, Folders, Gear, HouseSimple, ImageSquare, Info, Link, MagnifyingGlass, Plus, Sparkle, Warning, X } from "phosphor-react-native";
 import Reanimated, {
   cancelAnimation,
+  Easing as ReanimatedEasing,
   interpolate,
   interpolateColor,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withRepeat,
   withSpring,
   withTiming
 } from "react-native-reanimated";
@@ -1161,6 +1163,41 @@ export function ProcessingStatusPill({
   variant?: "row" | "review";
 }) {
   const review = variant === "review";
+  // "Premium, alive" cue: the icon spins continuously and a soft accent light sweeps across the
+  // pill. Both are continuous withRepeat loops, which keep the UI thread ticking — so they don't
+  // hit the declarative-animation idle stall — and use transform/opacity only (no full-screen
+  // worklet opacity) so they survive background→resume.
+  const spin = useSharedValue(0);
+  const sweep = useSharedValue(0);
+  useEffect(() => {
+    spin.value = withRepeat(
+      withTiming(1, { duration: 1100, easing: ReanimatedEasing.linear }),
+      -1,
+      false
+    );
+    sweep.value = withRepeat(
+      withTiming(1, {
+        duration: 1500,
+        easing: ReanimatedEasing.inOut(ReanimatedEasing.cubic)
+      }),
+      -1,
+      false
+    );
+    return () => {
+      cancelAnimation(spin);
+      cancelAnimation(sweep);
+    };
+  }, [spin, sweep]);
+  const iconStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${spin.value * 360}deg` }]
+  }));
+  const sweepStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(sweep.value, [0, 0.5, 1], [0, 0.9, 0]),
+    transform: [
+      { translateX: interpolate(sweep.value, [0, 1], [-44, 132]) },
+      { skewX: "-18deg" }
+    ]
+  }));
   return (
     <View
       accessibilityLabel={label}
@@ -1170,7 +1207,13 @@ export function ProcessingStatusPill({
         review && styles.processingStatusPillReview
       ]}
     >
-      <ClockClockwise color={colors.processing} size={review ? 15 : 13} weight="bold" />
+      <Reanimated.View
+        pointerEvents="none"
+        style={[styles.processingStatusSweep, sweepStyle]}
+      />
+      <Reanimated.View style={iconStyle}>
+        <ClockClockwise color={colors.processing} size={review ? 15 : 13} weight="bold" />
+      </Reanimated.View>
       <Text
         numberOfLines={1}
         style={[
