@@ -1,0 +1,7 @@
+{
+  "imports": {
+    "@extractus/oembed-extractor": "npm:@extractus/oembed-extractor@4.0.8",
+    "openlink": "npm:openlink@0.3.0",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2"
+  }
+}

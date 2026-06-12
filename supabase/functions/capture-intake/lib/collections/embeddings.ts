@@ -6,6 +6,7 @@ import {
   runInBackground,
   stringValue,
 } from "../common.ts";
+import { OPENAI_REQUEST_TIMEOUT_MS } from "../config.ts";
 
 export function collectionEmbeddingContent(title: string, description: string) {
   return compactText([title, description], 1600);
@@ -88,6 +89,10 @@ export async function createEmbedding(input: string) {
       model: "text-embedding-3-small",
       input: input || "untitled collection",
     }),
+    // Without a deadline a stalled embeddings request hangs the whole capture pipeline (it sits
+    // in collection retrieval, before the main analysis call) until the edge isolate is killed —
+    // stranding the capture in "processing" with no error. Bound it like the other OpenAI calls.
+    signal: AbortSignal.timeout(OPENAI_REQUEST_TIMEOUT_MS),
   });
   const raw = await response.json();
   if (!response.ok) {

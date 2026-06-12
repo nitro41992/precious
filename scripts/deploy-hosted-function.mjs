@@ -50,6 +50,29 @@ const captureIntakeResult = spawnSync(
 if (captureIntakeResult.status !== 0) process.exit(captureIntakeResult.status ?? 1);
 console.log(`Deployed capture-intake to project ${projectRef}.`);
 
+// Durable analysis worker. --no-verify-jwt: it is invoked by pg_net/pg_cron (not a user session)
+// and authenticates a shared bearer (CAPTURE_WORKER_SECRET) itself.
+const captureWorkerResult = spawnSync(
+  "npx",
+  [
+    "supabase",
+    "functions",
+    "deploy",
+    "capture-worker",
+    "--project-ref",
+    projectRef,
+    "--no-verify-jwt"
+  ],
+  {
+    cwd: process.cwd(),
+    env: process.env,
+    stdio: "inherit"
+  }
+);
+
+if (captureWorkerResult.status !== 0) process.exit(captureWorkerResult.status ?? 1);
+console.log(`Deployed capture-worker to project ${projectRef}.`);
+
 const placePhotoResult = spawnSync(
   "npx",
   [

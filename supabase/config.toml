@@ -3,3 +3,6 @@ verify_jwt = true
 
 [functions.place-photo]
 verify_jwt = false
+
+[functions.capture-worker]
+verify_jwt = false

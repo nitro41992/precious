@@ -98,12 +98,13 @@ export const OPENAI_REQUEST_TIMEOUT_MS = Number(
 export const PIPELINE_DEADLINE_MS = Number(
   Deno.env.get("PIPELINE_DEADLINE_MS") || "60000",
 );
-// Backstop for the rarer case the in-worker deadline can't catch: the worker is terminated
-// outright (its setTimeout never fires). The captures list fetch reaps anything still
-// "processing" past this to a recoverable "failed" so it never spins forever. Kept just above
-// the pipeline deadline so a genuinely-alive run is never reaped out from under itself.
+// Final backstop only. Durable analysis now runs through the pgmq `capture_analysis` queue: an
+// abandoned worker leaves the job un-acked and it is retried (then dead-lettered to a recoverable
+// "failed" after MAX_ATTEMPTS) — the queue owns terminal failure. This reaper must NOT race that
+// retry window, so it sits well above it and only catches truly-orphaned rows the queue never
+// owned (e.g. legacy captures, or an enqueue that never landed).
 export const STALE_PROCESSING_MS = Number(
-  Deno.env.get("STALE_PROCESSING_MS") || String(90 * 1000),
+  Deno.env.get("STALE_PROCESSING_MS") || String(10 * 60 * 1000),
 );
 export const COLLECTION_AUTO_LINK_CONFIDENCE = Number(
   Deno.env.get("COLLECTION_AUTO_LINK_CONFIDENCE") || "0.82",

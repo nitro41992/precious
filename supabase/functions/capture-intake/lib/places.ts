@@ -1,4 +1,5 @@
 import { errorMessage, jsonObject, stringValue } from "./common.ts";
+import { METADATA_TIMEOUT_MS } from "./config.ts";
 
 const PLACES_TEXT_SEARCH_URL =
   "https://places.googleapis.com/v1/places:searchText";
@@ -276,6 +277,8 @@ async function placeDetails(placeId: string, apiKey: string) {
         "X-Goog-Api-Key": apiKey,
         "X-Goog-FieldMask": PLACE_DETAILS_FIELD_MASK,
       },
+      // Bound every external call so a stalled Places request can't hang the analysis pipeline.
+      signal: AbortSignal.timeout(METADATA_TIMEOUT_MS),
     },
   );
   if (!response.ok) {
@@ -293,6 +296,7 @@ async function textSearch(query: string, apiKey: string) {
       "X-Goog-FieldMask": PLACES_FIELD_MASK,
     },
     body: JSON.stringify({ textQuery: query, maxResultCount: 3 }),
+    signal: AbortSignal.timeout(METADATA_TIMEOUT_MS),
   });
   if (!response.ok) {
     throw new Error(`Places text search failed (${response.status})`);

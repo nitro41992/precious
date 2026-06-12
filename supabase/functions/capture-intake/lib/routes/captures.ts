@@ -1,11 +1,11 @@
 import { adminClient } from "../supabase.ts";
 import { activeSaveIntentKeySet, CAPTURE_DETAIL_SELECT, CAPTURE_LIST_SELECT } from "../config.ts";
-import { boundedLimit, errorMessage, isUuid, runInBackground } from "../common.ts";
+import { boundedLimit, errorMessage, isUuid } from "../common.ts";
 import { syncDetectedCaptureEvents } from "../calendar/events.ts";
 import { json } from "../http.ts";
 import { archivedFilter, capturePayloadExpectsAsset, mergeAnalysisPatch, readCapturePayload, withCaptureState, withCaptureStates, withSignedCaptureAssetRows } from "../capture-records.ts";
 import { withLazySourcePreviewAssets } from "../source-previews.ts";
-import { createOrGetCaptureFromFields, createOrGetCaptureWithAsset, failCaptureMissingAsset, processCapture, reapStaleProcessingCaptures } from "../captures.ts";
+import { createOrGetCaptureFromFields, createOrGetCaptureWithAsset, failCaptureMissingAsset, reapStaleProcessingCaptures } from "../captures.ts";
 import { analysisRequiresReview, analysisWithCurrentIntent, normalizedReviewAnalysis, normalizedReviewTargets, resolveReviewTargets, reviewTargetsForAnalysis } from "../analysis/review-normalization.ts";
 import {
   acceptPendingCollectionDecisions,
@@ -184,7 +184,10 @@ export async function handleCapturesResource(
         .select("*")
         .single();
       if (result.error) throw result.error;
-      runInBackground(processCapture(String(existingResult.data.id), userId));
+      await supabase.rpc("enqueue_capture_analysis", {
+        p_capture_id: String(existingResult.data.id),
+        p_user_id: userId,
+      });
       return await captureResponse(
         supabase,
         userId,
@@ -620,7 +623,13 @@ export async function handleCapturesResource(
     capture.analysis_state === "queued" ||
     capture.analysis_state === "failed"
   ) {
-    runInBackground(processCapture(capture.id, userId));
+    // Enqueue durable analysis (pgmq) instead of fire-and-forget: the worker drains the queue and
+    // an abandoned run is retried, so the capture can't strand in "processing". The native worker
+    // keeps polling for the result exactly as before.
+    await supabase.rpc("enqueue_capture_analysis", {
+      p_capture_id: capture.id,
+      p_user_id: userId,
+    });
   }
   return json({ capture }, 202);
 }
