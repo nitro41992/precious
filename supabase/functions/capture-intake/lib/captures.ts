@@ -39,6 +39,7 @@ import {
   captureRoleTraceFromCollections,
   contentEvidenceProfile,
   firstCaptureAsset,
+  isImageAsset,
   normalizedReviewAnalysis,
   normalizedUrlEvidenceForCapture,
   rejectedAnalysis,
@@ -141,7 +142,7 @@ export async function persistCaptureGateNeedsReview(
     urlEvidence,
   );
   const normalizedAnalysis = normalizedReviewAnalysis(analysis);
-  const { error: runError } = await supabase.from("analysis_runs").insert({
+  await supabase.from("analysis_runs").insert({
     user_id: userId,
     capture_id: capture.id,
     provider: "openai",
@@ -450,6 +451,17 @@ export async function processCapture(captureId: string, userId: string) {
       }
     };
     const asset = firstCaptureAsset(capture);
+    // A user-attached photo (capture_media) is the source of truth, so analyze purely from it:
+    //  - Skip the capture-gate. The gate is a quality filter for low-context AUTOMATIC captures,
+    //    not a security control — and it wrongly bounces readable social-post screenshots as
+    //    "insufficient user context". A deliberately-attached photo IS the user's intent; let the
+    //    main analysis (schema-constrained, no agentic tools, image text treated as untrusted
+    //    evidence) decide, and a genuinely empty photo still yields needs_review.
+    //  - When the capture also has a link, ignore it: skip URL evidence and hide source_url from
+    //    the analysis so all fields come from the photo.
+    // Source-preview thumbnails are a different asset_role, so ordinary link captures (which have
+    // no capture_media image) are unaffected.
+    const imagePrimary = isImageAsset(asset);
     const signedAsset =
       asset?.storage_path && String(asset.mime_type || "").startsWith("image/")
         ? await supabase.storage.from("captures").createSignedUrl(
@@ -457,21 +469,28 @@ export async function processCapture(captureId: string, userId: string) {
           60 * 10,
         )
         : null;
-    const captureForAnalysis = signedAsset?.data?.signedUrl
-      ? {
-        ...capture,
-        asset_url: signedAsset.data.signedUrl,
-        asset_mime_type: asset?.mime_type || null,
-      }
-      : capture;
+    const captureForAnalysis = {
+      ...capture,
+      ...(signedAsset?.data?.signedUrl
+        ? {
+          asset_url: signedAsset.data.signedUrl,
+          asset_mime_type: asset?.mime_type || null,
+        }
+        : {}),
+      // Hide the link from the gate and the analysis so the photo is analyzed on its own.
+      ...(imagePrimary ? { source_url: null } : {}),
+    };
     // The capture gate reads only captureForAnalysis; URL evidence is an independent network
-    // fetch (the pipeline's biggest sink). Run them concurrently so the gate latency hides
-    // under the slower evidence fetch instead of serializing ahead of it.
+    // fetch (the pipeline's biggest sink). Run them concurrently so the gate latency hides under
+    // the slower evidence fetch. Skip URL evidence entirely when the photo is the source of truth.
     const [captureGateResult, urlEvidence] = await Promise.all([
-      shouldRunCaptureGate(capture, asset)
+      // Skip the gate when the user attached a photo: the gate exists to bounce low-value
+      // automatic captures, but a deliberately-attached photo is a user decision to analyze it.
+      // Let the full analysis run and decide (a genuinely thin photo still yields needs_review).
+      !imagePrimary && shouldRunCaptureGate(capture, asset)
         ? timeStage("captureGateMs", runCaptureGate(captureForAnalysis))
         : Promise.resolve(null),
-      capture.source_url
+      capture.source_url && !imagePrimary
         ? timeStage(
           "urlEvidenceMs",
           buildUrlEvidence(capture.source_url, supabase, {
@@ -488,9 +507,11 @@ export async function processCapture(captureId: string, userId: string) {
         )
         : Promise.resolve(null),
     ]);
-    runInBackground(
-      mirrorSourcePreviewAssetQuietly(supabase, userId, capture, urlEvidence),
-    );
+    // Best-effort source-preview mirror — fire concurrently without an EdgeRuntime background task.
+    void mirrorSourcePreviewAssetQuietly(supabase, userId, capture, urlEvidence)
+      .catch((error) =>
+        console.warn("Source preview mirror failed", errorMessage(error))
+      );
     const urlEvidenceStatus = productEvidenceStatus(urlEvidence);
     if (
       captureGateResult &&
@@ -507,6 +528,7 @@ export async function processCapture(captureId: string, userId: string) {
     }
     if (
       !captureGateResult &&
+      !imagePrimary &&
       shouldRejectContextlessLinkCapture(capture, asset, urlEvidence)
     ) {
       logUrlIngest(urlEvidence, 0);
