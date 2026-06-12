@@ -395,7 +395,7 @@ export const analysisSchema = {
           title: {
             type: "string",
             description:
-              "For type new, a concise mid-level Collection name future captures could also join, at most 50 characters. For type existing, the exact retrieved Collection title.",
+              "For type new, a concise mid-level Collection name future captures could also join, at most 50 characters — warm and natural in a real person's voice, not a flat repeated template or suffix, while staying a stable reusable category. For type existing, the exact retrieved Collection title.",
           },
           description: {
             type: ["string", "null"],

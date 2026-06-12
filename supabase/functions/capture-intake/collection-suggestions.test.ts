@@ -122,6 +122,23 @@ Deno.test("analysis prompt gates new collections with a granularity balance", ()
   );
 });
 
+Deno.test("analysis prompt nudges warm, varied names without breaking consolidation", () => {
+  const prompt = urlEvidence.buildPrompt(
+    captureFixture({ source_text: "A great trail running route near Boulder." }),
+    null,
+    [],
+  );
+  assert(
+    prompt.includes("warm, natural name") &&
+      prompt.includes("do not fall back on one repeated template or suffix"),
+    "prompt nudges a warm human voice and bans a formulaic repeated register",
+  );
+  assert(
+    prompt.includes("warmth never fragments repeated saves"),
+    "prompt keeps the stable reusable-phrasing guardrail so warmth does not undercut consolidation",
+  );
+});
+
 Deno.test("analysis prompt omits the pending-suggestion block when none exist", () => {
   const prompt = urlEvidence.buildPrompt(
     captureFixture({ source_text: "A great trail running route near Boulder." }),

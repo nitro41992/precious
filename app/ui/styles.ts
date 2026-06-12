@@ -2985,7 +2985,7 @@ export const styles = StyleSheet.create({
     gap: 6
   },
   propertyRowSuggestedValue: {
-    color: colors.accentTextStrong,
+    color: colors.accentText,
     flexShrink: 1,
     ...typefaces.displaySemibold,
     fontSize: 16,

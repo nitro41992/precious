@@ -1130,14 +1130,14 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                           <Text style={styles.propertyRowLabel}>Collection</Text>
                           {collectionField.suggested ? (
                             <View style={styles.propertyRowSuggested}>
-                              <Sparkle color={colors.accentTextStrong} size={15} weight="fill" />
-                              <Text numberOfLines={1} style={styles.propertyRowSuggestedValue}>
+                              <Sparkle color={colors.accent} size={15} weight="fill" />
+                              <Text numberOfLines={2} style={styles.propertyRowSuggestedValue}>
                                 {collectionField.displayValue}
                               </Text>
                             </View>
                           ) : (
                             <Text
-                              numberOfLines={1}
+                              numberOfLines={2}
                               style={[
                                 styles.propertyRowValue,
                                 !collectionField.hasValue && styles.propertyRowValuePending

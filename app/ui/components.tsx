@@ -1248,16 +1248,21 @@ export function SuggestionPendingToken({
 export function MeaningToken({
   Icon,
   iconColor = colors.muted,
+  textColor,
   text
 }: {
   Icon: AppIconComponent;
   iconColor?: string;
+  textColor?: string;
   text: string;
 }) {
   return (
     <View style={styles.meaningToken}>
       <Icon color={iconColor} size={13} weight="bold" />
-      <Text numberOfLines={1} style={styles.meaningTokenText}>
+      <Text
+        numberOfLines={1}
+        style={[styles.meaningTokenText, textColor ? { color: textColor } : null]}
+      >
         {text}
       </Text>
     </View>

@@ -171,7 +171,12 @@ export function CaptureRow({
           <View style={styles.rowMeaningLine}>
             <CollectionMeaningToken collections={collectionTokens} />
             {suggestionLabel ? (
-              <MeaningToken Icon={Sparkle} iconColor={colors.accentTextStrong} text={suggestionLabel} />
+              <MeaningToken
+                Icon={Sparkle}
+                iconColor={colors.accent}
+                text={suggestionLabel}
+                textColor={colors.accentText}
+              />
             ) : suggestionPending ? (
               <SuggestionPendingToken />
             ) : null}
