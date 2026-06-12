@@ -1322,6 +1322,44 @@ export function activeLinkedCollections(capture: Capture): LinkedCollection[] {
   return (capture.linkedCollections || []).filter((collection) => collection.status !== "suggested");
 }
 
+// A failed capture stays recoverable: when analysis could not read a non-image
+// capture, we offer a photo/screenshot so the user can re-arm it. Image captures
+// already carry their own visual, so they never get the prompt.
+export function shouldOfferPhotoRecovery(capture: Capture): boolean {
+  return displayStatus(capture) === "failed" && !isImageCapture(capture);
+}
+
+// Promote a capture's pending suggested collection to an active membership once
+// the suggestion is persisted. Pure so every loaded capture store can be mapped
+// through it identically; `now` is injected to keep it deterministic.
+export function promoteSuggestedCollection(
+  capture: Capture,
+  collectionId: string,
+  created: Collection,
+  now: number
+): Capture {
+  const suggested = suggestedLinkedCollection(capture);
+  if (!suggested || suggested.id !== collectionId) return capture;
+  const linked: LinkedCollection = {
+    ...suggested,
+    id: created.id,
+    title: created.title,
+    description: created.description,
+    status: "active",
+    linkedAt: now
+  };
+  return {
+    ...capture,
+    collectionSuggestionState: "none",
+    linkedCollections: [
+      ...(capture.linkedCollections || []).filter(
+        (collection) => collection !== suggested && collection.id !== created.id
+      ),
+      linked
+    ]
+  };
+}
+
 function pendingExistingCollectionDecisions(capture: Capture) {
   const linkedIds = new Set((capture.linkedCollections || []).map((collection) => collection.id));
   return (capture.collectionDecisions || []).filter((decision) => {

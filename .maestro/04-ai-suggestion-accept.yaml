@@ -1,0 +1,27 @@
+appId: com.preciouscaptures
+name: 04 ai suggestion accept
+# Seeded by run-maestro-smoke (seedPendingSuggestion); zero LLM. The session is
+# injected via the deep-link callback before this flow, so there is no UI sign-in.
+# Selectors are statically verified against the screens; confirm on first device run.
+---
+# Reset to a known home state (the injected session survives a warm relaunch).
+- launchApp
+- assertVisible:
+    id: "pc.home.captures"
+- tapOn:
+    id: "pc.nav.collections"
+- tapOn:
+    id: "pc.collections.see-suggestions"
+# The seeded suggested collection is opened by its id.
+- assertVisible:
+    id: "pc.collection.suggestion.open.${PRECIOUS_E2E_SUGGESTION_ID}"
+- tapOn:
+    id: "pc.collection.suggestion.open.${PRECIOUS_E2E_SUGGESTION_ID}"
+- assertVisible:
+    id: "pc.collection.detail.title"
+# Accept the suggestion: it is promoted to a real (active) collection.
+- tapOn:
+    id: "pc.collection.detail.persist"
+# Back on the suggestions list, the accepted suggestion is no longer offered.
+- assertNotVisible:
+    id: "pc.collection.suggestion.open.${PRECIOUS_E2E_SUGGESTION_ID}"

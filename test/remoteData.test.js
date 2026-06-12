@@ -603,3 +603,41 @@ test("eventFromRemote treats a missing start time as an all-day event with null 
   assert.equal(event.datePrecision, "month");
   assert.equal(event.source, "manual");
 });
+
+// --- Seed fixture <-> parser contract ---
+// The deterministic E2E seeder (scripts/lib/seed-captures.mjs) writes the same
+// backend shapes captureFromRemote parses. These tests pin that contract so a
+// future shape/type drift fails here in the gated suite instead of silently
+// passing a green-but-wrong Maestro run against fixtures the app can't read.
+
+test("seed fixture: pending suggestion parses to a ready suggested membership", async () => {
+  const { captureFromRemote } = loadRemoteData();
+  const { buildPendingSuggestionFixture } = await import("../scripts/lib/seed-captures.mjs");
+  const { buildCaptureRow } = buildPendingSuggestionFixture("review-e2e-test", "user-1");
+  const capture = captureFromRemote(buildCaptureRow("col-1"));
+
+  assert.equal(capture.collectionSuggestionState, "ready");
+  const suggested = (capture.linkedCollections || []).find((c) => c.status === "suggested");
+  assert.ok(suggested, "expected a suggested LinkedCollection");
+  assert.equal(suggested.id, "col-1");
+  assert.equal(suggested.title, "review-e2e-test Suggested");
+});
+
+test("seed fixture: failed capture parses to a failed, non-image capture", async () => {
+  const { captureFromRemote } = loadRemoteData();
+  const { buildFailedCaptureFixture } = await import("../scripts/lib/seed-captures.mjs");
+  const capture = captureFromRemote(buildFailedCaptureFixture("review-e2e-test", "user-1"));
+
+  assert.equal(capture.status, "failed");
+  // Non-image so the review screen offers photo recovery (shouldOfferPhotoRecovery).
+  assert.notEqual(String(capture.captureType || "").toLowerCase(), "image");
+  assert.equal(String(capture.imageAssetMimeType || "").startsWith("image/"), false);
+});
+
+test("seed fixture: needs-review capture parses to needs_review status", async () => {
+  const { captureFromRemote } = loadRemoteData();
+  const { buildNeedsReviewFixture } = await import("../scripts/lib/seed-captures.mjs");
+  const capture = captureFromRemote(buildNeedsReviewFixture("review-e2e-test", "user-1"));
+
+  assert.equal(capture.status, "needs_review");
+});

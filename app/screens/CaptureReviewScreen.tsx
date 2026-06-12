@@ -63,6 +63,7 @@ import {
   reminderLabel,
   reminderLabelParts,
   reviewStatusCue,
+  shouldOfferPhotoRecovery,
   urlEvidenceMessage
 } from "../capturePresentation";
 import { ReminderEditorSheet } from "../sheets/ReminderEditorSheet";
@@ -1230,7 +1231,7 @@ export function CaptureReviewScreen({ actions, data, state }: CaptureReviewScree
                         <Text style={styles.secondaryButtonText}>Try again</Text>
                       </MotionPressable>
                     ) : null}
-                    {selectedStatus === "failed" && !isImageCapture(selected) ? (
+                    {shouldOfferPhotoRecovery(selected) ? (
                       <View style={styles.reviewPhotoPrompt}>
                         <Text style={styles.reviewPhotoPromptText}>
                           A screenshot or photo helps us read this capture.

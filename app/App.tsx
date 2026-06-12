@@ -85,6 +85,7 @@ import {
   insertCollectionAtAnchor,
   isCaptureImageCancel,
   mergeCollectionsPreservingOrder,
+  promoteSuggestedCollection,
   reminderSuggestionFromSchedule,
   uniqueCaptures,
   uniqueCollections
@@ -3649,26 +3650,8 @@ export default function App() {
   // showing — not just on the open detail. With the unified model this just flips the membership's
   // status from "suggested" to "active" (keeping its rationale/confidence).
   function linkPersistedSuggestionToKnownCaptures(collectionId: string, created: Collection) {
-    mapKnownCaptures((capture) => {
-      const suggested = suggestedLinkedCollection(capture);
-      if (!suggested || suggested.id !== collectionId) return capture;
-      const linked: LinkedCollection = {
-        ...suggested,
-        id: created.id,
-        title: created.title,
-        description: created.description,
-        status: "active",
-        linkedAt: Date.now()
-      };
-      return {
-        ...capture,
-        collectionSuggestionState: "none",
-        linkedCollections: [
-          ...(capture.linkedCollections || []).filter((collection) => collection !== suggested && collection.id !== created.id),
-          linked
-        ]
-      };
-    });
+    const now = Date.now();
+    mapKnownCaptures((capture) => promoteSuggestedCollection(capture, collectionId, created, now));
   }
 
   async function saveContextNote(capture: Capture, noteValue: string) {

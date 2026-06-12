@@ -625,3 +625,106 @@ test("captureFieldRationale keeps the AI-pick insight visible while its collecti
     false
   );
 });
+
+// --- Characterization: failed-capture photo recovery gate ---
+// Locks the product stance that a failed, non-image capture stays recoverable by
+// offering a photo/screenshot, while image and non-failed captures never do.
+
+test("shouldOfferPhotoRecovery offers a photo for a failed non-image capture", () => {
+  const { shouldOfferPhotoRecovery } = loadCapturePresentation();
+  assert.equal(shouldOfferPhotoRecovery(capture({ status: "failed" })), true);
+});
+
+test("shouldOfferPhotoRecovery does not offer a photo for a failed image capture", () => {
+  const { shouldOfferPhotoRecovery } = loadCapturePresentation();
+  assert.equal(
+    shouldOfferPhotoRecovery(capture({ status: "failed", captureType: "image" })),
+    false
+  );
+  assert.equal(
+    shouldOfferPhotoRecovery(
+      capture({ status: "failed", sourceText: "Shared image: cat.png" })
+    ),
+    false
+  );
+});
+
+test("shouldOfferPhotoRecovery stays quiet for non-failed captures", () => {
+  const { shouldOfferPhotoRecovery } = loadCapturePresentation();
+  assert.equal(shouldOfferPhotoRecovery(capture({ status: "ready" })), false);
+  assert.equal(shouldOfferPhotoRecovery(capture({ status: "needs_review" })), false);
+  assert.equal(shouldOfferPhotoRecovery(capture({ status: "processing" })), false);
+});
+
+// --- Characterization: accept-suggestion promotion transform ---
+// Locks how a persisted suggestion is reflected onto every loaded capture: the
+// suggested membership flips to active with the created collection's identity,
+// the pending suggestion state clears, and no duplicate membership is left behind.
+
+function captureWithSuggestion(collectionId, overrides = {}) {
+  return capture({
+    collectionSuggestionState: "ready",
+    linkedCollections: [
+      {
+        id: collectionId,
+        title: "Suggested name",
+        description: "why",
+        status: "suggested",
+        rationale: "because",
+        confidence: 0.8
+      }
+    ],
+    ...overrides
+  });
+}
+
+test("promoteSuggestedCollection flips the matching suggestion to an active membership", () => {
+  const { promoteSuggestedCollection } = loadCapturePresentation();
+  const created = { id: "col-real", title: "Recipes", description: "tasty" };
+  const result = promoteSuggestedCollection(
+    captureWithSuggestion("col-suggested"),
+    "col-suggested",
+    created,
+    1000
+  );
+
+  assert.equal(result.collectionSuggestionState, "none");
+  assert.equal(result.linkedCollections.length, 1);
+  const linked = result.linkedCollections[0];
+  assert.equal(linked.id, "col-real");
+  assert.equal(linked.title, "Recipes");
+  assert.equal(linked.description, "tasty");
+  assert.equal(linked.status, "active");
+  assert.equal(linked.linkedAt, 1000);
+  // Rationale/confidence from the original suggestion are preserved.
+  assert.equal(linked.rationale, "because");
+  assert.equal(linked.confidence, 0.8);
+});
+
+test("promoteSuggestedCollection leaves captures without the matching suggestion untouched", () => {
+  const { promoteSuggestedCollection } = loadCapturePresentation();
+  const created = { id: "col-real", title: "Recipes", description: "tasty" };
+  const other = captureWithSuggestion("col-other");
+  const result = promoteSuggestedCollection(other, "col-suggested", created, 1000);
+  assert.equal(result, other);
+});
+
+test("promoteSuggestedCollection does not duplicate an already-active membership", () => {
+  const { promoteSuggestedCollection } = loadCapturePresentation();
+  const created = { id: "col-real", title: "Recipes", description: "tasty" };
+  const withExisting = captureWithSuggestion("col-suggested", {
+    linkedCollections: [
+      { id: "col-real", title: "Recipes", description: "tasty", status: "active" },
+      {
+        id: "col-suggested",
+        title: "Suggested name",
+        description: "why",
+        status: "suggested"
+      }
+    ]
+  });
+  const result = promoteSuggestedCollection(withExisting, "col-suggested", created, 1000);
+  const realMemberships = result.linkedCollections.filter((c) => c.id === "col-real");
+  assert.equal(realMemberships.length, 1);
+  assert.equal(result.linkedCollections.every((c) => c.status === "active"), true);
+});

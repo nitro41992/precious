@@ -1,9 +1,19 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { loadEnvFiles } from "./load-env-files.mjs";
+import {
+  APP_ID as appId,
+  delay,
+  envValue,
+  restInsert,
+  run,
+  runMaestroFlow,
+  runOptional,
+  signInForUser,
+  signInWithAuthCallback
+} from "./lib/e2e-harness.mjs";
 
-const appId = "com.preciouscaptures";
 const deviceVideoPath = "/sdcard/precious-motion.mp4";
 const localVideoPath = "/tmp/precious-motion.mp4";
 const localFrameStatsPath = "/tmp/precious-motion-framestats.txt";
@@ -27,34 +37,6 @@ function parseArgs() {
   return options;
 }
 
-function run(label, command, args, options = {}) {
-  const result = spawnSync(command, args, {
-    env: options.env || process.env,
-    stdio: options.capture ? "pipe" : "inherit",
-    encoding: options.capture ? "utf8" : undefined
-  });
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`${label} failed with exit code ${result.status ?? "unknown"}.`);
-  return result;
-}
-
-function runOptional(label, command, args, options = {}) {
-  const result = spawnSync(command, args, {
-    env: options.env || process.env,
-    stdio: "pipe",
-    encoding: "utf8"
-  });
-  if (result.error || result.status !== 0) {
-    console.warn(`${label} skipped.`);
-    return null;
-  }
-  return result;
-}
-
-function shellQuote(value) {
-  return `'${String(value).replace(/'/g, "'\\''")}'`;
-}
-
 function buildValidationEnv() {
   loadEnvFiles();
   const email = process.env.PRECIOUS_E2E_EMAIL || "precious-captures-e2e@example.com";
@@ -66,55 +48,6 @@ function buildValidationEnv() {
     PRECIOUS_E2E_EMAIL: email,
     PRECIOUS_E2E_PASSWORD: password
   };
-}
-
-function envValue(env, name, fallbackName) {
-  const value = env[name] || (fallbackName ? env[fallbackName] : "");
-  if (!value) throw new Error(`Missing ${name}${fallbackName ? ` or ${fallbackName}` : ""}.`);
-  return value.replace(/\/$/, "");
-}
-
-async function requestJson(url, init = {}) {
-  const response = await fetch(url, init);
-  const text = await response.text();
-  const json = text ? JSON.parse(text) : null;
-  if (!response.ok) {
-    throw new Error(`${init.method || "GET"} ${url} failed ${response.status}: ${text.slice(0, 500)}`);
-  }
-  return json;
-}
-
-function serviceHeaders(serviceRoleKey, extra = {}) {
-  return {
-    apikey: serviceRoleKey,
-    authorization: `Bearer ${serviceRoleKey}`,
-    ...extra
-  };
-}
-
-async function restInsert({ supabaseUrl, serviceRoleKey, table, row }) {
-  const rows = await requestJson(`${supabaseUrl}/rest/v1/${table}`, {
-    method: "POST",
-    headers: serviceHeaders(serviceRoleKey, {
-      "content-type": "application/json",
-      prefer: "return=representation"
-    }),
-    body: JSON.stringify(row)
-  });
-  return Array.isArray(rows) ? rows[0] : rows;
-}
-
-async function signInForUser({ supabaseUrl, anonKey, email, password }) {
-  const session = await requestJson(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
-    method: "POST",
-    headers: {
-      apikey: anonKey,
-      "content-type": "application/json"
-    },
-    body: JSON.stringify({ email, password })
-  });
-  if (!session.user?.id) throw new Error("Supabase auth did not return a user id.");
-  return session.user;
 }
 
 function collectionDecisionFor(collection) {
@@ -233,69 +166,6 @@ async function seedAnimationFixtures(env) {
   );
 }
 
-function runMaestro(label, flowPath, env) {
-  run(label, "maestro", [
-    "test",
-    "-e",
-    `PRECIOUS_E2E_EMAIL=${env.PRECIOUS_E2E_EMAIL}`,
-    "-e",
-    `PRECIOUS_E2E_PASSWORD=${env.PRECIOUS_E2E_PASSWORD}`,
-    flowPath
-  ], { env });
-}
-
-async function signInWithAuthCallback(env) {
-  const supabaseUrl = envValue(env, "EXPO_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL");
-  const anonKey = envValue(env, "EXPO_PUBLIC_SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY");
-  const session = await requestJson(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
-    method: "POST",
-    headers: {
-      apikey: anonKey,
-      "content-type": "application/json"
-    },
-    body: JSON.stringify({
-      email: env.PRECIOUS_E2E_EMAIL,
-      password: env.PRECIOUS_E2E_PASSWORD
-    })
-  });
-  const accessToken = session.access_token || "";
-  const refreshToken = session.refresh_token || "";
-  const expiresAt = Number(session.expires_at) ||
-    Math.floor(Date.now() / 1000) + Number(session.expires_in || 3600);
-  if (!accessToken || !refreshToken) throw new Error("Supabase auth did not return session tokens.");
-  const callbackParams = new URLSearchParams({
-    access_token: accessToken,
-    refresh_token: refreshToken,
-    expires_at: String(expiresAt)
-  });
-  const callbackUrl = `preciouscaptures://auth/callback#${callbackParams.toString()}`;
-  run("Clear app state", "adb", ["shell", "pm", "clear", appId], { env, capture: true });
-  runOptional("Grant notification permission", "adb", [
-    "shell",
-    "pm",
-    "grant",
-    appId,
-    "android.permission.POST_NOTIFICATIONS"
-  ], { env });
-  run("Open auth callback", "adb", [
-    "shell",
-    "am",
-    "start",
-    "-W",
-    "-a",
-    "android.intent.action.VIEW",
-    "-d",
-    shellQuote(callbackUrl),
-    "-n",
-    `${appId}/.MainActivity`
-  ], { env, capture: true });
-  await delay(3000);
-}
-
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 async function recordFlow(env, recordSeconds) {
   run("Remove old device recording", "adb", ["shell", "rm", "-f", deviceVideoPath], { env });
   run("Reset Android frame stats", "adb", ["shell", "dumpsys", "gfxinfo", appId, "reset"], { env, capture: true });
@@ -320,7 +190,7 @@ async function recordFlow(env, recordSeconds) {
   });
 
   await delay(1500);
-  runMaestro("Maestro animation validation flow", ".maestro/03-animation-validation.yaml", env);
+  runMaestroFlow("Maestro animation validation flow", ".maestro/03-animation-validation.yaml", env);
 
   if (!recorderExited) {
     runOptional("Stop Android screenrecord", "adb", ["shell", "pkill", "-2", "screenrecord"], { env });

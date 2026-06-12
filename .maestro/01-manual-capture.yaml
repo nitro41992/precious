@@ -1,28 +1,15 @@
 appId: com.preciouscaptures
 name: 01 manual capture
+# The ONE intentionally-real flow: it creates a real capture and hits the backend
+# + OpenAI. Run only via `run-maestro-smoke --with-live-capture`, NOT in the
+# default zero-LLM loop. The session is injected via the deep-link callback before
+# this flow runs, so there is no UI sign-in.
 ---
-- launchApp
-- runFlow:
-    when:
-      visible: "Sign in"
-    commands:
-      - tapOn:
-          id: "pc.auth.email"
-      - inputText: "${PRECIOUS_E2E_EMAIL}"
-      - tapOn:
-          id: "pc.auth.password"
-      - inputText: "${PRECIOUS_E2E_PASSWORD}"
-      - hideKeyboard
-      - tapOn:
-          id: "pc.auth.sign-in"
-          enabled: true
-      - runFlow: dismiss-password-save.yaml
-      - assertVisible:
-          id: "pc.home.captures"
 - assertVisible:
     id: "pc.home.captures"
+# The global FAB is the single "add capture" entry point on every tab.
 - tapOn:
-    id: "pc.capture.open"
+    id: "pc.nav.capture"
 - tapOn:
     id: "pc.capture.source"
 - inputText: "https://www.nps.gov/yose/planyourvisit/reservations.htm"

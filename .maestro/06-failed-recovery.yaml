@@ -1,0 +1,31 @@
+appId: com.preciouscaptures
+name: 06 failed capture recovery
+# Seeded by run-maestro-smoke (seedFailedCapture: a failed, non-image capture);
+# zero LLM. Locks the product stance that a failed capture stays recoverable by
+# offering a photo/screenshot. Session is injected beforehand.
+# Selectors/copy are statically verified; confirm on first device run.
+---
+# Reset to a known home state (the injected session survives a warm relaunch).
+- launchApp
+- assertVisible:
+    id: "pc.home.captures"
+# Open the seeded failed capture from Recents (title carries the seed prefix).
+# The failed capture sits low in Recents (near the bottom nav); center it before
+# tapping so the tap lands on the row, not the nav bar.
+- scrollUntilVisible:
+    element:
+      text: ".*${PRECIOUS_E2E_PREFIX}.*failed.*"
+    direction: DOWN
+    centerElement: true
+- tapOn:
+    text: ".*${PRECIOUS_E2E_PREFIX}.*failed.*"
+# The "Capture actions" block (incl. the photo-recovery prompt) is below the fold
+# on the review screen; scroll to it.
+- scrollUntilVisible:
+    element:
+      id: "pc.review.photo.camera"
+    direction: DOWN
+- assertVisible:
+    text: "A screenshot or photo helps us read this capture."
+- assertVisible:
+    id: "pc.review.photo.add"

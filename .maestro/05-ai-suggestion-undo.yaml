@@ -1,0 +1,30 @@
+appId: com.preciouscaptures
+name: 05 ai suggestion dismiss and undo
+# Seeded by run-maestro-smoke (a dedicated pending suggestion); zero LLM. Locks the
+# whole-suggestion dismiss + Undo journey. Session is injected beforehand.
+# Selectors/copy are statically verified; confirm on first device run.
+---
+# Reset to a known home state (the injected session survives a warm relaunch).
+- launchApp
+- assertVisible:
+    id: "pc.home.captures"
+- tapOn:
+    id: "pc.nav.collections"
+- tapOn:
+    id: "pc.collections.see-suggestions"
+- assertVisible:
+    id: "pc.collection.suggestion.open.${PRECIOUS_E2E_SUGGESTION_ID}"
+- tapOn:
+    id: "pc.collection.suggestion.open.${PRECIOUS_E2E_SUGGESTION_ID}"
+- assertVisible:
+    id: "pc.collection.detail.title"
+# Dismiss the whole suggestion -> destructive toast with an Undo action.
+- tapOn:
+    id: "pc.collection.detail.dismiss"
+- assertVisible:
+    text: "Suggestion dismissed."
+- tapOn:
+    text: "Undo"
+# Undo restores the suggestion.
+- assertVisible:
+    text: "Suggestion restored."

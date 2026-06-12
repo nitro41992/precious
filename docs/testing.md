@@ -16,6 +16,34 @@ That runs:
 
 The unit tests use Node's built-in test runner against shared app logic in `app/captureLogic.js`, so they do not need Metro, an emulator, or live Supabase credentials.
 
+`npm test` plus the Deno edge-function tests (`npm run test:url-evidence`) run automatically on every PR and on pushes to `main` via `.github/workflows/ci.yml`. That gate is the regression net: it must stay green for a PR to be safe to merge. (To make it *block* merge, require the "Fast checks" and "Backend tests" status checks in the repo's branch-protection settings.)
+
+## Two tracks: "does the app work?" vs "is the model good?"
+
+Keep these separate so we never pay to test the AI on every run:
+
+- **Deterministic track (free, every PR / pre-release).** Fast unit + Deno tests, and the seeded Maestro flows. These assert the app correctly *handles* whatever analysis it is given. **Never assert on model-generated wording** (titles, summaries, rationales, suggested collection names) — only on structure, status, product copy, and testIDs. Maestro flows are seeded via `scripts/lib/seed-captures.mjs` (no OpenAI call); `test/remoteData.test.js` pins that the seeded shapes parse the same way the hosted API's do, so fixtures can't silently drift from the backend contract.
+- **Probabilistic track (costs money, on prompt/model change only).** The capture-accuracy evals (below) measure model *quality* against a fixed sample, scored offline. Run on prompt or model changes, not per PR. Never gate CI on probabilistic output.
+
+### Journey → guard matrix
+
+Every user-critical journey should have a named guard. When you change a journey, update its guard.
+
+| Journey | Guard | Layer |
+| --- | --- | --- |
+| Capture status derivation (failed / needs_review / ready) | `captureFromRemote` tests in `test/remoteData.test.js` | unit |
+| Failed capture stays recoverable (photo prompt) | `shouldOfferPhotoRecovery` in `test/capturePresentation.test.js` + `.maestro/06-failed-recovery.yaml` | unit + Maestro |
+| Accept AI suggestion (reflect across stores) | `promoteSuggestedCollection` in `test/capturePresentation.test.js` + `.maestro/04-ai-suggestion-accept.yaml` | unit + Maestro |
+| Dismiss suggestion + undo | `.maestro/05-ai-suggestion-undo.yaml` | Maestro |
+| Seed fixture ↔ backend parse contract | `test/remoteData.test.js` (seed fixture section) | unit |
+| Cache-on-navigation merge | `mergeRemoteCaptures` tests in `test/captureLogic.test.js` | unit |
+| Settings / account-deletion gate | `.maestro/07-settings-delete-guard.yaml` (asserts the confirm sheet, never confirms) | Maestro |
+| Recents / Collections nav + search | `.maestro/02-collections.yaml` | Maestro |
+| Manual capture (real wire-check) | `.maestro/01-manual-capture.yaml` (LIVE LLM; `--with-live-capture` only) | Maestro |
+| Motion feel | `npm run test:e2e:animations` recording + framestats | recording |
+
+Undo restore-to-original-slot logic in `app/App.tsx` is currently guarded only at the Maestro layer (flow 05); extracting it into a pure, unit-tested helper is a worthwhile follow-up.
+
 ## Hosted product-path checks
 
 Run these when backend behavior, capture review, collections, assets, or extraction output shape changes:

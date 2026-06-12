@@ -1,0 +1,25 @@
+appId: com.preciouscaptures
+name: 07 settings delete guard
+# Verifies the account-deletion CONFIRMATION gate appears, then CANCELS. It must
+# never confirm — that would delete the E2E account (irreversible). Zero LLM.
+# Session is injected beforehand. Confirm selectors on first device run.
+---
+# Reset to a known home state (the injected session survives a warm relaunch).
+- launchApp
+- assertVisible:
+    id: "pc.home.captures"
+- tapOn:
+    id: "pc.nav.settings"
+- assertVisible:
+    text: "Settings"
+# The danger-zone control opens the confirmation sheet.
+- tapOn:
+    text: "Delete account"
+# Confirmation gate is shown — but we DO NOT confirm.
+- assertVisible:
+    text: "Delete my account"
+# Cancel out (close the sheet) and confirm we land back in Settings, intact.
+- tapOn:
+    text: "Close delete account"
+- assertVisible:
+    text: "Settings"
