@@ -306,6 +306,35 @@ export function analysisWithCurrentIntent(
   };
 }
 
+// Postgres `jsonb` rejects strings containing NUL (\x00) and unpaired UTF-16 surrogates,
+// failing the whole write with "Empty or invalid json". Scraped URL evidence (e.g. a login-walled
+// page) routinely carries these, so embedding it in the `analysis` column silently broke the
+// capture's terminal write and stranded it in "processing". Strip those characters from every
+// string in the analysis object before it is persisted. (\t \n \r are left intact.)
+function stripJsonbUnsafe(value: string): string {
+  return value
+    // NUL + C0 control chars, keeping \t (\x09), \n (\x0A), \r (\x0D).
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "")
+    // Lone (unpaired) UTF-16 surrogates.
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, "")
+    .replace(/(^|[^\uD800-\uDBFF])([\uDC00-\uDFFF])/g, "$1");
+}
+
+export function sanitizeForJsonb<T>(value: T): T {
+  if (typeof value === "string") return stripJsonbUnsafe(value) as unknown as T;
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeForJsonb(item)) as unknown as T;
+  }
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      out[key] = sanitizeForJsonb(item);
+    }
+    return out as T;
+  }
+  return value;
+}
+
 export function normalizedReviewAnalysis(
   analysis: Record<string, unknown>,
   reviewConfirmedAt?: unknown,
@@ -324,10 +353,12 @@ export function normalizedReviewAnalysis(
   const reviewTargets = normalizedReviewTargets(
     reviewTargetsForAnalysis(normalizedAnalysis, reviewConfirmedAt),
   );
-  return {
+  // Every analysis write flows through here, so this is the single place to guarantee the object
+  // is safe for a jsonb column (strip NUL / lone surrogates that scraped evidence can carry).
+  return sanitizeForJsonb({
     ...normalizedAnalysis,
     ...normalizeVisitTargetFields(normalizedAnalysis),
     review_targets: reviewTargets,
     needs_review: reviewTargets.length > 0,
-  };
+  });
 }
