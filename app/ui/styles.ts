@@ -99,8 +99,10 @@ export const styles = StyleSheet.create({
     zIndex: 0
   },
   bootBlank: {
+    alignItems: "center",
     backgroundColor: colors.paper,
-    flex: 1
+    flex: 1,
+    justifyContent: "center"
   },
   screenOverlay: {
     backgroundColor: colors.paper,
@@ -161,6 +163,9 @@ export const styles = StyleSheet.create({
     justifyContent: "space-between",
     position: "relative",
     zIndex: 2
+  },
+  headerLogo: {
+    alignSelf: "center"
   },
   headerCopy: {
     flex: 1,
@@ -2503,15 +2508,6 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginBottom: 4
-  },
-  authBrandMark: {
-    alignItems: "center",
-    backgroundColor: colors.accent,
-    borderRadius: 18,
-    height: 64,
-    justifyContent: "center",
-    marginBottom: 6,
-    width: 64
   },
   authHeaderRow: {
     alignItems: "center",

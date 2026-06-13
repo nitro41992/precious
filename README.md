@@ -1,4 +1,4 @@
-# Precious Captures
+# Stowbear
 
 Fresh mobile prototype for the smallest useful Sharebook loop:
 

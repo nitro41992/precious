@@ -9,15 +9,16 @@ import {
 import {
   ArrowLeft,
   ArrowSquareOut,
-  BookmarkSimple,
   Check,
   EnvelopeSimple as Mail,
   ShieldCheck
 } from "phosphor-react-native";
 
 import type { AuthLoadingState, AuthScreenMode } from "../types";
+import { APP_NAME } from "../branding";
 import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
+import { StowbearLogo } from "../ui/StowbearLogo";
 import { Text, TextInput } from "../ui/typography";
 
 type AuthScreenProps = {
@@ -57,14 +58,12 @@ export function AuthScreen({ actions, data, state }: AuthScreenProps) {
         {authScreen === "signin" ? (
           <>
             <View style={styles.authHero}>
-              <View style={styles.authBrandMark}>
-                <BookmarkSimple color={colors.onAccent} size={30} weight="fill" />
-              </View>
-              <Text style={[styles.title, styles.authTitle]}>Precious Captures</Text>
+              <StowbearLogo size={118} />
+              <Text style={[styles.title, styles.authTitle]}>{APP_NAME}</Text>
               <Text style={styles.authSubtitle}>Save from any app. Find it when it matters.</Text>
             </View>
             <Pressable
-              accessibilityHint="Opens a secure Google browser tab, then returns to Precious Captures."
+              accessibilityHint={`Opens a secure Google browser tab, then returns to ${APP_NAME}.`}
               accessibilityLabel="Continue with Google"
               disabled={Boolean(authLoading)}
               onPress={startGoogleSignIn}

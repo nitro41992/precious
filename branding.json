@@ -1,0 +1,8 @@
+{
+  "displayName": "Stowbear",
+  "slug": "stowbear",
+  "version": "0.1.0",
+  "scheme": "preciouscaptures",
+  "domain": "stowbear.app",
+  "androidPackage": "com.preciouscaptures"
+}

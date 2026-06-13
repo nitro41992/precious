@@ -26,6 +26,7 @@ import { appTheme, colors } from "../ui/theme";
 import { styles } from "../ui/styles";
 import { CaptureModeToggle, FadeSwap, HeaderContentGradient, ImageSourcePicker, KeyboardSheet, MotionPressable, SearchBarTrigger, SheetHeader, keyboardSheetMetrics } from "../ui/components";
 import { CollectionSuggestionRailCard } from "../ui/rows";
+import { StowbearLogo } from "../ui/StowbearLogo";
 import { Text, TextInput } from "../ui/typography";
 
 type HomeScreenProps = {
@@ -185,6 +186,9 @@ export function HomeScreen({ actions, data, state }: HomeScreenProps) {
         <View style={[styles.header, styles.topAppBarOverlay]} testID="pc.home.captures">
           <HeaderContentGradient density="compact" />
           <View style={styles.headerRow}>
+            <View style={styles.headerLogo}>
+              <StowbearLogo size={34} />
+            </View>
             <View style={styles.headerCopy}>
               <View style={styles.headerTitleLine}>
                 <Text style={styles.title}>Recents</Text>

@@ -30,6 +30,7 @@ import type { SharedValue } from "react-native-reanimated";
 import { AppSheets } from "./sheets/AppSheets";
 import { CollectionComposerSheet } from "./sheets/CollectionComposerSheet";
 import { CollectionSelectorScreen } from "./screens/CollectionSelectorScreen";
+import { StowbearLogo } from "./ui/StowbearLogo";
 import { useAppUiEffects } from "./state/useAppUiEffects";
 import { useAuthSession } from "./state/useAuthSession";
 import { useCaptureFeed } from "./state/useCaptureFeed";
@@ -42,7 +43,7 @@ import { motionEasing, motionPaneTransition, motionReduceMotion, reviewHeroExpan
 import { styles } from "./ui/styles";
 import { appTheme } from "./ui/theme";
 import { PRIVACY_POLICY_URL, SUPPORT_EMAIL, TERMS_URL } from "./ui/links";
-import appJson from "../app.json";
+import { APP_VERSION } from "./branding";
 
 import type {
   Capture,
@@ -5788,8 +5789,8 @@ export default function App() {
           data={{
             appSheets: includeChrome ? renderAppSheets() : null,
             // The installed APK's real versionName (CI injects it from the
-            // release tag); app.json is only a local-dev fallback.
-            appVersion: config?.appVersion || appJson.expo.version,
+            // release tag); branding.json is only a local-dev fallback.
+            appVersion: config?.appVersion || APP_VERSION,
             email: sessionEmail,
             toast: includeChrome ? renderToast() : null
           }}
@@ -5890,6 +5891,7 @@ export default function App() {
     return (
       <View style={styles.bootBlank}>
         <StatusBar barStyle={appTheme.statusBarStyle} />
+        <StowbearLogo size={88} />
       </View>
     );
   }

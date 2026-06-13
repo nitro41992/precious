@@ -10,6 +10,7 @@ import {
 } from "phosphor-react-native";
 
 import saveIntents from "../supabase/functions/_shared/save-intents.json";
+import { AUTH_CALLBACK_URL } from "./branding";
 import type {
   AuthCallbackPayload,
   Capture,
@@ -59,7 +60,7 @@ const NEUTRAL_REVIEW_RATIONALE: Required<ReviewRationale> = {
   reminder: "Review the Reminder idea"
 };
 
-export const AUTH_CALLBACK_URL = "preciouscaptures://auth/callback";
+export { AUTH_CALLBACK_URL };
 
 export const SEARCH_PROMPTS = [
   { label: "Places", query: "places", Icon: MapPin },

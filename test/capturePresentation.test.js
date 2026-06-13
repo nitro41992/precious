@@ -41,6 +41,18 @@ function loadCapturePresentation() {
       );
     }
     if (specifier === "./captureLogic") return require("../app/captureLogic");
+    if (specifier === "./branding") {
+      // app/branding.ts is TS importing branding.json; mirror its derivation
+      // here so the harness loads without transpiling another module.
+      const b = require("../branding.json");
+      return {
+        APP_NAME: b.displayName,
+        APP_DOMAIN: b.domain,
+        APP_SCHEME: b.scheme,
+        APP_VERSION: b.version,
+        AUTH_CALLBACK_URL: `${b.scheme}://auth/callback`
+      };
+    }
     if (specifier === "../supabase/functions/_shared/save-intents.json") {
       return require("../supabase/functions/_shared/save-intents.json");
     }
