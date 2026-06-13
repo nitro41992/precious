@@ -5961,6 +5961,33 @@ export default function App() {
     return renderBootScreen();
   }
 
+  // Signed out (with a hosted API configured) always returns to the auth screen,
+  // regardless of which screen sign-out happened on. Gated here — above the tab/
+  // overlay routing below — so logging out from e.g. Settings navigates back to
+  // login instead of leaving the prior screen mounted.
+  if (config?.apiUrl && !session) {
+    return (
+      <AuthScreen
+        actions={{
+          backToSignIn,
+          sendEmailAuthLink: () => void sendEmailAuthLink(),
+          setAuthEmail,
+          startGoogleSignIn: () => void startGoogleSignIn()
+        }}
+        data={{
+          appSheets: renderAppSheets(),
+          message
+        }}
+        state={{
+          authEmail,
+          authLoading,
+          authPendingEmail,
+          authScreen
+        }}
+      />
+    );
+  }
+
   if (deleteDismissCapture) {
     const deleteOrigin = deleteDismissOrigin || captureReviewOrigin || "recent";
     const deleteCollection = deleteDismissCollection || selectedCollection;
@@ -6178,29 +6205,6 @@ export default function App() {
       overlay: renderCaptureReviewScreen(closingReviewCapture),
       overlayHandoff: reviewHandoff
     });
-  }
-
-  if (authReady && config?.apiUrl && !session) {
-    return (
-      <AuthScreen
-        actions={{
-          backToSignIn,
-          sendEmailAuthLink: () => void sendEmailAuthLink(),
-          setAuthEmail,
-          startGoogleSignIn: () => void startGoogleSignIn()
-        }}
-        data={{
-          appSheets: renderAppSheets(),
-          message
-        }}
-        state={{
-          authEmail,
-          authLoading,
-          authPendingEmail,
-          authScreen
-        }}
-      />
-    );
   }
 
   if (searchOpen) {

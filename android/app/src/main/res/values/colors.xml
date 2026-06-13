@@ -1,6 +1,9 @@
 <resources>
-  <color name="pc_paper">#FFF7E6</color>
-  <color name="pc_accent">#C5D86D</color>
+  <!-- Mirrors the app design tokens in app/ui/theme.ts (paper / accent / ink) so
+       the native window background, status/nav bars, and cold-start splash match
+       the JS UI exactly. Keep these in sync with theme.ts. -->
+  <color name="pc_paper">#F6F7F8</color>
+  <color name="pc_accent">#A3E635</color>
   <color name="pc_ink">#17211B</color>
   <color name="ic_launcher_background">#FFFFFF</color>
 </resources>
